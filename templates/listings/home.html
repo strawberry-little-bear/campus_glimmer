@@ -1,0 +1,75 @@
+<!-- templates/listings/home.html -->
+{% extends 'base.html' %}
+
+{% block title %}拾光校园 - 校园二手交易平台{% endblock %}
+
+{% block content %}
+<!-- 欢迎横幅 -->
+<div class="bg-light p-5 rounded-3 mb-4 text-center">
+    <div class="container">
+        <h1 class="display-5 fw-bold text-success">拾光校园</h1>
+        <p class="lead">一个让校园闲置物品重获新生的二手交易平台</p>
+        <hr class="my-4">
+        <p>发布您不再需要的物品，寻找您所需要的二手宝贝，环保省钱又便捷！</p>
+        <div class="d-grid gap-2 d-md-flex justify-content-md-center">
+            <a href="{% url 'item_list' %}" class="btn btn-success btn-lg px-4">浏览商品</a>
+            {% if user.is_authenticated %}
+            <a href="{% url 'new_item' %}" class="btn btn-outline-success btn-lg px-4">发布商品</a>
+            {% else %}
+            <a href="{% url 'register' %}" class="btn btn-outline-success btn-lg px-4">立即注册</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- 类别导航 -->
+<h2 class="mb-3">商品类别</h2>
+<div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
+    {% for category in categories %}
+    <div class="col">
+        <a href="{% url 'item_list_by_category' category.id %}" class="text-decoration-none">
+            <div class="card h-100 shadow-sm border-success">
+                <div class="card-body text-center">
+                    <h5 class="card-title text-success">{{ category.name }}</h5>
+                    <p class="card-text">{{ category.description }}</p>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 最新发布 -->
+<h2 class="mb-3">最新发布</h2>
+<div class="row row-cols-1 row-cols-md-4 g-4">
+    {% for item in recent_items %}
+    <div class="col">
+        <div class="card h-100 shadow-sm">
+            {% if item.images.first %}
+            <img src="{{ item.images.first.image.url }}" class="card-img-top" alt="{{ item.title }}">
+            {% else %}
+            <img src="/static/img/no-image.png" class="card-img-top" alt="无图片">
+            {% endif %}
+            <div class="card-body">
+                <h5 class="card-title">{{ item.title }}</h5>
+                <p class="card-text text-success fw-bold">¥{{ item.price }}</p>
+                <p class="card-text">{{ item.description|truncatechars:60 }}</p>
+            </div>
+            <div class="card-footer bg-transparent d-flex justify-content-between align-items-center">
+                <small class="text-muted">{{ item.created_at|date:"Y-m-d" }}</small>
+                <a href="{% url 'item_detail' item.id %}" class="btn btn-sm btn-outline-success">查看详情</a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12 text-center py-5">
+        <p class="text-muted">暂无可用商品</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 更多链接 -->
+<div class="text-center mt-4">
+    <a href="{% url 'item_list' %}" class="btn btn-outline-success">查看更多商品</a>
+</div>
+{% endblock %}

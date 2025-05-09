@@ -1,0 +1,48 @@
+<!-- templates/listings/mark_sold.html -->
+{% extends 'base.html' %}
+
+{% block title %}修改商品状态 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">修改商品状态</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <h5>{{ item.title }}</h5>
+                    <p class="text-muted">当前状态: <span class="badge {% if item.status == 'available' %}bg-success{% elif item.status == 'reserved' %}bg-warning{% else %}bg-secondary{% endif %}">{{ item.get_status_display }}</span></p>
+                </div>
+                
+                <form method="POST">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">选择新状态</label>
+                        <div class="list-group">
+                            <label class="list-group-item">
+                                <input class="form-check-input me-1" type="radio" name="status" value="available" {% if item.status == 'available' %}checked{% endif %}>
+                                可购买 - 商品正常上架，可供购买
+                            </label>
+                            <label class="list-group-item">
+                                <input class="form-check-input me-1" type="radio" name="status" value="reserved" {% if item.status == 'reserved' %}checked{% endif %}>
+                                已预定 - 商品已有买家预定，暂不接受其他购买请求
+                            </label>
+                            <label class="list-group-item">
+                                <input class="form-check-input me-1" type="radio" name="status" value="sold" {% if item.status == 'sold' %}checked{% endif %}>
+                                已售出 - 商品已售出，不再显示在可购买列表中
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-4 d-flex justify-content-between">
+                        <a href="{% url 'item_detail' item.id %}" class="btn btn-outline-secondary">取消</a>
+                        <button type="submit" class="btn btn-success">保存更改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

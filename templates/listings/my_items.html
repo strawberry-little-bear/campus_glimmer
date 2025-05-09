@@ -1,0 +1,227 @@
+<!-- templates/listings/my_items.html -->
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>{{ title }}</h2>
+    <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
+</div>
+
+<div class="card shadow">
+    <div class="card-header bg-light">
+        <ul class="nav nav-tabs card-header-tabs" id="itemsTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="true">全部</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="available-tab" data-bs-toggle="tab" data-bs-target="#available" type="button" role="tab" aria-controls="available" aria-selected="false">可购买</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="reserved-tab" data-bs-toggle="tab" data-bs-target="#reserved" type="button" role="tab" aria-controls="reserved" aria-selected="false">已预定</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="sold-tab" data-bs-toggle="tab" data-bs-target="#sold" type="button" role="tab" aria-controls="sold" aria-selected="false">已售出</button>
+            </li>
+        </ul>
+    </div>
+    <div class="card-body">
+        <div class="tab-content" id="itemsTabContent">
+            <!-- 全部商品 -->
+            <div class="tab-pane fade show active" id="all" role="tabpanel" aria-labelledby="all-tab">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>商品</th>
+                                <th>价格</th>
+                                <th>状态</th>
+                                <th>发布时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if item.images.first %}
+                                        <img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        {% endif %}
+                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
+                                    </div>
+                                </td>
+                                <td>¥{{ item.price }}</td>
+                                <td>
+                                    <span class="badge {% if item.status == 'available' %}bg-success{% elif item.status == 'reserved' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                        {{ item.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary">编辑</a>
+                                        <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success">状态</a>
+                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center py-4">
+                                    <p class="text-muted mb-0">您还没有发布任何商品</p>
+                                    <a href="{% url 'new_item' %}" class="btn btn-success mt-3">立即发布</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- 可购买商品 -->
+            <div class="tab-pane fade" id="available" role="tabpanel" aria-labelledby="available-tab">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>商品</th>
+                                <th>价格</th>
+                                <th>发布时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            {% if item.status == 'available' %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if item.images.first %}
+                                        <img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        {% endif %}
+                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
+                                    </div>
+                                </td>
+                                <td>¥{{ item.price }}</td>
+                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary">编辑</a>
+                                        <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success">状态</a>
+                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4">
+                                    <p class="text-muted mb-0">没有可购买状态的商品</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- 已预定商品 -->
+            <div class="tab-pane fade" id="reserved" role="tabpanel" aria-labelledby="reserved-tab">
+                <!-- 与可购买商品结构类似，只是筛选status == 'reserved' -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>商品</th>
+                                <th>价格</th>
+                                <th>发布时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            {% if item.status == 'reserved' %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if item.images.first %}
+                                        <img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        {% endif %}
+                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
+                                    </div>
+                                </td>
+                                <td>¥{{ item.price }}</td>
+                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary">编辑</a>
+                                        <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success">状态</a>
+                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4">
+                                    <p class="text-muted mb-0">没有已预定状态的商品</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- 已售出商品 -->
+            <div class="tab-pane fade" id="sold" role="tabpanel" aria-labelledby="sold-tab">
+                <!-- 与可购买商品结构类似，只是筛选status == 'sold' -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>商品</th>
+                                <th>价格</th>
+                                <th>发布时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in items %}
+                            {% if item.status == 'sold' %}
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        {% if item.images.first %}
+                                        <img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        {% endif %}
+                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
+                                    </div>
+                                </td>
+                                <td>¥{{ item.price }}</td>
+                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{% url 'item_detail' item.id %}" class="btn btn-outline-primary">查看</a>
+                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-4">
+                                    <p class="text-muted mb-0">没有已售出状态的商品</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

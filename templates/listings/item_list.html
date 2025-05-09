@@ -1,0 +1,68 @@
+<!-- templates/listings/item_list.html -->
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- 侧边栏：类别 -->
+    <div class="col-md-3 mb-4">
+        <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">商品类别</h5>
+            </div>
+            <div class="list-group list-group-flush">
+                <a href="{% url 'item_list' %}" class="list-group-item list-group-item-action {% if not category %}active{% endif %}">
+                    所有类别
+                </a>
+                {% for category in categories %}
+                <a href="{% url 'item_list_by_category' category.id %}" class="list-group-item list-group-item-action {% if category == category %}active{% endif %}">
+                    {{ category.name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- 主要内容：商品列表 -->
+    <div class="col-md-9">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>{{ title }}</h2>
+            {% if user.is_authenticated %}
+            <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
+            {% endif %}
+        </div>
+        
+        <!-- 商品列表 -->
+        <div class="row row-cols-1 row-cols-md-3 g-4">
+            {% for item in items %}
+            <div class="col">
+                <div class="card h-100 shadow-sm">
+                    {% if item.images.first %}
+                    <img src="{{ item.images.first.image.url }}" class="card-img-top" alt="{{ item.title }}">
+                    {% else %}
+                    <img src="/static/img/no-image.png" class="card-img-top" alt="无图片">
+                    {% endif %}
+                    <div class="card-body">
+                        <h5 class="card-title">{{ item.title }}</h5>
+                        <p class="card-text text-success fw-bold">¥{{ item.price }}</p>
+                        <p class="card-text">{{ item.description|truncatechars:60 }}</p>
+                    </div>
+                    <div class="card-footer bg-transparent d-flex justify-content-between align-items-center">
+                        <small class="text-muted">{{ item.created_at|date:"Y-m-d" }}</small>
+                        <a href="{% url 'item_detail' item.id %}" class="btn btn-sm btn-outline-success">查看详情</a>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="col-12 text-center py-5">
+                <p class="text-muted">暂无符合条件的商品</p>
+                {% if user.is_authenticated %}
+                <a href="{% url 'new_item' %}" class="btn btn-success mt-3">发布新商品</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

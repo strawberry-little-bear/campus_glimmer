@@ -1,0 +1,44 @@
+<!-- templates/messages/send_message.html -->
+{% extends 'base.html' %}
+
+{% block title %}发送消息 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">发送消息给 {{ receiver.username }}</h5>
+            </div>
+            <div class="card-body">
+                {% if item %}
+                <div class="alert alert-info">
+                    <div class="d-flex align-items-center">
+                        {% if item.images.first %}
+                        <img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-3">
+                        {% endif %}
+                        <div>
+                            <p class="mb-0">关于商品: <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></p>
+                            <p class="mb-0 text-success">¥{{ item.price }}</p>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <form method="POST">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        {{ form.content.label_tag }}
+                        {{ form.content }}
+                        {{ form.content.errors }}
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'inbox' %}{% endif %}" class="btn btn-outline-secondary">取消</a>
+                        <button type="submit" class="btn btn-success">发送消息</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

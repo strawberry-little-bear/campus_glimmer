@@ -1,0 +1,62 @@
+/* static/css/style.css */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+.footer {
+    margin-top: auto;
+}
+
+/* 卡片样式 */
+.card-img-top {
+    height: 200px;
+    object-fit: cover;
+}
+
+/* 商品详情页图片 */
+.item-detail-img {
+    max-height: 400px;
+    object-fit: contain;
+}
+
+/* 消息样式 */
+.message-bubble {
+    border-radius: 15px;
+    padding: 10px 15px;
+    margin-bottom: 10px;
+    max-width: 70%;
+}
+
+.message-sent {
+    background-color: #dcf8c6;
+    margin-left: auto;
+}
+
+.message-received {
+    background-color: #f1f0f0;
+}
+
+/* 头像样式 */
+.avatar-sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+}
+
+.avatar-md {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+}
+
+.avatar-lg {
+    width: 128px;
+    height: 128px;
+    border-radius: 50%;
+}

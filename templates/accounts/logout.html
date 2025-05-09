@@ -1,0 +1,19 @@
+<!-- templates/accounts/logout.html -->
+{% extends 'base.html' %}
+
+{% block title %}已登出 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow text-center">
+            <div class="card-body">
+                <h4 class="mb-4">您已成功退出登录</h4>
+                <p>感谢您使用拾光校园二手交易平台。</p>
+                <a href="{% url 'login' %}" class="btn btn-success">重新登录</a>
+                <a href="{% url 'home' %}" class="btn btn-outline-secondary ms-2">返回首页</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

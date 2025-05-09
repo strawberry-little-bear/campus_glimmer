@@ -1,0 +1,89 @@
+<!-- templates/listings/item_form.html -->
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }} - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">{{ title }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <!-- 商品基本信息 -->
+                    <h5 class="mb-3">基本信息</h5>
+                    {% for field in form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                        {{ field.errors }}
+                        {{ field }}
+                        {% if field.help_text %}
+                        <div class="form-text text-muted">{{ field.help_text }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    
+                    <!-- 商品图片 -->
+                    <h5 class="mb-3 mt-4">商品图片</h5>
+                    <p class="text-muted mb-3">请上传清晰的商品照片，最多可上传5张图片</p>
+                    
+                    {{ formset.management_form }}
+                    <div class="row">
+                        {% for form in formset %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card">
+                                <img id="preview-{{ forloop.counter }}" src="{% if form.instance.image %}{{ form.instance.image.url }}{% else %}{% static 'img/no-image.png' %}{% endif %}" class="card-img-top" alt="图片预览" {% if not form.instance.image %}style="display: none;"{% endif %}>
+                                <div class="card-body">
+                                    {{ form.id }}
+                                    <div class="mb-3">
+                                        <label class="form-label">图片 {{ forloop.counter }}</label>
+                                        {{ form.errors }}
+                                        {{ form.image }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="mt-4 d-flex justify-content-between">
+                        <a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'item_list' %}{% endif %}" class="btn btn-outline-secondary">取消</a>
+                        <button type="submit" class="btn btn-success">保存商品</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 图片预览功能
+        const fileInputs = document.querySelectorAll('input[type="file"]');
+        fileInputs.forEach((input, index) => {
+            const previewId = `preview-${index + 1}`;
+            const preview = document.getElementById(previewId);
+            
+            input.addEventListener('change', function() {
+                if (this.files && this.files[0]) {
+                    const reader = new FileReader();
+                    
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        preview.style.display = 'block';
+                    }
+                    
+                    reader.readAsDataURL(this.files[0]);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
