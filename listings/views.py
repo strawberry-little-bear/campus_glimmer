@@ -1096,3 +1096,33 @@ def mark_all_notifications_read(request):
         ).update(is_read=True)
         messages.success(request, '所有通知已标记为已读。')
     return redirect('notification_list')
+
+
+@login_required
+def mark_selected_notifications_read(request):
+    if request.method == 'POST':
+        raw_ids = request.POST.getlist('notification_ids')
+        notification_ids = []
+        for raw_id in raw_ids:
+            try:
+                notification_ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                continue
+        updated_count = Notification.objects.filter(
+            recipient=request.user,
+            is_read=False,
+            id__in=notification_ids,
+        ).update(is_read=True)
+        if updated_count:
+            messages.success(request, f'已将 {updated_count} 条通知标记为已读。')
+        else:
+            messages.info(request, '请选择至少一条未读通知。')
+
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('notification_list')
+    return redirect(next_url)

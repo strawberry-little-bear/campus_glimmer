@@ -588,3 +588,23 @@ a { color: inherit; text-decoration: none; }
 .notification-switch .form-check-input:focus-visible + .notification-switch-track { box-shadow: 0 0 0 4px rgba(29, 138, 104, .12); }
 .notification-preference-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 20px; }
 @media (max-width: 575.98px) { .notification-preference-row { align-items: flex-start; gap: 12px; padding: 15px 0; } .notification-preference-actions { justify-content: stretch; } .notification-preference-actions .btn { flex: 1; } }
+
+.notification-bulk-toolbar { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 10px 12px; border: 1px solid #edf2ee; border-radius: 11px; background: #fbfdfb; color: #76877e; font-size: .74rem; }
+.notification-select-all { display: inline-flex; align-items: center; gap: 7px; color: #45685a; font-weight: 700; cursor: pointer; }
+.notification-select-all input, .notification-checkbox { accent-color: #2e8b67; }
+.notification-selection-count { margin-right: auto; color: #96a29c; }
+.notification-entry { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.notification-select { display: grid; width: 28px; height: 28px; flex: 0 0 28px; place-items: center; border: 1px solid #dce8df; border-radius: 9px; background: #fff; cursor: pointer; }
+.notification-select input { position: absolute; opacity: 0; pointer-events: none; }
+.notification-select span { width: 14px; height: 14px; border: 1.5px solid #b7c8be; border-radius: 4px; transition: .18s ease; }
+.notification-select input:checked + span { border-color: #2e8b67; background: #2e8b67; box-shadow: inset 0 0 0 3px #fff; }
+.notification-select:has(input:focus-visible) { box-shadow: 0 0 0 4px rgba(46, 139, 103, .12); }
+.notification-select-spacer { width: 28px; flex: 0 0 28px; }
+.notification-entry .notification-form { min-width: 0; flex: 1; }
+@media (max-width: 575.98px) {
+    .notification-bulk-toolbar { align-items: stretch; flex-wrap: wrap; }
+    .notification-selection-count { flex-basis: 100%; order: 3; }
+    .notification-bulk-toolbar .btn { margin-left: auto; }
+    .notification-entry { align-items: flex-start; }
+    .notification-select, .notification-select-spacer { margin-top: 14px; }
+}

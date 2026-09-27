@@ -287,6 +287,7 @@ class ListingFlowTests(TestCase):
         response = self.client.get(reverse('notification_list'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '商品收到新的留言')
+        self.assertContains(response, '标记所选为已读')
         self.assertContains(response, '2 条未读')
         self.assertEqual(response.context['notification_unread_total'], 2)
         kind_options = {
@@ -314,6 +315,48 @@ class ListingFlowTests(TestCase):
         self.assertTrue(one.is_read)
         self.client.post(reverse('mark_all_notifications_read'))
         self.assertFalse(Notification.objects.filter(recipient=self.user, is_read=False).exists())
+
+    def test_notification_center_can_bulk_mark_only_selected_owned_unread(self):
+        first = Notification.objects.create(
+            recipient=self.user, kind='comment_received', title='第一条未读', message='请查看。',
+        )
+        second = Notification.objects.create(
+            recipient=self.user, kind='order_status', title='第二条未读', message='订单有变化。',
+        )
+        already_read = Notification.objects.create(
+            recipient=self.user, kind='rating_received', title='已读通知', message='谢谢评价。', is_read=True,
+        )
+        someone_elses = Notification.objects.create(
+            recipient=self.other_user, kind='comment_received', title='不属于当前用户', message='不能被越权修改。',
+        )
+        self.client.login(username='alice', password='safe-password-123')
+
+        response = self.client.post(reverse('mark_selected_notifications_read'), {
+            'notification_ids': [first.id, already_read.id, someone_elses.id, 'not-an-id'],
+            'next': reverse('notification_list') + '?status=unread',
+        })
+
+        self.assertRedirects(response, reverse('notification_list') + '?status=unread')
+        first.refresh_from_db()
+        second.refresh_from_db()
+        already_read.refresh_from_db()
+        someone_elses.refresh_from_db()
+        self.assertTrue(first.is_read)
+        self.assertFalse(second.is_read)
+        self.assertTrue(already_read.is_read)
+        self.assertFalse(someone_elses.is_read)
+
+    def test_notification_bulk_read_rejects_external_redirect(self):
+        notification = Notification.objects.create(
+            recipient=self.user, kind='comment_received', title='安全跳转', message='不能跳出站点。',
+        )
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.post(reverse('mark_selected_notifications_read'), {
+            'notification_ids': [notification.id], 'next': 'https://evil.example/phishing',
+        })
+        self.assertRedirects(response, reverse('notification_list'))
+        notification.refresh_from_db()
+        self.assertTrue(notification.is_read)
 
     def test_notification_filters_keep_query_when_paginating(self):
         Notification.objects.bulk_create([

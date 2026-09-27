@@ -61,7 +61,7 @@
     </div>
 
     <form method="get" class="notification-filter-bar">
-        <div class="notification-search"><i class="bi bi-search"></i><input type="search" name="q" value="{{ notification_search_query }}" placeholder="搜索通知标题、内容或商品" aria-label="搜索通知"></div>
+        <div class="notification-search"><i class="bi bi-search"></i><input name="q" type="search" value="{{ notification_search_query }}" placeholder="搜索通知标题、内容或商品" aria-label="搜索通知"></div>
         <select class="form-select form-select-sm" name="kind" aria-label="通知类型">
             <option value="">全部类型</option>
             {% for option in notification_kind_options %}<option value="{{ option.value }}" {% if notification_kind_filter == option.value %}selected{% endif %}>{{ option.label }}（{{ option.count }}）</option>{% endfor %}
@@ -75,36 +75,56 @@
 
     <div class="notification-filter-summary"><i class="bi bi-sliders me-1"></i>当前结果中有 {{ notification_filtered_unread_count }} 条未读{% if notification_total != notification_total_all %} · 已应用筛选条件{% endif %}</div>
 
+    <div class="notification-bulk-toolbar">
+        <label class="notification-select-all"><input type="checkbox" id="notification-select-all"><span>全选本页未读</span></label>
+        <span class="notification-selection-count" id="notification-selection-count">已选择 0 条</span>
+        <button type="submit" form="notification-bulk-form" class="btn btn-outline-primary btn-sm" id="notification-bulk-submit" disabled><i class="bi bi-check2-square me-1"></i>标记所选为已读</button>
+    </div>
+    <form id="notification-bulk-form" method="post" action="{% url 'mark_selected_notifications_read' %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% if notification_filter_query %}{% url 'notification_list' %}?{{ notification_filter_query }}{% else %}{% url 'notification_list' %}{% endif %}">
+    </form>
+
     <div class="notification-list">
         {% for notification in notifications %}
-        <form method="post" action="{% url 'mark_notification_read' notification.id %}" class="notification-form">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{% if notification.target_url %}{{ notification.target_url }}{% else %}{% url 'notification_list' %}{% endif %}">
-            <button type="submit" class="notification-card {% if not notification.is_read %}is-unread{% endif %}">
-                <span class="notification-icon notification-icon-{{ notification.kind }}">
-                    {% if notification.kind == 'order_created' %}<i class="bi bi-bag-plus"></i>
-                    {% elif notification.kind == 'order_status' %}<i class="bi bi-arrow-repeat"></i>
-                    {% elif notification.kind == 'rating_received' %}<i class="bi bi-star"></i>
-                    {% elif notification.kind == 'message_received' %}<i class="bi bi-chat-dots"></i>
-                    {% elif notification.kind == 'saved_search_match' %}<i class="bi bi-radar"></i>
-                    {% elif notification.kind == 'order_dispute' %}<i class="bi bi-shield-exclamation"></i>
-                    {% elif notification.kind == 'order_expiring' %}<i class="bi bi-hourglass-split"></i>
-                    {% elif notification.kind == 'order_expired' %}<i class="bi bi-x-circle"></i>
-                    {% elif notification.kind == 'report_update' %}<i class="bi bi-flag"></i>
-                    {% else %}<i class="bi bi-chat-square-text"></i>{% endif %}
-                </span>
-                <span class="notification-body">
-                    <span class="notification-title-row">
-                        <strong>{{ notification.title }}</strong>
-                        <time datetime="{{ notification.created_at|date:'c' }}">{{ notification.created_at|date:'Y-m-d H:i' }}</time>
+        <div class="notification-entry">
+            {% if not notification.is_read %}
+            <label class="notification-select" title="选择通知">
+                <input type="checkbox" name="notification_ids" value="{{ notification.id }}" form="notification-bulk-form" class="notification-checkbox">
+                <span aria-hidden="true"></span>
+            </label>
+            {% else %}
+            <span class="notification-select-spacer" aria-hidden="true"></span>
+            {% endif %}
+            <form method="post" action="{% url 'mark_notification_read' notification.id %}" class="notification-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% if notification.target_url %}{{ notification.target_url }}{% else %}{% url 'notification_list' %}{% endif %}">
+                <button type="submit" class="notification-card {% if not notification.is_read %}is-unread{% endif %}">
+                    <span class="notification-icon notification-icon-{{ notification.kind }}">
+                        {% if notification.kind == 'order_created' %}<i class="bi bi-bag-plus"></i>
+                        {% elif notification.kind == 'order_status' %}<i class="bi bi-arrow-repeat"></i>
+                        {% elif notification.kind == 'rating_received' %}<i class="bi bi-star"></i>
+                        {% elif notification.kind == 'message_received' %}<i class="bi bi-chat-dots"></i>
+                        {% elif notification.kind == 'saved_search_match' %}<i class="bi bi-radar"></i>
+                        {% elif notification.kind == 'order_dispute' %}<i class="bi bi-shield-exclamation"></i>
+                        {% elif notification.kind == 'order_expiring' %}<i class="bi bi-hourglass-split"></i>
+                        {% elif notification.kind == 'order_expired' %}<i class="bi bi-x-circle"></i>
+                        {% elif notification.kind == 'report_update' %}<i class="bi bi-flag"></i>
+                        {% else %}<i class="bi bi-chat-square-text"></i>{% endif %}
                     </span>
-                    <span class="notification-message">{{ notification.message }}</span>
-                    {% if notification.item %}<span class="notification-context"><i class="bi bi-box-seam me-1"></i>{{ notification.item.title }}</span>{% elif notification.order %}<span class="notification-context"><i class="bi bi-receipt me-1"></i>{{ notification.order.item.title }}</span>{% endif %}
-                </span>
-                {% if not notification.is_read %}<span class="notification-dot" aria-label="未读"></span>{% endif %}
-                <i class="bi bi-chevron-right notification-arrow" aria-hidden="true"></i>
-            </button>
-        </form>
+                    <span class="notification-body">
+                        <span class="notification-title-row">
+                            <strong>{{ notification.title }}</strong>
+                            <time datetime="{{ notification.created_at|date:'c' }}">{{ notification.created_at|date:'Y-m-d H:i' }}</time>
+                        </span>
+                        <span class="notification-message">{{ notification.message }}</span>
+                        {% if notification.item %}<span class="notification-context"><i class="bi bi-box-seam me-1"></i>{{ notification.item.title }}</span>{% elif notification.order %}<span class="notification-context"><i class="bi bi-receipt me-1"></i>{{ notification.order.item.title }}</span>{% endif %}
+                    </span>
+                    {% if not notification.is_read %}<span class="notification-dot" aria-label="未读"></span>{% endif %}
+                    <i class="bi bi-chevron-right notification-arrow" aria-hidden="true"></i>
+                </button>
+            </form>
+        </div>
         {% empty %}
         <div class="empty-state notification-empty">
             <i class="bi bi-bell-slash"></i>
@@ -125,4 +145,29 @@
     </nav>
     {% endif %}
 </section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const selectAll = document.getElementById('notification-select-all');
+    const checkboxes = Array.from(document.querySelectorAll('.notification-checkbox'));
+    const count = document.getElementById('notification-selection-count');
+    const submit = document.getElementById('notification-bulk-submit');
+    if (!selectAll || !count || !submit) return;
+    const refreshSelection = function () {
+        const selected = checkboxes.filter(function (checkbox) { return checkbox.checked; });
+        count.textContent = '已选择 ' + selected.length + ' 条';
+        submit.disabled = selected.length === 0;
+        selectAll.checked = checkboxes.length > 0 && selected.length === checkboxes.length;
+        selectAll.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
+    };
+    selectAll.addEventListener('change', function () {
+        checkboxes.forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
+        refreshSelection();
+    });
+    checkboxes.forEach(function (checkbox) { checkbox.addEventListener('change', refreshSelection); });
+    refreshSelection();
+});
+</script>
 {% endblock %}
