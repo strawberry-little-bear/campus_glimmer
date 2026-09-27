@@ -1,5 +1,5 @@
 from django import forms
-from .models import Item, ItemImage, Category, CampusLocation
+from .models import CampusLocation, Category, Item, ItemImage, Report
 
 
 class StyledModelFormMixin:
@@ -41,6 +41,21 @@ class ItemImageForm(StyledModelFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._style_fields()
+
+
+class ReportForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Report
+        fields = ['reason', 'detail']
+        widgets = {
+            'reason': forms.Select(attrs={'class': 'form-select'}),
+            'detail': forms.Textarea(attrs={'rows': 5, 'placeholder': '请描述你发现的问题，帮助我们更快完成审核。'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['reason'].widget.attrs['class'] = 'form-select'
 
 
 ItemImageFormSet = forms.inlineformset_factory(

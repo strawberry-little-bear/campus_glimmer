@@ -101,3 +101,30 @@ a { color: inherit; text-decoration: none; }
     margin-top: 3px;
     color: #73847d;
 }
+.report-target {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 15px 17px;
+    background: #f6faf7;
+    border: 1px solid rgba(31, 102, 77, .12);
+    border-radius: 16px;
+}
+
+.report-target-icon {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    color: #fff;
+    background: #d7775f;
+    border-radius: 13px;
+}
+
+.report-target strong,
+.report-target small { display: block; }
+.report-target small { margin-top: 3px; color: #73847d; }
+.report-link { text-decoration: none; }
+.report-link:hover { color: #c45f4a !important; }
+.safety-card h2 { margin: 14px 0 18px; font-size: 1.45rem; }
+.safety-card ul { padding-left: 1.2rem; color: #60756c; line-height: 1.9; }

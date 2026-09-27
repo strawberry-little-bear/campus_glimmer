@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CampusLocation, Category, Favorite, Item, ItemImage
+from .models import CampusLocation, Category, Favorite, Item, ItemImage, Report
 
 
 class ItemImageInline(admin.TabularInline):
@@ -24,11 +24,15 @@ class CampusLocationAdmin(admin.ModelAdmin):
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ('title', 'price', 'category', 'location', 'seller', 'status', 'created_at')
+    list_display = ('title', 'price', 'category', 'location', 'seller', 'status', 'report_count', 'created_at')
     list_filter = ('status', 'category', 'location', 'created_at')
     search_fields = ('title', 'description', 'seller__username', 'location__name')
     date_hierarchy = 'created_at'
     inlines = [ItemImageInline]
+
+    @admin.display(description='举报数')
+    def report_count(self, obj):
+        return obj.reports.count()
 
 
 @admin.register(Favorite)
@@ -36,3 +40,16 @@ class FavoriteAdmin(admin.ModelAdmin):
     list_display = ('user', 'item', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('user__username', 'item__title')
+
+
+@admin.register(Report)
+class ReportAdmin(admin.ModelAdmin):
+    list_display = ('item', 'reporter', 'reason', 'status', 'reviewer', 'created_at', 'updated_at')
+    list_filter = ('status', 'reason', 'created_at')
+    search_fields = ('item__title', 'reporter__username', 'detail', 'review_note')
+    autocomplete_fields = ('item', 'reporter', 'reviewer')
+    readonly_fields = ('created_at', 'updated_at')
+    fieldsets = (
+        ('举报信息', {'fields': ('item', 'reporter', 'reason', 'detail', 'created_at')}),
+        ('审核结果', {'fields': ('status', 'reviewer', 'review_note', 'updated_at')}),
+    )

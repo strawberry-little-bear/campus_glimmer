@@ -3,12 +3,13 @@ from urllib.parse import urlencode
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.db import IntegrityError
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .forms import ItemForm, ItemImageFormSet
-from .models import CampusLocation, Category, Favorite, Item
+from .forms import ItemForm, ItemImageFormSet, ReportForm
+from .models import CampusLocation, Category, Favorite, Item, Report
 
 
 def _favorite_ids(request):
@@ -79,6 +80,7 @@ def item_detail(request, item_id):
         'item': item,
         'related_items': related_items,
         'is_favorite': item_id in _favorite_ids(request),
+        'has_reported': request.user.is_authenticated and Report.objects.filter(item=item, reporter=request.user).exists(),
     }
     return render(request, 'listings/item_detail.html', context)
 
@@ -97,6 +99,33 @@ def toggle_favorite(request, item_id):
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
         next_url = ''
     return redirect(next_url or 'item_detail', item_id=item.id) if not next_url else redirect(next_url)
+
+
+@login_required
+def report_item(request, item_id):
+    item = get_object_or_404(Item, id=item_id)
+    if item.seller == request.user:
+        messages.error(request, '不能举报自己发布的商品。')
+        return redirect('item_detail', item_id=item.id)
+    if Report.objects.filter(item=item, reporter=request.user).exists():
+        messages.info(request, '你已经举报过这个商品，我们会尽快处理。')
+        return redirect('item_detail', item_id=item.id)
+    if request.method == 'POST':
+        form = ReportForm(request.POST)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.item = item
+            report.reporter = request.user
+            try:
+                report.save()
+            except IntegrityError:
+                messages.info(request, '你已经举报过这个商品，我们会尽快处理。')
+            else:
+                messages.success(request, '举报已提交，感谢你一起维护校园社区。')
+            return redirect('item_detail', item_id=item.id)
+    else:
+        form = ReportForm()
+    return render(request, 'listings/report_form.html', {'form': form, 'item': item, 'title': '举报商品'})
 
 
 @login_required
