@@ -851,6 +851,36 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '搜索时段趋势')
         self.assertContains(response, '星期分布')
 
+    def test_search_insights_compares_previous_period_and_term_movement(self):
+        today = timezone.localdate()
+        current_date = today - timedelta(days=1)
+        previous_date = today - timedelta(days=31)
+
+        def create_search(query, result_count, created_date):
+            record = SearchQuery.objects.create(
+                user=self.other_user, query=query, result_count=result_count,
+            )
+            record.created_at = timezone.make_aware(
+                datetime.combine(created_date, time(hour=10, minute=30)),
+            )
+            record.save(update_fields=['created_at'])
+
+        for query, result_count in (('台灯', 2), ('台灯', 2), ('台灯', 2), ('键盘', 3)):
+            create_search(query, result_count, current_date)
+        for query, result_count in (('台灯', 0), ('书籍', 4), ('书籍', 4)):
+            create_search(query, result_count, previous_date)
+
+        comparison = build_search_insights(30)['period_comparison']
+        self.assertEqual(comparison['current_searches'], 4)
+        self.assertEqual(comparison['previous_searches'], 3)
+        self.assertEqual(comparison['search_change']['change_display'], '+33.3%')
+        self.assertEqual(comparison['zero_result_rate_delta'], -33.3)
+        rising = {row['query']: row['delta'] for row in comparison['rising_terms']}
+        falling = {row['query']: row['delta'] for row in comparison['falling_terms']}
+        self.assertEqual(rising['台灯'], 2)
+        self.assertEqual(rising['键盘'], 1)
+        self.assertEqual(falling['书籍'], -2)
+
     def test_search_insights_is_staff_only(self):
         self.client.login(username='bob', password='safe-password-123')
         response = self.client.get(reverse('search_insights'))

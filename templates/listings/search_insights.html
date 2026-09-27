@@ -39,6 +39,18 @@
     <div class="ops-metric-card ops-metric-green"><span><i class="bi bi-graph-up-arrow"></i>无结果占比</span><strong>{{ metrics.zero_result_rate }}%</strong><small>搜索体验健康度参考</small></div>
 </div>
 
+<div class="content-card ops-panel search-period-comparison mb-4">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Period movement</span><h2>需求变化</h2></div><span class="ops-panel-hint">与上一周期对比</span></div>
+    <div class="search-comparison-metrics">
+        <div class="search-comparison-metric"><span>搜索次数</span><strong class="is-{{ period_comparison.search_change.direction }}">{{ period_comparison.search_change.change_display }}</strong><small>{{ period_comparison.current_searches }} 次 vs {{ period_comparison.previous_searches }} 次</small></div>
+        <div class="search-comparison-metric"><span>无结果占比</span><strong class="is-{% if period_comparison.zero_result_rate_delta > 0 %}down{% elif period_comparison.zero_result_rate_delta < 0 %}up{% else %}flat{% endif %}">{{ period_comparison.zero_result_rate_change_display }}</strong><small>{{ period_comparison.current_zero_result_rate }}% vs {{ period_comparison.previous_zero_result_rate }}%</small></div>
+    </div>
+    <div class="search-term-movement-grid">
+        <div><h3><i class="bi bi-arrow-up-right"></i>上升需求</h3>{% if period_comparison.rising_terms %}<div class="search-term-movement-list">{% for row in period_comparison.rising_terms %}<div class="search-term-movement-row"><strong>{{ row.query }}</strong><span>{{ row.previous_count }} → {{ row.current_count }}</span><b>+{{ row.delta }}</b></div>{% endfor %}</div>{% else %}<p class="empty-inline">暂无明显上升的搜索词。</p>{% endif %}</div>
+        <div><h3><i class="bi bi-arrow-down-right"></i>下降需求</h3>{% if period_comparison.falling_terms %}<div class="search-term-movement-list">{% for row in period_comparison.falling_terms %}<div class="search-term-movement-row"><strong>{{ row.query }}</strong><span>{{ row.previous_count }} → {{ row.current_count }}</span><b>{{ row.delta }}</b></div>{% endfor %}</div>{% else %}<p class="empty-inline">暂无明显下降的搜索词。</p>{% endif %}</div>
+    </div>
+</div>
+
 <div class="row g-4 mb-4">
     <div class="col-lg-8">
         <section class="content-card ops-panel h-100">

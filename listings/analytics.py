@@ -88,6 +88,73 @@ def _build_search_rhythm(search_period):
     }
 
 
+def _build_search_period_comparison(current_period, previous_period):
+    """Compare search demand with the equivalent previous period."""
+    current_count = current_period.count()
+    previous_count = previous_period.count()
+    current_zero_count = current_period.filter(result_count=0).count()
+    previous_zero_count = previous_period.filter(result_count=0).count()
+    current_zero_rate = round(current_zero_count / current_count * 100, 1) if current_count else 0
+    previous_zero_rate = round(previous_zero_count / previous_count * 100, 1) if previous_count else 0
+
+    if current_count == previous_count:
+        search_change = {'delta': 0, 'change_display': '持平', 'direction': 'flat'}
+    elif previous_count:
+        delta = round((current_count - previous_count) / previous_count * 100, 1)
+        search_change = {
+            'delta': delta,
+            'change_display': f'{delta:+.1f}%',
+            'direction': 'up' if delta > 0 else 'down',
+        }
+    else:
+        search_change = {
+            'delta': None,
+            'change_display': '新增' if current_count else '—',
+            'direction': 'up' if current_count else 'flat',
+        }
+
+    zero_rate_delta = round(current_zero_rate - previous_zero_rate, 1)
+    current_terms = dict(
+        current_period.values('query').annotate(count=Count('id')).values_list('query', 'count')
+    )
+    previous_terms = dict(
+        previous_period.values('query').annotate(count=Count('id')).values_list('query', 'count')
+    )
+    term_changes = []
+    for term in set(current_terms) | set(previous_terms):
+        current_term_count = current_terms.get(term, 0)
+        previous_term_count = previous_terms.get(term, 0)
+        delta = current_term_count - previous_term_count
+        if delta:
+            term_changes.append({
+                'query': term,
+                'current_count': current_term_count,
+                'previous_count': previous_term_count,
+                'delta': delta,
+                'direction': 'up' if delta > 0 else 'down',
+            })
+
+    return {
+        'current_searches': current_count,
+        'previous_searches': previous_count,
+        'search_change': search_change,
+        'current_zero_result_rate': current_zero_rate,
+        'previous_zero_result_rate': previous_zero_rate,
+        'zero_result_rate_delta': zero_rate_delta,
+        'zero_result_rate_change_display': (
+            '持平' if zero_rate_delta == 0 else f'{zero_rate_delta:+.1f} 个百分点'
+        ),
+        'rising_terms': sorted(
+            (row for row in term_changes if row['direction'] == 'up'),
+            key=lambda row: (-row['delta'], -row['current_count'], row['query']),
+        )[:8],
+        'falling_terms': sorted(
+            (row for row in term_changes if row['direction'] == 'down'),
+            key=lambda row: (row['delta'], -row['current_count'], row['query']),
+        )[:8],
+    }
+
+
 def build_search_insights(days=30, query=''):
     """Build an actionable view of search demand for staff operations work."""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
@@ -141,6 +208,10 @@ def build_search_insights(days=30, query=''):
         'period_days': days,
         'period_choices': PERIOD_CHOICES,
         'search_rhythm': _build_search_rhythm(search_period),
+        'period_comparison': _build_search_period_comparison(
+            search_period,
+            SearchQuery.objects.filter(created_at__gte=start - timedelta(days=days), created_at__lt=start),
+        ),
         'period_start': start,
         'period_end': now,
         'query_filter': query,
