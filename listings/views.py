@@ -1,3 +1,4 @@
+import csv
 from decimal import Decimal, InvalidOperation
 from datetime import timedelta
 from urllib.parse import urlencode
@@ -6,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
+from django.http import HttpResponse
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Case, Count, F, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
@@ -774,19 +776,96 @@ def my_items(request):
     return render(request, 'listings/my_items.html', {'items': items, 'title': '我的商品'})
 
 
+def _operations_period_days(request):
+    try:
+        return int(request.GET.get('days', 30))
+    except (TypeError, ValueError):
+        return 30
+
+
 @login_required
 def operations_dashboard(request):
     if not request.user.is_staff:
         raise PermissionDenied
-    try:
-        period_days = int(request.GET.get('days', 30))
-    except (TypeError, ValueError):
-        period_days = 30
-    dashboard = build_operations_dashboard(period_days)
+    dashboard = build_operations_dashboard(_operations_period_days(request))
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
     return render(request, 'listings/operations_dashboard.html', dashboard)
+
+
+@login_required
+def operations_dashboard_export(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+
+    dashboard = build_operations_dashboard(_operations_period_days(request))
+    metrics = dashboard['metrics']
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = (
+        f"attachment; filename=campus-glimmer-operations-{dashboard['period_days']}d.csv"
+    )
+    response.write('\ufeff')
+    writer = csv.writer(response)
+    writer.writerow(['拾光校园运营数据导出'])
+    writer.writerow(['统计周期', f"最近 {dashboard['period_days']} 天"])
+    writer.writerow([
+        '数据范围',
+        f"{dashboard['period_start']:%Y-%m-%d} 至 {dashboard['period_end']:%Y-%m-%d}",
+    ])
+    writer.writerow([])
+    writer.writerow(['核心指标', '数值'])
+    metric_labels = (
+        ('active_items', '当前在售商品'),
+        ('new_items', '新增商品'),
+        ('detail_views', '详情浏览'),
+        ('favorites', '加入心愿单'),
+        ('orders', '交易预约'),
+        ('completed_orders', '完成交易'),
+        ('completion_rate', '交易完成率（%）'),
+        ('average_order_price', '平均预约金额'),
+        ('searches', '搜索次数'),
+        ('zero_result_searches', '无结果搜索'),
+        ('zero_result_rate', '无结果占比（%）'),
+        ('new_users', '新增用户'),
+        ('new_reports', '新增举报'),
+        ('pending_reports', '待处理举报'),
+    )
+    for key, label in metric_labels:
+        value = metrics[key]
+        writer.writerow([label, '' if value is None else value])
+    writer.writerow([
+        '待处理交易争议',
+        OrderDispute.objects.filter(status__in={'open', 'reviewing'}).count(),
+    ])
+
+    writer.writerow([])
+    writer.writerow(['转化漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
+    for stage in dashboard['conversion_funnel']:
+        writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
+
+    writer.writerow([])
+    writer.writerow(['每日活动趋势', '发布商品', '搜索次数', '交易预约', '活动总量'])
+    for point in dashboard['activity_trend']:
+        writer.writerow([
+            point['date'], point['items'], point['searches'], point['orders'], point['total'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['订单状态', '数量'])
+    for row in dashboard['order_statuses']:
+        writer.writerow([row['label'], row['count']])
+
+    writer.writerow([])
+    writer.writerow(['分类供给', '周期内新增', '当前在售'])
+    for row in dashboard['category_stats']:
+        writer.writerow([row.name, row.new_count, row.available_count])
+
+    writer.writerow([])
+    writer.writerow(['地点供给与交易', '周期内新增商品', '周期内交易预约'])
+    for row in dashboard['location_stats']:
+        writer.writerow([row.name, row.new_count, row.order_count])
+    return response
 
 def search_items(request):
     query = request.GET.get('q', '').strip()

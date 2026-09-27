@@ -454,6 +454,26 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '用户行为转化漏斗')
         self.assertContains(response, '图书馆东门')
 
+    def test_operations_dashboard_export_is_staff_only_and_contains_aggregates(self):
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 7})
+        self.assertEqual(response.status_code, 403)
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        SearchQuery.objects.create(query='键盘', result_count=2)
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 7})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn('campus-glimmer-operations-7d.csv', response['Content-Disposition'])
+        report = response.content.decode('utf-8-sig')
+        self.assertIn('拾光校园运营数据导出', report)
+        self.assertIn('核心指标,数值', report)
+        self.assertIn('当前在售商品,1', report)
+        self.assertIn('每日活动趋势', report)
+        self.assertIn('图书馆东门', report)
+
     def test_operations_dashboard_respects_selected_period(self):
         self.user.is_staff = True
         self.user.save(update_fields=['is_staff'])

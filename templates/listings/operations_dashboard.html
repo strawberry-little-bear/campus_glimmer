@@ -10,6 +10,7 @@
         <p>把商品、搜索与交易行为放在同一张看板里，观察校园市场正在发生什么。</p>
     </div>
     <div class="d-flex flex-wrap align-items-center gap-2">
+        <a href="{% url 'operations_dashboard_export' %}?days={{ period_days }}" class="btn btn-outline-success btn-sm"><i class="bi bi-download me-1"></i>导出 CSV</a>
         <a href="{% url 'search_insights' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-search-heart me-1"></i>搜索洞察</a>
         <a href="{% url 'report_list' %}" class="btn btn-outline-warning btn-sm"><i class="bi bi-flag me-1"></i>商品举报{% if metrics.pending_reports %}（{{ metrics.pending_reports }}）{% endif %}</a><a href="{% url 'dispute_list' %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-shield-exclamation me-1"></i>交易争议{% if pending_dispute_count %}（{{ pending_dispute_count }}）{% endif %}</a>
         <form method="get" class="operations-period-form">
