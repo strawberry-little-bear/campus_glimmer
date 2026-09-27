@@ -842,6 +842,18 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
+    if dashboard['operational_alerts']:
+        for alert in dashboard['operational_alerts']:
+            writer.writerow([
+                alert['title'], alert['severity_label'],
+                f"{alert['metric_label']}：{alert['metric']}",
+                alert['message'], alert['action_label'],
+            ])
+    else:
+        writer.writerow(['暂无高优先级提醒', '', '', '当前周期未触发运营提醒规则', ''])
+
+    writer.writerow([])
     writer.writerow(['周期对比', '当前周期', '上一周期', '变化'])
     for row in dashboard['period_comparisons']:
         writer.writerow([row['label'], row['current'], row['previous'], row['change_display']])

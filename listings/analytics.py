@@ -238,6 +238,71 @@ def _build_user_retention(start, previous_start, end):
     }
 
 
+
+def build_operational_alerts(metrics, period_comparisons):
+    """Turn dashboard signals into a short, actionable operations queue."""
+    alerts = []
+    search_count = metrics['searches']
+    zero_result_rate = metrics['zero_result_rate']
+    zero_result_count = metrics['zero_result_searches']
+    if search_count >= 3 and zero_result_count >= 3 and zero_result_rate >= 35:
+        alerts.append({
+            'key': 'search_supply_gap',
+            'severity': 'warning',
+            'severity_label': '需要关注',
+            'title': '搜索供给缺口',
+            'message': (
+                f'最近 {search_count} 次搜索中有 {zero_result_count} 次没有结果，'
+                f'无结果占比达到 {zero_result_rate}%，建议优先补充相关商品。'
+            ),
+            'metric': f'{zero_result_rate}%',
+            'metric_label': '无结果占比',
+            'action_label': '查看搜索洞察',
+            'action_url_name': 'search_insights',
+        })
+
+    pending_reports = metrics['pending_reports']
+    if pending_reports >= 3:
+        alerts.append({
+            'key': 'report_backlog',
+            'severity': 'critical' if pending_reports >= 10 else 'warning',
+            'severity_label': '优先处理' if pending_reports >= 10 else '需要关注',
+            'title': '举报审核队列积压',
+            'message': f'当前有 {pending_reports} 条举报仍在待处理队列，建议安排审核并及时反馈。',
+            'metric': str(pending_reports),
+            'metric_label': '待处理举报',
+            'action_label': '进入举报审核',
+            'action_url_name': 'report_list',
+        })
+
+    completed_comparison = next(
+        (row for row in period_comparisons if row['key'] == 'completed_orders'),
+        None,
+    )
+    if completed_comparison and completed_comparison['previous'] >= 3:
+        previous = completed_comparison['previous']
+        current = completed_comparison['current']
+        drop_rate = round((previous - current) / previous * 100, 1)
+        if current < previous and drop_rate >= 30:
+            alerts.append({
+                'key': 'completed_order_drop',
+                'severity': 'critical' if drop_rate >= 50 else 'warning',
+                'severity_label': '优先关注' if drop_rate >= 50 else '需要关注',
+                'title': '交易转化下滑',
+                'message': (
+                    f'完成交易从上一周期的 {previous} 笔降至 {current} 笔，'
+                    f'下降 {drop_rate}%，建议排查供给、预约和交付环节。'
+                ),
+                'metric': f'-{drop_rate}%',
+                'metric_label': '完成交易变化',
+                'action_label': '查看运营看板',
+                'action_url_name': 'operations_dashboard',
+            })
+
+    severity_order = {'critical': 0, 'warning': 1, 'info': 2}
+    return sorted(alerts, key=lambda alert: severity_order.get(alert['severity'], 9))
+
+
 def build_operations_dashboard(days=30):
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
@@ -429,6 +494,27 @@ def build_operations_dashboard(days=30):
             'direction': direction,
         })
 
+    metrics = {
+        'active_items': Item.objects.filter(status='available').count(),
+        'new_items': item_period.count(),
+        'detail_views': detail_view_count,
+        'favorites': favorite_count,
+        'orders': order_count,
+        'completed_orders': completed_order_count,
+        'completion_rate': completion_rate,
+        'average_order_price': average_order_price,
+        'searches': search_count,
+        'zero_result_searches': zero_result_search_count,
+        'zero_result_rate': round(zero_result_search_count / search_count * 100, 1) if search_count else 0,
+        'new_users': user_period.count(),
+        'active_users': active_user_count,
+        'retention_rate': user_retention['rate'],
+        'new_reports': report_period.count(),
+        'pending_reports': Report.objects.filter(status__in=['pending', 'reviewing']).count(),
+    }
+    operational_alerts = build_operational_alerts(metrics, period_comparisons)
+
+
     return {
         'period_days': days,
         'period_choices': PERIOD_CHOICES,
@@ -437,26 +523,10 @@ def build_operations_dashboard(days=30):
         'previous_period_start': previous_start,
         'previous_period_end': start - timedelta(days=1),
         'period_comparisons': period_comparisons,
+        'operational_alerts': operational_alerts,
         'activity_segments': activity_segments,
         'user_retention': user_retention,
-        'metrics': {
-            'active_items': Item.objects.filter(status='available').count(),
-            'new_items': item_period.count(),
-            'detail_views': detail_view_count,
-            'favorites': favorite_count,
-            'orders': order_count,
-            'completed_orders': completed_order_count,
-            'completion_rate': completion_rate,
-            'average_order_price': average_order_price,
-            'searches': search_count,
-            'zero_result_searches': zero_result_search_count,
-            'zero_result_rate': round(zero_result_search_count / search_count * 100, 1) if search_count else 0,
-            'new_users': user_period.count(),
-            'active_users': active_user_count,
-            'retention_rate': user_retention['rate'],
-            'new_reports': report_period.count(),
-            'pending_reports': Report.objects.filter(status__in=['pending', 'reviewing']).count(),
-        },
+        'metrics': metrics,
         'activity_trend': activity_trend,
         'trend_max': trend_max,
         'conversion_funnel': conversion_funnel,

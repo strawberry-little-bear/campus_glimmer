@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
-from .analytics import build_search_insights
+from .analytics import build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .recommendations import get_recommendations
 from .notifications import create_notification
@@ -453,6 +453,49 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.context['conversion_funnel'][2]['rate'], 100.0)
         self.assertContains(response, '用户行为转化漏斗')
         self.assertContains(response, '图书馆东门')
+
+    def test_operations_dashboard_surfaces_actionable_alerts(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        for _ in range(3):
+            SearchQuery.objects.create(query='投影仪', result_count=0)
+        report_items = [self.item]
+        report_items.extend(
+            Item.objects.create(
+                title=f'测试商品-{index}', description='测试', price='10.00',
+                category=self.category, location=self.location, condition='全新', seller=self.user,
+            )
+            for index in (1, 2)
+        )
+        for report_item, reason in zip(report_items, ('scam', 'spam', 'inappropriate')):
+            Report.objects.create(item=report_item, reporter=self.other_user, reason=reason)
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        alert_keys = {alert['key'] for alert in response.context['operational_alerts']}
+        self.assertIn('search_supply_gap', alert_keys)
+        self.assertIn('report_backlog', alert_keys)
+        self.assertContains(response, '运营提醒')
+        self.assertContains(response, '搜索供给缺口')
+        self.assertContains(response, '举报审核队列积压')
+
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+        self.assertContains(export, '运营提醒')
+        self.assertContains(export, '搜索供给缺口')
+
+    def test_operational_alerts_detect_completed_order_drop(self):
+        metrics = {
+            'searches': 10, 'zero_result_searches': 0, 'zero_result_rate': 0,
+            'pending_reports': 0,
+        }
+        comparisons = [{
+            'key': 'completed_orders', 'current': 2, 'previous': 5,
+        }]
+        alerts = build_operational_alerts(metrics, comparisons)
+        self.assertEqual([alert['key'] for alert in alerts], ['completed_order_drop'])
+        self.assertEqual(alerts[0]['metric'], '-60.0%')
+        self.assertEqual(alerts[0]['severity'], 'critical')
 
     def test_operations_dashboard_export_is_staff_only_and_contains_aggregates(self):
         self.client.login(username='alice', password='safe-password-123')

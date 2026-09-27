@@ -29,6 +29,35 @@
     {{ period_start|date:"Y年m月d日" }} — {{ period_end|date:"Y年m月d日" }} · 仅限管理员可见
 </div>
 
+{% if operational_alerts %}
+<section class="content-card ops-panel ops-alert-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Action queue</span><h2>运营提醒</h2></div>
+        <span class="ops-panel-hint">基于当前周期信号自动整理</span>
+    </div>
+    <div class="ops-alert-list">
+        {% for alert in operational_alerts %}
+        <article class="ops-alert ops-alert-{{ alert.severity }}">
+            <div class="ops-alert-icon">
+                {% if alert.severity == 'critical' %}<i class="bi bi-exclamation-octagon"></i>{% else %}<i class="bi bi-exclamation-triangle"></i>{% endif %}
+            </div>
+            <div class="ops-alert-body">
+                <div class="ops-alert-title"><strong>{{ alert.title }}</strong><span>{{ alert.severity_label }}</span></div>
+                <p>{{ alert.message }}</p>
+                <a class="ops-inline-link" href="{% url alert.action_url_name %}?days={{ period_days }}">{{ alert.action_label }} <i class="bi bi-arrow-up-right"></i></a>
+            </div>
+            <div class="ops-alert-metric"><strong>{{ alert.metric }}</strong><small>{{ alert.metric_label }}</small></div>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% else %}
+<section class="content-card ops-panel ops-alert-panel ops-alert-clear mb-4">
+    <div class="ops-alert-clear-icon"><i class="bi bi-check2-circle"></i></div>
+    <div><span class="eyebrow eyebrow-soft">All clear</span><h2>暂时没有高优先级提醒</h2><p>当前周期的搜索、审核和交易信号都在可观察范围内，继续保持节奏即可。</p></div>
+</section>
+{% endif %}
+
 <div class="ops-metric-grid mb-4">
     <div class="ops-metric-card ops-metric-green">
         <span><i class="bi bi-box-seam"></i>当前在售</span>
