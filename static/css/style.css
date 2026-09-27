@@ -128,3 +128,29 @@ a { color: inherit; text-decoration: none; }
 .report-link:hover { color: #c45f4a !important; }
 .safety-card h2 { margin: 14px 0 18px; font-size: 1.45rem; }
 .safety-card ul { padding-left: 1.2rem; color: #60756c; line-height: 1.9; }
+.order-target { display: flex; align-items: center; gap: 14px; padding: 15px 17px; background: #f6faf7; border: 1px solid rgba(31, 102, 77, .12); border-radius: 16px; }
+.order-target-icon, .order-list-icon { display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #2e8b67, #85b83f); border-radius: 13px; }
+.order-target-icon { width: 42px; height: 42px; }
+.order-target strong, .order-target small { display: block; }
+.order-target small { margin-top: 3px; color: #73847d; }
+.order-status { display: inline-flex; align-items: center; padding: 5px 10px; font-size: .78rem; font-weight: 700; border-radius: 999px; white-space: nowrap; }
+.order-status-pending { color: #8c651d; background: #fff3cd; }
+.order-status-confirmed, .order-status-meeting { color: #1c6681; background: #dff4fb; }
+.order-status-completed { color: #1f7653; background: #ddf4e9; }
+.order-status-cancelled { color: #9b4c42; background: #fbe5e1; }
+.order-progress { display: flex; align-items: center; }
+.progress-step { display: flex; flex-direction: column; align-items: center; gap: 7px; min-width: 66px; color: #a2b0aa; text-align: center; }
+.progress-step span { display: grid; width: 31px; height: 31px; place-items: center; border: 1px solid #cbd8d1; border-radius: 50%; font-size: .85rem; }
+.progress-step.is-done { color: #247956; }
+.progress-step.is-done span { color: #fff; background: #2e8b67; border-color: #2e8b67; }
+.progress-step small { font-size: .73rem; white-space: nowrap; }
+.progress-line { flex: 1; height: 2px; background: #dce6e0; }
+.progress-line.is-done { background: #63a882; }
+.order-info-list { line-height: 1.8; }
+.order-info-list dt { color: #7a8b84; font-weight: 500; }
+.order-info-list dd a { color: #247956; text-decoration: none; }
+.order-list-card { display: flex; align-items: center; gap: 14px; padding: 17px 19px; color: inherit; text-decoration: none; background: #fff; border: 1px solid rgba(31, 102, 77, .11); border-radius: 18px; transition: transform .2s ease, box-shadow .2s ease; }
+.order-list-card:hover { color: inherit; transform: translateY(-2px); box-shadow: 0 12px 28px rgba(31, 86, 66, .1); }
+.order-list-icon { width: 42px; height: 42px; flex: 0 0 auto; }
+.order-list-card strong, .order-list-card small { display: block; }
+.order-list-card small { margin-top: 5px; color: #73847d; }

@@ -1,5 +1,5 @@
 from django import forms
-from .models import CampusLocation, Category, Item, ItemImage, Report
+from .models import CampusLocation, Category, Item, ItemImage, Order, Report
 
 
 class StyledModelFormMixin:
@@ -61,3 +61,20 @@ class ReportForm(StyledModelFormMixin, forms.ModelForm):
 ItemImageFormSet = forms.inlineformset_factory(
     Item, ItemImage, form=ItemImageForm, extra=3, max_num=5, can_delete=True
 )
+
+
+class OrderForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Order
+        fields = ['meeting_location', 'buyer_note']
+        widgets = {
+            'meeting_location': forms.Select(attrs={'class': 'form-select'}),
+            'buyer_note': forms.Textarea(attrs={'rows': 4, 'placeholder': '例如：周三晚课后在图书馆东门见面。'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['meeting_location'].widget.attrs['class'] = 'form-select'
+        self.fields['meeting_location'].queryset = CampusLocation.objects.filter(is_active=True)
+        self.fields['meeting_location'].empty_label = '沿用商品交易地点'

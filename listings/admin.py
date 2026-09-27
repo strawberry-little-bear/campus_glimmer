@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CampusLocation, Category, Favorite, Item, ItemImage, Report
+from .models import CampusLocation, Category, Favorite, Item, ItemImage, Order, Report
 
 
 class ItemImageInline(admin.TabularInline):
@@ -53,3 +53,12 @@ class ReportAdmin(admin.ModelAdmin):
         ('举报信息', {'fields': ('item', 'reporter', 'reason', 'detail', 'created_at')}),
         ('审核结果', {'fields': ('status', 'reviewer', 'review_note', 'updated_at')}),
     )
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ('item', 'buyer', 'seller', 'agreed_price', 'status', 'meeting_location', 'created_at', 'updated_at')
+    list_filter = ('status', 'meeting_location', 'created_at')
+    search_fields = ('item__title', 'buyer__username', 'seller__username')
+    autocomplete_fields = ('item', 'buyer', 'seller', 'meeting_location')
+    readonly_fields = ('agreed_price', 'created_at', 'updated_at')

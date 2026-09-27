@@ -3,13 +3,13 @@ from urllib.parse import urlencode
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .forms import ItemForm, ItemImageFormSet, ReportForm
-from .models import CampusLocation, Category, Favorite, Item, Report
+from .forms import ItemForm, ItemImageFormSet, OrderForm, ReportForm
+from .models import CampusLocation, Category, Favorite, Item, Order, Report
 
 
 def _favorite_ids(request):
@@ -126,6 +126,90 @@ def report_item(request, item_id):
     else:
         form = ReportForm()
     return render(request, 'listings/report_form.html', {'form': form, 'item': item, 'title': '举报商品'})
+
+
+@login_required
+def create_order(request, item_id):
+    item = get_object_or_404(Item.objects.select_related('seller', 'location'), id=item_id)
+    if item.seller == request.user:
+        messages.error(request, '不能预约自己发布的商品。')
+        return redirect('item_detail', item_id=item.id)
+    if hasattr(item, 'order'):
+        messages.info(request, '这个商品已经有一笔交易预约。')
+        return redirect('order_detail', order_id=item.order.id)
+    if request.method == 'POST':
+        form = OrderForm(request.POST)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    locked_item = Item.objects.select_for_update().select_related('seller').get(id=item.id)
+                    if locked_item.status != 'available' or hasattr(locked_item, 'order'):
+                        messages.info(request, '这个商品刚刚被其他同学预约了。')
+                        return redirect('item_detail', item_id=item.id)
+                    order = form.save(commit=False)
+                    order.item = locked_item
+                    order.buyer = request.user
+                    order.seller = locked_item.seller
+                    order.agreed_price = locked_item.price
+                    order.meeting_location = order.meeting_location or locked_item.location
+                    order.save()
+                    locked_item.status = 'reserved'
+                    locked_item.save(update_fields=['status', 'updated_at'])
+            except IntegrityError:
+                messages.info(request, '这个商品刚刚被其他同学预约了。')
+                return redirect('item_detail', item_id=item.id)
+            messages.success(request, '预约已提交，等待卖家确认。')
+            return redirect('order_detail', order_id=order.id)
+    else:
+        form = OrderForm(initial={'meeting_location': item.location_id})
+    return render(request, 'listings/order_form.html', {'form': form, 'item': item, 'title': '预约交易'})
+
+
+@login_required
+def order_detail(request, order_id):
+    order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller', 'meeting_location'), id=order_id)
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限查看这笔订单。')
+        return redirect('home')
+    return render(request, 'listings/order_detail.html', {'order': order, 'title': '交易订单'})
+
+
+@login_required
+def update_order_status(request, order_id):
+    order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller'), id=order_id)
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限操作这笔订单。')
+        return redirect('home')
+    if request.method == 'POST':
+        target_status = request.POST.get('status')
+        transitions = {
+            'pending': {'confirmed', 'cancelled'},
+            'confirmed': {'meeting', 'cancelled'},
+            'meeting': {'completed', 'cancelled'},
+            'completed': set(),
+            'cancelled': set(),
+        }
+        seller_can_update = request.user == order.seller and target_status in transitions.get(order.status, set())
+        buyer_can_update = request.user == order.buyer and target_status in {'completed', 'cancelled'}
+        if seller_can_update or buyer_can_update:
+            order.status = target_status
+            order.save(update_fields=['status', 'updated_at'])
+            if target_status == 'cancelled':
+                order.item.status = 'available'
+                order.item.save(update_fields=['status', 'updated_at'])
+            elif target_status == 'completed':
+                order.item.status = 'sold'
+                order.item.save(update_fields=['status', 'updated_at'])
+            messages.success(request, f'订单状态已更新为“{order.get_status_display()}”。')
+        else:
+            messages.error(request, '当前订单状态不允许执行这个操作。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def my_orders(request):
+    orders = Order.objects.filter(Q(buyer=request.user) | Q(seller=request.user)).select_related('item', 'buyer', 'seller', 'meeting_location')
+    return render(request, 'listings/my_orders.html', {'orders': orders, 'title': '我的交易'})
 
 
 @login_required

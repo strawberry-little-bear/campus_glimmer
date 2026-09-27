@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">交易记录</span><h1>我的交易</h1><p>查看你作为买家或卖家的每一笔预约。</p></div><a href="{% url 'item_list' %}" class="btn btn-outline-primary"><i class="bi bi-compass me-2"></i>继续逛逛</a></div>
+<div class="row g-3">{% for order in orders %}<div class="col-12"><a href="{% url 'order_detail' order.id %}" class="order-list-card"><div class="order-list-icon"><i class="bi bi-bag-check"></i></div><div class="flex-grow-1"><div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ order.item.title }}</strong><span class="order-status order-status-{{ order.status }}">{{ order.get_status_display }}</span></div><small>{% if user == order.buyer %}买家{% else %}卖家{% endif %} · ¥{{ order.agreed_price|floatformat:2 }}{% if order.meeting_location %} · {{ order.meeting_location.name }}{% endif %}</small></div><i class="bi bi-chevron-right text-muted"></i></a></div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-receipt display-6 d-block mb-3"></i><h3>还没有交易记录</h3><p>遇到合适的商品后，可以从详情页发起预约。</p><a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a></div></div>{% endfor %}</div>
+{% endblock %}

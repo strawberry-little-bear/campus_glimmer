@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CampusLocation, Category, Favorite, Item, Report
+from .models import CampusLocation, Category, Favorite, Item, Order, Report
 
 
 class ListingFlowTests(TestCase):
@@ -59,3 +59,24 @@ class ListingFlowTests(TestCase):
         response = self.client.get(reverse('report_item', args=[self.item.id]))
         self.assertRedirects(response, reverse('item_detail', args=[self.item.id]))
         self.assertFalse(Report.objects.filter(item=self.item, reporter=self.user).exists())
+    def test_buyer_can_place_order_and_seller_can_complete_it(self):
+        self.client.login(username='bob', password='safe-password-123')
+        order_url = reverse('create_order', args=[self.item.id])
+        response = self.client.post(order_url, {'meeting_location': self.location.id, 'buyer_note': '周三晚课后见面'})
+        order = Order.objects.get(item=self.item)
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        self.item.refresh_from_db()
+        self.assertEqual(order.status, 'pending')
+        self.assertEqual(self.item.status, 'reserved')
+
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        status_url = reverse('update_order_status', args=[order.id])
+        self.client.post(status_url, {'status': 'confirmed'})
+        self.client.post(status_url, {'status': 'meeting'})
+        self.client.post(status_url, {'status': 'completed'})
+        order.refresh_from_db()
+        self.item.refresh_from_db()
+        self.assertEqual(order.status, 'completed')
+        self.assertEqual(self.item.status, 'sold')
+

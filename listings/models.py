@@ -130,3 +130,38 @@ class Report(models.Model):
 
     def __str__(self):
         return f'{self.item.title} · {self.get_reason_display()}'
+
+
+class Order(models.Model):
+    STATUS_CHOICES = (
+        ('pending', '待卖家确认'),
+        ('confirmed', '卖家已确认'),
+        ('meeting', '待当面交付'),
+        ('completed', '交易完成'),
+        ('cancelled', '已取消'),
+    )
+
+    item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name='order', verbose_name='商品')
+    buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='purchased_orders', verbose_name='买家')
+    seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sold_orders', verbose_name='卖家')
+    meeting_location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='orders', verbose_name='交付地点',
+    )
+    agreed_price = models.DecimalField('成交价格', max_digits=10, decimal_places=2)
+    buyer_note = models.TextField('买家备注', blank=True)
+    status = models.CharField('订单状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField('下单时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '交易订单'
+        verbose_name_plural = '交易订单'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['buyer', 'status']),
+            models.Index(fields=['seller', 'status']),
+        ]
+
+    def __str__(self):
+        return f'{self.item.title} · {self.get_status_display()}'
