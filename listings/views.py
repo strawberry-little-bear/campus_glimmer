@@ -1,164 +1,183 @@
-# listings/views.py
-from django.shortcuts import render, redirect, get_object_or_404
+from urllib.parse import urlencode
+
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
-from .models import Item, Category
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
+
 from .forms import ItemForm, ItemImageFormSet
+from .models import Category, Favorite, Item
+
+
+def _favorite_ids(request):
+    if not request.user.is_authenticated:
+        return set()
+    return set(Favorite.objects.filter(user=request.user).values_list('item_id', flat=True))
+
 
 def home(request):
-    categories = Category.objects.all()
-    recent_items = Item.objects.filter(status='available').order_by('-created_at')[:8]
+    categories = Category.objects.annotate(available_count=Count('items', filter=Q(items__status='available')))
+    recent_items = Item.objects.filter(status='available').select_related('category', 'seller').prefetch_related('images')[:8]
     context = {
         'categories': categories,
-        'recent_items': recent_items
+        'recent_items': recent_items,
+        'favorite_ids': _favorite_ids(request),
+        'stats': {
+            'items': Item.objects.filter(status='available').count(),
+            'categories': categories.count(),
+            'members': Item.objects.values('seller').distinct().count(),
+        },
     }
     return render(request, 'listings/home.html', context)
 
+
 def item_list(request, category_id=None):
-    categories = Category.objects.all()
-    
-    if category_id:
-        category = get_object_or_404(Category, id=category_id)
-        items = Item.objects.filter(category=category, status='available').order_by('-created_at')
-        title = f'{category.name}类别下的商品'
-    else:
-        items = Item.objects.filter(status='available').order_by('-created_at')
-        title = '所有可购买商品'
-        
+    categories = Category.objects.annotate(available_count=Count('items', filter=Q(items__status='available')))
+    category = get_object_or_404(Category, id=category_id) if category_id else None
+    items = Item.objects.filter(status='available').select_related('category', 'seller').prefetch_related('images')
+    if category:
+        items = items.filter(category=category)
+    query = request.GET.get('q', '').strip()
+    if query:
+        items = items.filter(Q(title__icontains=query) | Q(description__icontains=query))
+    sort = request.GET.get('sort', 'latest')
+    sort_map = {'latest': '-created_at', 'price_asc': 'price', 'price_desc': '-price'}
+    items = items.order_by(sort_map.get(sort, '-created_at'))
+    paginator = Paginator(items, 12)
+    page_obj = paginator.get_page(request.GET.get('page'))
     context = {
         'categories': categories,
-        'items': items,
-        'title': title
+        'category': category,
+        'items': page_obj,
+        'page_obj': page_obj,
+        'query': query,
+        'sort': sort,
+        'title': f'{category.name} · 商品集' if category else '发现校园好物',
+        'favorite_ids': _favorite_ids(request),
     }
     return render(request, 'listings/item_list.html', context)
 
+
 def item_detail(request, item_id):
-    item = get_object_or_404(Item, id=item_id)
-    context = {'item': item}
+    item = get_object_or_404(
+        Item.objects.select_related('category', 'seller').prefetch_related('images', 'comments__author__profile'),
+        id=item_id,
+    )
+    related_items = Item.objects.filter(category=item.category, status='available').exclude(id=item.id).select_related('seller').prefetch_related('images')[:4]
+    context = {
+        'item': item,
+        'related_items': related_items,
+        'is_favorite': item_id in _favorite_ids(request),
+    }
     return render(request, 'listings/item_detail.html', context)
+
+
+@login_required
+def toggle_favorite(request, item_id):
+    item = get_object_or_404(Item, id=item_id)
+    if request.method == 'POST':
+        favorite, created = Favorite.objects.get_or_create(user=request.user, item=item)
+        if created:
+            messages.success(request, '已加入心愿单。')
+        else:
+            favorite.delete()
+            messages.info(request, '已从心愿单移除。')
+    next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or ''
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = ''
+    return redirect(next_url or 'item_detail', item_id=item.id) if not next_url else redirect(next_url)
+
+
+@login_required
+def favorite_list(request):
+    favorites = Favorite.objects.filter(user=request.user).select_related('item__category', 'item__seller').prefetch_related('item__images')
+    context = {
+        'favorites': favorites,
+        'favorite_ids': set(favorites.values_list('item_id', flat=True)),
+        'title': '我的心愿单',
+    }
+    return render(request, 'listings/favorite_list.html', context)
+
 
 @login_required
 def new_item(request):
     if request.method == 'POST':
         form = ItemForm(request.POST)
         formset = ItemImageFormSet(request.POST, request.FILES)
-        
         if form.is_valid() and formset.is_valid():
             item = form.save(commit=False)
             item.seller = request.user
             item.save()
-            
-            for form in formset:
-                if form.cleaned_data and form.cleaned_data.get('image'):
-                    image = form.save(commit=False)
+            for image_form in formset:
+                if image_form.cleaned_data and image_form.cleaned_data.get('image'):
+                    image = image_form.save(commit=False)
                     image.item = item
                     image.save()
-                    
-            messages.success(request, '商品已成功发布！')
+            messages.success(request, '商品已成功发布，快去分享给同学吧！')
             return redirect('item_detail', item_id=item.id)
     else:
         form = ItemForm()
         formset = ItemImageFormSet()
-        
-    context = {
-        'form': form,
-        'formset': formset,
-        'title': '发布新商品'
-    }
-    return render(request, 'listings/item_form.html', context)
+    return render(request, 'listings/item_form.html', {'form': form, 'formset': formset, 'title': '发布新商品'})
+
 
 @login_required
 def edit_item(request, item_id):
     item = get_object_or_404(Item, id=item_id)
-    
-    # 检查当前用户是否是卖家
     if item.seller != request.user:
-        messages.error(request, '您没有权限编辑此商品！')
+        messages.error(request, '您没有权限编辑此商品。')
         return redirect('item_detail', item_id=item.id)
-        
     if request.method == 'POST':
         form = ItemForm(request.POST, instance=item)
         formset = ItemImageFormSet(request.POST, request.FILES, instance=item)
-        
         if form.is_valid() and formset.is_valid():
             form.save()
             formset.save()
-            messages.success(request, '商品信息已更新！')
+            messages.success(request, '商品信息已更新。')
             return redirect('item_detail', item_id=item.id)
     else:
         form = ItemForm(instance=item)
         formset = ItemImageFormSet(instance=item)
-        
-    context = {
-        'form': form,
-        'formset': formset,
-        'title': '编辑商品',
-        'item': item
-    }
-    return render(request, 'listings/item_form.html', context)
+    return render(request, 'listings/item_form.html', {'form': form, 'formset': formset, 'title': '编辑商品', 'item': item})
+
 
 @login_required
 def delete_item(request, item_id):
     item = get_object_or_404(Item, id=item_id)
-    
-    # 检查当前用户是否是卖家
     if item.seller != request.user:
-        messages.error(request, '您没有权限删除此商品！')
+        messages.error(request, '您没有权限删除此商品。')
         return redirect('item_detail', item_id=item.id)
-        
     if request.method == 'POST':
         item.delete()
-        messages.success(request, '商品已成功删除！')
+        messages.success(request, '商品已成功删除。')
         return redirect('my_items')
-        
-    context = {'item': item}
-    return render(request, 'listings/item_confirm_delete.html', context)
+    return render(request, 'listings/item_confirm_delete.html', {'item': item})
+
 
 @login_required
 def mark_sold(request, item_id):
     item = get_object_or_404(Item, id=item_id)
-    
-    # 检查当前用户是否是卖家
     if item.seller != request.user:
-        messages.error(request, '您没有权限更改此商品状态！')
+        messages.error(request, '您没有权限更改此商品状态。')
         return redirect('item_detail', item_id=item.id)
-        
     if request.method == 'POST':
         status = request.POST.get('status')
-        if status in [s[0] for s in Item.STATUS_CHOICES]:
+        if status in dict(Item.STATUS_CHOICES):
             item.status = status
-            item.save()
-            messages.success(request, f'商品状态已更新为{dict(Item.STATUS_CHOICES)[status]}！')
+            item.save(update_fields=['status', 'updated_at'])
+            messages.success(request, f'商品状态已更新为{item.get_status_display()}。')
         return redirect('item_detail', item_id=item.id)
-        
-    context = {'item': item}
-    return render(request, 'listings/mark_sold.html', context)
+    return render(request, 'listings/mark_sold.html', {'item': item})
+
 
 @login_required
 def my_items(request):
-    items = Item.objects.filter(seller=request.user).order_by('-created_at')
-    context = {
-        'items': items,
-        'title': '我的商品'
-    }
-    return render(request, 'listings/my_items.html', context)
+    items = Item.objects.filter(seller=request.user).select_related('category').prefetch_related('images')
+    return render(request, 'listings/my_items.html', {'items': items, 'title': '我的商品'})
+
 
 def search_items(request):
-    query = request.GET.get('q', '')
-    
-    if query:
-        items = Item.objects.filter(
-            Q(title__icontains=query) | 
-            Q(description__icontains=query),
-            status='available'
-        ).order_by('-created_at')
-    else:
-        items = Item.objects.none()
-        
-    context = {
-        'items': items,
-        'query': query,
-        'title': f'搜索结果: {query}'
-    }
-    return render(request, 'listings/search_results.html', context)
+    query = request.GET.get('q', '').strip()
+    return redirect(f'/listings/?{urlencode({"q": query})}') if query else redirect('item_list')

@@ -1,0 +1,16 @@
+{% load static %}
+<article class="product-card h-100">
+    <div class="product-image-wrap">
+        <a href="{% url 'item_detail' item.id %}">
+            {% if item.images.first %}<img src="{{ item.images.first.image.url }}" class="product-image" alt="{{ item.title }}">{% else %}<img src="{% static 'img/no-image.png' %}" class="product-image" alt="暂无图片">{% endif %}
+        </a>
+        <span class="condition-pill">{{ item.condition }}</span>
+        {% if user.is_authenticated %}<form method="post" action="{% url 'toggle_favorite' item.id %}" class="favorite-form">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="favorite-button {% if item.id in favorite_ids %}is-favorite{% endif %}" type="submit" aria-label="收藏"><i class="bi {% if item.id in favorite_ids %}bi-heart-fill{% else %}bi-heart{% endif %}"></i></button></form>{% endif %}
+    </div>
+    <div class="product-body">
+        <div class="product-meta"><span>{{ item.category.name }}</span><span>{{ item.created_at|date:'m月d日' }}</span></div>
+        <h3 class="product-title"><a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></h3>
+        <p class="product-description">{{ item.description|truncatechars:54 }}</p>
+        <div class="product-footer"><strong class="product-price">¥{{ item.price|floatformat:2 }}</strong><a href="{% url 'item_detail' item.id %}" class="stretched-link text-link small">查看详情 <i class="bi bi-arrow-up-right"></i></a></div>
+    </div>
+</article>

@@ -1,167 +1,20 @@
-<!-- templates/listings/item_detail.html -->
 {% extends 'base.html' %}
 {% load static %}
-
-{% block title %}{{ item.title }} - 拾光校园{% endblock %}
-
+{% block title %}{{ item.title }} · 拾光校园{% endblock %}
 {% block content %}
-<div class="row">
-    <!-- 商品详情 -->
-    <div class="col-md-8">
-        <div class="card shadow-sm mb-4">
-            <!-- 商品图片 -->
-            <div id="itemCarousel" class="carousel slide" data-bs-ride="carousel">
-                <div class="carousel-inner">
-                    {% if item.images.exists %}
-                    {% for image in item.images.all %}
-                    <div class="carousel-item {% if forloop.first %}active{% endif %}">
-                        <img src="{{ image.image.url }}" class="d-block w-100 item-detail-img" alt="{{ item.title }}">
-                    </div>
-                    {% endfor %}
-                    {% else %}
-                    <div class="carousel-item active">
-                        <img src="{% static 'img/no-image.png' %}" class="d-block w-100 item-detail-img" alt="无图片">
-                    </div>
-                    {% endif %}
-                </div>
-                {% if item.images.count > 1 %}
-                <button class="carousel-control-prev" type="button" data-bs-target="#itemCarousel" data-bs-slide="prev">
-                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                    <span class="visually-hidden">上一张</span>
-                </button>
-                <button class="carousel-control-next" type="button" data-bs-target="#itemCarousel" data-bs-slide="next">
-                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                    <span class="visually-hidden">下一张</span>
-                </button>
-                {% endif %}
-            </div>
-            
-            <!-- 商品信息 -->
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="card-title">{{ item.title }}</h3>
-                    <span class="badge {% if item.status == 'available' %}bg-success{% elif item.status == 'reserved' %}bg-warning{% else %}bg-secondary{% endif %}">
-                        {{ item.get_status_display }}
-                    </span>
-                </div>
-                
-                <h4 class="text-success mb-3">¥{{ item.price }}</h4>
-                
-                <p class="card-text">{{ item.description }}</p>
-                
-                <div class="row mt-4">
-                    <div class="col-md-6">
-                        <p><strong>类别：</strong> {{ item.category.name }}</p>
-                        <p><strong>成色：</strong> {{ item.condition }}</p>
-                    </div>
-                    <div class="col-md-6">
-                        <p><strong>发布时间：</strong> {{ item.created_at|date:"Y-m-d H:i" }}</p>
-                        <p><strong>更新时间：</strong> {{ item.updated_at|date:"Y-m-d H:i" }}</p>
-                    </div>
-                </div>
-                
-                <!-- 卖家操作按钮 -->
-                {% if user == item.seller %}
-                <div class="mt-4 d-flex justify-content-end">
-                    <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary me-2">编辑商品</a>
-                    <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success me-2">修改状态</a>
-                    <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除商品</a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        
-        <!-- 评论区 -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-light">
-                <h5 class="mb-0">商品留言 ({{ item.comments.count }})</h5>
-            </div>
-            <div class="card-body">
-                <!-- 评论列表 -->
-                {% for comment in item.comments.all %}
-                <div class="d-flex mb-3">
-                    <img src="{{ comment.author.profile.avatar.url }}" alt="{{ comment.author.username }}" class="avatar-sm me-2">
-                    <div class="flex-grow-1">
-                        <div class="d-flex justify-content-between">
-                            <h6 class="mb-0">{{ comment.author.username }}</h6>
-                            <small class="text-muted">{{ comment.created_at|date:"Y-m-d H:i" }}</small>
-                        </div>
-                        <p class="mb-0">{{ comment.content }}</p>
-                    </div>
-                </div>
-                {% if not forloop.last %}<hr>{% endif %}
-                {% empty %}
-                <p class="text-muted text-center py-3">暂无留言</p>
-                {% endfor %}
-                
-                <!-- 发表评论 -->
-                {% if user.is_authenticated %}
-                <form method="POST" action="{% url 'add_comment' item.id %}" class="mt-4">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="id_content" class="form-label">发表留言</label>
-                        <textarea name="content" id="id_content" class="form-control" rows="3" required></textarea>
-                    </div>
-                    <button type="submit" class="btn btn-success">提交留言</button>
-                </form>
-                {% else %}
-                <div class="alert alert-info mt-4">
-                    请<a href="{% url 'login' %}">登录</a>后参与留言
-                </div>
-                {% endif %}
-            </div>
+<div class="mb-4"><a href="{% url 'item_list' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回商品集</a></div>
+<div class="row g-5">
+    <div class="col-lg-7">
+        <div class="detail-gallery">
+            <div class="detail-main-image">{% if item.images.first %}<img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" id="mainProductImage">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage">{% endif %}<span class="detail-status status-{{ item.status }}">{{ item.get_status_display }}</span></div>
+            {% if item.images.count > 1 %}<div class="detail-thumbs">{% for image in item.images.all %}<button type="button" class="detail-thumb {% if forloop.first %}active{% endif %}" data-image="{{ image.image.url }}"><img src="{{ image.image.url }}" alt="{{ item.title }} 图片{{ forloop.counter }}"></button>{% endfor %}</div>{% endif %}
         </div>
     </div>
-    
-    <!-- 侧边栏 -->
-    <div class="col-md-4">
-        <!-- 卖家信息 -->
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-light">
-                <h5 class="mb-0">卖家信息</h5>
-            </div>
-            <div class="card-body text-center">
-                <img src="{{ item.seller.profile.avatar.url }}" alt="{{ item.seller.username }}" class="avatar-md mb-3">
-                <h5>{{ item.seller.username }}</h5>
-                
-                <div class="mt-3">
-                    {% if user.is_authenticated and user != item.seller %}
-                    <a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-success">私信卖家</a>
-                    {% endif %}
-                    <a href="#" class="btn btn-outline-secondary">查看卖家其他商品</a>
-                </div>
-            </div>
-        </div>
-        
-        <!-- 相关商品 -->
-        <div class="card shadow-sm">
-            <div class="card-header bg-light">
-                <h5 class="mb-0">相关商品</h5>
-            </div>
-            <div class="card-body">
-                <div class="list-group list-group-flush">
-                    {% for related_item in item.category.item_set.all|slice:":5" %}
-                    {% if related_item != item and related_item.status == 'available' %}
-                    <a href="{% url 'item_detail' related_item.id %}" class="list-group-item list-group-item-action">
-                        <div class="d-flex">
-                            {% if related_item.images.first %}
-                            <img src="{{ related_item.images.first.image.url }}" alt="{{ related_item.title }}" class="me-3" style="width: 50px; height: 50px; object-fit: cover;">
-                            {% else %}
-                            <img src="{% static 'img/no-image.png' %}" alt="无图片" class="me-3" style="width: 50px; height: 50px; object-fit: cover;">
-                            {% endif %}
-                            <div>
-                                <h6 class="mb-0">{{ related_item.title }}</h6>
-                                <p class="mb-0 text-success">¥{{ related_item.price }}</p>
-                            </div>
-                        </div>
-                    </a>
-                    {% endif %}
-                    {% empty %}
-                    <p class="text-muted text-center py-3">暂无相关商品</p>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-    </div>
+    <div class="col-lg-5"><div class="detail-content"><div class="product-meta mb-3"><span>{{ item.category.name }}</span><span>{{ item.created_at|date:'Y年m月d日' }}</span></div><h1>{{ item.title }}</h1><div class="detail-price">¥{{ item.price|floatformat:2 }}</div><div class="detail-tags"><span><i class="bi bi-stars"></i>{{ item.condition }}</span><span><i class="bi bi-person"></i>{{ item.seller.username }}</span></div><div class="detail-divider"></div><h6 class="section-label">商品描述</h6><p class="detail-description">{{ item.description|linebreaksbr }}</p><div class="d-flex flex-wrap gap-2 mt-4">{% if user.is_authenticated %}<form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>{% if user != item.seller and item.status != 'sold' %}<a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-primary"><i class="bi bi-chat-dots me-2"></i>联系卖家</a>{% endif %}{% else %}<a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary">登录后收藏或联系卖家</a>{% endif %}</div>{% if user == item.seller %}<div class="owner-actions mt-4"><span class="small text-muted">这是你发布的商品</span><div class="d-flex gap-2 mt-2"><a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">编辑</a><a href="{% url 'mark_sold' item.id %}" class="btn btn-sm btn-outline-secondary">更新状态</a><a href="{% url 'delete_item' item.id %}" class="btn btn-sm btn-outline-danger">删除</a></div></div>{% endif %}</div></div>
+</div>
+<div class="row g-4 mt-4">
+    <div class="col-lg-8"><section class="content-card"><div class="card-section-heading"><h2><i class="bi bi-chat-square-text me-2"></i>留言讨论</h2><span>{{ item.comments.count }} 条</span></div>{% for comment in item.comments.all %}<div class="comment-row"><img src="{{ comment.author.profile.avatar.url }}" alt="{{ comment.author.username }}" class="avatar-md"><div><div class="comment-meta"><strong>{{ comment.author.username }}</strong><span>{{ comment.created_at|date:'Y-m-d H:i' }}</span></div><p>{{ comment.content }}</p></div></div>{% empty %}<div class="empty-inline"><i class="bi bi-chat-square-heart"></i>还没有留言，来做第一个交流的人吧。</div>{% endfor %}{% if user.is_authenticated %}<form method="post" action="{% url 'add_comment' item.id %}" class="comment-form mt-4">{% csrf_token %}<label for="id_content" class="section-label">留下你的想法</label><textarea name="content" id="id_content" class="form-control" rows="3" placeholder="礼貌交流，友好沟通～" required></textarea><button type="submit" class="btn btn-primary mt-3">发布留言</button></form>{% else %}<div class="login-hint mt-4">登录后可以参与留言 <a href="{% url 'login' %}?next={{ request.path }}">去登录 <i class="bi bi-arrow-right"></i></a></div>{% endif %}</section></div>
+    <div class="col-lg-4"><section class="seller-card content-card mb-4"><span class="eyebrow eyebrow-soft">卖家名片</span><div class="seller-profile mt-3"><img src="{{ item.seller.profile.avatar.url }}" alt="{{ item.seller.username }}" class="avatar-lg"><div><h5>{{ item.seller.username }}</h5><small>已发布 {{ item.seller.listed_items.count }} 件商品</small></div></div>{% if item.seller.profile.bio %}<p class="seller-bio">{{ item.seller.profile.bio }}</p>{% endif %}{% if user.is_authenticated and user != item.seller %}<a href="{% url 'send_message' item.seller.id %}" class="btn btn-outline-primary w-100">给卖家发消息</a>{% endif %}</section>{% if related_items %}<section class="content-card"><div class="card-section-heading"><h2>同类好物</h2><a href="{% url 'item_list_by_category' item.category.id %}" class="text-link">更多</a></div>{% for related_item in related_items %}<a class="related-item" href="{% url 'item_detail' related_item.id %}">{% if related_item.images.first %}<img src="{{ related_item.images.first.image.url }}" alt="{{ related_item.title }}">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片">{% endif %}<span><strong>{{ related_item.title }}</strong><small>¥{{ related_item.price|floatformat:2 }}</small></span></a>{% endfor %}</section>{% endif %}</div>
 </div>
 {% endblock %}
+{% block extra_js %}<script>document.querySelectorAll('.detail-thumb').forEach(function (thumb) { thumb.addEventListener('click', function () { document.getElementById('mainProductImage').src = this.dataset.image; document.querySelectorAll('.detail-thumb').forEach(t => t.classList.remove('active')); this.classList.add('active'); }); });</script>{% endblock %}

@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}我的心愿单 · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">把心动留下</span><h1>我的心愿单</h1><p>收藏那些想再看看、也许很快就会带回家的校园好物。</p></div><a href="{% url 'item_list' %}" class="btn btn-outline-primary"><i class="bi bi-compass me-2"></i>继续发现</a></div>
+<div class="row g-4">{% for favorite in favorites %}<div class="col-sm-6 col-xl-3">{% include 'listings/_item_card.html' with item=favorite.item %}</div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-heart display-6 d-block mb-3"></i><h3>心愿单还是空的</h3><p>看到喜欢的商品，点一下心形按钮就能收藏。</p><a href="{% url 'item_list' %}" class="btn btn-primary">去逛逛</a></div></div>{% endfor %}</div>
+{% endblock %}

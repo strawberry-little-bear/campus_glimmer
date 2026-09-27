@@ -1,68 +1,16 @@
-<!-- templates/listings/item_list.html -->
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}{{ title }} - 拾光校园{% endblock %}
+{% block title %}{{ title }} · 拾光校园{% endblock %}
 
 {% block content %}
-<div class="row">
-    <!-- 侧边栏：类别 -->
-    <div class="col-md-3 mb-4">
-        <div class="card shadow-sm">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0">商品类别</h5>
-            </div>
-            <div class="list-group list-group-flush">
-                <a href="{% url 'item_list' %}" class="list-group-item list-group-item-action {% if not category %}active{% endif %}">
-                    所有类别
-                </a>
-                {% for category in categories %}
-                <a href="{% url 'item_list_by_category' category.id %}" class="list-group-item list-group-item-action {% if category == category %}active{% endif %}">
-                    {{ category.name }}
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-    
-    <!-- 主要内容：商品列表 -->
-    <div class="col-md-9">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>{{ title }}</h2>
-            {% if user.is_authenticated %}
-            <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
-            {% endif %}
-        </div>
-        
-        <!-- 商品列表 -->
-        <div class="row row-cols-1 row-cols-md-3 g-4">
-            {% for item in items %}
-            <div class="col">
-                <div class="card h-100 shadow-sm">
-                    {% if item.images.first %}
-                    <img src="{{ item.images.first.image.url }}" class="card-img-top" alt="{{ item.title }}">
-                    {% else %}
-                    <img src="/static/img/no-image.png" class="card-img-top" alt="无图片">
-                    {% endif %}
-                    <div class="card-body">
-                        <h5 class="card-title">{{ item.title }}</h5>
-                        <p class="card-text text-success fw-bold">¥{{ item.price }}</p>
-                        <p class="card-text">{{ item.description|truncatechars:60 }}</p>
-                    </div>
-                    <div class="card-footer bg-transparent d-flex justify-content-between align-items-center">
-                        <small class="text-muted">{{ item.created_at|date:"Y-m-d" }}</small>
-                        <a href="{% url 'item_detail' item.id %}" class="btn btn-sm btn-outline-success">查看详情</a>
-                    </div>
-                </div>
-            </div>
-            {% empty %}
-            <div class="col-12 text-center py-5">
-                <p class="text-muted">暂无符合条件的商品</p>
-                {% if user.is_authenticated %}
-                <a href="{% url 'new_item' %}" class="btn btn-success mt-3">发布新商品</a>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
+<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">探索校园闲置</span><h1>{{ title }}</h1><p>{% if query %}正在为你筛选“{{ query }}”{% else %}找到适合自己的好物，也把不再需要的分享出去。{% endif %}</p></div>{% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>发布闲置</a>{% endif %}</div>
+<div class="row g-4">
+    <aside class="col-lg-3"><div class="filter-panel"><div class="filter-title"><span>商品分类</span><i class="bi bi-sliders2"></i></div><a class="filter-link {% if not category %}active{% endif %}" href="{% url 'item_list' %}">全部商品 <span>{{ page_obj.paginator.count }}</span></a>{% for category_option in categories %}<a class="filter-link {% if category and category_option.id == category.id %}active{% endif %}" href="{% url 'item_list_by_category' category_option.id %}">{{ category_option.name }} <span>{{ category_option.available_count }}</span></a>{% endfor %}</div></aside>
+    <div class="col-lg-9">
+        <div class="toolbar mb-4"><span class="text-muted small">共 {{ page_obj.paginator.count }} 件商品</span><form method="get" class="sort-form"><input type="hidden" name="q" value="{{ query }}"><label for="sort" class="small text-muted">排序</label><select id="sort" name="sort" class="form-select form-select-sm" onchange="this.form.submit()"><option value="latest" {% if sort == 'latest' %}selected{% endif %}>最新发布</option><option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>价格从低到高</option><option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>价格从高到低</option></select></form></div>
+        <div class="row g-4">{% for item in items %}<div class="col-sm-6 col-xl-4">{% include 'listings/_item_card.html' with item=item %}</div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-search display-6 d-block mb-3"></i><h3>没有找到匹配的商品</h3><p>换个关键词，或者看看其他分类吧。</p><a href="{% url 'item_list' %}" class="btn btn-outline-primary">清除筛选</a></div></div>{% endfor %}</div>
+        {% if page_obj.paginator.num_pages > 1 %}<nav class="mt-5" aria-label="商品分页"><ul class="pagination justify-content-center">{% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ query }}&sort={{ sort }}">上一页</a></li>{% endif %}{% for num in page_obj.paginator.page_range %}<li class="page-item {% if page_obj.number == num %}active{% endif %}"><a class="page-link" href="?page={{ num }}&q={{ query }}&sort={{ sort }}">{{ num }}</a></li>{% endfor %}{% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ query }}&sort={{ sort }}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
     </div>
 </div>
 {% endblock %}

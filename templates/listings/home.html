@@ -1,75 +1,48 @@
-<!-- templates/listings/home.html -->
 {% extends 'base.html' %}
+{% load static %}
 
-{% block title %}拾光校园 - 校园二手交易平台{% endblock %}
+{% block title %}拾光校园 · 让闲置发光{% endblock %}
 
 {% block content %}
-<!-- 欢迎横幅 -->
-<div class="bg-light p-5 rounded-3 mb-4 text-center">
-    <div class="container">
-        <h1 class="display-5 fw-bold text-success">拾光校园</h1>
-        <p class="lead">一个让校园闲置物品重获新生的二手交易平台</p>
-        <hr class="my-4">
-        <p>发布您不再需要的物品，寻找您所需要的二手宝贝，环保省钱又便捷！</p>
-        <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-            <a href="{% url 'item_list' %}" class="btn btn-success btn-lg px-4">浏览商品</a>
-            {% if user.is_authenticated %}
-            <a href="{% url 'new_item' %}" class="btn btn-outline-success btn-lg px-4">发布商品</a>
-            {% else %}
-            <a href="{% url 'register' %}" class="btn btn-outline-success btn-lg px-4">立即注册</a>
-            {% endif %}
+<section class="hero-panel mb-5">
+    <div class="hero-orb orb-one"></div><div class="hero-orb orb-two"></div>
+    <div class="row align-items-center position-relative">
+        <div class="col-lg-7">
+            <span class="eyebrow"><i class="bi bi-stars me-2"></i>校园里的轻盈交易站</span>
+            <h1 class="hero-title">把用不上的，<br><span>交给刚好需要的人。</span></h1>
+            <p class="hero-copy">书籍、数码、宿舍好物和毕业闲置，在熟悉的校园里安心流转。少一点浪费，多一点惊喜。</p>
+            <div class="d-flex flex-wrap gap-3 mt-4">
+                <a href="{% url 'item_list' %}" class="btn btn-light btn-lg px-4"><i class="bi bi-compass me-2"></i>开始逛逛</a>
+                {% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-hero-outline btn-lg px-4"><i class="bi bi-plus-lg me-2"></i>发布闲置</a>{% else %}<a href="{% url 'register' %}" class="btn btn-hero-outline btn-lg px-4">加入拾光社区</a>{% endif %}
+            </div>
+            <div class="hero-trust mt-4"><span><i class="bi bi-shield-check"></i> 校园同学优先</span><span><i class="bi bi-arrow-repeat"></i> 让物品继续被使用</span></div>
         </div>
+        <div class="col-lg-5 d-none d-lg-block"><div class="hero-illustration"><div class="float-card card-main"><i class="bi bi-headphones"></i><div><strong>耳机</strong><small>9成新 · ¥68</small></div><span class="mini-heart">♥</span></div><div class="float-card card-top"><i class="bi bi-book"></i><span>考研资料</span></div><div class="float-card card-bottom"><i class="bi bi-cup-hot"></i><span>宿舍好物</span></div><div class="sun-shape"><i class="bi bi-stars"></i></div></div></div>
     </div>
-</div>
+</section>
 
-<!-- 类别导航 -->
-<h2 class="mb-3">商品类别</h2>
-<div class="row row-cols-1 row-cols-md-3 g-4 mb-4">
+<section class="stats-row mb-5">
+    <div class="stat-item"><strong>{{ stats.items }}</strong><span>件在售好物</span></div>
+    <div class="stat-item"><strong>{{ stats.categories }}</strong><span>个生活分类</span></div>
+    <div class="stat-item"><strong>{{ stats.members }}</strong><span>位校园卖家</span></div>
+    <div class="stat-item stat-note"><i class="bi bi-leaf"></i><span>每一次转手<br>都是一次环保选择</span></div>
+</section>
+
+<section class="section-heading mb-3"><div><span class="eyebrow eyebrow-soft">按兴趣逛</span><h2>今天想发现什么？</h2></div><a href="{% url 'item_list' %}" class="text-link">查看全部 <i class="bi bi-arrow-up-right"></i></a></section>
+<div class="category-grid mb-5">
     {% for category in categories %}
-    <div class="col">
-        <a href="{% url 'item_list_by_category' category.id %}" class="text-decoration-none">
-            <div class="card h-100 shadow-sm border-success">
-                <div class="card-body text-center">
-                    <h5 class="card-title text-success">{{ category.name }}</h5>
-                    <p class="card-text">{{ category.description }}</p>
-                </div>
-            </div>
-        </a>
-    </div>
-    {% endfor %}
+    <a href="{% url 'item_list_by_category' category.id %}" class="category-tile category-{{ forloop.counter|divisibleby:2|yesno:'warm,cool' }}">
+        <span class="category-icon"><i class="bi {% cycle 'bi-book' 'bi-laptop' 'bi-house-heart' 'bi-bicycle' 'bi-controller' 'bi-three-dots' %}"></i></span>
+        <span class="category-content"><strong>{{ category.name }}</strong><small>{{ category.description|default:'校园精选好物'|truncatechars:26 }}</small></span>
+        <span class="category-count">{{ category.available_count }} 件 <i class="bi bi-arrow-up-right"></i></span>
+    </a>
+    {% empty %}<div class="empty-state">还没有商品分类，先去管理后台添加吧。</div>{% endfor %}
 </div>
 
-<!-- 最新发布 -->
-<h2 class="mb-3">最新发布</h2>
-<div class="row row-cols-1 row-cols-md-4 g-4">
+<section class="section-heading mb-3"><div><span class="eyebrow eyebrow-soft">刚刚上新</span><h2>新鲜好物，先到先得</h2></div><a href="{% url 'item_list' %}" class="text-link">浏览更多 <i class="bi bi-arrow-right"></i></a></section>
+<div class="row g-4">
     {% for item in recent_items %}
-    <div class="col">
-        <div class="card h-100 shadow-sm">
-            {% if item.images.first %}
-            <img src="{{ item.images.first.image.url }}" class="card-img-top" alt="{{ item.title }}">
-            {% else %}
-            <img src="/static/img/no-image.png" class="card-img-top" alt="无图片">
-            {% endif %}
-            <div class="card-body">
-                <h5 class="card-title">{{ item.title }}</h5>
-                <p class="card-text text-success fw-bold">¥{{ item.price }}</p>
-                <p class="card-text">{{ item.description|truncatechars:60 }}</p>
-            </div>
-            <div class="card-footer bg-transparent d-flex justify-content-between align-items-center">
-                <small class="text-muted">{{ item.created_at|date:"Y-m-d" }}</small>
-                <a href="{% url 'item_detail' item.id %}" class="btn btn-sm btn-outline-success">查看详情</a>
-            </div>
-        </div>
-    </div>
-    {% empty %}
-    <div class="col-12 text-center py-5">
-        <p class="text-muted">暂无可用商品</p>
-    </div>
-    {% endfor %}
-</div>
-
-<!-- 更多链接 -->
-<div class="text-center mt-4">
-    <a href="{% url 'item_list' %}" class="btn btn-outline-success">查看更多商品</a>
+    <div class="col-sm-6 col-xl-3">{% include 'listings/_item_card.html' with item=item %}</div>
+    {% empty %}<div class="col-12"><div class="empty-state">还没有在售商品，成为第一个发布的人吧。</div></div>{% endfor %}
 </div>
 {% endblock %}

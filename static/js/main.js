@@ -1,41 +1,20 @@
-// static/js/main.js
-document.addEventListener('DOMContentLoaded', function() {
-    // 图片预览
-    const fileInputs = document.querySelectorAll('input[type="file"]');
-    fileInputs.forEach(input => {
-        input.addEventListener('change', function(e) {
-            const previewId = this.getAttribute('data-preview');
-            if (!previewId) return;
-            
-            const preview = document.getElementById(previewId);
-            if (!preview) return;
-            
-            if (this.files && this.files[0]) {
-                const reader = new FileReader();
-                
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    preview.style.display = 'block';
-                }
-                
-                reader.readAsDataURL(this.files[0]);
-            }
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('input[type="file"]').forEach(function (input) {
+        input.addEventListener('change', function () {
+            const preview = this.closest('.upload-card')?.querySelector('img') || document.getElementById('avatar-preview');
+            if (!preview || !this.files || !this.files[0]) return;
+            const reader = new FileReader();
+            reader.onload = function (event) { preview.src = event.target.result; preview.style.display = 'block'; };
+            reader.readAsDataURL(this.files[0]);
         });
     });
-    
-    // 确认删除对话框
-    const deleteButtons = document.querySelectorAll('.confirm-delete');
-    deleteButtons.forEach(button => {
-        button.addEventListener('click', function(e) {
-            if (!confirm('您确定要删除此项吗？此操作无法撤销。')) {
-                e.preventDefault();
-            }
+
+    document.querySelectorAll('.confirm-delete').forEach(function (button) {
+        button.addEventListener('click', function (event) {
+            if (!window.confirm('确定删除这件商品吗？此操作无法撤销。')) event.preventDefault();
         });
     });
-    
-    // 自动滚动到聊天底部
-    const chatContainer = document.querySelector('.chat-messages');
-    if (chatContainer) {
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-    }
+
+    const chat = document.querySelector('.chat-messages');
+    if (chat) chat.scrollTop = chat.scrollHeight;
 });
