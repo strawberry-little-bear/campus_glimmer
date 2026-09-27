@@ -85,7 +85,11 @@ def _build_conversation_data(user, conversation_users):
 
 @login_required
 def inbox(request):
-    search_query = request.GET.get('q', '').strip()
+    search_query = request.GET.get('q', '').strip()[:120]
+    status_filter = request.GET.get('status', 'all').strip()
+    if status_filter not in {'all', 'unread', 'read'}:
+        status_filter = 'all'
+
     received_messages = PrivateMessage.objects.filter(
         receiver=request.user,
     ).select_related('sender', 'item').order_by('-created_at')
@@ -104,6 +108,10 @@ def inbox(request):
             | Q(receiver__username__icontains=search_query)
             | Q(item__title__icontains=search_query)
         )
+    if status_filter == 'unread':
+        received_messages = received_messages.filter(is_read=False)
+    elif status_filter == 'read':
+        received_messages = received_messages.filter(is_read=True)
 
     conversation_users = User.objects.filter(
         Q(sent_messages__receiver=request.user) | Q(received_messages__sender=request.user)
@@ -122,6 +130,13 @@ def inbox(request):
         'sent_messages': sent_messages,
         'conversation_data': _build_conversation_data(request.user, conversation_users),
         'search_query': search_query,
+        'message_status_filter': status_filter,
+        'message_status_options': (
+            ('all', '全部收到的消息'),
+            ('unread', '仅看未读'),
+            ('read', '仅看已读'),
+        ),
+        'message_filtered_unread_count': received_messages.filter(is_read=False).count(),
     }
     return render(request, 'chat_messages/inbox.html', context)
 

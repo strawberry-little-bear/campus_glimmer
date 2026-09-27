@@ -68,6 +68,25 @@ class MessageNotificationTests(TestCase):
         self.assertRedirects(response, reverse('inbox'))
         self.assertEqual(PrivateMessage.objects.filter(receiver=self.seller, is_read=False).count(), 0)
 
+    def test_inbox_can_filter_received_messages_by_read_state(self):
+        unread = PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller, content='这是一条未读消息',
+        )
+        read = PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller, content='这是一条已读消息', is_read=True,
+        )
+        self.client.login(username='seller', password='safe-password-123')
+
+        unread_response = self.client.get(reverse('inbox'), {'status': 'unread'})
+        self.assertEqual(unread_response.status_code, 200)
+        self.assertEqual(list(unread_response.context['received_messages']), [unread])
+        self.assertEqual(unread_response.context['message_status_filter'], 'unread')
+        self.assertContains(unread_response, '已应用筛选条件')
+
+        read_response = self.client.get(reverse('inbox'), {'status': 'read'})
+        self.assertEqual(list(read_response.context['received_messages']), [read])
+        self.assertEqual(read_response.context['message_filtered_unread_count'], 0)
+
     def test_conversation_summary_uses_bounded_queries(self):
         for index in range(4):
             PrivateMessage.objects.create(

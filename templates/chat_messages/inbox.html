@@ -13,7 +13,11 @@
         <form method="get" class="message-search-form">
             <i class="bi bi-search"></i>
             <input type="search" name="q" value="{{ search_query }}" placeholder="搜索内容、用户或商品" aria-label="搜索私信">
-            <button type="submit" class="btn btn-sm btn-outline-success">搜索</button>
+            <select name="status" class="form-select form-select-sm" aria-label="消息状态">
+                {% for value, label in message_status_options %}<option value="{{ value }}" {% if message_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm btn-outline-success">筛选</button>
+            {% if search_query or message_status_filter != 'all' %}<a href="{% url 'inbox' %}" class="btn btn-sm btn-light">重置</a>{% endif %}
         </form>
         {% if unread_message_count %}
         <form method="post" action="{% url 'mark_all_messages_read' %}">
@@ -23,6 +27,8 @@
         {% endif %}
     </div>
 </div>
+
+<div class="message-filter-summary mb-3"><i class="bi bi-funnel me-1"></i>当前收到的消息 {{ received_messages|length }} 条，其中 {{ message_filtered_unread_count }} 条未读{% if search_query or message_status_filter != 'all' %} · 已应用筛选条件{% endif %}</div>
 
 <div class="row">
     <!-- 左侧会话列表 -->
