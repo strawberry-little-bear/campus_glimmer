@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}交易争议处理 - 拾光校园{% endblock %}
+{% block content %}
+<div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust & safety</span><h1 class="mt-2">交易争议处理</h1><p class="text-muted mb-0">核实交易双方的反馈，留下可回溯的处理意见。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
+<div class="dispute-queue-note mb-4"><i class="bi bi-inbox me-2"></i>当前有 <strong>{{ pending_dispute_count }}</strong> 条争议待处理或处理中</div>
+<section class="dispute-list">
+{% for dispute in disputes %}
+<article class="content-card dispute-admin-card {% if dispute.status in 'resolved rejected' %}is-closed{% endif %}"><div class="dispute-admin-head"><div><span class="dispute-status dispute-status-{{ dispute.status }}">{{ dispute.get_status_display }}</span><h2>{{ dispute.order.item.title }}</h2><p class="mb-0 small text-muted">{{ dispute.get_reason_display }} · {{ dispute.opened_by.username }} 发起 · {{ dispute.created_at|date:'Y-m-d H:i' }}</p></div><span class="small text-muted">订单 #{{ dispute.order.id }}</span></div><div class="dispute-admin-body"><p>{{ dispute.detail|linebreaksbr }}</p><p class="small text-muted mb-0">买家：{{ dispute.order.buyer.username }} · 卖家：{{ dispute.order.seller.username }}</p>{% if dispute.resolution_note %}<div class="dispute-resolution-note mt-3"><strong>处理意见</strong><p class="mb-0 mt-1">{{ dispute.resolution_note|linebreaksbr }}</p></div>{% endif %}</div>{% if dispute.status not in 'resolved rejected' %}<a class="btn btn-sm btn-primary" href="{% url 'resolve_dispute' dispute.id %}"><i class="bi bi-check2-circle me-1"></i>处理这条争议</a>{% endif %}</article>
+{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-shield-check"></i><h2>暂时没有交易争议</h2><p>当用户提交争议后，会在这里形成处理队列。</p></div>{% endfor %}
+</section>
+{% endblock %}

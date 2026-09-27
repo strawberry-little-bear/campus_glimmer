@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 
 
@@ -35,7 +35,10 @@ class ListingFlowTests(TestCase):
         status_url = reverse('update_order_status', args=[order.id])
         self.client.post(status_url, {'status': 'confirmed'})
         self.client.post(status_url, {'status': 'meeting'})
-        self.client.post(status_url, {'status': 'completed'})
+        self.client.post(reverse('confirm_delivery', args=[order.id]))
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('confirm_delivery', args=[order.id]))
         order.refresh_from_db()
         return order
 
@@ -95,7 +98,10 @@ class ListingFlowTests(TestCase):
         status_url = reverse('update_order_status', args=[order.id])
         self.client.post(status_url, {'status': 'confirmed'})
         self.client.post(status_url, {'status': 'meeting'})
-        self.client.post(status_url, {'status': 'completed'})
+        self.client.post(reverse('confirm_delivery', args=[order.id]))
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('confirm_delivery', args=[order.id]))
         order.refresh_from_db()
         self.item.refresh_from_db()
         self.assertEqual(order.status, 'completed')
@@ -180,7 +186,7 @@ class ListingFlowTests(TestCase):
         self.assertEqual(events[0].from_status, '')
         self.assertEqual(events[0].actor, self.other_user)
         self.assertEqual(events[-1].from_status, 'meeting')
-        self.assertEqual(events[-1].actor, self.user)
+        self.assertEqual(events[-1].actor, self.other_user)
 
     def test_order_detail_displays_status_history(self):
         order = self._complete_order()
@@ -433,3 +439,68 @@ class ListingFlowTests(TestCase):
         response = self.client.post(reverse('delete_saved_search', args=[saved_search.id]))
         self.assertRedirects(response, reverse('saved_search_list'))
         self.assertFalse(SavedSearch.objects.filter(pk=saved_search.id).exists())
+
+
+    def test_delivery_confirmation_requires_both_parties(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '当面交付'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'meeting'})
+        self.client.post(reverse('confirm_delivery', args=[order.id]))
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'meeting')
+        confirmation = DeliveryConfirmation.objects.get(order=order)
+        self.assertIsNotNone(confirmation.seller_confirmed_at)
+        self.assertIsNone(confirmation.buyer_confirmed_at)
+
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(reverse('confirm_delivery', args=[order.id]))
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'completed')
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'sold')
+        self.assertTrue(DeliveryConfirmation.objects.get(order=order).is_complete)
+
+    def test_user_can_open_dispute_and_staff_can_resolve_it(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '需要核对商品'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(reverse('open_dispute', args=[order.id]), {
+            'reason': 'mismatch', 'detail': '收到的商品与描述不一致。',
+        })
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        dispute = OrderDispute.objects.get(order=order)
+        self.assertEqual(dispute.opened_by, self.other_user)
+        self.assertTrue(Notification.objects.filter(recipient=self.user, kind='order_dispute').exists())
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('dispute_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '交易争议处理')
+        response = self.client.post(reverse('resolve_dispute', args=[dispute.id]), {
+            'status': 'resolved', 'resolution_note': '已核实并完成双方沟通。',
+        })
+        self.assertRedirects(response, reverse('dispute_list'))
+        dispute.refresh_from_db()
+        self.assertEqual(dispute.status, 'resolved')
+        self.assertEqual(dispute.reviewer, self.user)
+        self.assertTrue(Notification.objects.filter(recipient=self.other_user, kind='order_dispute').exists())

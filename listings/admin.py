@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Notification, Order, OrderEvent, Rating, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemImage, Notification, Order, OrderDispute, OrderEvent, Rating, Report, SavedSearch, SearchQuery
 
 
 class ItemImageInline(admin.TabularInline):
@@ -122,3 +122,21 @@ class SavedSearchAdmin(admin.ModelAdmin):
     search_fields = ('name', 'query', 'condition', 'user__username')
     autocomplete_fields = ('user', 'category', 'location')
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(DeliveryConfirmation)
+class DeliveryConfirmationAdmin(admin.ModelAdmin):
+    list_display = ('order', 'buyer_confirmed_at', 'seller_confirmed_at', 'updated_at')
+    list_filter = ('updated_at',)
+    search_fields = ('order__item__title', 'order__buyer__username', 'order__seller__username')
+    autocomplete_fields = ('order',)
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(OrderDispute)
+class OrderDisputeAdmin(admin.ModelAdmin):
+    list_display = ('order', 'opened_by', 'reason', 'status', 'reviewer', 'created_at', 'resolved_at')
+    list_filter = ('status', 'reason', 'created_at', 'resolved_at')
+    search_fields = ('order__item__title', 'opened_by__username', 'detail', 'resolution_note')
+    autocomplete_fields = ('order', 'opened_by', 'reviewer')
+    readonly_fields = ('created_at', 'updated_at', 'resolved_at')

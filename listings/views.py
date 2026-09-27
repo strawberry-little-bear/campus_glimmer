@@ -13,8 +13,8 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard
-from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SavedSearch, SearchQuery
+from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .saved_searches import notify_saved_search_matches
@@ -285,7 +285,12 @@ def create_order(request, item_id):
 
 @login_required
 def order_detail(request, order_id):
-    order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller', 'meeting_location'), id=order_id)
+    order = get_object_or_404(
+        Order.objects.select_related(
+            'item', 'buyer', 'seller', 'meeting_location', 'delivery_confirmation', 'dispute',
+        ),
+        id=order_id,
+    )
     if request.user not in {order.buyer, order.seller}:
         messages.error(request, '你没有权限查看这笔订单。')
         return redirect('home')
@@ -302,6 +307,173 @@ def order_detail(request, order_id):
         'rating_form': rating_form,
         'ratings': ratings,
         'events': events,
+        'confirmation': getattr(order, 'delivery_confirmation', None),
+        'dispute': getattr(order, 'dispute', None),
+    })
+
+
+@login_required
+def confirm_delivery(request, order_id):
+    order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller'), id=order_id)
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限确认这笔订单。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+    if order.status != 'meeting':
+        messages.error(request, '订单进入“待当面交付”后，才能确认交付。')
+        return redirect('order_detail', order_id=order.id)
+
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().select_related('item', 'buyer', 'seller').get(pk=order.id)
+        confirmation, _ = DeliveryConfirmation.objects.select_for_update().get_or_create(order=locked_order)
+        field_name = 'buyer_confirmed_at' if request.user == locked_order.buyer else 'seller_confirmed_at'
+        if getattr(confirmation, field_name):
+            messages.info(request, '你已经确认过这次交付了，请等待对方操作。')
+            return redirect('order_detail', order_id=locked_order.id)
+        setattr(confirmation, field_name, timezone.now())
+        confirmation.save(update_fields=[field_name, 'updated_at'])
+        other_party = locked_order.seller if request.user == locked_order.buyer else locked_order.buyer
+
+        if confirmation.is_complete:
+            locked_order.status = 'completed'
+            locked_order.save(update_fields=['status', 'updated_at'])
+            locked_order.item.status = 'sold'
+            locked_order.item.save(update_fields=['status', 'updated_at'])
+            OrderEvent.objects.create(
+                order=locked_order,
+                actor=request.user,
+                from_status='meeting',
+                to_status='completed',
+                note='双方确认交易已完成',
+            )
+            create_notification(
+                other_party, actor=request.user, kind='order_status',
+                title='交易已完成',
+                message=f'商品“{locked_order.item.title}”已完成双方交付确认。',
+                order=locked_order, item=locked_order.item,
+                target_url=reverse('order_detail', args=[locked_order.id]),
+            )
+            messages.success(request, '双方已完成交付确认，交易正式完成。')
+        else:
+            create_notification(
+                other_party, actor=request.user, kind='order_status',
+                title='对方确认了交付',
+                message=f'{request.user.username}已确认商品“{locked_order.item.title}”完成交付，请你确认。',
+                order=locked_order, item=locked_order.item,
+                target_url=reverse('order_detail', args=[locked_order.id]),
+            )
+            messages.success(request, '已记录你的交付确认，等待对方确认。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def open_dispute(request, order_id):
+    order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller'), id=order_id)
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限发起这笔订单的争议。')
+        return redirect('home')
+    if order.status not in {'confirmed', 'meeting', 'completed'}:
+        messages.error(request, '当前订单状态不支持发起交易争议。')
+        return redirect('order_detail', order_id=order.id)
+    if hasattr(order, 'dispute'):
+        messages.info(request, '这笔订单已经有一条争议记录，请等待平台处理。')
+        return redirect('order_detail', order_id=order.id)
+
+    if request.method == 'POST':
+        form = DisputeForm(request.POST)
+        if form.is_valid():
+            with transaction.atomic():
+                dispute = form.save(commit=False)
+                dispute.order = order
+                dispute.opened_by = request.user
+                dispute.save()
+                OrderEvent.objects.create(
+                    order=order,
+                    actor=request.user,
+                    from_status=order.status,
+                    to_status=order.status,
+                    note='交易争议已提交，等待平台处理',
+                )
+                other_party = order.seller if request.user == order.buyer else order.buyer
+                create_notification(
+                    other_party, actor=request.user, kind='order_dispute',
+                    title='交易争议已提交',
+                    message=f'{request.user.username}对商品“{order.item.title}”发起了交易争议。',
+                    order=order, item=order.item,
+                    target_url=reverse('order_detail', args=[order.id]),
+                )
+            messages.success(request, '争议已提交，平台会在后台核实处理。')
+            return redirect('order_detail', order_id=order.id)
+    else:
+        form = DisputeForm()
+    return render(request, 'listings/dispute_form.html', {
+        'form': form,
+        'order': order,
+        'title': '发起交易争议',
+    })
+
+
+@login_required
+def dispute_list(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    disputes = OrderDispute.objects.select_related(
+        'order__item', 'order__buyer', 'order__seller', 'opened_by', 'reviewer',
+    )
+    return render(request, 'listings/disputes.html', {
+        'disputes': disputes,
+        'pending_dispute_count': disputes.filter(status__in={'open', 'reviewing'}).count(),
+        'title': '交易争议处理',
+    })
+
+
+@login_required
+def resolve_dispute(request, dispute_id):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    dispute = get_object_or_404(
+        OrderDispute.objects.select_related('order__item', 'order__buyer', 'order__seller'),
+        id=dispute_id,
+    )
+    if dispute.status in {'resolved', 'rejected'}:
+        messages.info(request, '这条争议已经处理完成。')
+        return redirect('dispute_list')
+    if request.method == 'POST':
+        form = DisputeResolutionForm(request.POST, instance=dispute)
+        if form.is_valid():
+            with transaction.atomic():
+                dispute = OrderDispute.objects.select_for_update().select_related(
+                    'order__item', 'order__buyer', 'order__seller',
+                ).get(pk=dispute.id)
+                dispute.status = form.cleaned_data['status']
+                dispute.resolution_note = form.cleaned_data['resolution_note']
+                dispute.reviewer = request.user
+                dispute.resolved_at = timezone.now()
+                dispute.save(update_fields=['status', 'resolution_note', 'reviewer', 'resolved_at', 'updated_at'])
+                OrderEvent.objects.create(
+                    order=dispute.order,
+                    actor=request.user,
+                    from_status=dispute.order.status,
+                    to_status=dispute.order.status,
+                    note=f'平台已将交易争议标记为“{dispute.get_status_display()}”',
+                )
+                for recipient in {dispute.order.buyer, dispute.order.seller}:
+                    create_notification(
+                        recipient, kind='order_dispute',
+                        title='交易争议处理结果已更新',
+                        message=f'商品“{dispute.order.item.title}”的争议已{dispute.get_status_display()}。',
+                        order=dispute.order, item=dispute.order.item,
+                        target_url=reverse('order_detail', args=[dispute.order.id]),
+                    )
+            messages.success(request, '争议处理结果已保存，双方会收到通知。')
+            return redirect('dispute_list')
+    else:
+        form = DisputeResolutionForm(instance=dispute, initial={'status': 'resolved'})
+    return render(request, 'listings/dispute_resolve.html', {
+        'form': form,
+        'dispute': dispute,
+        'title': '处理交易争议',
     })
 
 
@@ -361,12 +533,12 @@ def update_order_status(request, order_id):
         transitions = {
             'pending': {'confirmed', 'cancelled'},
             'confirmed': {'meeting', 'cancelled'},
-            'meeting': {'completed', 'cancelled'},
+            'meeting': {'cancelled'},
             'completed': set(),
             'cancelled': set(),
         }
         seller_can_update = request.user == order.seller and target_status in transitions.get(order.status, set())
-        buyer_can_update = request.user == order.buyer and target_status in {'completed', 'cancelled'}
+        buyer_can_update = request.user == order.buyer and target_status == 'cancelled' and order.status in {'pending', 'confirmed', 'meeting'}
         if seller_can_update or buyer_can_update:
             previous_status = order.status
             order.status = target_status
@@ -513,11 +685,11 @@ def operations_dashboard(request):
         period_days = int(request.GET.get('days', 30))
     except (TypeError, ValueError):
         period_days = 30
-    return render(
-        request,
-        'listings/operations_dashboard.html',
-        build_operations_dashboard(period_days),
-    )
+    dashboard = build_operations_dashboard(period_days)
+    dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
+        status__in={'open', 'reviewing'},
+    ).count()
+    return render(request, 'listings/operations_dashboard.html', dashboard)
 
 def search_items(request):
     query = request.GET.get('q', '').strip()

@@ -1,5 +1,5 @@
 from django import forms
-from .models import CampusLocation, Category, Item, ItemImage, Order, Rating, Report, SavedSearch
+from .models import CampusLocation, Category, Item, ItemImage, Order, OrderDispute, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -132,3 +132,43 @@ class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):
         if min_price is not None and max_price is not None and min_price > max_price:
             self.add_error('max_price', '最高价格不能低于最低价格。')
         return cleaned_data
+
+
+class DisputeForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = OrderDispute
+        fields = ['reason', 'detail']
+        widgets = {
+            'reason': forms.Select(attrs={'class': 'form-select'}),
+            'detail': forms.Textarea(attrs={
+                'rows': 6,
+                'placeholder': '请描述发生了什么、你希望平台如何协助处理。',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['reason'].widget.attrs['class'] = 'form-select'
+
+
+class DisputeResolutionForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = OrderDispute
+        fields = ['status', 'resolution_note']
+        widgets = {
+            'status': forms.Select(attrs={'class': 'form-select'}),
+            'resolution_note': forms.Textarea(attrs={
+                'rows': 5,
+                'placeholder': '记录核实结果、处理依据和后续建议。',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['status'].choices = [
+            choice for choice in self.fields['status'].choices
+            if choice[0] in {'resolved', 'rejected'}
+        ]
+        self.fields['status'].widget.attrs['class'] = 'form-select'

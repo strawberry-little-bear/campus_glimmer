@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}发起交易争议 - 拾光校园{% endblock %}
+{% block content %}
+<div class="form-page-heading"><a href="{% url 'order_detail' order.id %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回订单</a><span class="eyebrow eyebrow-soft">交易保障</span><h1>发起交易争议</h1><p>订单：{{ order.item.title }} · 请尽量提供清晰、可核实的说明。</p></div>
+<div class="form-card content-card dispute-form-card"><form method="post">{% csrf_token %}<div class="form-section"><h2><span>01</span>选择问题类型</h2>{% for field in form %}<div class="mb-4"><label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|striptags }}</div>{% endif %}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}</div><div class="dispute-tip"><i class="bi bi-info-circle me-2"></i>提交后，对方和平台工作人员会看到这条争议记录；请不要填写密码、验证码等敏感信息。</div><div class="form-actions"><a href="{% url 'order_detail' order.id %}" class="btn btn-light">取消</a><button class="btn btn-danger px-4" type="submit"><i class="bi bi-shield-exclamation me-2"></i>提交争议</button></div></form></div>
+{% endblock %}

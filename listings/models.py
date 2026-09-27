@@ -193,6 +193,73 @@ class OrderEvent(models.Model):
 
 
 
+class DeliveryConfirmation(models.Model):
+    order = models.OneToOneField(
+        Order, on_delete=models.CASCADE, related_name='delivery_confirmation', verbose_name='订单',
+    )
+    buyer_confirmed_at = models.DateTimeField('买家确认时间', null=True, blank=True)
+    seller_confirmed_at = models.DateTimeField('卖家确认时间', null=True, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '交付确认'
+        verbose_name_plural = '交付确认'
+
+    @property
+    def is_complete(self):
+        return bool(self.buyer_confirmed_at and self.seller_confirmed_at)
+
+    def __str__(self):
+        return f'{self.order.item.title} · 交付确认'
+
+
+class OrderDispute(models.Model):
+    REASON_CHOICES = (
+        ('not_received', '未收到商品'),
+        ('mismatch', '商品与描述不符'),
+        ('payment', '价格或付款问题'),
+        ('safety', '交易安全问题'),
+        ('other', '其他争议'),
+    )
+    STATUS_CHOICES = (
+        ('open', '待处理'),
+        ('reviewing', '处理中'),
+        ('resolved', '已解决'),
+        ('rejected', '已驳回'),
+    )
+
+    order = models.OneToOneField(
+        Order, on_delete=models.CASCADE, related_name='dispute', verbose_name='相关订单',
+    )
+    opened_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='opened_order_disputes', verbose_name='发起人',
+    )
+    reason = models.CharField('争议类型', max_length=30, choices=REASON_CHOICES)
+    detail = models.TextField('争议说明')
+    status = models.CharField('处理状态', max_length=20, choices=STATUS_CHOICES, default='open')
+    reviewer = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_order_disputes', verbose_name='处理人',
+    )
+    resolution_note = models.TextField('处理意见', blank=True)
+    resolved_at = models.DateTimeField('处理时间', null=True, blank=True)
+    created_at = models.DateTimeField('发起时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '交易争议'
+        verbose_name_plural = '交易争议'
+        ordering = ['status', '-created_at']
+        indexes = [
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['opened_by', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.order.item.title} · {self.get_reason_display()}'
+
+
 class BrowsingHistory(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='browsing_history', verbose_name='用户')
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='view_history', verbose_name='商品')
@@ -248,6 +315,7 @@ class Notification(models.Model):
         ('message_received', '收到新私信'),
         ('comment_received', '收到商品留言'),
         ('saved_search_match', '关注的搜索有新商品'),
+        ('order_dispute', '交易争议更新'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')

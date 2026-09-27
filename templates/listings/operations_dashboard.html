@@ -9,14 +9,17 @@
         <h1>运营数据概览</h1>
         <p>把商品、搜索与交易行为放在同一张看板里，观察校园市场正在发生什么。</p>
     </div>
-    <form method="get" class="operations-period-form">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        <a href="{% url 'dispute_list' %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-shield-exclamation me-1"></i>交易争议{% if pending_dispute_count %}（{{ pending_dispute_count }}）{% endif %}</a>
+        <form method="get" class="operations-period-form">
         <label for="operations-days" class="small text-muted">统计周期</label>
         <select id="operations-days" name="days" class="form-select form-select-sm" onchange="this.form.submit()">
             {% for value, label in period_choices %}
             <option value="{{ value }}" {% if period_days == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
         </select>
-    </form>
+        </form>
+    </div>
 </div>
 
 <div class="operations-period-note mb-4">

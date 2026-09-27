@@ -84,8 +84,14 @@
                 <p class="mt-3">请与买家沟通后确认见面安排。</p>
                 <form method="post" action="{% url 'update_order_status' order.id %}" class="d-grid gap-2">{% csrf_token %}<button name="status" value="meeting" class="btn btn-primary">标记为待交付</button><button name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
             {% elif order.status == 'meeting' %}
-                <p class="mt-3">完成当面交付后，任一方都可以确认交易完成。</p>
-                <form method="post" action="{% url 'update_order_status' order.id %}" class="d-grid gap-2">{% csrf_token %}<button name="status" value="completed" class="btn btn-primary">确认交易完成</button><button name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
+                <p class="mt-3">完成当面交付后，需要买卖双方分别确认，订单才会自动完成。</p>
+                <div class="delivery-confirmation-summary">
+                    <div class="delivery-confirmation-person {% if confirmation and confirmation.buyer_confirmed_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.buyer_confirmed_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>买家{% if confirmation and confirmation.buyer_confirmed_at %}已确认{% else %}待确认{% endif %}</span></div>
+                    <div class="delivery-confirmation-person {% if confirmation and confirmation.seller_confirmed_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.seller_confirmed_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>卖家{% if confirmation and confirmation.seller_confirmed_at %}已确认{% else %}待确认{% endif %}</span></div>
+                </div>
+                {% if user == order.buyer and not confirmation.buyer_confirmed_at or user == order.seller and not confirmation.seller_confirmed_at %}
+                <form method="post" action="{% url 'confirm_delivery' order.id %}" class="d-grid gap-2 mt-3">{% csrf_token %}<button class="btn btn-primary"><i class="bi bi-hand-thumbs-up me-1"></i>确认已完成交付</button><button type="submit" formaction="{% url 'update_order_status' order.id %}" name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
+                {% else %}<p class="small text-muted mt-3 mb-0">你已完成确认，请等待对方确认。</p>{% endif %}
             {% elif order.status == 'confirmed' and user == order.buyer %}
                 <p class="mt-3">卖家已确认预约，请继续沟通见面时间。</p>
                 <form method="post" action="{% url 'update_order_status' order.id %}">{% csrf_token %}<button name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
@@ -95,6 +101,22 @@
                 <p class="mt-3 mb-0 text-muted">等待卖家确认后继续推进。</p>
             {% endif %}
         </section>
+
+        {% if order.status == 'confirmed' or order.status == 'meeting' or order.status == 'completed' %}
+        <section class="content-card mt-4 dispute-summary-card">
+            <span class="eyebrow eyebrow-soft">交易保障</span>
+            {% if dispute %}
+                <h2 class="mt-2">争议：{{ dispute.get_status_display }}</h2>
+                <p class="small text-muted mb-2">{{ dispute.get_reason_display }} · {{ dispute.created_at|date:'Y-m-d H:i' }}</p>
+                <p class="small mb-0">{{ dispute.detail|linebreaksbr }}</p>
+                {% if dispute.resolution_note %}<div class="dispute-resolution-note mt-3"><strong>平台处理意见</strong><p class="mb-0 mt-1">{{ dispute.resolution_note|linebreaksbr }}</p></div>{% endif %}
+            {% else %}
+                <h2 class="mt-2">遇到交易问题？</h2>
+                <p class="small text-muted">如商品未收到、与描述不符或存在安全问题，可以提交争议让平台介入核实。</p>
+                <a class="btn btn-sm btn-outline-danger" href="{% url 'open_dispute' order.id %}"><i class="bi bi-shield-exclamation me-1"></i>发起交易争议</a>
+            {% endif %}
+        </section>
+        {% endif %}
 
         {% if ratings %}
         <section class="content-card mt-4">
