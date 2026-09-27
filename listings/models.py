@@ -274,3 +274,36 @@ class Notification(models.Model):
 
     def __str__(self):
         return f'{self.recipient.username} · {self.title}'
+
+
+class SearchQuery(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='search_queries', verbose_name='用户',
+    )
+    query = models.CharField('搜索词', max_length=120)
+    condition = models.CharField('成色筛选', max_length=120, blank=True)
+    category = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='search_queries', verbose_name='分类',
+    )
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='search_queries', verbose_name='交易地点',
+    )
+    min_price = models.DecimalField('最低价格', max_digits=10, decimal_places=2, null=True, blank=True)
+    max_price = models.DecimalField('最高价格', max_digits=10, decimal_places=2, null=True, blank=True)
+    result_count = models.PositiveIntegerField('结果数量', default=0)
+    created_at = models.DateTimeField('搜索时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '搜索记录'
+        verbose_name_plural = '搜索记录'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['query', '-created_at']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.query} · {self.result_count} 条结果'

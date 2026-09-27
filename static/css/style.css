@@ -382,3 +382,46 @@ a { color: inherit; text-decoration: none; }
     .notification-card { align-items: flex-start; padding: 14px 8px; }
     .notification-arrow { margin-top: 13px; }
 }
+
+/* 搜索与精细筛选 */
+.advanced-filter-panel {
+    background: linear-gradient(145deg, #fff, #f8fcf9);
+}
+.advanced-filter-form .form-label {
+    margin-bottom: 7px;
+    color: #597066;
+    font-size: .76rem;
+    font-weight: 700;
+}
+.advanced-filter-form .form-control {
+    border-color: #dce8e0;
+    border-radius: 10px;
+    color: var(--ink);
+    background: rgba(255,255,255,.9);
+}
+.advanced-filter-form .form-control:focus {
+    border-color: #9ed4bc;
+    box-shadow: 0 0 0 3px rgba(29, 138, 104, .08);
+}
+.filter-price-fields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+}
+.filter-price-fields span {
+    color: #9aaba2;
+    font-size: .78rem;
+}
+.advanced-filter-form .btn {
+    padding-block: 8px;
+}
+@media (max-width: 991px) {
+    .advanced-filter-panel { margin-bottom: 0; }
+}
+@media (max-width: 575px) {
+    .filter-price-fields { gap: 5px; }
+    .toolbar { align-items: flex-start; flex-direction: column; }
+    .sort-form { width: 100%; justify-content: space-between; }
+    .sort-form select { flex: 1; }
+}

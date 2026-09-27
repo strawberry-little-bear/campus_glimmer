@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SearchQuery
 from .recommendations import get_recommendations
 
 
@@ -245,3 +245,82 @@ class ListingFlowTests(TestCase):
         self.client.post(reverse('mark_all_notifications_read'))
         self.assertFalse(Notification.objects.filter(recipient=self.user, is_read=False).exists())
 
+
+    def test_search_matches_category_location_and_condition(self):
+        response = self.client.get(reverse('item_list'), {'q': '东校区'})
+        self.assertContains(response, '便携键盘')
+
+        response = self.client.get(reverse('item_list'), {'q': '9成新'})
+        self.assertContains(response, '便携键盘')
+
+        response = self.client.get(reverse('item_list'), {'q': '数码'})
+        self.assertContains(response, '便携键盘')
+
+    def test_search_filters_by_price_range(self):
+        Item.objects.create(
+            title='低价鼠标', description='备用鼠标', price='20.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        Item.objects.create(
+            title='高价显示器', description='大屏显示器', price='260.00', category=self.category,
+            location=self.location, condition='8成新', seller=self.other_user,
+        )
+
+        response = self.client.get(reverse('item_list'), {'min_price': '50', 'max_price': '120'})
+        self.assertContains(response, '便携键盘')
+        self.assertNotContains(response, '低价鼠标')
+        self.assertNotContains(response, '高价显示器')
+
+    def test_relevance_sort_prioritizes_exact_and_prefix_matches(self):
+        exact = Item.objects.create(
+            title='键盘', description='精确匹配', price='80.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        prefix = Item.objects.create(
+            title='键盘套', description='前缀匹配', price='30.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        contains = Item.objects.create(
+            title='无线键盘', description='包含匹配', price='60.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+
+        response = self.client.get(reverse('item_list'), {'q': '键盘', 'sort': 'relevance'})
+        result_ids = [item.id for item in response.context['items']]
+        self.assertLess(result_ids.index(exact.id), result_ids.index(prefix.id))
+        self.assertLess(result_ids.index(prefix.id), result_ids.index(contains.id))
+
+    def test_search_query_records_filters_and_result_count(self):
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('item_list'), {
+            'q': '键盘', 'condition': '9成新', 'location': self.location.id, 'min_price': '50', 'max_price': '120',
+        })
+        self.assertEqual(response.status_code, 200)
+        record = SearchQuery.objects.get(user=self.user)
+        self.assertEqual(record.query, '键盘')
+        self.assertEqual(record.category, None)
+        self.assertEqual(record.location, self.location)
+        self.assertEqual(str(record.min_price), '50.00')
+        self.assertEqual(str(record.max_price), '120.00')
+        self.assertEqual(record.result_count, 1)
+
+    def test_search_pagination_does_not_create_duplicate_records(self):
+        for index in range(13):
+            Item.objects.create(
+                title=f'键盘配件 {index}', description='分页搜索商品', price='12.00',
+                category=self.category, location=self.location, condition='全新', seller=self.other_user,
+            )
+
+        self.client.get(reverse('item_list'), {'q': '键盘'})
+        self.client.get(reverse('item_list'), {'q': '键盘', 'page': 2})
+        self.assertEqual(SearchQuery.objects.filter(query='键盘').count(), 1)
+
+    def test_invalid_price_filters_are_ignored_safely(self):
+        response = self.client.get(reverse('item_list'), {
+            'q': '键盘', 'min_price': 'not-a-number', 'max_price': '-10',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '便携键盘')
+        record = SearchQuery.objects.get(query='键盘')
+        self.assertIsNone(record.min_price)
+        self.assertIsNone(record.max_price)

@@ -1,17 +1,18 @@
+from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Avg, Count, F, Q
+from django.db.models import Avg, Case, Count, F, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
 
@@ -41,23 +42,95 @@ def home(request):
     return render(request, 'listings/home.html', context)
 
 
+def _parse_price(value):
+    try:
+        amount = Decimal(value)
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not amount.is_finite() or amount < 0:
+        return None
+    return amount
+
+
 def item_list(request, category_id=None):
     categories = Category.objects.annotate(available_count=Count('items', filter=Q(items__status='available')))
     locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=Q(items__status='available')))
     category = get_object_or_404(Category, id=category_id) if category_id else None
     location_id = request.GET.get('location', '').strip()
     location = get_object_or_404(CampusLocation, id=location_id, is_active=True) if location_id.isdigit() else None
+    query = request.GET.get('q', '').strip()
+    condition = request.GET.get('condition', '').strip()
+    raw_min_price = request.GET.get('min_price', '').strip()
+    raw_max_price = request.GET.get('max_price', '').strip()
+    min_price = _parse_price(raw_min_price)
+    max_price = _parse_price(raw_max_price)
+
     items = Item.objects.filter(status='available').select_related('category', 'seller', 'location').prefetch_related('images')
     if category:
         items = items.filter(category=category)
     if location:
         items = items.filter(location=location)
-    query = request.GET.get('q', '').strip()
     if query:
-        items = items.filter(Q(title__icontains=query) | Q(description__icontains=query) | Q(location__name__icontains=query))
+        items = items.filter(
+            Q(title__icontains=query)
+            | Q(description__icontains=query)
+            | Q(condition__icontains=query)
+            | Q(category__name__icontains=query)
+            | Q(location__name__icontains=query)
+            | Q(location__building__icontains=query)
+        )
+    if condition:
+        items = items.filter(condition__icontains=condition)
+    if min_price is not None:
+        items = items.filter(price__gte=min_price)
+    if max_price is not None:
+        items = items.filter(price__lte=max_price)
+
     sort = request.GET.get('sort', 'latest')
-    sort_map = {'latest': '-created_at', 'price_asc': 'price', 'price_desc': '-price'}
-    items = items.order_by(sort_map.get(sort, '-created_at'))
+    allowed_sorts = {'latest', 'price_asc', 'price_desc', 'relevance'}
+    if sort not in allowed_sorts or (sort == 'relevance' and not query):
+        sort = 'latest'
+    if sort == 'relevance':
+        items = items.annotate(
+            search_rank=Case(
+                When(title__iexact=query, then=Value(3)),
+                When(title__istartswith=query, then=Value(2)),
+                When(title__icontains=query, then=Value(1)),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+        ).order_by('-search_rank', '-created_at')
+    else:
+        sort_map = {'latest': '-created_at', 'price_asc': 'price', 'price_desc': '-price'}
+        items = items.order_by(sort_map[sort])
+
+    result_count = items.count()
+    if query and not request.GET.get('page'):
+        SearchQuery.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            query=query[:120],
+            condition=condition[:120],
+            category=category,
+            location=location,
+            min_price=min_price,
+            max_price=max_price,
+            result_count=result_count,
+        )
+
+    filter_params = {}
+    if query:
+        filter_params['q'] = query
+    if condition:
+        filter_params['condition'] = condition
+    if raw_min_price:
+        filter_params['min_price'] = raw_min_price
+    if raw_max_price:
+        filter_params['max_price'] = raw_max_price
+    if location:
+        filter_params['location'] = location.id
+    if sort != 'latest':
+        filter_params['sort'] = sort
+
     paginator = Paginator(items, 12)
     page_obj = paginator.get_page(request.GET.get('page'))
     context = {
@@ -68,12 +141,15 @@ def item_list(request, category_id=None):
         'items': page_obj,
         'page_obj': page_obj,
         'query': query,
+        'condition': condition,
+        'min_price': raw_min_price,
+        'max_price': raw_max_price,
         'sort': sort,
+        'filter_query': urlencode(filter_params),
         'title': f'{category.name} · 商品集' if category else '发现校园好物',
         'favorite_ids': _favorite_ids(request),
     }
     return render(request, 'listings/item_list.html', context)
-
 
 def item_detail(request, item_id):
     item = get_object_or_404(

@@ -4,16 +4,99 @@
 {% block title %}{{ title }} · 拾光校园{% endblock %}
 
 {% block content %}
-<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">探索校园闲置</span><h1>{{ title }}</h1><p>{% if query %}正在为你筛选“{{ query }}”{% elif location %}正在浏览 {{ location.name }} 附近的好物{% else %}找到适合自己的好物，也把不再需要的分享出去。{% endif %}</p></div>{% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>发布闲置</a>{% endif %}</div>
+<div class="page-intro mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">探索校园闲置</span>
+        <h1>{{ title }}</h1>
+        <p>
+            {% if query %}正在为你筛选“{{ query }}”
+            {% elif location %}正在浏览 {{ location.name }} 附近的好物
+            {% else %}找到适合自己的好物，也把不再需要的分享出去。{% endif %}
+        </p>
+    </div>
+    {% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>发布闲置</a>{% endif %}
+</div>
+
 <div class="row g-4">
     <aside class="col-lg-3">
-        <div class="filter-panel mb-4"><div class="filter-title"><span>商品分类</span><i class="bi bi-sliders2"></i></div><a class="filter-link {% if not category %}active{% endif %}" href="{% url 'item_list' %}">全部商品 <span>{{ page_obj.paginator.count }}</span></a>{% for category_option in categories %}<a class="filter-link {% if category and category_option.id == category.id %}active{% endif %}" href="{% url 'item_list_by_category' category_option.id %}">{{ category_option.name }} <span>{{ category_option.available_count }}</span></a>{% endfor %}</div>
-        <div class="filter-panel"><div class="filter-title"><span>交易地点</span><i class="bi bi-geo-alt"></i></div><a class="filter-link {% if not location %}active{% endif %}" href="{% url 'item_list' %}{% if query %}?q={{ query }}{% endif %}">全部地点</a>{% for location_option in locations %}<a class="filter-link {% if location and location_option.id == location.id %}active{% endif %}" href="?location={{ location_option.id }}{% if query %}&q={{ query }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}"><span><i class="bi bi-pin-map me-1"></i>{{ location_option.name }}</span><span>{{ location_option.available_count }}</span></a>{% empty %}<p class="text-muted small mb-0">管理员还没有配置校园地点</p>{% endfor %}</div>
+        <div class="filter-panel mb-4">
+            <div class="filter-title"><span>商品分类</span><i class="bi bi-sliders2"></i></div>
+            <a class="filter-link {% if not category %}active{% endif %}" href="{% url 'item_list' %}">全部商品 <span>{{ page_obj.paginator.count }}</span></a>
+            {% for category_option in categories %}
+            <a class="filter-link {% if category and category_option.id == category.id %}active{% endif %}" href="{% url 'item_list_by_category' category_option.id %}">{{ category_option.name }} <span>{{ category_option.available_count }}</span></a>
+            {% endfor %}
+        </div>
+
+        <div class="filter-panel mb-4">
+            <div class="filter-title"><span>交易地点</span><i class="bi bi-geo-alt"></i></div>
+            <a class="filter-link {% if not location %}active{% endif %}" href="{% url 'item_list' %}{% if query %}?q={{ query }}{% endif %}">全部地点</a>
+            {% for location_option in locations %}
+            <a class="filter-link {% if location and location_option.id == location.id %}active{% endif %}" href="?location={{ location_option.id }}{% if query %}&q={{ query }}{% endif %}{% if sort != 'latest' %}&sort={{ sort }}{% endif %}">
+                <span><i class="bi bi-pin-map me-1"></i>{{ location_option.name }}</span><span>{{ location_option.available_count }}</span>
+            </a>
+            {% empty %}<p class="text-muted small mb-0">管理员还没有配置校园地点</p>{% endfor %}
+        </div>
+
+        <div class="filter-panel advanced-filter-panel">
+            <div class="filter-title"><span>精细筛选</span><i class="bi bi-funnel"></i></div>
+            <form method="get" action="{% if category %}{% url 'item_list_by_category' category.id %}{% else %}{% url 'item_list' %}{% endif %}" class="advanced-filter-form">
+                <input type="hidden" name="q" value="{{ query }}">
+                {% if location %}<input type="hidden" name="location" value="{{ location.id }}">{% endif %}
+                <div class="mb-3">
+                    <label for="condition" class="form-label">成色 / 关键词</label>
+                    <input id="condition" name="condition" value="{{ condition }}" class="form-control form-control-sm" placeholder="如：九成新、全新">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">价格区间</label>
+                    <div class="filter-price-fields">
+                        <input name="min_price" value="{{ min_price }}" class="form-control form-control-sm" inputmode="decimal" placeholder="最低">
+                        <span>—</span>
+                        <input name="max_price" value="{{ max_price }}" class="form-control form-control-sm" inputmode="decimal" placeholder="最高">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-check2 me-1"></i>应用筛选</button>
+            </form>
+        </div>
     </aside>
+
     <div class="col-lg-9">
-        <div class="toolbar mb-4"><span class="text-muted small">共 {{ page_obj.paginator.count }} 件商品{% if location %} · {{ location.name }}{% endif %}</span><form method="get" class="sort-form"><input type="hidden" name="q" value="{{ query }}"><input type="hidden" name="location" value="{% if location %}{{ location.id }}{% endif %}"><label for="sort" class="small text-muted">排序</label><select id="sort" name="sort" class="form-select form-select-sm" onchange="this.form.submit()"><option value="latest" {% if sort == 'latest' %}selected{% endif %}>最新发布</option><option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>价格从低到高</option><option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>价格从高到低</option></select></form></div>
-        <div class="row g-4">{% for item in items %}<div class="col-sm-6 col-xl-4">{% include 'listings/_item_card.html' with item=item %}</div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-search display-6 d-block mb-3"></i><h3>没有找到匹配的商品</h3><p>换个关键词、地点，或者看看其他分类吧。</p><a href="{% url 'item_list' %}" class="btn btn-outline-primary">清除筛选</a></div></div>{% endfor %}</div>
-        {% if page_obj.paginator.num_pages > 1 %}<nav class="mt-5" aria-label="商品分页"><ul class="pagination justify-content-center">{% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ query }}&sort={{ sort }}{% if location %}&location={{ location.id }}{% endif %}">上一页</a></li>{% endif %}{% for num in page_obj.paginator.page_range %}<li class="page-item {% if page_obj.number == num %}active{% endif %}"><a class="page-link" href="?page={{ num }}&q={{ query }}&sort={{ sort }}{% if location %}&location={{ location.id }}{% endif %}">{{ num }}</a></li>{% endfor %}{% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ query }}&sort={{ sort }}{% if location %}&location={{ location.id }}{% endif %}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
+        <div class="toolbar mb-4">
+            <span class="text-muted small">共 {{ page_obj.paginator.count }} 件商品{% if location %} · {{ location.name }}{% endif %}</span>
+            <form method="get" class="sort-form">
+                <input type="hidden" name="q" value="{{ query }}">
+                <input type="hidden" name="condition" value="{{ condition }}">
+                <input type="hidden" name="min_price" value="{{ min_price }}">
+                <input type="hidden" name="max_price" value="{{ max_price }}">
+                <input type="hidden" name="location" value="{% if location %}{{ location.id }}{% endif %}">
+                <label for="sort" class="small text-muted">排序</label>
+                <select id="sort" name="sort" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="latest" {% if sort == 'latest' %}selected{% endif %}>最新发布</option>
+                    {% if query %}<option value="relevance" {% if sort == 'relevance' %}selected{% endif %}>相关度优先</option>{% endif %}
+                    <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>价格从低到高</option>
+                    <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>价格从高到低</option>
+                </select>
+            </form>
+        </div>
+
+        <div class="row g-4">
+            {% for item in items %}
+            <div class="col-sm-6 col-xl-4">{% include 'listings/_item_card.html' with item=item %}</div>
+            {% empty %}
+            <div class="col-12">
+                <div class="empty-state py-5"><i class="bi bi-search display-6 d-block mb-3"></i><h3>没有找到匹配的商品</h3><p>换个关键词、地点或价格区间，看看其他分类吧。</p><a href="{% url 'item_list' %}" class="btn btn-outline-primary">清除筛选</a></div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="mt-5" aria-label="商品分页">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">上一页</a></li>{% endif %}
+                {% for num in page_obj.paginator.page_range %}<li class="page-item {% if page_obj.number == num %}active{% endif %}"><a class="page-link" href="?page={{ num }}{% if filter_query %}&{{ filter_query }}{% endif %}">{{ num }}</a></li>{% endfor %}
+                {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">下一页</a></li>{% endif %}
+            </ul>
+        </nav>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
