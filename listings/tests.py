@@ -516,6 +516,35 @@ class ListingFlowTests(TestCase):
         self.assertEqual(comparisons['searches']['change_display'], '-50.0%')
         self.assertContains(response, '周期对比')
 
+    def test_operations_dashboard_segments_active_users_by_behavior(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        SearchQuery.objects.create(user=self.user, query='键盘', result_count=1)
+        BrowsingHistory.objects.create(user=self.other_user, item=self.item)
+        Favorite.objects.create(user=self.other_user, item=self.item)
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['metrics']['active_users'], 2)
+        segments = {row['key']: row for row in response.context['activity_segments']}
+        self.assertEqual(segments['supplier']['count'], 0)
+        self.assertEqual(segments['explorer']['count'], 0)
+        self.assertEqual(segments['light']['count'], 2)
+        self.assertContains(response, '活跃用户分层')
+
+    def test_operations_dashboard_export_includes_activity_segments(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        SearchQuery.objects.create(user=self.user, query='键盘', result_count=1)
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        report = response.content.decode('utf-8-sig')
+        self.assertIn('周期活跃用户,1', report)
+        self.assertIn('活跃用户分层,人数,占活跃用户（%）,识别口径', report)
+        self.assertIn('供给贡献者,0,0.0,周期内发布了多件商品', report)
+
     def test_operations_dashboard_export_includes_period_comparison(self):
         self.user.is_staff = True
         self.user.save(update_fields=['is_staff'])

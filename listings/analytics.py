@@ -5,6 +5,7 @@ from django.db.models import Avg, Count, Max, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
+
 from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report, SearchQuery
 
 
@@ -93,6 +94,91 @@ def build_search_insights(days=30, query=''):
         'gap_terms': gap_terms,
         'insights': insights,
     }
+
+
+def _build_user_activity_segments(start, end):
+    """Aggregate current-period activity once, then classify users by behavior."""
+    user_model = get_user_model()
+    users = user_model.objects.annotate(
+        listing_count=Count(
+            'listed_items',
+            filter=Q(listed_items__created_at__gte=start, listed_items__created_at__lte=end),
+            distinct=True,
+        ),
+        search_count=Count(
+            'search_queries',
+            filter=Q(search_queries__created_at__gte=start, search_queries__created_at__lte=end),
+            distinct=True,
+        ),
+        browse_count=Count(
+            'browsing_history',
+            filter=Q(browsing_history__last_viewed_at__gte=start, browsing_history__last_viewed_at__lte=end),
+            distinct=True,
+        ),
+        favorite_count=Count(
+            'favorites',
+            filter=Q(favorites__created_at__gte=start, favorites__created_at__lte=end),
+            distinct=True,
+        ),
+        purchase_count=Count(
+            'purchased_orders',
+            filter=Q(purchased_orders__created_at__gte=start, purchased_orders__created_at__lte=end),
+            distinct=True,
+        ),
+        sale_count=Count(
+            'sold_orders',
+            filter=Q(sold_orders__created_at__gte=start, sold_orders__created_at__lte=end),
+            distinct=True,
+        ),
+        sent_message_count=Count(
+            'sent_messages',
+            filter=Q(sent_messages__created_at__gte=start, sent_messages__created_at__lte=end),
+            distinct=True,
+        ),
+        received_message_count=Count(
+            'received_messages',
+            filter=Q(received_messages__created_at__gte=start, received_messages__created_at__lte=end),
+            distinct=True,
+        ),
+    )
+    segment_definitions = {
+        'trader': {'label': '交易参与者', 'note': '周期内发起或承接过交易预约'},
+        'supplier': {'label': '供给贡献者', 'note': '周期内发布了多件商品'},
+        'explorer': {'label': '高频探索者', 'note': '搜索与浏览行为较为集中'},
+        'light': {'label': '轻度活跃者', 'note': '有访问、收藏或单次互动'},
+    }
+    segment_counts = {key: 0 for key in segment_definitions}
+    active_user_count = 0
+    for user in users:
+        behavior_count = (
+            user.listing_count + user.search_count + user.browse_count
+            + user.favorite_count + user.purchase_count + user.sale_count
+            + user.sent_message_count + user.received_message_count
+        )
+        if not behavior_count:
+            continue
+        active_user_count += 1
+        if user.purchase_count or user.sale_count:
+            segment_key = 'trader'
+        elif user.listing_count >= 2:
+            segment_key = 'supplier'
+        elif user.search_count + user.browse_count >= 5:
+            segment_key = 'explorer'
+        else:
+            segment_key = 'light'
+        segment_counts[segment_key] += 1
+
+    segments = []
+    for key, definition in segment_definitions.items():
+        count = segment_counts[key]
+        segments.append({
+            'key': key,
+            'label': definition['label'],
+            'note': definition['note'],
+            'count': count,
+            'share': round(count / active_user_count * 100, 1) if active_user_count else 0,
+        })
+    return active_user_count, segments
 
 
 def build_operations_dashboard(days=30):
@@ -227,6 +313,8 @@ def build_operations_dashboard(days=30):
         for status, _ in Order.STATUS_CHOICES
     ]
 
+    active_user_count, activity_segments = _build_user_activity_segments(start, now)
+
     current_comparison_values = {
         'new_items': item_period.count(),
         'detail_views': detail_view_count,
@@ -291,6 +379,7 @@ def build_operations_dashboard(days=30):
         'previous_period_start': previous_start,
         'previous_period_end': start - timedelta(days=1),
         'period_comparisons': period_comparisons,
+        'activity_segments': activity_segments,
         'metrics': {
             'active_items': Item.objects.filter(status='available').count(),
             'new_items': item_period.count(),
@@ -304,6 +393,7 @@ def build_operations_dashboard(days=30):
             'zero_result_searches': zero_result_search_count,
             'zero_result_rate': round(zero_result_search_count / search_count * 100, 1) if search_count else 0,
             'new_users': user_period.count(),
+            'active_users': active_user_count,
             'new_reports': report_period.count(),
             'pending_reports': Report.objects.filter(status__in=['pending', 'reviewing']).count(),
         },

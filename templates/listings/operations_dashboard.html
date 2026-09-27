@@ -82,6 +82,29 @@
 
 <section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">User activity</span><h2>活跃用户分层</h2></div>
+        <span class="ops-panel-hint">当前周期内有行为的用户 · {{ metrics.active_users }} 人</span>
+    </div>
+    <div class="ops-table-wrap">
+        <table class="table ops-table ops-segment-table align-middle mb-0">
+            <thead><tr><th>用户层级</th><th>人数</th><th>占活跃用户</th><th>识别口径</th></tr></thead>
+            <tbody>
+                {% for segment in activity_segments %}
+                <tr>
+                    <td><span class="ops-segment-label ops-segment-{{ segment.key }}"><i class="bi bi-circle-fill"></i>{{ segment.label }}</span></td>
+                    <td><strong>{{ segment.count }}</strong></td>
+                    <td>{{ segment.share }}%</td>
+                    <td class="ops-segment-note">{{ segment.note }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-lightbulb me-1"></i>分层同时参考发布、搜索、浏览、收藏、交易和私信等结构化行为，不保存额外的画像标签。</div>
+</section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Conversion funnel</span><h2>用户行为转化漏斗</h2></div>
         <span class="ops-panel-hint">按当前统计周期计算</span>
     </div>
