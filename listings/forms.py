@@ -1,5 +1,5 @@
 from django import forms
-from .models import CampusLocation, Category, Item, ItemImage, Order, Report
+from .models import CampusLocation, Category, Item, ItemImage, Order, Rating, Report
 
 
 class StyledModelFormMixin:
@@ -78,3 +78,18 @@ class OrderForm(StyledModelFormMixin, forms.ModelForm):
         self.fields['meeting_location'].widget.attrs['class'] = 'form-select'
         self.fields['meeting_location'].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields['meeting_location'].empty_label = '沿用商品交易地点'
+
+
+class RatingForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Rating
+        fields = ['score', 'comment']
+        widgets = {
+            'score': forms.Select(attrs={'class': 'form-select'}),
+            'comment': forms.Textarea(attrs={'rows': 4, 'placeholder': '分享这次交易的体验，帮助其他同学做出判断。'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['score'].widget.attrs['class'] = 'form-select'

@@ -3,18 +3,99 @@
 {% block title %}{{ item.title }} · 拾光校园{% endblock %}
 {% block content %}
 <div class="mb-4"><a href="{% url 'item_list' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回商品集</a></div>
+
 <div class="row g-5">
     <div class="col-lg-7">
         <div class="detail-gallery">
-            <div class="detail-main-image">{% if item.images.first %}<img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" id="mainProductImage">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage">{% endif %}<span class="detail-status status-{{ item.status }}">{{ item.get_status_display }}</span></div>
-            {% if item.images.count > 1 %}<div class="detail-thumbs">{% for image in item.images.all %}<button type="button" class="detail-thumb {% if forloop.first %}active{% endif %}" data-image="{{ image.image.url }}"><img src="{{ image.image.url }}" alt="{{ item.title }} 图片{{ forloop.counter }}"></button>{% endfor %}</div>{% endif %}
+            <div class="detail-main-image">
+                {% if item.images.first %}<img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" id="mainProductImage">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage">{% endif %}
+                <span class="detail-status status-{{ item.status }}">{{ item.get_status_display }}</span>
+            </div>
+            {% if item.images.count > 1 %}
+            <div class="detail-thumbs">
+                {% for image in item.images.all %}<button type="button" class="detail-thumb {% if forloop.first %}active{% endif %}" data-image="{{ image.image.url }}"><img src="{{ image.image.url }}" alt="{{ item.title }} 图片{{ forloop.counter }}"></button>{% endfor %}
+            </div>
+            {% endif %}
         </div>
     </div>
-    <div class="col-lg-5"><div class="detail-content"><div class="product-meta mb-3"><span>{{ item.category.name }}</span><span>{{ item.created_at|date:'Y年m月d日' }}</span></div><h1>{{ item.title }}</h1><div class="detail-price">¥{{ item.price|floatformat:2 }}</div><div class="detail-tags"><span><i class="bi bi-stars"></i>{{ item.condition }}</span><span><i class="bi bi-person"></i>{{ item.seller.username }}</span>{% if item.location %}<span><i class="bi bi-geo-alt"></i>{{ item.location.name }}{% if item.location.building %} · {{ item.location.building }}{% endif %}</span>{% endif %}</div><div class="detail-divider"></div><h6 class="section-label">商品描述</h6><p class="detail-description">{{ item.description|linebreaksbr }}</p><div class="d-flex flex-wrap gap-2 mt-4">{% if user.is_authenticated %}<form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>{% if user != item.seller and item.status == 'available' %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-calendar2-check me-2"></i>预约交易</a><a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-outline-primary"><i class="bi bi-chat-dots me-2"></i>联系卖家</a>{% elif user != item.seller and item.status == 'reserved' %}{% if item.order %}<a href="{% url 'order_detail' item.order.id %}" class="btn btn-outline-primary"><i class="bi bi-receipt me-2"></i>查看交易进度</a>{% endif %}{% endif %}{% else %}<a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary">登录后收藏或联系卖家</a>{% endif %}</div>{% if user == item.seller %}<div class="owner-actions mt-4"><span class="small text-muted">这是你发布的商品</span><div class="d-flex gap-2 mt-2"><a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">编辑</a><a href="{% url 'mark_sold' item.id %}" class="btn btn-sm btn-outline-secondary">更新状态</a><a href="{% url 'delete_item' item.id %}" class="btn btn-sm btn-outline-danger">删除</a></div></div>{% elif user.is_authenticated %}<div class="mt-4">{% if has_reported %}<span class="small text-muted"><i class="bi bi-check2-circle me-1"></i>你已提交过举报</span>{% else %}<a href="{% url 'report_item' item.id %}" class="small text-muted report-link"><i class="bi bi-flag me-1"></i>举报此商品</a>{% endif %}</div>{% endif %}</div></div>
+
+    <div class="col-lg-5">
+        <div class="detail-content">
+            <div class="product-meta mb-3"><span>{{ item.category.name }}</span><span>{{ item.created_at|date:'Y年m月d日' }}</span></div>
+            <h1>{{ item.title }}</h1>
+            <div class="detail-price">¥{{ item.price|floatformat:2 }}</div>
+            <div class="detail-tags">
+                <span><i class="bi bi-stars"></i>{{ item.condition }}</span>
+                <span><i class="bi bi-person"></i>{{ item.seller.username }}</span>
+                {% if rating_summary.count %}<span class="rating-inline"><i class="bi bi-star-fill"></i>{{ rating_summary.average|floatformat:1 }}（{{ rating_summary.count }} 条评价）</span>{% endif %}
+                {% if item.location %}<span><i class="bi bi-geo-alt"></i>{{ item.location.name }}{% if item.location.building %} · {{ item.location.building }}{% endif %}</span>{% endif %}
+            </div>
+            <div class="detail-divider"></div>
+            <h6 class="section-label">商品描述</h6>
+            <p class="detail-description">{{ item.description|linebreaksbr }}</p>
+
+            <div class="d-flex flex-wrap gap-2 mt-4">
+                {% if user.is_authenticated %}
+                    <form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>
+                    {% if user != item.seller and item.status == 'available' %}
+                        <a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-calendar2-check me-2"></i>预约交易</a>
+                        <a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-outline-primary"><i class="bi bi-chat-dots me-2"></i>联系卖家</a>
+                    {% elif user != item.seller and item.status == 'reserved' %}
+                        {% if item.order %}<a href="{% url 'order_detail' item.order.id %}" class="btn btn-outline-primary"><i class="bi bi-receipt me-2"></i>查看交易进度</a>{% endif %}
+                    {% endif %}
+                {% else %}
+                    <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary">登录后收藏或联系卖家</a>
+                {% endif %}
+            </div>
+
+            {% if user == item.seller %}
+            <div class="owner-actions mt-4"><span class="small text-muted">这是你发布的商品</span><div class="d-flex gap-2 mt-2"><a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">编辑</a><a href="{% url 'mark_sold' item.id %}" class="btn btn-sm btn-outline-secondary">更新状态</a><a href="{% url 'delete_item' item.id %}" class="btn btn-sm btn-outline-danger">删除</a></div></div>
+            {% elif user.is_authenticated %}
+            <div class="mt-4">{% if has_reported %}<span class="small text-muted"><i class="bi bi-check2-circle me-1"></i>你已提交过举报</span>{% else %}<a href="{% url 'report_item' item.id %}" class="small text-muted report-link"><i class="bi bi-flag me-1"></i>举报此商品</a>{% endif %}</div>
+            {% endif %}
+        </div>
+    </div>
 </div>
+
 <div class="row g-4 mt-4">
-    <div class="col-lg-8"><section class="content-card"><div class="card-section-heading"><h2><i class="bi bi-chat-square-text me-2"></i>留言讨论</h2><span>{{ item.comments.count }} 条</span></div>{% for comment in item.comments.all %}<div class="comment-row"><img src="{{ comment.author.profile.avatar.url }}" alt="{{ comment.author.username }}" class="avatar-md"><div><div class="comment-meta"><strong>{{ comment.author.username }}</strong><span>{{ comment.created_at|date:'Y-m-d H:i' }}</span></div><p>{{ comment.content }}</p></div></div>{% empty %}<div class="empty-inline"><i class="bi bi-chat-square-heart"></i>还没有留言，来做第一个交流的人吧。</div>{% endfor %}{% if user.is_authenticated %}<form method="post" action="{% url 'add_comment' item.id %}" class="comment-form mt-4">{% csrf_token %}<label for="id_content" class="section-label">留下你的想法</label><textarea name="content" id="id_content" class="form-control" rows="3" placeholder="礼貌交流，友好沟通～" required></textarea><button type="submit" class="btn btn-primary mt-3">发布留言</button></form>{% else %}<div class="login-hint mt-4">登录后可以参与留言 <a href="{% url 'login' %}?next={{ request.path }}">去登录 <i class="bi bi-arrow-right"></i></a></div>{% endif %}</section></div>
-    <div class="col-lg-4"><section class="seller-card content-card mb-4"><span class="eyebrow eyebrow-soft">卖家名片</span><div class="seller-profile mt-3"><img src="{{ item.seller.profile.avatar.url }}" alt="{{ item.seller.username }}" class="avatar-lg"><div><h5>{{ item.seller.username }}</h5><small>已发布 {{ item.seller.listed_items.count }} 件商品</small></div></div>{% if item.seller.profile.bio %}<p class="seller-bio">{{ item.seller.profile.bio }}</p>{% endif %}{% if user.is_authenticated and user != item.seller %}<a href="{% url 'send_message' item.seller.id %}" class="btn btn-outline-primary w-100">给卖家发消息</a>{% endif %}</section>{% if related_items %}<section class="content-card"><div class="card-section-heading"><h2>同类好物</h2><a href="{% url 'item_list_by_category' item.category.id %}" class="text-link">更多</a></div>{% for related_item in related_items %}<a class="related-item" href="{% url 'item_detail' related_item.id %}">{% if related_item.images.first %}<img src="{{ related_item.images.first.image.url }}" alt="{{ related_item.title }}">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片">{% endif %}<span><strong>{{ related_item.title }}</strong><small>¥{{ related_item.price|floatformat:2 }}</small></span></a>{% endfor %}</section>{% endif %}</div>
+    <div class="col-lg-8">
+        <section class="content-card">
+            <div class="card-section-heading"><h2><i class="bi bi-chat-square-text me-2"></i>留言讨论</h2><span>{{ item.comments.count }} 条</span></div>
+            {% for comment in item.comments.all %}
+            <div class="comment-row"><img src="{{ comment.author.profile.avatar.url }}" alt="{{ comment.author.username }}" class="avatar-md"><div><div class="comment-meta"><strong>{{ comment.author.username }}</strong><span>{{ comment.created_at|date:'Y-m-d H:i' }}</span></div><p>{{ comment.content }}</p></div></div>
+            {% empty %}<div class="empty-inline"><i class="bi bi-chat-square-heart"></i>还没有留言，来做第一个交流的人吧。</div>
+            {% endfor %}
+            {% if user.is_authenticated %}
+            <form method="post" action="{% url 'add_comment' item.id %}" class="comment-form mt-4">{% csrf_token %}<label for="id_content" class="section-label">留下你的想法</label><textarea name="content" id="id_content" class="form-control" rows="3" placeholder="礼貌交流，友好沟通～" required></textarea><button type="submit" class="btn btn-primary mt-3">发布留言</button></form>
+            {% else %}<div class="login-hint mt-4">登录后可以参与留言 <a href="{% url 'login' %}?next={{ request.path }}">去登录 <i class="bi bi-arrow-right"></i></a></div>{% endif %}
+        </section>
+    </div>
+
+    <div class="col-lg-4">
+        <section class="seller-card content-card mb-4">
+            <span class="eyebrow eyebrow-soft">卖家名片</span>
+            <div class="seller-profile mt-3"><img src="{{ item.seller.profile.avatar.url }}" alt="{{ item.seller.username }}" class="avatar-lg"><div><h5>{{ item.seller.username }}</h5><small>已发布 {{ item.seller.listed_items.count }} 件商品</small></div></div>
+            {% if rating_summary.count %}<div class="seller-rating-summary mt-3"><span class="rating-stars" aria-label="平均 {{ rating_summary.average|floatformat:1 }} 星">{% for star in '12345' %}{% if forloop.counter <= rating_summary.average %}★{% else %}☆{% endif %}{% endfor %}</span><strong>{{ rating_summary.average|floatformat:1 }}</strong><span>来自 {{ rating_summary.count }} 条交易评价</span></div>{% else %}<p class="seller-rating-empty mt-3 mb-0"><i class="bi bi-star me-1"></i>暂时还没有交易评价</p>{% endif %}
+            {% if item.seller.profile.bio %}<p class="seller-bio">{{ item.seller.profile.bio }}</p>{% endif %}
+            {% if user.is_authenticated and user != item.seller %}<a href="{% url 'send_message' item.seller.id %}" class="btn btn-outline-primary w-100">给卖家发消息</a>{% endif %}
+        </section>
+
+        {% if seller_ratings %}
+        <section class="content-card mb-4">
+            <div class="card-section-heading"><h2><i class="bi bi-chat-square-heart me-2"></i>最近评价</h2><span>{{ rating_summary.count }} 条</span></div>
+            <div class="seller-review-list mt-3">
+                {% for rating in seller_ratings %}<article class="seller-review"><div class="d-flex justify-content-between gap-2"><strong>{{ rating.rater.username }}</strong><span class="rating-stars" aria-label="{{ rating.score }} 星">{% for star in '12345' %}{% if forloop.counter <= rating.score %}★{% else %}☆{% endif %}{% endfor %}</span></div>{% if rating.comment %}<p class="mb-0 mt-2">{{ rating.comment|linebreaksbr }}</p>{% else %}<p class="mb-0 mt-2 text-muted">这位同学给出了 {{ rating.score }} 星评价。</p>{% endif %}</article>{% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if related_items %}
+        <section class="content-card">
+            <div class="card-section-heading"><h2>同类好物</h2><a href="{% url 'item_list_by_category' item.category.id %}" class="text-link">更多</a></div>
+            {% for related_item in related_items %}<a class="related-item" href="{% url 'item_detail' related_item.id %}">{% if related_item.images.first %}<img src="{{ related_item.images.first.image.url }}" alt="{{ related_item.title }}">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片">{% endif %}<span><strong>{{ related_item.title }}</strong><small>¥{{ related_item.price|floatformat:2 }}</small></span></a>{% endfor %}
+        </section>
+        {% endif %}
+    </div>
 </div>
 {% endblock %}
 {% block extra_js %}<script>document.querySelectorAll('.detail-thumb').forEach(function (thumb) { thumb.addEventListener('click', function () { document.getElementById('mainProductImage').src = this.dataset.image; document.querySelectorAll('.detail-thumb').forEach(t => t.classList.remove('active')); this.classList.add('active'); }); });</script>{% endblock %}

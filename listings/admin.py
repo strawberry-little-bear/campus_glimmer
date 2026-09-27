@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Order, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Order, Rating, Report
 
 
 class ItemImageInline(admin.TabularInline):
@@ -71,3 +71,18 @@ class BrowsingHistoryAdmin(admin.ModelAdmin):
     search_fields = ('user__username', 'item__title')
     autocomplete_fields = ('user', 'item')
     readonly_fields = ('first_viewed_at', 'last_viewed_at')
+
+
+@admin.register(Rating)
+class RatingAdmin(admin.ModelAdmin):
+    list_display = ('order', 'rater', 'ratee', 'score', 'comment_preview', 'created_at')
+    list_filter = ('score', 'created_at')
+    search_fields = ('order__item__title', 'rater__username', 'ratee__username', 'comment')
+    autocomplete_fields = ('order', 'rater', 'ratee')
+    readonly_fields = ('created_at',)
+
+    @admin.display(description='评价内容')
+    def comment_preview(self, obj):
+        if not obj.comment:
+            return '—'
+        return obj.comment[:36] + ('…' if len(obj.comment) > 36 else '')

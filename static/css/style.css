@@ -158,3 +158,83 @@ a { color: inherit; text-decoration: none; }
 .recommendation-reason { position: absolute; top: 0; left: 14px; z-index: 2; padding: 5px 9px; color: #2a7054; background: #e7f5ec; border-radius: 999px; font-size: .72rem; font-weight: 700; }
 .history-card { position: relative; padding-top: 20px; }
 .history-card-meta { position: absolute; top: 0; left: 14px; right: 14px; z-index: 2; display: flex; justify-content: space-between; gap: 8px; color: #7c8b84; font-size: .72rem; }
+
+/* 交易评价 */
+.rating-panel,
+.rating-target-card {
+    padding: 18px 20px;
+    background: #f6faf7;
+    border: 1px solid rgba(31, 102, 77, .12);
+    border-radius: 18px;
+}
+
+.rating-target-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(135deg, #f2fbf5, #fffaf2);
+}
+
+.rating-target-icon {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: #fff;
+    background: linear-gradient(135deg, #2e8b67, #85b83f);
+    border-radius: 15px;
+    font-size: 1.3rem;
+}
+
+.rating-form-card { max-width: 760px; margin: 0 auto; }
+.rating-form-card textarea { min-height: 126px; }
+.rating-score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    color: #8c651d;
+    background: #fff3cd;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+.rating-stars {
+    color: #e5a83c;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.rating-own-comment {
+    padding: 12px 14px;
+    color: #60756c;
+    background: rgba(255,255,255,.75);
+    border-left: 3px solid #85b83f;
+    border-radius: 0 12px 12px 0;
+}
+
+.rating-list,
+.seller-review-list { display: grid; gap: 12px; }
+.rating-card,
+.seller-review {
+    padding: 14px 15px;
+    background: #f8fbf9;
+    border: 1px solid rgba(31, 102, 77, .1);
+    border-radius: 14px;
+}
+
+.rating-card p,
+.seller-review p { color: #60756c; line-height: 1.7; }
+.rating-inline { color: #a36f1c; }
+.rating-inline i { margin-right: 3px; }
+.seller-rating-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    color: #71827a;
+    font-size: .78rem;
+}
+.seller-rating-summary strong { color: #8c651d; font-size: 1rem; }
+.seller-rating-empty { color: #87968f; font-size: .82rem; }

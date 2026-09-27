@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Rating, Report
 from .recommendations import get_recommendations
 
 
@@ -18,6 +18,23 @@ class ListingFlowTests(TestCase):
             title='便携键盘', description='适合宿舍使用', price='99.00',
             category=self.category, location=self.location, condition='9成新', seller=self.user,
         )
+
+    def _complete_order(self):
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '周三晚课后见面'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        status_url = reverse('update_order_status', args=[order.id])
+        self.client.post(status_url, {'status': 'confirmed'})
+        self.client.post(status_url, {'status': 'meeting'})
+        self.client.post(status_url, {'status': 'completed'})
+        order.refresh_from_db()
+        return order
 
     def test_home_and_listing_pages_render(self):
         self.assertEqual(self.client.get(reverse('home')).status_code, 200)
@@ -108,4 +125,48 @@ class ListingFlowTests(TestCase):
         self.assertEqual(record.view_count, 2)
         response = self.client.get(reverse('browsing_history'))
         self.assertContains(response, '便携键盘')
+
+
+    def test_buyer_can_rate_seller_after_completed_order(self):
+        order = self._complete_order()
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('rate_order', args=[order.id]),
+            {'score': 5, 'comment': '卖家沟通顺畅，交付很准时。'},
+        )
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        rating = Rating.objects.get(order=order, rater=self.other_user)
+        self.assertEqual(rating.ratee, self.user)
+        self.assertEqual(rating.score, 5)
+
+    def test_user_cannot_rate_same_order_twice(self):
+        order = self._complete_order()
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        rate_url = reverse('rate_order', args=[order.id])
+        self.client.post(rate_url, {'score': 4, 'comment': '第一次评价'})
+        self.client.post(rate_url, {'score': 1, 'comment': '重复提交'})
+        self.assertEqual(Rating.objects.filter(order=order, rater=self.other_user).count(), 1)
+        self.assertEqual(Rating.objects.get(order=order, rater=self.other_user).score, 4)
+
+    def test_incomplete_order_cannot_be_rated(self):
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '等待确认'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        response = self.client.post(reverse('rate_order', args=[order.id]), {'score': 5, 'comment': '不应提交'})
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        self.assertFalse(Rating.objects.filter(order=order).exists())
+
+    def test_seller_rating_is_visible_on_item_detail(self):
+        order = self._complete_order()
+        Rating.objects.create(order=order, rater=self.other_user, ratee=self.user, score=5, comment='值得信赖')
+        response = self.client.get(reverse('item_detail', args=[self.item.id]))
+        self.assertContains(response, '5.0')
+        self.assertContains(response, '来自 1 条交易评价')
+        self.assertContains(response, '值得信赖')
 

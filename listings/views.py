@@ -4,14 +4,13 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import F
-from django.db.models import Count, Q
+from django.db.models import Avg, Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .forms import ItemForm, ItemImageFormSet, OrderForm, ReportForm
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report
+from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Rating, Report
 from .recommendations import get_recommendations
 
 
@@ -87,9 +86,13 @@ def item_detail(request, item_id):
                 last_viewed_at=timezone.now(),
             )
     related_items = Item.objects.filter(category=item.category, status='available').exclude(id=item.id).select_related('seller', 'location').prefetch_related('images')[:4]
+    seller_ratings = Rating.objects.filter(ratee=item.seller).select_related('rater', 'order')[:5]
+    rating_summary = Rating.objects.filter(ratee=item.seller).aggregate(average=Avg('score'), count=Count('id'))
     context = {
         'item': item,
         'related_items': related_items,
+        'rating_summary': rating_summary,
+        'seller_ratings': seller_ratings,
         'is_favorite': item_id in _favorite_ids(request),
         'has_reported': request.user.is_authenticated and Report.objects.filter(item=item, reporter=request.user).exists(),
     }
@@ -182,7 +185,56 @@ def order_detail(request, order_id):
     if request.user not in {order.buyer, order.seller}:
         messages.error(request, '你没有权限查看这笔订单。')
         return redirect('home')
-    return render(request, 'listings/order_detail.html', {'order': order, 'title': '交易订单'})
+    rating_target = order.seller if request.user == order.buyer else order.buyer
+    my_rating = Rating.objects.filter(order=order, rater=request.user).first()
+    rating_form = RatingForm() if order.status == 'completed' and not my_rating else None
+    ratings = order.ratings.select_related('rater', 'ratee').all()
+    return render(request, 'listings/order_detail.html', {
+        'order': order,
+        'title': '交易订单',
+        'rating_target': rating_target,
+        'my_rating': my_rating,
+        'rating_form': rating_form,
+        'ratings': ratings,
+    })
+
+
+@login_required
+def rate_order(request, order_id):
+    order = get_object_or_404(Order.objects.select_related('buyer', 'seller'), id=order_id)
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限评价这笔订单。')
+        return redirect('home')
+    if order.status != 'completed':
+        messages.error(request, '交易完成后才可以互相评价。')
+        return redirect('order_detail', order_id=order.id)
+    ratee = order.seller if request.user == order.buyer else order.buyer
+    if Rating.objects.filter(order=order, rater=request.user).exists():
+        messages.info(request, '你已经评价过这笔交易。')
+        return redirect('order_detail', order_id=order.id)
+    if request.method == 'POST':
+        form = RatingForm(request.POST)
+        if form.is_valid():
+            rating = form.save(commit=False)
+            rating.order = order
+            rating.rater = request.user
+            rating.ratee = ratee
+            try:
+                with transaction.atomic():
+                    rating.save()
+            except IntegrityError:
+                messages.info(request, '你已经评价过这笔交易。')
+            else:
+                messages.success(request, '评价已提交，感谢你的真实反馈。')
+            return redirect('order_detail', order_id=order.id)
+    else:
+        form = RatingForm()
+    return render(request, 'listings/rating_form.html', {
+        'form': form,
+        'order': order,
+        'ratee': ratee,
+        'title': '评价交易',
+    })
 
 
 @login_required

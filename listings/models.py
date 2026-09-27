@@ -187,3 +187,28 @@ class BrowsingHistory(models.Model):
 
     def __str__(self):
         return f'{self.user.username}浏览了{self.item.title}'
+
+
+class Rating(models.Model):
+    SCORE_CHOICES = tuple((score, f'{score} 星') for score in range(1, 6))
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='ratings', verbose_name='订单')
+    rater = models.ForeignKey(User, on_delete=models.CASCADE, related_name='given_ratings', verbose_name='评价人')
+    ratee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_ratings', verbose_name='被评价人')
+    score = models.PositiveSmallIntegerField('评分', choices=SCORE_CHOICES)
+    comment = models.TextField('评价内容', blank=True)
+    created_at = models.DateTimeField('评价时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '交易评价'
+        verbose_name_plural = '交易评价'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['order', 'rater'], name='unique_order_rater'),
+        ]
+        indexes = [
+            models.Index(fields=['ratee', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.rater.username}评价{self.ratee.username} · {self.score}星'
