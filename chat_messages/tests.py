@@ -1,9 +1,12 @@
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from listings.models import CampusLocation, Category, Item, Notification
 from .models import Comment, PrivateMessage
+from .views import _build_conversation_data
 
 
 class MessageNotificationTests(TestCase):
@@ -64,6 +67,28 @@ class MessageNotificationTests(TestCase):
         response = self.client.post(reverse('mark_all_messages_read'))
         self.assertRedirects(response, reverse('inbox'))
         self.assertEqual(PrivateMessage.objects.filter(receiver=self.seller, is_read=False).count(), 0)
+
+    def test_conversation_summary_uses_bounded_queries(self):
+        for index in range(4):
+            PrivateMessage.objects.create(
+                sender=self.buyer, receiver=self.seller,
+                content=f'消息 {index}', item=self.item,
+            )
+            PrivateMessage.objects.create(
+                sender=self.seller, receiver=self.buyer,
+                content=f'回复 {index}', item=self.item,
+            )
+
+        conversation_users = User.objects.filter(
+            sent_messages__receiver=self.seller,
+        ).distinct()
+        with CaptureQueriesContext(connection) as queries:
+            data = _build_conversation_data(self.seller, conversation_users)
+
+        self.assertLessEqual(len(queries), 2)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['message_count'], 8)
+        self.assertEqual(data[0]['unread_count'], 4)
 
     def test_inbox_uses_latest_message_in_both_directions(self):
         PrivateMessage.objects.create(

@@ -4,8 +4,8 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages as django_messages
 from django.contrib.auth.models import User
-from django.db.models import Q
-from django.utils import timezone
+from django.db.models.functions import Coalesce
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
 from .models import Comment, PrivateMessage
 from .forms import CommentForm, PrivateMessageForm
 from listings.models import Item
@@ -35,6 +35,53 @@ def add_comment(request, item_id):
         form = CommentForm()
         
     return redirect('item_detail', item_id=item.id)
+
+def _build_conversation_data(user, conversation_users):
+    """Build the inbox conversation list with a bounded number of queries."""
+    conversation_messages = PrivateMessage.objects.filter(
+        Q(sender=OuterRef('pk'), receiver=user)
+        | Q(sender=user, receiver=OuterRef('pk'))
+    ).order_by('-created_at')
+    sent_messages = PrivateMessage.objects.filter(sender=OuterRef('pk'), receiver=user)
+    received_messages = PrivateMessage.objects.filter(receiver=OuterRef('pk'), sender=user)
+    sent_count = sent_messages.order_by().values('sender').annotate(
+        total=Count('id'),
+    ).values('total')[:1]
+    received_count = received_messages.order_by().values('receiver').annotate(
+        total=Count('id'),
+    ).values('total')[:1]
+    unread_count = sent_messages.filter(is_read=False).order_by().values('sender').annotate(
+        total=Count('id'),
+    ).values('total')[:1]
+    conversation_users = conversation_users.select_related('profile').annotate(
+        latest_message_id=Subquery(conversation_messages.values('id')[:1]),
+        latest_message_at=Subquery(conversation_messages.values('created_at')[:1]),
+        message_count=(
+            Coalesce(Subquery(sent_count, output_field=IntegerField()), Value(0))
+            + Coalesce(Subquery(received_count, output_field=IntegerField()), Value(0))
+        ),
+        unread_count=Coalesce(
+            Subquery(unread_count, output_field=IntegerField()), Value(0),
+        ),
+    ).order_by('-latest_message_at', 'username')
+
+    conversation_users = list(conversation_users)
+    latest_message_ids = [
+        row.latest_message_id for row in conversation_users if row.latest_message_id
+    ]
+    latest_messages = PrivateMessage.objects.select_related(
+        'sender', 'receiver', 'item',
+    ).in_bulk(latest_message_ids)
+    return [
+        {
+            'user': row,
+            'last_message': latest_messages.get(row.latest_message_id),
+            'unread_count': row.unread_count,
+            'message_count': row.message_count,
+        }
+        for row in conversation_users
+    ]
+
 
 @login_required
 def inbox(request):
@@ -70,32 +117,10 @@ def inbox(request):
             | Q(received_messages__sender=request.user, received_messages__item__title__icontains=search_query)
         ).distinct()
 
-    conversation_data = []
-    for user in conversation_users:
-        conversation_messages = PrivateMessage.objects.filter(
-            Q(sender=request.user, receiver=user)
-            | Q(sender=user, receiver=request.user)
-        ).select_related('sender', 'receiver', 'item')
-        last_message = conversation_messages.order_by('-created_at').first()
-        unread_count = conversation_messages.filter(
-            receiver=request.user,
-            is_read=False,
-        ).count()
-        conversation_data.append({
-            'user': user,
-            'last_message': last_message,
-            'unread_count': unread_count,
-            'message_count': conversation_messages.count(),
-        })
-
-    conversation_data.sort(
-        key=lambda data: data['last_message'].created_at if data['last_message'] else timezone.now(),
-        reverse=True,
-    )
     context = {
         'received_messages': received_messages,
         'sent_messages': sent_messages,
-        'conversation_data': conversation_data,
+        'conversation_data': _build_conversation_data(request.user, conversation_users),
         'search_query': search_query,
     }
     return render(request, 'chat_messages/inbox.html', context)

@@ -25,3 +25,17 @@ class PrivateMessage(models.Model):
         
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(
+                fields=['receiver', 'is_read', '-created_at'],
+                name='pm_receiver_read_created_idx',
+            ),
+            models.Index(
+                fields=['sender', 'receiver', '-created_at'],
+                name='pm_sender_receiver_created_idx',
+            ),
+            models.Index(
+                fields=['receiver', 'sender', '-created_at'],
+                name='pm_receiver_sender_created_idx',
+            ),
+        ]
