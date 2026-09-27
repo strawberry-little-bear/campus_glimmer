@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 
 
@@ -383,3 +383,53 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.context['metrics']['searches'], 1)
         self.assertContains(response, '近期搜索')
         self.assertNotContains(response, '旧搜索')
+
+    def test_user_can_save_search_from_filtered_results(self):
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('item_list'), {
+            'q': '键盘', 'condition': '9成新', 'location': self.location.id,
+            'min_price': '50', 'max_price': '120',
+        })
+        self.assertTrue(response.context['has_search_criteria'])
+        response = self.client.post(reverse('save_search'), {
+            'name': '图书馆附近的键盘', 'query': '键盘', 'condition': '9成新',
+            'location': self.location.id, 'min_price': '50', 'max_price': '120',
+            'next': reverse('item_list'),
+        })
+        self.assertRedirects(response, reverse('item_list'))
+        saved_search = SavedSearch.objects.get(user=self.user)
+        self.assertEqual(saved_search.location, self.location)
+        self.assertEqual(str(saved_search.min_price), '50.00')
+
+    def test_new_matching_item_creates_one_aggregated_notification(self):
+        SavedSearch.objects.create(user=self.other_user, name='键盘提醒', query='键盘')
+        SavedSearch.objects.create(user=self.other_user, name='数码提醒', category=self.category)
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.post(reverse('new_item'), {
+            'title': '宿舍键盘', 'description': '轻便好用', 'price': '39.00',
+            'category': self.category.id, 'location': self.location.id, 'condition': '全新',
+            'images-TOTAL_FORMS': '3', 'images-INITIAL_FORMS': '0',
+            'images-MIN_NUM_FORMS': '0', 'images-MAX_NUM_FORMS': '5',
+        })
+        self.assertEqual(response.status_code, 302)
+        notifications = Notification.objects.filter(
+            recipient=self.other_user, kind='saved_search_match',
+        )
+        self.assertEqual(notifications.count(), 1)
+        self.assertIn('宿舍键盘', notifications.first().message)
+        self.assertIn('2 个关注条件', notifications.first().message)
+        self.assertFalse(Notification.objects.filter(recipient=self.user, kind='saved_search_match').exists())
+
+    def test_saved_search_can_be_paused_and_deleted(self):
+        saved_search = SavedSearch.objects.create(user=self.user, name='价格提醒', max_price='100')
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('saved_search_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '价格提醒')
+        response = self.client.post(reverse('toggle_saved_search', args=[saved_search.id]))
+        self.assertRedirects(response, reverse('saved_search_list'))
+        saved_search.refresh_from_db()
+        self.assertFalse(saved_search.is_active)
+        response = self.client.post(reverse('delete_saved_search', args=[saved_search.id]))
+        self.assertRedirects(response, reverse('saved_search_list'))
+        self.assertFalse(SavedSearch.objects.filter(pk=saved_search.id).exists())

@@ -36,6 +36,7 @@
 - 在商品下留言，或通过站内私信联系其他用户；
 - 会话列表展示最近消息和未读数量；
 - 通知中心集中展示交易、评价、留言和私信提醒，并支持单条或全部标记已读；
+- 关注的搜索支持保存关键词、分类、地点、成色和价格条件；新商品发布后会按条件匹配并聚合生成站内提醒，也可以随时暂停或恢复。
 - 记录登录用户的最近浏览商品与浏览次数，为推荐和兴趣分析提供依据。
 
 ### 交易、评价与信任
@@ -97,6 +98,7 @@ campus_glimmer/
 ├── listings/                 # 商品、地点、订单、评价、通知和推荐
 │   ├── migrations/           # 数据库迁移
 │   ├── notifications.py      # 统一创建站内通知
+│   ├── saved_searches.py     # 关注搜索匹配与智能提醒
 │   └── recommendations.py   # 可解释的推荐评分
 ├── chat_messages/            # 商品留言、私信和会话
 ├── campus_glimmer/           # Django 配置、路由、上下文处理器和 ASGI/WSGI
@@ -162,6 +164,7 @@ python manage.py runserver
 | 商品发现 | <http://127.0.0.1:8000/listings/> |
 | 站内消息 | <http://127.0.0.1:8000/messages/inbox/> |
 | 通知中心 | <http://127.0.0.1:8000/listings/notifications/> |
+| 关注的搜索 | <http://127.0.0.1:8000/listings/saved-searches/> |
 | 运营看板（管理员） | <http://127.0.0.1:8000/listings/operations/> |
 | 管理后台 | <http://127.0.0.1:8000/admin/> |
 | 健康检查 | <http://127.0.0.1:8000/healthz/> |

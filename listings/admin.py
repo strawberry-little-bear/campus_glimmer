@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Notification, Order, OrderEvent, Rating, Report, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Notification, Order, OrderEvent, Rating, Report, SavedSearch, SearchQuery
 
 
 class ItemImageInline(admin.TabularInline):
@@ -113,3 +113,12 @@ class SearchQueryAdmin(admin.ModelAdmin):
     search_fields = ('query', 'condition', 'user__username')
     autocomplete_fields = ('user', 'category', 'location')
     readonly_fields = ('created_at',)
+
+
+@admin.register(SavedSearch)
+class SavedSearchAdmin(admin.ModelAdmin):
+    list_display = ('name', 'user', 'query', 'category', 'location', 'min_price', 'max_price', 'is_active', 'created_at')
+    list_filter = ('is_active', 'category', 'location', 'created_at')
+    search_fields = ('name', 'query', 'condition', 'user__username')
+    autocomplete_fields = ('user', 'category', 'location')
+    readonly_fields = ('created_at', 'updated_at')

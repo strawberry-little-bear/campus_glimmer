@@ -13,10 +13,11 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard
-from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SearchQuery
+from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
+from .saved_searches import notify_saved_search_matches
 
 
 def _favorite_ids(request):
@@ -148,6 +149,18 @@ def item_list(request, category_id=None):
         'max_price': raw_max_price,
         'sort': sort,
         'filter_query': urlencode(filter_params),
+        'saved_search_form': SavedSearchForm(initial={
+            'query': query,
+            'condition': condition,
+            'category': category.id if category else None,
+            'location': location.id if location else None,
+            'min_price': min_price,
+            'max_price': max_price,
+        }),
+        'has_search_criteria': any((
+            query, condition, category, location,
+            min_price is not None, max_price is not None,
+        )),
         'title': f'{category.name} · 商品集' if category else '发现校园好物',
         'favorite_ids': _favorite_ids(request),
     }
@@ -422,6 +435,7 @@ def new_item(request):
                     image = image_form.save(commit=False)
                     image.item = item
                     image.save()
+            notify_saved_search_matches(item)
             messages.success(request, '商品已成功发布，快去分享给同学吧！')
             return redirect('item_detail', item_id=item.id)
     else:
@@ -508,6 +522,60 @@ def operations_dashboard(request):
 def search_items(request):
     query = request.GET.get('q', '').strip()
     return redirect(f'/listings/?{urlencode({"q": query})}') if query else redirect('item_list')
+
+
+@login_required
+def save_search(request):
+    if request.method != 'POST':
+        return redirect('item_list')
+    form = SavedSearchForm(request.POST)
+    if form.is_valid():
+        saved_search = form.save(commit=False)
+        saved_search.user = request.user
+        try:
+            saved_search.save()
+        except IntegrityError:
+            messages.error(request, '你已经有一个同名的关注搜索，请换一个名称。')
+        else:
+            messages.success(request, f'已保存“{saved_search.name}”，有新商品匹配时会通知你。')
+    else:
+        messages.error(request, '保存失败：' + '；'.join(error for errors in form.errors.values() for error in errors))
+
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+    ):
+        next_url = reverse('item_list')
+    return redirect(next_url)
+
+
+@login_required
+def saved_search_list(request):
+    saved_searches = SavedSearch.objects.filter(user=request.user).select_related('category', 'location')
+    return render(request, 'listings/saved_searches.html', {
+        'saved_searches': saved_searches,
+        'title': '关注的搜索',
+    })
+
+
+@login_required
+def toggle_saved_search(request, saved_search_id):
+    saved_search = get_object_or_404(SavedSearch, id=saved_search_id, user=request.user)
+    if request.method == 'POST':
+        saved_search.is_active = not saved_search.is_active
+        saved_search.save(update_fields=['is_active', 'updated_at'])
+        messages.success(request, f'“{saved_search.name}”已{"开启" if saved_search.is_active else "暂停"}提醒。')
+    return redirect('saved_search_list')
+
+
+@login_required
+def delete_saved_search(request, saved_search_id):
+    saved_search = get_object_or_404(SavedSearch, id=saved_search_id, user=request.user)
+    if request.method == 'POST':
+        name = saved_search.name
+        saved_search.delete()
+        messages.success(request, f'已删除关注搜索“{name}”。')
+    return redirect('saved_search_list')
 
 
 @login_required

@@ -1,5 +1,5 @@
 from django import forms
-from .models import CampusLocation, Category, Item, ItemImage, Order, Rating, Report
+from .models import CampusLocation, Category, Item, ItemImage, Order, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -93,3 +93,42 @@ class RatingForm(StyledModelFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._style_fields()
         self.fields['score'].widget.attrs['class'] = 'form-select'
+
+
+class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = SavedSearch
+        fields = ['name', 'query', 'condition', 'category', 'location', 'min_price', 'max_price']
+        widgets = {
+            'name': forms.TextInput(attrs={'placeholder': '例如：图书馆附近的考研资料'}),
+            'query': forms.HiddenInput(),
+            'condition': forms.HiddenInput(),
+            'category': forms.HiddenInput(),
+            'location': forms.HiddenInput(),
+            'min_price': forms.HiddenInput(),
+            'max_price': forms.HiddenInput(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['category'].queryset = Category.objects.all()
+        self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        has_criteria = any((
+            bool(cleaned_data.get('query')),
+            bool(cleaned_data.get('condition')),
+            cleaned_data.get('category') is not None,
+            cleaned_data.get('location') is not None,
+            cleaned_data.get('min_price') is not None,
+            cleaned_data.get('max_price') is not None,
+        ))
+        if not has_criteria:
+            raise forms.ValidationError('至少保留一个搜索条件，才能创建关注提醒。')
+        min_price = cleaned_data.get('min_price')
+        max_price = cleaned_data.get('max_price')
+        if min_price is not None and max_price is not None and min_price > max_price:
+            self.add_error('max_price', '最高价格不能低于最低价格。')
+        return cleaned_data

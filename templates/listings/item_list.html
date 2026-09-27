@@ -78,6 +78,25 @@
             </form>
         </div>
 
+        {% if user.is_authenticated and has_search_criteria %}
+        <section class="saved-search-prompt mb-4">
+            <div class="saved-search-prompt-copy">
+                <span class="eyebrow eyebrow-soft">不想错过新发布</span>
+                <strong>保存这组筛选条件</strong>
+                <p>以后有符合条件的新商品，会自动出现在你的通知中心。</p>
+            </div>
+            <form method="post" action="{% url 'save_search' %}" class="saved-search-form">
+                {% csrf_token %}
+                {{ saved_search_form.query }}{{ saved_search_form.condition }}{{ saved_search_form.category }}{{ saved_search_form.location }}{{ saved_search_form.min_price }}{{ saved_search_form.max_price }}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="input-group input-group-sm">
+                    {{ saved_search_form.name }}
+                    <button class="btn btn-primary" type="submit"><i class="bi bi-bell me-1"></i>保存关注</button>
+                </div>
+            </form>
+        </section>
+        {% endif %}
+
         <div class="row g-4">
             {% for item in items %}
             <div class="col-sm-6 col-xl-4">{% include 'listings/_item_card.html' with item=item %}</div>

@@ -247,6 +247,7 @@ class Notification(models.Model):
         ('rating_received', '收到交易评价'),
         ('message_received', '收到新私信'),
         ('comment_received', '收到商品留言'),
+        ('saved_search_match', '关注的搜索有新商品'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -307,3 +308,38 @@ class SearchQuery(models.Model):
 
     def __str__(self):
         return f'{self.query} · {self.result_count} 条结果'
+
+
+class SavedSearch(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_searches', verbose_name='用户')
+    name = models.CharField('关注名称', max_length=80)
+    query = models.CharField('搜索词', max_length=120, blank=True)
+    condition = models.CharField('成色筛选', max_length=120, blank=True)
+    category = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='saved_searches', verbose_name='分类',
+    )
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='saved_searches', verbose_name='交易地点',
+    )
+    min_price = models.DecimalField('最低价格', max_digits=10, decimal_places=2, null=True, blank=True)
+    max_price = models.DecimalField('最高价格', max_digits=10, decimal_places=2, null=True, blank=True)
+    is_active = models.BooleanField('启用提醒', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '关注的搜索'
+        verbose_name_plural = '关注的搜索'
+        ordering = ['-is_active', '-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'name'], name='unique_user_saved_search_name'),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'is_active', '-created_at']),
+            models.Index(fields=['category', 'location', 'is_active']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.name}'

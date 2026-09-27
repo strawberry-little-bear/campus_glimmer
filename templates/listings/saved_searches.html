@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block title %}关注的搜索 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-heading saved-search-heading">
+    <div>
+        <span class="eyebrow">让搜索替你留意校园供给</span>
+        <h1 class="mt-2">关注的搜索</h1>
+        <p class="text-muted mb-0">保存常用条件，新商品出现时会收到一条站内提醒。</p>
+    </div>
+    <a class="btn btn-outline-primary" href="{% url 'item_list' %}"><i class="bi bi-search me-1"></i>继续找商品</a>
+</div>
+
+<section class="saved-search-grid">
+    {% for saved_search in saved_searches %}
+    <article class="content-card saved-search-card {% if not saved_search.is_active %}is-paused{% endif %}">
+        <div class="saved-search-card-head">
+            <div>
+                <span class="saved-search-status"><i class="bi {% if saved_search.is_active %}bi-bell-fill{% else %}bi-bell-slash{% endif %}"></i>{% if saved_search.is_active %}提醒中{% else %}已暂停{% endif %}</span>
+                <h2>{{ saved_search.name }}</h2>
+            </div>
+            <span class="saved-search-date">{{ saved_search.created_at|date:'Y-m-d' }} 创建</span>
+        </div>
+        <div class="saved-search-criteria">
+            {% if saved_search.query %}<span><i class="bi bi-search"></i>{{ saved_search.query }}</span>{% endif %}
+            {% if saved_search.category %}<span><i class="bi bi-tag"></i>{{ saved_search.category.name }}</span>{% endif %}
+            {% if saved_search.location %}<span><i class="bi bi-geo-alt"></i>{{ saved_search.location.name }}</span>{% endif %}
+            {% if saved_search.condition %}<span><i class="bi bi-stars"></i>{{ saved_search.condition }}</span>{% endif %}
+            {% if saved_search.min_price or saved_search.max_price %}<span><i class="bi bi-cash-coin"></i>{% if saved_search.min_price %}¥{{ saved_search.min_price }}{% else %}不限{% endif %} — {% if saved_search.max_price %}¥{{ saved_search.max_price }}{% else %}不限{% endif %}</span>{% endif %}
+        </div>
+        <div class="saved-search-actions">
+            <form method="post" action="{% url 'toggle_saved_search' saved_search.id %}">
+                {% csrf_token %}
+                <button class="btn btn-sm {% if saved_search.is_active %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}" type="submit">{% if saved_search.is_active %}<i class="bi bi-pause me-1"></i>暂停提醒{% else %}<i class="bi bi-play me-1"></i>恢复提醒{% endif %}</button>
+            </form>
+            <form method="post" action="{% url 'delete_saved_search' saved_search.id %}" onsubmit="return confirm('确定删除这条关注搜索吗？');">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-link text-danger" type="submit"><i class="bi bi-trash3 me-1"></i>删除</button>
+            </form>
+        </div>
+    </article>
+    {% empty %}
+    <div class="content-card empty-state saved-search-empty">
+        <i class="bi bi-radar"></i>
+        <h2>还没有关注的搜索</h2>
+        <p>在商品发现页设置关键词、地点或价格后，就可以保存这组条件。</p>
+        <a class="btn btn-primary" href="{% url 'item_list' %}">去发现商品</a>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}
