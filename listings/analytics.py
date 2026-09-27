@@ -2,7 +2,7 @@ from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.db.models import Avg, Count, Max, Q
-from django.db.models.functions import TruncDate
+from django.db.models.functions import ExtractHour, ExtractIsoWeekDay, TruncDate
 from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
@@ -28,6 +28,64 @@ def _daily_counts(queryset, start, end):
         day=TruncDate('created_at'),
     ).values('day').annotate(count=Count('id')).order_by('day')
     return {row['day']: row['count'] for row in rows}
+
+
+def _build_search_rhythm(search_period):
+    """Summarize when search demand appears so staff can time replenishment work."""
+    hourly_rows = search_period.annotate(
+        hour=ExtractHour('created_at'),
+    ).values('hour').annotate(
+        count=Count('id'),
+        zero_result_count=Count('id', filter=Q(result_count=0)),
+    ).order_by('hour')
+    hourly_map = {int(row['hour']): row for row in hourly_rows}
+    max_hour_count = max((row['count'] for row in hourly_map.values()), default=0)
+    hourly = []
+    for hour in range(24):
+        row = hourly_map.get(hour, {})
+        count = row.get('count', 0)
+        zero_result_count = row.get('zero_result_count', 0)
+        hourly.append({
+            'hour': hour,
+            'label': f'{hour:02d}:00',
+            'count': count,
+            'zero_result_count': zero_result_count,
+            'zero_result_rate': round(zero_result_count / count * 100, 1) if count else 0,
+            'bar_height': max(12, round(count / max_hour_count * 100)) if count and max_hour_count else 4,
+            'show_label': hour % 3 == 0,
+        })
+
+    weekday_rows = search_period.annotate(
+        weekday=ExtractIsoWeekDay('created_at'),
+    ).values('weekday').annotate(
+        count=Count('id'),
+        zero_result_count=Count('id', filter=Q(result_count=0)),
+    ).order_by('weekday')
+    weekday_map = {int(row['weekday']): row for row in weekday_rows}
+    weekday_labels = ('周一', '周二', '周三', '周四', '周五', '周六', '周日')
+    max_weekday_count = max((row['count'] for row in weekday_map.values()), default=0)
+    weekdays = []
+    for weekday, label in enumerate(weekday_labels, start=1):
+        row = weekday_map.get(weekday, {})
+        count = row.get('count', 0)
+        zero_result_count = row.get('zero_result_count', 0)
+        weekdays.append({
+            'weekday': weekday,
+            'label': label,
+            'count': count,
+            'zero_result_count': zero_result_count,
+            'bar_width': max(8, round(count / max_weekday_count * 100)) if count and max_weekday_count else 0,
+        })
+
+    peak_hour = max(hourly, key=lambda row: (row['count'], -row['hour'])) if max_hour_count else None
+    peak_weekday = max(weekdays, key=lambda row: (row['count'], -row['weekday'])) if max_weekday_count else None
+    return {
+        'hourly': hourly,
+        'weekdays': weekdays,
+        'peak_hour': peak_hour,
+        'peak_weekday': peak_weekday,
+        'has_data': bool(max_hour_count),
+    }
 
 
 def build_search_insights(days=30, query=''):
@@ -82,6 +140,7 @@ def build_search_insights(days=30, query=''):
     return {
         'period_days': days,
         'period_choices': PERIOD_CHOICES,
+        'search_rhythm': _build_search_rhythm(search_period),
         'period_start': start,
         'period_end': now,
         'query_filter': query,

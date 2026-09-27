@@ -40,6 +40,25 @@
 </div>
 
 <div class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Search rhythm</span><h2>搜索时段趋势</h2></div><span class="ops-panel-hint">按小时聚合搜索行为</span></div>
+            {% if search_rhythm.peak_hour %}<div class="search-rhythm-summary"><i class="bi bi-clock-history me-1"></i>搜索高峰集中在 <strong>{{ search_rhythm.peak_hour.label }}</strong>，共 {{ search_rhythm.peak_hour.count }} 次{% if search_rhythm.peak_weekday %}；{{ search_rhythm.peak_weekday.label }} 是最活跃的一天{% endif %}</div>{% else %}<div class="empty-inline">当前周期还没有可分析的搜索节奏。</div>{% endif %}
+            <div class="search-hour-chart" aria-label="按小时统计的搜索次数">
+                {% for slot in search_rhythm.hourly %}<div class="search-hour-column" title="{{ slot.label }}：{{ slot.count }} 次搜索{% if slot.zero_result_count %}，{{ slot.zero_result_count }} 次无结果{% endif %}"><span class="search-hour-bar {% if slot.zero_result_count %}has-zero-result{% endif %}" style="height: {{ slot.bar_height }}%"></span>{% if slot.count %}<b>{{ slot.count }}</b>{% endif %}{% if slot.show_label %}<small>{{ slot.label }}</small>{% endif %}</div>{% endfor %}
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-4">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Weekly pulse</span><h2>星期分布</h2></div><span class="ops-panel-hint">搜索次数</span></div>
+            <div class="search-weekday-list">{% for day in search_rhythm.weekdays %}<div class="search-weekday-row"><span>{{ day.label }}</span><div><i style="width: {{ day.bar_width }}%"></i></div><strong>{{ day.count }}</strong></div>{% endfor %}</div>
+            <p class="search-rhythm-note mb-0"><i class="bi bi-info-circle me-1"></i>可以据此安排补货、上新或求购活动的发布时间。</p>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
     <div class="col-xl-7">
         <section class="content-card ops-panel h-100">
             <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Demand table</span><h2>搜索词表现</h2></div><span class="ops-panel-hint">最多展示 30 个词</span></div>

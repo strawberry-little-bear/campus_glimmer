@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -821,6 +821,35 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '搜索需求洞察')
         self.assertContains(response, '台灯')
         self.assertContains(response, '供给缺口')
+
+    def test_search_insights_builds_hourly_and_weekday_rhythm(self):
+        yesterday = timezone.localdate() - timedelta(days=1)
+        records = []
+        for hour, result_count in ((9, 3), (9, 0), (21, 0)):
+            record = SearchQuery.objects.create(
+                user=self.other_user, query='台灯', result_count=result_count,
+            )
+            record.created_at = timezone.make_aware(
+                datetime.combine(yesterday, time(hour=hour, minute=15)),
+            )
+            record.save(update_fields=['created_at'])
+            records.append(record)
+
+        dashboard = build_search_insights(30)
+        rhythm = dashboard['search_rhythm']
+        self.assertEqual(rhythm['peak_hour']['hour'], 9)
+        self.assertEqual(rhythm['peak_hour']['count'], 2)
+        self.assertEqual(rhythm['peak_weekday']['count'], 3)
+        self.assertEqual(rhythm['hourly'][9]['zero_result_count'], 1)
+        self.assertEqual(sum(slot['count'] for slot in rhythm['hourly']), 3)
+        self.assertEqual(sum(day['count'] for day in rhythm['weekdays']), 3)
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('search_insights'))
+        self.assertContains(response, '搜索时段趋势')
+        self.assertContains(response, '星期分布')
 
     def test_search_insights_is_staff_only(self):
         self.client.login(username='bob', password='safe-password-123')
