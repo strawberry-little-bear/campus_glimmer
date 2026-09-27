@@ -15,6 +15,23 @@ class Category(models.Model):
         ordering = ['name']
 
 
+class CampusLocation(models.Model):
+    name = models.CharField('地点名称', max_length=100, unique=True)
+    building = models.CharField('楼栋 / 校区', max_length=100, blank=True)
+    address = models.CharField('详细位置', max_length=200, blank=True)
+    description = models.CharField('地点说明', max_length=200, blank=True)
+    is_active = models.BooleanField('启用', default=True)
+    sort_order = models.PositiveIntegerField('排序', default=0)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = '校园地点'
+        verbose_name_plural = '校园地点'
+        ordering = ['sort_order', 'name']
+
+
 class Item(models.Model):
     STATUS_CHOICES = (
         ('available', '在售'),
@@ -26,6 +43,14 @@ class Item(models.Model):
     description = models.TextField('商品描述')
     price = models.DecimalField('价格', max_digits=10, decimal_places=2)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='items', verbose_name='分类')
+    location = models.ForeignKey(
+        CampusLocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='items',
+        verbose_name='交易地点',
+    )
     condition = models.CharField('成色', max_length=100)
     seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='listed_items', verbose_name='卖家')
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='available')
@@ -40,6 +65,7 @@ class Item(models.Model):
         indexes = [
             models.Index(fields=['status', '-created_at']),
             models.Index(fields=['category', 'status']),
+            models.Index(fields=['location', 'status']),
         ]
 
 

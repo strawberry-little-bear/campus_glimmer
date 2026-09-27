@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import ItemForm, ItemImageFormSet
-from .models import Category, Favorite, Item
+from .models import CampusLocation, Category, Favorite, Item
 
 
 def _favorite_ids(request):
@@ -19,9 +19,11 @@ def _favorite_ids(request):
 
 def home(request):
     categories = Category.objects.annotate(available_count=Count('items', filter=Q(items__status='available')))
-    recent_items = Item.objects.filter(status='available').select_related('category', 'seller').prefetch_related('images')[:8]
+    locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=Q(items__status='available')))
+    recent_items = Item.objects.filter(status='available').select_related('category', 'seller', 'location').prefetch_related('images')[:8]
     context = {
         'categories': categories,
+        'locations': locations,
         'recent_items': recent_items,
         'favorite_ids': _favorite_ids(request),
         'stats': {
@@ -35,13 +37,18 @@ def home(request):
 
 def item_list(request, category_id=None):
     categories = Category.objects.annotate(available_count=Count('items', filter=Q(items__status='available')))
+    locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=Q(items__status='available')))
     category = get_object_or_404(Category, id=category_id) if category_id else None
-    items = Item.objects.filter(status='available').select_related('category', 'seller').prefetch_related('images')
+    location_id = request.GET.get('location', '').strip()
+    location = get_object_or_404(CampusLocation, id=location_id, is_active=True) if location_id.isdigit() else None
+    items = Item.objects.filter(status='available').select_related('category', 'seller', 'location').prefetch_related('images')
     if category:
         items = items.filter(category=category)
+    if location:
+        items = items.filter(location=location)
     query = request.GET.get('q', '').strip()
     if query:
-        items = items.filter(Q(title__icontains=query) | Q(description__icontains=query))
+        items = items.filter(Q(title__icontains=query) | Q(description__icontains=query) | Q(location__name__icontains=query))
     sort = request.GET.get('sort', 'latest')
     sort_map = {'latest': '-created_at', 'price_asc': 'price', 'price_desc': '-price'}
     items = items.order_by(sort_map.get(sort, '-created_at'))
@@ -49,7 +56,9 @@ def item_list(request, category_id=None):
     page_obj = paginator.get_page(request.GET.get('page'))
     context = {
         'categories': categories,
+        'locations': locations,
         'category': category,
+        'location': location,
         'items': page_obj,
         'page_obj': page_obj,
         'query': query,
@@ -62,10 +71,10 @@ def item_list(request, category_id=None):
 
 def item_detail(request, item_id):
     item = get_object_or_404(
-        Item.objects.select_related('category', 'seller').prefetch_related('images', 'comments__author__profile'),
+        Item.objects.select_related('category', 'seller', 'location').prefetch_related('images', 'comments__author__profile'),
         id=item_id,
     )
-    related_items = Item.objects.filter(category=item.category, status='available').exclude(id=item.id).select_related('seller').prefetch_related('images')[:4]
+    related_items = Item.objects.filter(category=item.category, status='available').exclude(id=item.id).select_related('seller', 'location').prefetch_related('images')[:4]
     context = {
         'item': item,
         'related_items': related_items,
@@ -92,7 +101,7 @@ def toggle_favorite(request, item_id):
 
 @login_required
 def favorite_list(request):
-    favorites = Favorite.objects.filter(user=request.user).select_related('item__category', 'item__seller').prefetch_related('item__images')
+    favorites = Favorite.objects.filter(user=request.user).select_related('item__category', 'item__seller', 'item__location').prefetch_related('item__images')
     context = {
         'favorites': favorites,
         'favorite_ids': set(favorites.values_list('item_id', flat=True)),
@@ -174,7 +183,7 @@ def mark_sold(request, item_id):
 
 @login_required
 def my_items(request):
-    items = Item.objects.filter(seller=request.user).select_related('category').prefetch_related('images')
+    items = Item.objects.filter(seller=request.user).select_related('category', 'location').prefetch_related('images')
     return render(request, 'listings/my_items.html', {'items': items, 'title': '我的商品'})
 
 

@@ -2,16 +2,19 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Category, Favorite, Item
+from .models import CampusLocation, Category, Favorite, Item
 
 
 class ListingFlowTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='alice', password='safe-password-123')
         self.category = Category.objects.create(name='数码', description='电子设备')
+        self.location = CampusLocation.objects.create(
+            name='图书馆东门', building='东校区', address='图书馆一层东侧',
+        )
         self.item = Item.objects.create(
             title='便携键盘', description='适合宿舍使用', price='99.00',
-            category=self.category, condition='9成新', seller=self.user,
+            category=self.category, location=self.location, condition='9成新', seller=self.user,
         )
 
     def test_home_and_listing_pages_render(self):
@@ -19,6 +22,17 @@ class ListingFlowTests(TestCase):
         response = self.client.get(reverse('item_list'), {'q': '键盘', 'sort': 'price_asc'})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '便携键盘')
+        self.assertContains(response, '图书馆东门')
+
+    def test_location_filter_only_returns_matching_items(self):
+        another_location = CampusLocation.objects.create(name='南门快递站')
+        Item.objects.create(
+            title='宿舍台灯', description='暖光', price='39.00', category=self.category,
+            location=another_location, condition='全新', seller=self.user,
+        )
+        response = self.client.get(reverse('item_list'), {'location': self.location.id})
+        self.assertContains(response, '便携键盘')
+        self.assertNotContains(response, '宿舍台灯')
 
     def test_authenticated_user_can_toggle_favorite(self):
         self.client.login(username='alice', password='safe-password-123')

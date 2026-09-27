@@ -39,6 +39,14 @@
     {% empty %}<div class="empty-state">还没有商品分类，先去管理后台添加吧。</div>{% endfor %}
 </div>
 
+<section class="section-heading mb-3"><div><span class="eyebrow eyebrow-soft">就近交易</span><h2>校园里的热门地点</h2></div><a href="{% url 'item_list' %}" class="text-link">按地点浏览 <i class="bi bi-arrow-right"></i></a></section>
+<div class="location-strip mb-5">
+    {% for location in locations|slice:':6' %}
+    <a href="{% url 'item_list' %}?location={{ location.id }}" class="location-chip"><span class="location-chip-icon"><i class="bi bi-geo-alt"></i></span><span><strong>{{ location.name }}</strong><small>{{ location.available_count }} 件在售{% if location.building %} · {{ location.building }}{% endif %}</small></span><i class="bi bi-arrow-up-right ms-auto"></i></a>
+    {% empty %}<div class="empty-state w-100">还没有配置校园地点，管理员可以在后台添加交易点。</div>
+    {% endfor %}
+</div>
+
 <section class="section-heading mb-3"><div><span class="eyebrow eyebrow-soft">刚刚上新</span><h2>新鲜好物，先到先得</h2></div><a href="{% url 'item_list' %}" class="text-link">浏览更多 <i class="bi bi-arrow-right"></i></a></section>
 <div class="row g-4">
     {% for item in recent_items %}
