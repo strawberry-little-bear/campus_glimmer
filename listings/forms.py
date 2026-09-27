@@ -63,6 +63,24 @@ ItemImageFormSet = forms.inlineformset_factory(
 )
 
 
+class ReportReviewForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = Report
+        fields = ['status', 'review_note']
+        widgets = {
+            'status': forms.Select(attrs={'class': 'form-select'}),
+            'review_note': forms.Textarea(attrs={
+                'rows': 5,
+                'placeholder': '记录核查依据、处理结果以及后续建议。',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['status'].widget.attrs['class'] = 'form-select'
+
+
 class OrderForm(StyledModelFormMixin, forms.ModelForm):
     class Meta:
         model = Order

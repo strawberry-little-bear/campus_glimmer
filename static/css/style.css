@@ -483,3 +483,22 @@ a { color: inherit; text-decoration: none; }
 .recommendation-feedback button:hover { color: #397658; border-color: #a9d0b5; background: #f2faf4; transform: translateY(-1px); }
 .recommendation-feedback button:last-child:hover { color: #9a7460; border-color: #e4cabb; background: #fff8f4; }
 .recommendation-feedback i { margin-right: 4px; }
+.ops-inline-link { color: inherit; text-decoration: none; }
+.ops-inline-link:hover { color: #b65337; text-decoration: underline; }
+.report-queue-note { padding: 12px 14px; border-radius: 10px; color: #6d7f75; background: #fffaf2; font-size: .78rem; }
+.report-queue-note i { color: #c08b4b; }
+.report-filter-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.report-filter { padding: 7px 12px; border: 1px solid #e4ece6; border-radius: 999px; color: #73857b; background: #fff; font-size: .75rem; text-decoration: none; }
+.report-filter:hover, .report-filter.is-active { color: #3d7658; border-color: #a8cfb4; background: #f1faf3; }
+.report-list { display: grid; gap: 16px; }
+.report-admin-card { padding: 20px; }
+.report-admin-card.is-closed { opacity: .78; }
+.report-admin-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.report-admin-head h2 { margin: 9px 0 5px; color: #315746; font-size: 1.08rem; }
+.report-admin-body { margin: 17px 0; color: #60746a; font-size: .84rem; }
+.report-admin-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 14px; border-top: 1px solid #edf2ee; }
+.report-status { display: inline-flex; padding: 4px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; }
+.report-status-pending { color: #a1543e; background: #fff0eb; }.report-status-reviewing { color: #9b762e; background: #fff8e8; }.report-status-resolved { color: #3d815d; background: #eef9f1; }.report-status-rejected { color: #7f8b84; background: #f0f3f1; }
+.report-review-note { padding: 11px 13px; border-left: 3px solid #d2a25a; border-radius: 8px; color: #64786d; background: #fffbf3; font-size: .78rem; }
+.report-review-card { padding: 24px; }.report-review-context { padding-bottom: 18px; border-bottom: 1px solid #edf2ee; color: #60746a; font-size: .85rem; }
+@media (max-width: 575px) { .report-admin-head, .report-admin-footer { align-items: flex-start; flex-direction: column; gap: 8px; } }

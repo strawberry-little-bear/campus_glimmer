@@ -113,6 +113,7 @@ class Report(models.Model):
     status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='pending')
     reviewer = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_reports', verbose_name='审核人')
     review_note = models.TextField('审核备注', blank=True)
+    reviewed_at = models.DateTimeField('审核时间', null=True, blank=True)
     created_at = models.DateTimeField('举报时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
@@ -348,6 +349,7 @@ class Notification(models.Model):
         ('comment_received', '收到商品留言'),
         ('saved_search_match', '关注的搜索有新商品'),
         ('order_dispute', '交易争议更新'),
+        ('report_update', '举报处理更新'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')

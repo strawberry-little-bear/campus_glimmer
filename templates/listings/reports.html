@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}商品举报审核 - 拾光校园{% endblock %}
+{% block content %}
+<div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust & safety</span><h1 class="mt-2">商品举报审核</h1><p class="text-muted mb-0">集中核查社区反馈，保留处理依据，让每一次治理都有迹可循。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
+<div class="report-queue-note mb-4"><i class="bi bi-flag me-2"></i>当前有 <strong>{{ pending_report_count }}</strong> 条举报待处理或审核中</div>
+<div class="report-filter-bar mb-4">
+    <span class="small text-muted">筛选状态</span>
+    <a class="report-filter {% if status_filter == 'all' %}is-active{% endif %}" href="{% url 'report_list' %}">全部</a>
+    {% for status, label in report_statuses %}<a class="report-filter {% if status_filter == status %}is-active{% endif %}" href="{% url 'report_list' %}?status={{ status }}">{{ label }}</a>{% endfor %}
+</div>
+<section class="report-list">
+{% for report in reports %}
+<article class="content-card report-admin-card {% if report.status in 'resolved rejected' %}is-closed{% endif %}">
+    <div class="report-admin-head"><div><span class="report-status report-status-{{ report.status }}">{{ report.get_status_display }}</span><h2>{{ report.item.title }}</h2><p class="mb-0 small text-muted">{{ report.get_reason_display }} · {{ report.reporter.username }} 举报 · {{ report.created_at|date:'Y-m-d H:i' }}</p></div><span class="small text-muted">发布者：{{ report.item.seller.username }}</span></div>
+    <div class="report-admin-body"><p>{{ report.detail|default:'举报人未补充说明。'|linebreaksbr }}</p>{% if report.item.location %}<p class="small text-muted mb-0"><i class="bi bi-geo-alt me-1"></i>{{ report.item.location.name }} · 当前商品状态：{{ report.item.get_status_display }}</p>{% endif %}{% if report.review_note %}<div class="report-review-note mt-3"><strong>审核备注</strong><p class="mb-0 mt-1">{{ report.review_note|linebreaksbr }}</p></div>{% endif %}</div>
+    <div class="report-admin-footer"><span class="small text-muted">{% if report.reviewer %}{{ report.reviewer.username }} · {{ report.reviewed_at|date:'Y-m-d H:i' }} 审核{% else %}尚未分配审核人{% endif %}</span>{% if report.status not in 'resolved rejected' %}<a class="btn btn-sm btn-primary" href="{% url 'review_report' report.id %}"><i class="bi bi-check2-circle me-1"></i>处理举报</a>{% else %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'review_report' report.id %}">查看记录</a>{% endif %}</div>
+</article>
+{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-flag"></i><h2>暂时没有举报记录</h2><p>用户提交举报后，会在这里形成审核队列。</p></div>{% endfor %}
+</section>
+{% endblock %}

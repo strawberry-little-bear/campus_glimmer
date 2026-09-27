@@ -538,3 +538,31 @@ class ListingFlowTests(TestCase):
         )
         self.assertRedirects(response, reverse('home'))
         self.assertFalse(RecommendationFeedback.objects.filter(user=self.other_user, item=self.item).exists())
+
+    def test_staff_can_review_report_and_notify_reporter(self):
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(reverse('report_item', args=[self.item.id]), {
+            'reason': 'scam', 'detail': '商品描述与实际情况不一致。',
+        })
+        self.assertRedirects(response, reverse('item_detail', args=[self.item.id]))
+        report = Report.objects.get(item=self.item, reporter=self.other_user)
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('report_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '商品举报审核')
+        self.assertContains(response, '疑似诈骗或虚假信息')
+        response = self.client.post(reverse('review_report', args=[report.id]), {
+            'status': 'resolved', 'review_note': '已核对商品信息，提醒发布者补充说明。',
+        })
+        self.assertRedirects(response, reverse('report_list'))
+        report.refresh_from_db()
+        self.assertEqual(report.status, 'resolved')
+        self.assertEqual(report.reviewer, self.user)
+        self.assertIsNotNone(report.reviewed_at)
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.other_user, kind='report_update', item=self.item,
+        ).exists())

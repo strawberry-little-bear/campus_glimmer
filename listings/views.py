@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard
-from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, SavedSearchForm
+from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
@@ -445,6 +445,67 @@ def open_dispute(request, order_id):
         'form': form,
         'order': order,
         'title': '发起交易争议',
+    })
+
+
+@login_required
+def report_list(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    reports = Report.objects.select_related(
+        'item__seller', 'item__category', 'item__location', 'reporter', 'reviewer',
+    )
+    status_filter = request.GET.get('status', 'all')
+    if status_filter in dict(Report.STATUS_CHOICES):
+        reports = reports.filter(status=status_filter)
+    else:
+        status_filter = 'all'
+    return render(request, 'listings/reports.html', {
+        'reports': reports,
+        'status_filter': status_filter,
+        'report_statuses': Report.STATUS_CHOICES,
+        'pending_report_count': Report.objects.filter(status__in={'pending', 'reviewing'}).count(),
+        'title': '商品举报审核',
+    })
+
+
+@login_required
+def review_report(request, report_id):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    report = get_object_or_404(
+        Report.objects.select_related('item__seller', 'item__category', 'item__location', 'reporter', 'reviewer'),
+        id=report_id,
+    )
+    if request.method == 'POST':
+        form = ReportReviewForm(request.POST, instance=report)
+        if form.is_valid():
+            with transaction.atomic():
+                report = Report.objects.select_for_update().select_related(
+                    'item', 'reporter',
+                ).get(pk=report.id)
+                report.status = form.cleaned_data['status']
+                report.review_note = form.cleaned_data['review_note']
+                report.reviewer = request.user
+                report.reviewed_at = timezone.now()
+                report.save(update_fields=['status', 'review_note', 'reviewer', 'reviewed_at', 'updated_at'])
+                create_notification(
+                    report.reporter,
+                    actor=request.user,
+                    kind='report_update',
+                    title='你提交的举报有处理进展',
+                    message=f'关于商品“{report.item.title}”的举报状态已更新为“{report.get_status_display()}”。',
+                    item=report.item,
+                    target_url=reverse('item_detail', args=[report.item_id]),
+                )
+            messages.success(request, '举报审核结果已保存，举报人会收到通知。')
+            return redirect('report_list')
+    else:
+        form = ReportReviewForm(instance=report, initial={'status': 'reviewing'})
+    return render(request, 'listings/report_review.html', {
+        'form': form,
+        'report': report,
+        'title': '审核商品举报',
     })
 
 

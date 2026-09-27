@@ -45,6 +45,7 @@
                     {% elif notification.kind == 'message_received' %}<i class="bi bi-chat-dots"></i>
                     {% elif notification.kind == 'saved_search_match' %}<i class="bi bi-radar"></i>
                     {% elif notification.kind == 'order_dispute' %}<i class="bi bi-shield-exclamation"></i>
+                    {% elif notification.kind == 'report_update' %}<i class="bi bi-flag"></i>
                     {% else %}<i class="bi bi-chat-square-text"></i>{% endif %}
                 </span>
                 <span class="notification-body">

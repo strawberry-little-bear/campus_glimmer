@@ -44,14 +44,14 @@ class FavoriteAdmin(admin.ModelAdmin):
 
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
-    list_display = ('item', 'reporter', 'reason', 'status', 'reviewer', 'created_at', 'updated_at')
+    list_display = ('item', 'reporter', 'reason', 'status', 'reviewer', 'created_at', 'reviewed_at')
     list_filter = ('status', 'reason', 'created_at')
     search_fields = ('item__title', 'reporter__username', 'detail', 'review_note')
     autocomplete_fields = ('item', 'reporter', 'reviewer')
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'reviewed_at')
     fieldsets = (
         ('举报信息', {'fields': ('item', 'reporter', 'reason', 'detail', 'created_at')}),
-        ('审核结果', {'fields': ('status', 'reviewer', 'review_note', 'updated_at')}),
+        ('审核结果', {'fields': ('status', 'reviewer', 'review_note', 'reviewed_at', 'updated_at')}),
     )
 
 
