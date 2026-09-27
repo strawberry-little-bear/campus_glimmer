@@ -54,6 +54,34 @@
 
 <section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Period comparison</span><h2>周期对比</h2></div>
+        <span class="ops-panel-hint">对比上一段同长度周期</span>
+    </div>
+    <div class="ops-comparison-note">
+        <i class="bi bi-arrow-left-right me-1"></i>
+        当前周期 {{ period_start|date:"Y年m月d日" }} — {{ period_end|date:"Y年m月d日" }}
+        <span class="mx-1">·</span>
+        上一周期 {{ previous_period_start|date:"Y年m月d日" }} — {{ previous_period_end|date:"Y年m月d日" }}
+    </div>
+    <div class="ops-table-wrap">
+        <table class="table ops-table ops-comparison-table align-middle mb-0">
+            <thead><tr><th>指标</th><th>当前周期</th><th>上一周期</th><th>变化</th></tr></thead>
+            <tbody>
+                {% for comparison in period_comparisons %}
+                <tr>
+                    <td><strong>{{ comparison.label }}</strong></td>
+                    <td>{{ comparison.current }}</td>
+                    <td>{{ comparison.previous }}</td>
+                    <td><span class="ops-change ops-change-{{ comparison.direction }}">{% if comparison.direction == 'up' %}<i class="bi bi-arrow-up-short"></i>{% elif comparison.direction == 'down' %}<i class="bi bi-arrow-down-short"></i>{% else %}<i class="bi bi-dash"></i>{% endif %}{{ comparison.change_display }}</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Conversion funnel</span><h2>用户行为转化漏斗</h2></div>
         <span class="ops-panel-hint">按当前统计周期计算</span>
     </div>

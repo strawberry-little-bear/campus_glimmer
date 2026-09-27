@@ -112,6 +112,14 @@ def build_operations_dashboard(days=30):
     report_period = Report.objects.filter(created_at__gte=start, created_at__lte=now)
     view_period = BrowsingHistory.objects.filter(last_viewed_at__gte=start, last_viewed_at__lte=now)
     favorite_period = Favorite.objects.filter(created_at__gte=start, created_at__lte=now)
+    previous_start = start - timedelta(days=days)
+    previous_item_period = Item.objects.filter(created_at__gte=previous_start, created_at__lt=start)
+    previous_order_period = Order.objects.filter(created_at__gte=previous_start, created_at__lt=start)
+    previous_search_period = SearchQuery.objects.filter(created_at__gte=previous_start, created_at__lt=start)
+    previous_user_period = get_user_model().objects.filter(date_joined__gte=previous_start, date_joined__lt=start)
+    previous_view_period = BrowsingHistory.objects.filter(last_viewed_at__gte=previous_start, last_viewed_at__lt=start)
+    previous_favorite_period = Favorite.objects.filter(created_at__gte=previous_start, created_at__lt=start)
+    previous_report_period = Report.objects.filter(created_at__gte=previous_start, created_at__lt=start)
 
     order_count = order_period.count()
     completed_order_count = order_period.filter(status='completed').count()
@@ -219,11 +227,70 @@ def build_operations_dashboard(days=30):
         for status, _ in Order.STATUS_CHOICES
     ]
 
+    current_comparison_values = {
+        'new_items': item_period.count(),
+        'detail_views': detail_view_count,
+        'favorites': favorite_count,
+        'orders': order_count,
+        'completed_orders': completed_order_count,
+        'searches': search_count,
+        'new_users': user_period.count(),
+        'new_reports': report_period.count(),
+    }
+    previous_comparison_values = {
+        'new_items': previous_item_period.count(),
+        'detail_views': previous_view_period.count(),
+        'favorites': previous_favorite_period.count(),
+        'orders': previous_order_period.count(),
+        'completed_orders': previous_order_period.filter(status='completed').count(),
+        'searches': previous_search_period.count(),
+        'new_users': previous_user_period.count(),
+        'new_reports': previous_report_period.count(),
+    }
+    comparison_labels = {
+        'new_items': '新增商品',
+        'detail_views': '详情浏览',
+        'favorites': '加入心愿单',
+        'orders': '交易预约',
+        'completed_orders': '完成交易',
+        'searches': '搜索次数',
+        'new_users': '新增用户',
+        'new_reports': '新增举报',
+    }
+    period_comparisons = []
+    for key, label in comparison_labels.items():
+        current = current_comparison_values[key]
+        previous = previous_comparison_values[key]
+        if current == previous:
+            change_display = '持平'
+            direction = 'flat'
+            delta = 0
+        elif previous:
+            delta = round((current - previous) / previous * 100, 1)
+            change_display = f'{delta:+.1f}%'
+            direction = 'up' if delta > 0 else 'down'
+        else:
+            delta = None
+            change_display = '新增' if current else '—'
+            direction = 'up' if current else 'flat'
+        period_comparisons.append({
+            'key': key,
+            'label': label,
+            'current': current,
+            'previous': previous,
+            'delta': delta,
+            'change_display': change_display,
+            'direction': direction,
+        })
+
     return {
         'period_days': days,
         'period_choices': PERIOD_CHOICES,
         'period_start': start,
         'period_end': now,
+        'previous_period_start': previous_start,
+        'previous_period_end': start - timedelta(days=1),
+        'period_comparisons': period_comparisons,
         'metrics': {
             'active_items': Item.objects.filter(status='available').count(),
             'new_items': item_period.count(),

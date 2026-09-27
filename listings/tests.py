@@ -490,6 +490,42 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '近期搜索')
         self.assertNotContains(response, '旧搜索')
 
+    def test_operations_dashboard_compares_with_previous_period(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        old_item = Item.objects.create(
+            title='上一周期商品', description='用于周期对比', price='20.00',
+            category=self.category, location=self.location, condition='全新', seller=self.user,
+        )
+        previous_time = timezone.now() - timedelta(days=10)
+        Item.objects.filter(pk=old_item.pk).update(created_at=previous_time)
+        SearchQuery.objects.create(query='当前搜索', result_count=2)
+        old_search_one = SearchQuery.objects.create(query='历史搜索', result_count=1)
+        old_search_two = SearchQuery.objects.create(query='历史搜索', result_count=0)
+        SearchQuery.objects.filter(pk__in=[old_search_one.pk, old_search_two.pk]).update(created_at=previous_time)
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 7})
+        self.assertEqual(response.status_code, 200)
+        comparisons = {row['key']: row for row in response.context['period_comparisons']}
+        self.assertEqual(comparisons['new_items']['current'], 1)
+        self.assertEqual(comparisons['new_items']['previous'], 1)
+        self.assertEqual(comparisons['new_items']['change_display'], '持平')
+        self.assertEqual(comparisons['searches']['current'], 1)
+        self.assertEqual(comparisons['searches']['previous'], 2)
+        self.assertEqual(comparisons['searches']['change_display'], '-50.0%')
+        self.assertContains(response, '周期对比')
+
+    def test_operations_dashboard_export_includes_period_comparison(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 7})
+        self.assertEqual(response.status_code, 200)
+        report = response.content.decode('utf-8-sig')
+        self.assertIn('周期对比,当前周期,上一周期,变化', report)
+        self.assertIn('新增商品,1,0,新增', report)
+
     def test_user_can_save_search_from_filtered_results(self):
         self.client.login(username='alice', password='safe-password-123')
         response = self.client.get(reverse('item_list'), {

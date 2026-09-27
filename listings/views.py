@@ -840,6 +840,11 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    writer.writerow(['周期对比', '当前周期', '上一周期', '变化'])
+    for row in dashboard['period_comparisons']:
+        writer.writerow([row['label'], row['current'], row['previous'], row['change_display']])
+
+    writer.writerow([])
     writer.writerow(['转化漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
     for stage in dashboard['conversion_funnel']:
         writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
