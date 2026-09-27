@@ -10,6 +10,7 @@
         <p>把商品、搜索与交易行为放在同一张看板里，观察校园市场正在发生什么。</p>
     </div>
     <div class="d-flex flex-wrap align-items-center gap-2">
+        <a href="{% url 'search_insights' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-search-heart me-1"></i>搜索洞察</a>
         <a href="{% url 'report_list' %}" class="btn btn-outline-warning btn-sm"><i class="bi bi-flag me-1"></i>商品举报{% if metrics.pending_reports %}（{{ metrics.pending_reports }}）{% endif %}</a><a href="{% url 'dispute_list' %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-shield-exclamation me-1"></i>交易争议{% if pending_dispute_count %}（{{ pending_dispute_count }}）{% endif %}</a>
         <form method="get" class="operations-period-form">
         <label for="operations-days" class="small text-muted">统计周期</label>
@@ -46,7 +47,7 @@
     <div class="ops-metric-card ops-metric-purple">
         <span><i class="bi bi-search"></i>搜索行为</span>
         <strong>{{ metrics.searches }}</strong>
-        <small>其中 {{ metrics.zero_result_searches }} 次无结果</small>
+        <small>其中 {{ metrics.zero_result_searches }} 次无结果{% if metrics.zero_result_rate %}（{{ metrics.zero_result_rate }}%）{% endif %}</small>
     </div>
 </div>
 
@@ -97,7 +98,7 @@
 <div class="row g-4 mb-4">
     <div class="col-lg-6">
         <section class="content-card ops-panel h-100">
-            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Search demand</span><h2>热门搜索</h2></div><span class="ops-panel-hint">按搜索次数</span></div>
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Search demand</span><h2>热门搜索</h2></div><a class="ops-panel-hint ops-inline-link" href="{% url 'search_insights' %}">查看完整洞察 <i class="bi bi-arrow-up-right"></i></a></div>
             {% if top_searches %}
             <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>搜索词</th><th>次数</th><th>无结果</th><th>平均结果</th></tr></thead><tbody>
                 {% for search in top_searches %}<tr><td><strong>{{ search.query }}</strong></td><td>{{ search.search_count }}</td><td>{% if search.zero_result_count %}<span class="ops-warning">{{ search.zero_result_count }}</span>{% else %}—{% endif %}</td><td>{{ search.average_results|floatformat:1 }}</td></tr>{% endfor %}

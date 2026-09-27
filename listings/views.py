@@ -12,7 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .analytics import build_operations_dashboard
+from .analytics import build_operations_dashboard, build_search_insights
 from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
@@ -789,6 +789,17 @@ def operations_dashboard(request):
 def search_items(request):
     query = request.GET.get('q', '').strip()
     return redirect(f'/listings/?{urlencode({"q": query})}') if query else redirect('item_list')
+
+
+def search_insights(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    try:
+        period_days = int(request.GET.get('days', 30))
+    except (TypeError, ValueError):
+        period_days = 30
+    dashboard = build_search_insights(period_days, request.GET.get('q', ''))
+    return render(request, 'listings/search_insights.html', dashboard)
 
 
 @login_required

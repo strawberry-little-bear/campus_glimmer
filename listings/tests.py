@@ -6,6 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .analytics import build_search_insights
 from .recommendations import get_recommendations
 
 
@@ -566,3 +567,31 @@ class ListingFlowTests(TestCase):
         self.assertTrue(Notification.objects.filter(
             recipient=self.other_user, kind='report_update', item=self.item,
         ).exists())
+
+    def test_search_insights_aggregate_demand_gaps_for_staff(self):
+        SearchQuery.objects.create(user=self.other_user, query='台灯', result_count=0)
+        SearchQuery.objects.create(user=self.other_user, query='台灯', result_count=0)
+        SearchQuery.objects.create(user=self.user, query='台灯', result_count=2)
+        SearchQuery.objects.create(user=self.other_user, query='键盘', result_count=4)
+
+        dashboard = build_search_insights(30)
+        self.assertEqual(dashboard['metrics']['searches'], 4)
+        self.assertEqual(dashboard['metrics']['zero_result_searches'], 2)
+        self.assertEqual(dashboard['metrics']['zero_result_rate'], 50.0)
+        self.assertEqual(dashboard['term_rows'][0]['query'], '台灯')
+        self.assertEqual(dashboard['term_rows'][0]['zero_result_rate'], 66.7)
+        self.assertEqual(dashboard['gap_terms'][0]['query'], '台灯')
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('search_insights'), {'q': '台', 'days': 30})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '搜索需求洞察')
+        self.assertContains(response, '台灯')
+        self.assertContains(response, '供给缺口')
+
+    def test_search_insights_is_staff_only(self):
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.get(reverse('search_insights'))
+        self.assertEqual(response.status_code, 403)

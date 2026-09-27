@@ -1,7 +1,7 @@
 from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Max, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
@@ -28,6 +28,73 @@ def _daily_counts(queryset, start, end):
     return {row['day']: row['count'] for row in rows}
 
 
+def build_search_insights(days=30, query=''):
+    """Build an actionable view of search demand for staff operations work."""
+    allowed_days = {value for value, _ in PERIOD_CHOICES}
+    if days not in allowed_days:
+        days = 30
+
+    now = timezone.now()
+    start = _period_start(days, timezone.localdate())
+    search_period = SearchQuery.objects.filter(
+        created_at__gte=start,
+        created_at__lte=now,
+    )
+    query = (query or '').strip()[:120]
+    if query:
+        search_period = search_period.filter(query__icontains=query)
+
+    term_rows = list(
+        search_period.values('query').annotate(
+            search_count=Count('id'),
+            zero_result_count=Count('id', filter=Q(result_count=0)),
+            average_results=Avg('result_count'),
+            unique_users=Count('user', distinct=True),
+            last_searched=Max('created_at'),
+        ).order_by('-search_count', 'query')
+    )
+    for row in term_rows:
+        row['zero_result_rate'] = round(
+            row['zero_result_count'] / row['search_count'] * 100, 1
+        ) if row['search_count'] else 0
+
+    search_count = search_period.count()
+    zero_result_count = search_period.filter(result_count=0).count()
+    gap_terms = sorted(
+        (row for row in term_rows if row['zero_result_count']),
+        key=lambda row: (-row['zero_result_count'], -row['search_count'], row['query']),
+    )[:12]
+    insights = []
+    for row in gap_terms[:6]:
+        insights.append({
+            'query': row['query'],
+            'search_count': row['search_count'],
+            'zero_result_count': row['zero_result_count'],
+            'zero_result_rate': row['zero_result_rate'],
+            'message': (
+                f"“{row['query']}”有 {row['zero_result_count']} 次搜索没有结果，"
+                '可以考虑补充库存、调整分类或发布求购引导。'
+            ),
+        })
+
+    return {
+        'period_days': days,
+        'period_choices': PERIOD_CHOICES,
+        'period_start': start,
+        'period_end': now,
+        'query_filter': query,
+        'metrics': {
+            'searches': search_count,
+            'unique_terms': len(term_rows),
+            'zero_result_searches': zero_result_count,
+            'zero_result_rate': round(zero_result_count / search_count * 100, 1) if search_count else 0,
+        },
+        'term_rows': term_rows[:30],
+        'gap_terms': gap_terms,
+        'insights': insights,
+    }
+
+
 def build_operations_dashboard(days=30):
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
@@ -48,6 +115,8 @@ def build_operations_dashboard(days=30):
     completed_order_count = order_period.filter(status='completed').count()
     completion_rate = round(completed_order_count / order_count * 100, 1) if order_count else 0
     average_order_price = order_period.aggregate(value=Avg('agreed_price'))['value']
+    search_count = search_period.count()
+    zero_result_search_count = search_period.filter(result_count=0).count()
 
     item_daily = _daily_counts(Item.objects, start, now)
     order_daily = _daily_counts(Order.objects, start, now)
@@ -123,8 +192,9 @@ def build_operations_dashboard(days=30):
             'completed_orders': completed_order_count,
             'completion_rate': completion_rate,
             'average_order_price': average_order_price,
-            'searches': search_period.count(),
-            'zero_result_searches': search_period.filter(result_count=0).count(),
+            'searches': search_count,
+            'zero_result_searches': zero_result_search_count,
+            'zero_result_rate': round(zero_result_search_count / search_count * 100, 1) if search_count else 0,
             'new_users': user_period.count(),
             'new_reports': report_period.count(),
             'pending_reports': Report.objects.filter(status__in=['pending', 'reviewing']).count(),

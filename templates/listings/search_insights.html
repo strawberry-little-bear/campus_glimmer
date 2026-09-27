@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+
+{% block title %}搜索需求洞察 · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-intro operations-heading mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">Search intelligence</span>
+        <h1>搜索需求洞察</h1>
+        <p>从真实搜索记录里找出热门需求和供给缺口，为补货、分类调整与运营活动提供依据。</p>
+    </div>
+    <a href="{% url 'operations_dashboard' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>返回运营看板</a>
+</div>
+
+<div class="content-card search-insights-toolbar mb-4">
+    <form method="get" class="row g-2 align-items-end">
+        <div class="col-md-6">
+            <label class="form-label small text-muted" for="search-insights-q">筛选搜索词</label>
+            <input id="search-insights-q" class="form-control" type="search" name="q" value="{{ query_filter }}" placeholder="例如：台灯、考研资料、显示器">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small text-muted" for="search-insights-days">统计周期</label>
+            <select id="search-insights-days" class="form-select" name="days">
+                {% for value, label in period_choices %}<option value="{{ value }}" {% if period_days == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+            <button class="btn btn-primary flex-grow-1" type="submit"><i class="bi bi-filter me-1"></i>更新分析</button>
+            <a class="btn btn-light" href="{% url 'search_insights' %}">重置</a>
+        </div>
+    </form>
+    <div class="operations-period-note mt-3"><i class="bi bi-calendar3 me-2"></i>{{ period_start|date:"Y年m月d日" }} — {{ period_end|date:"Y年m月d日" }} · 仅限管理员可见</div>
+</div>
+
+<div class="ops-metric-grid mb-4">
+    <div class="ops-metric-card ops-metric-purple"><span><i class="bi bi-search"></i>搜索次数</span><strong>{{ metrics.searches }}</strong><small>符合当前筛选条件</small></div>
+    <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-tags"></i>搜索词数量</span><strong>{{ metrics.unique_terms }}</strong><small>去重后的需求表达</small></div>
+    <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-exclamation-circle"></i>无结果搜索</span><strong>{{ metrics.zero_result_searches }}</strong><small>值得跟进的需求信号</small></div>
+    <div class="ops-metric-card ops-metric-green"><span><i class="bi bi-graph-up-arrow"></i>无结果占比</span><strong>{{ metrics.zero_result_rate }}%</strong><small>搜索体验健康度参考</small></div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-xl-7">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Demand table</span><h2>搜索词表现</h2></div><span class="ops-panel-hint">最多展示 30 个词</span></div>
+            {% if term_rows %}
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>搜索词</th><th>次数</th><th>用户</th><th>无结果</th><th>平均结果</th><th>最近搜索</th></tr></thead><tbody>
+                {% for row in term_rows %}<tr><td><strong>{{ row.query }}</strong></td><td>{{ row.search_count }}</td><td>{{ row.unique_users }}</td><td>{% if row.zero_result_count %}<span class="ops-warning">{{ row.zero_result_count }}（{{ row.zero_result_rate }}%）</span>{% else %}—{% endif %}</td><td>{{ row.average_results|floatformat:1 }}</td><td class="text-nowrap">{{ row.last_searched|date:"m-d H:i" }}</td></tr>{% endfor %}
+            </tbody></table></div>
+            {% else %}<div class="empty-inline">当前周期还没有匹配的搜索记录。</div>{% endif %}
+        </section>
+    </div>
+    <div class="col-xl-5">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Supply gaps</span><h2>供给缺口</h2></div><span class="ops-panel-hint">按无结果次数排序</span></div>
+            {% if gap_terms %}<div class="search-gap-list">{% for row in gap_terms %}<a class="search-gap-row" href="{% url 'item_list' %}?q={{ row.query|urlencode }}"><span><strong>{{ row.query }}</strong><small>{{ row.search_count }} 次搜索 · {{ row.unique_users }} 位用户</small></span><b>{{ row.zero_result_count }}<em>无结果</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前周期没有明显的无结果需求。</div>{% endif %}
+        </section>
+    </div>
+</div>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Action queue</span><h2>运营建议</h2></div><span class="ops-panel-hint">由搜索行为自动生成</span></div>
+    {% if insights %}<div class="search-insight-grid">{% for insight in insights %}<article class="search-insight-card"><div class="search-insight-icon"><i class="bi bi-lightbulb"></i></div><div><strong>{{ insight.query }}</strong><p>{{ insight.message }}</p><a href="{% url 'item_list' %}?q={{ insight.query|urlencode }}">查看相关商品 <i class="bi bi-arrow-right"></i></a></div></article>{% endfor %}</div>{% else %}<div class="empty-inline">暂无需要跟进的搜索需求。可以扩大统计周期，或等待新的搜索记录积累。</div>{% endif %}
+</section>
+
+<div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>搜索洞察只使用聚合后的业务记录，不展示用户身份或单次搜索详情。</div>
+{% endblock %}

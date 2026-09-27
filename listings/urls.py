@@ -24,6 +24,7 @@ urlpatterns = [
     path('my_items/', views.my_items, name='my_items'),
     path('search/', views.search_items, name='search_items'),
     path('operations/', views.operations_dashboard, name='operations_dashboard'),
+    path('operations/search-insights/', views.search_insights, name='search_insights'),
     path('reports/', views.report_list, name='report_list'),
     path('reports/<int:report_id>/review/', views.review_report, name='review_report'),
     path('disputes/', views.dispute_list, name='dispute_list'),
