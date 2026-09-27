@@ -57,6 +57,20 @@
                 {% if my_rating.comment %}<p class="rating-own-comment mt-3 mb-0">“{{ my_rating.comment|linebreaksbr }}”</p>{% endif %}
             </div>
             {% endif %}
+
+            {% if events %}
+            <section class="order-timeline mt-5">
+                <div class="card-section-heading"><h2><i class="bi bi-clock-history me-2"></i>状态记录</h2><span>{{ events|length }} 次变更</span></div>
+                <ol class="timeline-list mt-3">
+                    {% for event in events %}
+                    <li class="timeline-item {% if forloop.last %}is-current{% endif %}">
+                        <span class="timeline-dot"></span>
+                        <div class="timeline-content"><div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ event.get_to_status_display }}</strong><time>{{ event.created_at|date:'Y-m-d H:i' }}</time></div><p class="mb-1">{{ event.note }}</p><small>{% if event.actor %}由 {{ event.actor.username }} 操作{% else %}系统记录{% endif %}</small></div>
+                    </li>
+                    {% endfor %}
+                </ol>
+            </section>
+            {% endif %}
         </section>
     </div>
 

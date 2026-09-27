@@ -167,6 +167,32 @@ class Order(models.Model):
         return f'{self.item.title} · {self.get_status_display()}'
 
 
+class OrderEvent(models.Model):
+    STATUS_CHOICES = Order.STATUS_CHOICES
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='events', verbose_name='订单')
+    actor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='order_events', verbose_name='操作人',
+    )
+    from_status = models.CharField('原状态', max_length=20, blank=True)
+    to_status = models.CharField('目标状态', max_length=20, choices=STATUS_CHOICES)
+    note = models.CharField('事件说明', max_length=200, blank=True)
+    created_at = models.DateTimeField('发生时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '订单状态记录'
+        verbose_name_plural = '订单状态记录'
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(fields=['order', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.order.item.title} · {self.get_to_status_display()}'
+
+
+
 class BrowsingHistory(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='browsing_history', verbose_name='用户')
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='view_history', verbose_name='商品')

@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, OrderEvent, Rating, Report
 from .recommendations import get_recommendations
 
 
@@ -167,6 +167,10 @@ def create_order(request, item_id):
                     order.agreed_price = locked_item.price
                     order.meeting_location = order.meeting_location or locked_item.location
                     order.save()
+                    OrderEvent.objects.create(
+                        order=order, actor=request.user, to_status=order.status,
+                        note='买家发起交易预约',
+                    )
                     locked_item.status = 'reserved'
                     locked_item.save(update_fields=['status', 'updated_at'])
             except IntegrityError:
@@ -189,6 +193,7 @@ def order_detail(request, order_id):
     my_rating = Rating.objects.filter(order=order, rater=request.user).first()
     rating_form = RatingForm() if order.status == 'completed' and not my_rating else None
     ratings = order.ratings.select_related('rater', 'ratee').all()
+    events = order.events.select_related('actor').all()
     return render(request, 'listings/order_detail.html', {
         'order': order,
         'title': '交易订单',
@@ -196,6 +201,7 @@ def order_detail(request, order_id):
         'my_rating': my_rating,
         'rating_form': rating_form,
         'ratings': ratings,
+        'events': events,
     })
 
 
@@ -255,8 +261,22 @@ def update_order_status(request, order_id):
         seller_can_update = request.user == order.seller and target_status in transitions.get(order.status, set())
         buyer_can_update = request.user == order.buyer and target_status in {'completed', 'cancelled'}
         if seller_can_update or buyer_can_update:
+            previous_status = order.status
             order.status = target_status
             order.save(update_fields=['status', 'updated_at'])
+            event_notes = {
+                'confirmed': '卖家确认了交易预约',
+                'meeting': '卖家将订单推进到当面交付',
+                'completed': '双方确认交易已完成',
+                'cancelled': '订单被取消，商品恢复为在售',
+            }
+            OrderEvent.objects.create(
+                order=order,
+                actor=request.user,
+                from_status=previous_status,
+                to_status=target_status,
+                note=event_notes.get(target_status, '订单状态已更新'),
+            )
             if target_status == 'cancelled':
                 order.item.status = 'available'
                 order.item.save(update_fields=['status', 'updated_at'])

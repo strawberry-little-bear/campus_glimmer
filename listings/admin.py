@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Order, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Order, OrderEvent, Rating, Report
 
 
 class ItemImageInline(admin.TabularInline):
@@ -86,3 +86,12 @@ class RatingAdmin(admin.ModelAdmin):
         if not obj.comment:
             return '—'
         return obj.comment[:36] + ('…' if len(obj.comment) > 36 else '')
+
+
+@admin.register(OrderEvent)
+class OrderEventAdmin(admin.ModelAdmin):
+    list_display = ('order', 'from_status', 'to_status', 'actor', 'note', 'created_at')
+    list_filter = ('to_status', 'created_at')
+    search_fields = ('order__item__title', 'actor__username', 'note')
+    autocomplete_fields = ('order', 'actor')
+    readonly_fields = ('created_at',)

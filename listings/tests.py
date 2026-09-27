@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, OrderEvent, Rating, Report
 from .recommendations import get_recommendations
 
 
@@ -169,4 +169,19 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '5.0')
         self.assertContains(response, '来自 1 条交易评价')
         self.assertContains(response, '值得信赖')
+
+    def test_order_tracks_status_history(self):
+        order = self._complete_order()
+        events = list(OrderEvent.objects.filter(order=order).order_by('created_at', 'id'))
+        self.assertEqual([event.to_status for event in events], ['pending', 'confirmed', 'meeting', 'completed'])
+        self.assertEqual(events[0].from_status, '')
+        self.assertEqual(events[0].actor, self.other_user)
+        self.assertEqual(events[-1].from_status, 'meeting')
+        self.assertEqual(events[-1].actor, self.user)
+
+    def test_order_detail_displays_status_history(self):
+        order = self._complete_order()
+        response = self.client.get(reverse('order_detail', args=[order.id]))
+        self.assertContains(response, '买家发起交易预约')
+        self.assertContains(response, '双方确认交易已完成')
 
