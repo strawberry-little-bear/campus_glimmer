@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemImage, Notification, Order, OrderDispute, OrderEvent, Rating, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemImage, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 
 
 class ItemImageInline(admin.TabularInline):
@@ -140,3 +140,12 @@ class OrderDisputeAdmin(admin.ModelAdmin):
     search_fields = ('order__item__title', 'opened_by__username', 'detail', 'resolution_note')
     autocomplete_fields = ('order', 'opened_by', 'reviewer')
     readonly_fields = ('created_at', 'updated_at', 'resolved_at')
+
+
+@admin.register(RecommendationFeedback)
+class RecommendationFeedbackAdmin(admin.ModelAdmin):
+    list_display = ('user', 'item', 'action', 'updated_at')
+    list_filter = ('action', 'updated_at')
+    search_fields = ('user__username', 'item__title')
+    autocomplete_fields = ('user', 'item')
+    readonly_fields = ('created_at', 'updated_at')

@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 
 
@@ -504,3 +504,37 @@ class ListingFlowTests(TestCase):
         self.assertEqual(dispute.status, 'resolved')
         self.assertEqual(dispute.reviewer, self.user)
         self.assertTrue(Notification.objects.filter(recipient=self.other_user, kind='order_dispute').exists())
+
+    def test_recommendation_feedback_closes_the_personalization_loop(self):
+        second_item = Item.objects.create(
+            title='宿舍台灯', description='暖光护眼', price='39.00',
+            category=self.category, location=self.location, condition='全新', seller=self.user,
+        )
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('recommendation_feedback', args=[self.item.id]),
+            {'action': 'interested', 'next': reverse('home')},
+        )
+        self.assertRedirects(response, reverse('home'))
+        feedback = RecommendationFeedback.objects.get(user=self.other_user, item=self.item)
+        self.assertEqual(feedback.action, 'interested')
+
+        response = self.client.post(
+            reverse('recommendation_feedback', args=[self.item.id]),
+            {'action': 'dismiss', 'next': reverse('home')},
+        )
+        self.assertRedirects(response, reverse('home'))
+        feedback.refresh_from_db()
+        self.assertEqual(feedback.action, 'dismiss')
+        recommendations = get_recommendations(self.other_user, limit=10)
+        self.assertNotIn(self.item.id, [recommendation.item.id for recommendation in recommendations])
+        self.assertIn(second_item.id, [recommendation.item.id for recommendation in recommendations])
+
+    def test_recommendation_feedback_rejects_unsupported_actions(self):
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('recommendation_feedback', args=[self.item.id]),
+            {'action': 'boost', 'next': 'https://evil.example/steal'},
+        )
+        self.assertRedirects(response, reverse('home'))
+        self.assertFalse(RecommendationFeedback.objects.filter(user=self.other_user, item=self.item).exists())

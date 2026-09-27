@@ -307,6 +307,38 @@ class Rating(models.Model):
         return f'{self.rater.username}评价{self.ratee.username} · {self.score}星'
 
 
+class RecommendationFeedback(models.Model):
+    ACTION_CHOICES = (
+        ('interested', '想看看'),
+        ('dismiss', '不感兴趣'),
+    )
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='recommendation_feedbacks', verbose_name='用户',
+    )
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE, related_name='recommendation_feedbacks', verbose_name='商品',
+    )
+    action = models.CharField('反馈动作', max_length=20, choices=ACTION_CHOICES)
+    created_at = models.DateTimeField('首次反馈时间', auto_now_add=True)
+    updated_at = models.DateTimeField('最近反馈时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '推荐反馈'
+        verbose_name_plural = '推荐反馈'
+        ordering = ['-updated_at']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'item'], name='unique_recommendation_feedback'),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'action', '-updated_at']),
+            models.Index(fields=['item', 'action']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.item.title} · {self.get_action_display()}'
+
+
 class Notification(models.Model):
     KIND_CHOICES = (
         ('order_created', '新的交易预约'),

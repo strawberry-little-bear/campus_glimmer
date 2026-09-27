@@ -50,7 +50,7 @@
 <section class="section-heading mb-3"><div><span class="eyebrow eyebrow-soft">为你挑选</span><h2>{% if user.is_authenticated %}可能会喜欢这些{% else %}校园里正在被关注{% endif %}</h2></div><a href="{% url 'item_list' %}" class="text-link">发现更多 <i class="bi bi-arrow-right"></i></a></section>
 <div class="row g-4 mb-5">
     {% for recommendation in recommendations %}
-    <div class="col-sm-6 col-xl-3"><div class="recommendation-wrap"><span class="recommendation-reason"><i class="bi bi-stars me-1"></i>{{ recommendation.reason }}</span>{% include 'listings/_item_card.html' with item=recommendation.item %}</div></div>
+    <div class="col-sm-6 col-xl-3"><div class="recommendation-wrap"><span class="recommendation-reason"><i class="bi bi-stars me-1"></i>{{ recommendation.reason }}</span>{% include 'listings/_item_card.html' with item=recommendation.item %}{% if user.is_authenticated %}<form method="post" action="{% url 'recommendation_feedback' recommendation.item.id %}" class="recommendation-feedback">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button type="submit" name="action" value="interested" title="优先保留这类推荐"><i class="bi bi-hand-thumbs-up"></i>想看看</button><button type="submit" name="action" value="dismiss" title="减少这类推荐"><i class="bi bi-eye-slash"></i>不感兴趣</button></form>{% endif %}</div></div>
     {% empty %}<div class="col-12"><div class="empty-state">还没有足够的浏览数据，先去发布或收藏一些商品吧。</div></div>
     {% endfor %}
 </div>

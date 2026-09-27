@@ -14,7 +14,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard
 from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .saved_searches import notify_saved_search_matches
@@ -206,6 +206,40 @@ def toggle_favorite(request, item_id):
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
         next_url = ''
     return redirect(next_url or 'item_detail', item_id=item.id) if not next_url else redirect(next_url)
+
+
+@login_required
+def recommendation_feedback(request, item_id):
+    item = get_object_or_404(Item, id=item_id, status='available')
+    if item.seller == request.user:
+        messages.info(request, '自己的商品不会进入个性化推荐。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('home')
+
+    action = request.POST.get('action', '').strip()
+    allowed_actions = dict(RecommendationFeedback.ACTION_CHOICES)
+    if action not in allowed_actions:
+        messages.error(request, '暂不支持这种推荐反馈。')
+    else:
+        RecommendationFeedback.objects.update_or_create(
+            user=request.user,
+            item=item,
+            defaults={'action': action},
+        )
+        if action == 'interested':
+            messages.success(request, '已记录“想看看”，之后会优先为你保留。')
+        else:
+            messages.info(request, '已减少这类推荐，之后不会优先展示它。')
+
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('home')
+    return redirect(next_url)
 
 
 @login_required

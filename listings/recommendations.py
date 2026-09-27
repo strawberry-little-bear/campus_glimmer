@@ -5,7 +5,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db.models import Count
 from django.utils import timezone
 
-from .models import BrowsingHistory, Favorite, Item, Order
+from .models import BrowsingHistory, Favorite, Item, Order, RecommendationFeedback
 
 
 @dataclass(frozen=True)
@@ -22,11 +22,16 @@ class RecommendationService:
         self.user = user or AnonymousUser()
         self.category_ids = set()
         self.location_ids = set()
+        self.interested_item_ids = set()
+        self.dismissed_item_ids = set()
         self._load_preferences()
 
     def _load_preferences(self):
         if not self.user.is_authenticated:
             return
+        feedbacks = RecommendationFeedback.objects.filter(user=self.user)
+        self.interested_item_ids.update(feedbacks.filter(action='interested').values_list('item_id', flat=True))
+        self.dismissed_item_ids.update(feedbacks.filter(action='dismiss').values_list('item_id', flat=True))
         favorite_items = Favorite.objects.filter(user=self.user).select_related('item')
         self.category_ids.update(favorite_items.values_list('item__category_id', flat=True))
         self.location_ids.update(
@@ -51,7 +56,7 @@ class RecommendationService:
             favorite_count=Count('favorites'),
         ).select_related('category', 'seller', 'location').prefetch_related('images')
         if self.user.is_authenticated:
-            items = items.exclude(seller=self.user)
+            items = items.exclude(seller=self.user).exclude(id__in=self.dismissed_item_ids)
         if exclude_item_id:
             items = items.exclude(id=exclude_item_id)
 
@@ -63,13 +68,18 @@ class RecommendationService:
             popularity_score = min(item.favorite_count, 10) * 0.8
             category_match = item.category_id in self.category_ids
             location_match = item.location_id is not None and item.location_id in self.location_ids
+            feedback_match = item.id in self.interested_item_ids
             score = recency_score + popularity_score
+            if feedback_match:
+                score += 10
             if category_match:
                 score += 8
             if location_match:
                 score += 5
 
-            if category_match and location_match:
+            if feedback_match:
+                reason = '你标记过想看，优先为你保留'
+            elif category_match and location_match:
                 reason = '符合你的分类与交易地点偏好'
             elif category_match:
                 reason = '与你收藏或交易过的分类相近'
