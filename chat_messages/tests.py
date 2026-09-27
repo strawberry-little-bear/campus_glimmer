@@ -122,3 +122,39 @@ class MessageNotificationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         conversation = response.context['conversation_data'][0]
         self.assertEqual(conversation['last_message'].content, '后发的回复')
+
+class UnreadSummaryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='reader', password='safe-password-123')
+        self.other_user = User.objects.create_user(username='other-reader', password='safe-password-123')
+
+    def test_unread_summary_returns_only_current_user_counts(self):
+        Notification.objects.create(
+            recipient=self.user, kind='order_status', title='订单更新', message='你的订单有新的状态。',
+        )
+        Notification.objects.create(
+            recipient=self.user, kind='comment_received', title='商品留言', message='你的商品收到新的留言。', is_read=True,
+        )
+        Notification.objects.create(
+            recipient=self.other_user, kind='order_status', title='订单更新', message='另一位用户的订单有新的状态。',
+        )
+        PrivateMessage.objects.create(
+            sender=self.other_user, receiver=self.user, content='有一条未读私信。',
+        )
+        PrivateMessage.objects.create(
+            sender=self.user, receiver=self.other_user, content='这是发给别人的消息。',
+        )
+
+        self.client.login(username='reader', password='safe-password-123')
+        response = self.client.get(reverse('unread_summary'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'notifications': 1, 'messages': 1})
+
+    def test_unread_summary_requires_login(self):
+        response = self.client.get(reverse('unread_summary'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response.url)
+
+\r\n

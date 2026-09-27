@@ -7,7 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Case, Count, F, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
@@ -21,6 +21,7 @@ from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmat
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .saved_searches import notify_saved_search_matches
+from chat_messages.models import PrivateMessage
 
 
 def _favorite_ids(request):
@@ -1039,6 +1040,18 @@ def delete_saved_search(request, saved_search_id):
 
 
 @login_required
+def unread_summary(request):
+    return JsonResponse({
+        'notifications': Notification.objects.filter(
+            recipient=request.user, is_read=False,
+        ).count(),
+        'messages': PrivateMessage.objects.filter(
+            receiver=request.user, is_read=False,
+        ).count(),
+    })
+
+
+@login_required
 def notification_list(request):
     status_filter = request.GET.get('status', 'all').strip()
     if status_filter not in {'all', 'unread', 'read'}:
@@ -1193,3 +1206,5 @@ def mark_selected_notifications_read(request):
     ):
         next_url = reverse('notification_list')
     return redirect(next_url)
+
+\r\n

@@ -36,6 +36,7 @@ urlpatterns = [
     path('saved-searches/<int:saved_search_id>/toggle/', views.toggle_saved_search, name='toggle_saved_search'),
     path('saved-searches/<int:saved_search_id>/delete/', views.delete_saved_search, name='delete_saved_search'),
     path('notifications/', views.notification_list, name='notification_list'),
+    path('notifications/unread-summary/', views.unread_summary, name='unread_summary'),
     path('notifications/preferences/', views.notification_preferences, name='notification_preferences'),
     path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
     path('notifications/read-all/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
