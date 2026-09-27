@@ -1,4 +1,5 @@
 from decimal import Decimal, InvalidOperation
+from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
@@ -293,6 +294,7 @@ def create_order(request, item_id):
                     order.seller = locked_item.seller
                     order.agreed_price = locked_item.price
                     order.meeting_location = order.meeting_location or locked_item.location
+                    order.confirmation_deadline = timezone.now() + timedelta(hours=24)
                     order.save()
                     OrderEvent.objects.create(
                         order=order, actor=request.user, to_status=order.status,

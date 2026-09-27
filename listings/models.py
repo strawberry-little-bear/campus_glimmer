@@ -154,6 +154,8 @@ class Order(models.Model):
     status = models.CharField('订单状态', max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField('下单时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
+    confirmation_deadline = models.DateTimeField('卖家确认截止时间', null=True, blank=True)
+    confirmation_reminder_sent_at = models.DateTimeField('确认提醒发送时间', null=True, blank=True)
 
     class Meta:
         verbose_name = '交易订单'
@@ -349,6 +351,8 @@ class Notification(models.Model):
         ('comment_received', '收到商品留言'),
         ('saved_search_match', '关注的搜索有新商品'),
         ('order_dispute', '交易争议更新'),
+        ('order_expiring', '交易预约即将超时'),
+        ('order_expired', '交易预约已超时'),
         ('report_update', '举报处理更新'),
     )
 

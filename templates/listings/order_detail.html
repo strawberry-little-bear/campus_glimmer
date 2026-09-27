@@ -38,6 +38,7 @@
                 <dt class="col-sm-4">卖家</dt><dd class="col-sm-8">{{ order.seller.username }}</dd>
                 <dt class="col-sm-4">交付地点</dt><dd class="col-sm-8">{% if order.meeting_location %}{{ order.meeting_location.name }}{% if order.meeting_location.address %} · {{ order.meeting_location.address }}{% endif %}{% else %}待双方沟通{% endif %}</dd>
                 {% if order.buyer_note %}<dt class="col-sm-4">买家备注</dt><dd class="col-sm-8">{{ order.buyer_note|linebreaksbr }}</dd>{% endif %}
+                {% if order.status == 'pending' and order.confirmation_deadline %}<dt class="col-sm-4">确认截止</dt><dd class="col-sm-8"><span class="order-deadline"><i class="bi bi-hourglass-split me-1"></i>{{ order.confirmation_deadline|date:'Y年m月d日 H:i' }} 前</span></dd>{% endif %}
             </dl>
 
             {% if order.status == 'completed' %}

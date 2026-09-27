@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .analytics import build_search_insights
+from .order_maintenance import process_order_timeouts
 from .recommendations import get_recommendations
 
 
@@ -595,3 +596,61 @@ class ListingFlowTests(TestCase):
         self.client.login(username='bob', password='safe-password-123')
         response = self.client.get(reverse('search_insights'))
         self.assertEqual(response.status_code, 403)
+
+    def test_pending_order_gets_confirmation_deadline(self):
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '请卖家确认'},
+        )
+        self.assertEqual(response.status_code, 302)
+        order = Order.objects.get(item=self.item)
+        self.assertIsNotNone(order.confirmation_deadline)
+        self.assertGreater(order.confirmation_deadline, timezone.now())
+        self.assertIsNone(order.confirmation_reminder_sent_at)
+        self.assertContains(self.client.get(reverse('order_detail', args=[order.id])), '确认截止')
+
+    def test_order_timeout_reminds_once_and_releases_reservation(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '等待确认'},
+        )
+        order = Order.objects.get(item=self.item)
+        base_time = timezone.now()
+        order.confirmation_deadline = base_time + timedelta(hours=3)
+        order.save(update_fields=['confirmation_deadline', 'updated_at'])
+
+        result = process_order_timeouts(now=base_time, reminder_hours=6)
+        self.assertEqual(result, {'expired': 0, 'reminded': 1})
+        order.refresh_from_db()
+        self.assertIsNotNone(order.confirmation_reminder_sent_at)
+        self.assertEqual(Notification.objects.filter(order=order, kind='order_expiring').count(), 1)
+
+        second_result = process_order_timeouts(now=base_time + timedelta(hours=1), reminder_hours=6)
+        self.assertEqual(second_result, {'expired': 0, 'reminded': 0})
+        self.assertEqual(Notification.objects.filter(order=order, kind='order_expiring').count(), 1)
+
+    def test_order_timeout_cancels_order_reopens_item_and_notifies_both_sides(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '等待确认'},
+        )
+        order = Order.objects.get(item=self.item)
+        expired_at = timezone.now()
+        order.confirmation_deadline = expired_at - timedelta(minutes=1)
+        order.save(update_fields=['confirmation_deadline', 'updated_at'])
+
+        result = process_order_timeouts(now=expired_at)
+        self.assertEqual(result, {'expired': 1, 'reminded': 0})
+        order.refresh_from_db()
+        self.item.refresh_from_db()
+        self.assertEqual(order.status, 'cancelled')
+        self.assertEqual(self.item.status, 'available')
+        self.assertTrue(OrderEvent.objects.filter(order=order, to_status='cancelled', actor__isnull=True).exists())
+        self.assertEqual(Notification.objects.filter(order=order, kind='order_expired').count(), 2)
+
+        second_result = process_order_timeouts(now=expired_at + timedelta(hours=1))
+        self.assertEqual(second_result, {'expired': 0, 'reminded': 0})
+        self.assertEqual(Notification.objects.filter(order=order, kind='order_expired').count(), 2)

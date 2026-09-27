@@ -57,11 +57,11 @@ class ReportAdmin(admin.ModelAdmin):
 
 @admin.register(Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ('item', 'buyer', 'seller', 'agreed_price', 'status', 'meeting_location', 'created_at', 'updated_at')
-    list_filter = ('status', 'meeting_location', 'created_at')
+    list_display = ('item', 'buyer', 'seller', 'agreed_price', 'status', 'meeting_location', 'confirmation_deadline', 'created_at')
+    list_filter = ('status', 'meeting_location', 'confirmation_deadline', 'created_at')
     search_fields = ('item__title', 'buyer__username', 'seller__username')
     autocomplete_fields = ('item', 'buyer', 'seller', 'meeting_location')
-    readonly_fields = ('agreed_price', 'created_at', 'updated_at')
+    readonly_fields = ('agreed_price', 'created_at', 'updated_at', 'confirmation_reminder_sent_at')
 
 
 @admin.register(BrowsingHistory)
