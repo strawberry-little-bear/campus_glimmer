@@ -4,6 +4,7 @@ from urllib.parse import urlencode
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
+from django.core.exceptions import PermissionDenied
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Case, Count, F, IntegerField, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from .analytics import build_operations_dashboard
 from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm
 from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SearchQuery
 from .recommendations import get_recommendations
@@ -488,6 +490,20 @@ def my_items(request):
     items = Item.objects.filter(seller=request.user).select_related('category', 'location').prefetch_related('images')
     return render(request, 'listings/my_items.html', {'items': items, 'title': '我的商品'})
 
+
+@login_required
+def operations_dashboard(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    try:
+        period_days = int(request.GET.get('days', 30))
+    except (TypeError, ValueError):
+        period_days = 30
+    return render(
+        request,
+        'listings/operations_dashboard.html',
+        build_operations_dashboard(period_days),
+    )
 
 def search_items(request):
     query = request.GET.get('q', '').strip()

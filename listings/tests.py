@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report, SearchQuery
 from .recommendations import get_recommendations
@@ -298,6 +301,7 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         record = SearchQuery.objects.get(user=self.user)
         self.assertEqual(record.query, '键盘')
+        self.assertEqual(record.condition, '9成新')
         self.assertEqual(record.category, None)
         self.assertEqual(record.location, self.location)
         self.assertEqual(str(record.min_price), '50.00')
@@ -324,3 +328,58 @@ class ListingFlowTests(TestCase):
         record = SearchQuery.objects.get(query='键盘')
         self.assertIsNone(record.min_price)
         self.assertIsNone(record.max_price)
+    def test_operations_dashboard_is_restricted_to_staff(self):
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'))
+        self.assertEqual(response.status_code, 403)
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        response = self.client.get(reverse('operations_dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '运营数据概览')
+
+    def test_operations_dashboard_aggregates_search_and_supply_metrics(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        second_item = Item.objects.create(
+            title='宿舍台灯', description='暖光台灯', price='39.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        SearchQuery.objects.create(query='键盘', condition='9成新', result_count=3)
+        SearchQuery.objects.create(query='键盘', result_count=0)
+        SearchQuery.objects.create(query='台灯', result_count=1)
+        Order.objects.create(
+            item=second_item, buyer=self.other_user, seller=self.user,
+            meeting_location=self.location, agreed_price='39.00', status='completed',
+        )
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        metrics = response.context['metrics']
+        self.assertEqual(metrics['new_items'], 2)
+        self.assertEqual(metrics['searches'], 3)
+        self.assertEqual(metrics['zero_result_searches'], 1)
+        self.assertEqual(metrics['orders'], 1)
+        self.assertEqual(metrics['completed_orders'], 1)
+        self.assertEqual(response.context['top_searches'][0]['query'], '键盘')
+        self.assertEqual(response.context['category_stats'][0].new_count, 2)
+        self.assertEqual(response.context['location_stats'][0].order_count, 1)
+        self.assertContains(response, '图书馆东门')
+
+    def test_operations_dashboard_respects_selected_period(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        old_search = SearchQuery.objects.create(query='旧搜索', result_count=0)
+        SearchQuery.objects.filter(pk=old_search.pk).update(
+            created_at=timezone.now() - timedelta(days=40),
+        )
+        SearchQuery.objects.create(query='近期搜索', result_count=2)
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 7})
+        self.assertEqual(response.context['period_days'], 7)
+        self.assertEqual(response.context['metrics']['searches'], 1)
+        self.assertContains(response, '近期搜索')
+        self.assertNotContains(response, '旧搜索')
