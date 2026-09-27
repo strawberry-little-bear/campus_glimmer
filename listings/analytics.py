@@ -5,7 +5,7 @@ from django.db.models import Avg, Count, Max, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
-from .models import CampusLocation, Category, Item, Order, Report, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report, SearchQuery
 
 
 PERIOD_CHOICES = (
@@ -110,11 +110,50 @@ def build_operations_dashboard(days=30):
     search_period = SearchQuery.objects.filter(created_at__gte=start, created_at__lte=now)
     user_period = get_user_model().objects.filter(date_joined__gte=start, date_joined__lte=now)
     report_period = Report.objects.filter(created_at__gte=start, created_at__lte=now)
+    view_period = BrowsingHistory.objects.filter(last_viewed_at__gte=start, last_viewed_at__lte=now)
+    favorite_period = Favorite.objects.filter(created_at__gte=start, created_at__lte=now)
 
     order_count = order_period.count()
     completed_order_count = order_period.filter(status='completed').count()
     completion_rate = round(completed_order_count / order_count * 100, 1) if order_count else 0
     average_order_price = order_period.aggregate(value=Avg('agreed_price'))['value']
+    detail_view_count = view_period.count()
+    favorite_count = favorite_period.count()
+
+    def conversion_rate(current, previous):
+        return round(current / previous * 100, 1) if previous else 0
+
+    conversion_funnel = [
+        {
+            'key': 'views',
+            'label': '详情浏览',
+            'count': detail_view_count,
+            'rate': 100,
+            'note': '去重后的用户-商品浏览',
+        },
+        {
+            'key': 'favorites',
+            'label': '加入心愿单',
+            'count': favorite_count,
+            'rate': conversion_rate(favorite_count, detail_view_count),
+            'note': '从浏览到收藏',
+        },
+        {
+            'key': 'orders',
+            'label': '发起预约',
+            'count': order_count,
+            'rate': conversion_rate(order_count, favorite_count),
+            'note': '从收藏到预约',
+        },
+        {
+            'key': 'completed',
+            'label': '完成交易',
+            'count': completed_order_count,
+            'rate': conversion_rate(completed_order_count, order_count),
+            'note': '从预约到完成',
+        },
+    ]
+    funnel_max = max((stage['count'] for stage in conversion_funnel), default=1) or 1
     search_count = search_period.count()
     zero_result_search_count = search_period.filter(result_count=0).count()
 
@@ -188,6 +227,8 @@ def build_operations_dashboard(days=30):
         'metrics': {
             'active_items': Item.objects.filter(status='available').count(),
             'new_items': item_period.count(),
+            'detail_views': detail_view_count,
+            'favorites': favorite_count,
             'orders': order_count,
             'completed_orders': completed_order_count,
             'completion_rate': completion_rate,
@@ -201,6 +242,8 @@ def build_operations_dashboard(days=30):
         },
         'activity_trend': activity_trend,
         'trend_max': trend_max,
+        'conversion_funnel': conversion_funnel,
+        'funnel_max': funnel_max,
         'top_searches': top_searches,
         'zero_result_searches': zero_result_searches,
         'category_stats': category_stats,

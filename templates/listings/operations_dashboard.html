@@ -51,6 +51,26 @@
     </div>
 </div>
 
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Conversion funnel</span><h2>用户行为转化漏斗</h2></div>
+        <span class="ops-panel-hint">按当前统计周期计算</span>
+    </div>
+    <div class="conversion-funnel" aria-label="详情浏览到完成交易的转化漏斗">
+        {% for stage in conversion_funnel %}
+        <div class="conversion-stage conversion-stage-{{ stage.key }}">
+            <div class="conversion-stage-head">
+                <div class="conversion-stage-title"><span class="conversion-stage-index">0{{ forloop.counter }}</span><span><strong>{{ stage.label }}</strong><small>{{ stage.note }}</small></span></div>
+                <strong class="conversion-stage-count">{{ stage.count }}</strong>
+            </div>
+            <div class="conversion-track"><span style="width: {% widthratio stage.count funnel_max 100 %}%"></span></div>
+            <small class="conversion-stage-rate">{% if forloop.first %}起始样本{% else %}较上一步 {{ stage.rate }}%{% endif %}</small>
+        </div>
+        {% empty %}<p class="empty-inline mb-0">当前周期还没有足够的行为数据。</p>{% endfor %}
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>浏览和收藏使用用户-商品去重记录，转化率用于观察趋势，不代表单个用户的完整路径。</div>
+</section>
+
 <div class="row g-4 mb-4">
     <div class="col-xl-8">
         <section class="content-card ops-panel h-100">
@@ -80,7 +100,7 @@
     </div>
     <div class="col-xl-4">
         <section class="content-card ops-panel h-100">
-            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Order funnel</span><h2>交易状态</h2></div></div>
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Order status</span><h2>交易状态分布</h2></div></div>
             <div class="order-status-list">
                 {% for status in order_statuses %}
                 <div class="order-status-row"><span>{{ status.label }}</span><strong>{{ status.count }}</strong></div>

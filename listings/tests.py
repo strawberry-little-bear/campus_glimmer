@@ -357,6 +357,8 @@ class ListingFlowTests(TestCase):
         SearchQuery.objects.create(query='键盘', condition='9成新', result_count=3)
         SearchQuery.objects.create(query='键盘', result_count=0)
         SearchQuery.objects.create(query='台灯', result_count=1)
+        BrowsingHistory.objects.create(user=self.other_user, item=self.item)
+        Favorite.objects.create(user=self.other_user, item=self.item)
         Order.objects.create(
             item=second_item, buyer=self.other_user, seller=self.user,
             meeting_location=self.location, agreed_price='39.00', status='completed',
@@ -367,6 +369,8 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         metrics = response.context['metrics']
         self.assertEqual(metrics['new_items'], 2)
+        self.assertEqual(metrics['detail_views'], 1)
+        self.assertEqual(metrics['favorites'], 1)
         self.assertEqual(metrics['searches'], 3)
         self.assertEqual(metrics['zero_result_searches'], 1)
         self.assertEqual(metrics['orders'], 1)
@@ -374,6 +378,9 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.context['top_searches'][0]['query'], '键盘')
         self.assertEqual(response.context['category_stats'][0].new_count, 2)
         self.assertEqual(response.context['location_stats'][0].order_count, 1)
+        self.assertEqual(response.context['conversion_funnel'][1]['rate'], 100.0)
+        self.assertEqual(response.context['conversion_funnel'][2]['rate'], 100.0)
+        self.assertContains(response, '用户行为转化漏斗')
         self.assertContains(response, '图书馆东门')
 
     def test_operations_dashboard_respects_selected_period(self):
