@@ -38,3 +38,43 @@ class MessageNotificationTests(TestCase):
         self.assertTrue(PrivateMessage.objects.filter(sender=self.buyer, receiver=self.seller).exists())
         notice = Notification.objects.get(recipient=self.seller, kind='message_received')
         self.assertEqual(notice.actor, self.buyer)
+
+    def test_inbox_searches_messages_and_bulk_marks_unread_as_read(self):
+        PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller,
+            content='想了解台灯的电池续航', item=self.item,
+        )
+        PrivateMessage.objects.create(
+            sender=self.seller, receiver=self.buyer,
+            content='可以当面演示，周末方便吗？', item=self.item,
+        )
+        PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller,
+            content='这条消息用于其他关键词测试',
+        )
+
+        self.client.login(username='seller', password='safe-password-123')
+        response = self.client.get(reverse('inbox'), {'q': '续航'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '想了解台灯的电池续航')
+        self.assertEqual(response.context['received_messages'].count(), 1)
+        self.assertEqual(response.context['sent_messages'].count(), 0)
+        self.assertEqual(response.context['conversation_data'][0]['message_count'], 3)
+
+        response = self.client.post(reverse('mark_all_messages_read'))
+        self.assertRedirects(response, reverse('inbox'))
+        self.assertEqual(PrivateMessage.objects.filter(receiver=self.seller, is_read=False).count(), 0)
+
+    def test_inbox_uses_latest_message_in_both_directions(self):
+        PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller, content='先发的消息',
+        )
+        PrivateMessage.objects.create(
+            sender=self.seller, receiver=self.buyer, content='后发的回复',
+        )
+
+        self.client.login(username='seller', password='safe-password-123')
+        response = self.client.get(reverse('inbox'))
+        self.assertEqual(response.status_code, 200)
+        conversation = response.context['conversation_data'][0]
+        self.assertEqual(conversation['last_message'].content, '后发的回复')

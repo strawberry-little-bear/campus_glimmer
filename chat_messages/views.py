@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages as django_messages
 from django.contrib.auth.models import User
 from django.db.models import Q
+from django.utils import timezone
 from .models import Comment, PrivateMessage
 from .forms import CommentForm, PrivateMessageForm
 from listings.models import Item
@@ -37,46 +38,81 @@ def add_comment(request, item_id):
 
 @login_required
 def inbox(request):
-    # 获取收到和发出的消息
-    received_messages = PrivateMessage.objects.filter(receiver=request.user).order_by('-created_at')
-    sent_messages = PrivateMessage.objects.filter(sender=request.user).order_by('-created_at')
-    
-    # 获取与用户有过交流的所有用户
+    search_query = request.GET.get('q', '').strip()
+    received_messages = PrivateMessage.objects.filter(
+        receiver=request.user,
+    ).select_related('sender', 'item').order_by('-created_at')
+    sent_messages = PrivateMessage.objects.filter(
+        sender=request.user,
+    ).select_related('receiver', 'item').order_by('-created_at')
+
+    if search_query:
+        received_messages = received_messages.filter(
+            Q(content__icontains=search_query)
+            | Q(sender__username__icontains=search_query)
+            | Q(item__title__icontains=search_query)
+        )
+        sent_messages = sent_messages.filter(
+            Q(content__icontains=search_query)
+            | Q(receiver__username__icontains=search_query)
+            | Q(item__title__icontains=search_query)
+        )
+
     conversation_users = User.objects.filter(
         Q(sent_messages__receiver=request.user) | Q(received_messages__sender=request.user)
     ).distinct().exclude(id=request.user.id)
-    
-    # 为每个用户准备会话信息
+    if search_query:
+        conversation_users = conversation_users.filter(
+            Q(username__icontains=search_query)
+            | Q(sent_messages__receiver=request.user, sent_messages__content__icontains=search_query)
+            | Q(received_messages__sender=request.user, received_messages__content__icontains=search_query)
+            | Q(sent_messages__receiver=request.user, sent_messages__item__title__icontains=search_query)
+            | Q(received_messages__sender=request.user, received_messages__item__title__icontains=search_query)
+        ).distinct()
+
     conversation_data = []
     for user in conversation_users:
-        # 获取来自此用户的最后一条消息
-        last_message = PrivateMessage.objects.filter(
-            sender=user, 
-            receiver=request.user
-        ).order_by('-created_at').first()
-        
-        # 计算来自此用户的未读消息数量
-        unread_count = PrivateMessage.objects.filter(
-            sender=user, 
-            receiver=request.user, 
-            is_read=False
+        conversation_messages = PrivateMessage.objects.filter(
+            Q(sender=request.user, receiver=user)
+            | Q(sender=user, receiver=request.user)
+        ).select_related('sender', 'receiver', 'item')
+        last_message = conversation_messages.order_by('-created_at').first()
+        unread_count = conversation_messages.filter(
+            receiver=request.user,
+            is_read=False,
         ).count()
-        
-        # 汇总此用户的会话数据
-        user_data = {
+        conversation_data.append({
             'user': user,
             'last_message': last_message,
-            'unread_count': unread_count
-        }
-        
-        conversation_data.append(user_data)
-    
+            'unread_count': unread_count,
+            'message_count': conversation_messages.count(),
+        })
+
+    conversation_data.sort(
+        key=lambda data: data['last_message'].created_at if data['last_message'] else timezone.now(),
+        reverse=True,
+    )
     context = {
         'received_messages': received_messages,
         'sent_messages': sent_messages,
-        'conversation_data': conversation_data
+        'conversation_data': conversation_data,
+        'search_query': search_query,
     }
     return render(request, 'chat_messages/inbox.html', context)
+
+
+@login_required
+def mark_all_messages_read(request):
+    if request.method == 'POST':
+        updated_count = PrivateMessage.objects.filter(
+            receiver=request.user,
+            is_read=False,
+        ).update(is_read=True)
+        if updated_count:
+            django_messages.success(request, f'已将 {updated_count} 条私信标记为已读。')
+        else:
+            django_messages.info(request, '当前没有未读私信。')
+    return redirect('inbox')
 
 @login_required
 def send_message(request, receiver_id, item_id=None):

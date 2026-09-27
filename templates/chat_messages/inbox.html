@@ -3,12 +3,33 @@
 {% block title %}消息中心 - 拾光校园{% endblock %}
 
 {% block content %}
+<div class="message-center-toolbar mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">Message center</span>
+        <h1 class="mb-1">消息中心</h1>
+        <p class="text-muted mb-0">搜索历史私信，或一次性处理所有未读消息。</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <form method="get" class="message-search-form">
+            <i class="bi bi-search"></i>
+            <input type="search" name="q" value="{{ search_query }}" placeholder="搜索内容、用户或商品" aria-label="搜索私信">
+            <button type="submit" class="btn btn-sm btn-outline-success">搜索</button>
+        </form>
+        {% if unread_message_count %}
+        <form method="post" action="{% url 'mark_all_messages_read' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-all me-1"></i>全部已读（{{ unread_message_count }}）</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
 <div class="row">
     <!-- 左侧会话列表 -->
     <div class="col-md-4 mb-4">
         <div class="card shadow">
             <div class="card-header bg-success text-white">
-                <h5 class="mb-0">我的对话</h5>
+                <h5 class="mb-0">我的对话{% if conversation_data %} <small class="opacity-75">{{ conversation_data|length }}</small>{% endif %}</h5>
             </div>
             <div class="list-group list-group-flush">
                 {% for data in conversation_data %}
@@ -27,6 +48,7 @@
                             {% if data.last_message %}
                             {{ data.last_message.content|truncatechars:20 }}
                             {% endif %}
+                            {% if data.message_count %}<span class="ms-1">· {{ data.message_count }} 条</span>{% endif %}
                         </small>
                     </div>
                     {% if data.unread_count > 0 %}
@@ -45,7 +67,8 @@
     <!-- 右侧消息概览 -->
     <div class="col-md-8">
         <div class="card shadow">
-            <div class="card-header bg-light">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center gap-2">
+                <span class="small text-muted">{% if search_query %}“{{ search_query }}”的搜索结果{% else %}最近消息{% endif %}</span>
                 <ul class="nav nav-tabs card-header-tabs" id="messagesTabs" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active" id="received-tab" data-bs-toggle="tab" data-bs-target="#received" type="button" role="tab" aria-controls="received" aria-selected="true">收到的消息</button>
