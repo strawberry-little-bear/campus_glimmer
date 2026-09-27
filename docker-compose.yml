@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: "change-this-in-production"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
+      DJANGO_DB_PATH: "/app/data/db.sqlite3"
+      DJANGO_SECURE_SSL_REDIRECT: "0"
+    volumes:
+      - campus_data:/app/data
+      - campus_media:/app/media
+    restart: unless-stopped
+
+volumes:
+  campus_data:
+  campus_media:

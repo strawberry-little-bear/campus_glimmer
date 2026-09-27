@@ -42,6 +42,7 @@
 - 商品举报、重复举报拦截和管理员审核状态
 - 预约交易、订单详情和交易状态流转
 - 买卖双方可推进确认、当面交付、完成或取消交易
+- 基于收藏、历史交易、地点偏好和商品热度的可解释推荐
 
 ### 管理后台
 
@@ -164,8 +165,33 @@ python manage.py runserver
 | `DJANGO_SECRET_KEY` | Django 密钥，生产环境应替换 | 本地开发占位值 |
 | `DJANGO_DEBUG` | 是否开启调试模式 | `1` |
 | `DJANGO_ALLOWED_HOSTS` | 允许访问的域名，使用逗号分隔 | `127.0.0.1,localhost,testserver` |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | 反向代理或 HTTPS 场景下的可信来源 | 空 |
+| `DJANGO_DB_PATH` | SQLite 数据库文件路径 | `db.sqlite3` |
+| `DJANGO_SECURE_SSL_REDIRECT` | 是否强制跳转 HTTPS | `0` |
 
 生产环境还应配合正式数据库、静态文件服务、媒体文件存储、HTTPS 和安全的密钥管理方案。
+
+## Docker 部署
+
+项目提供了一个适合演示环境和小规模部署的 Docker 配置：
+
+```bash
+docker compose up --build
+```
+
+启动后访问 <http://127.0.0.1:8000/>，健康检查地址为 <http://127.0.0.1:8000/healthz/>。数据库和上传文件通过 Docker volume 持久化，容器重建不会自动丢失数据。
+
+`docker-compose.yml` 使用 SQLite 作为默认部署演示方案。若用于正式生产环境，建议将数据库替换为 PostgreSQL，并把媒体文件迁移到对象存储或独立文件服务。
+
+## 持续集成
+
+`.github/workflows/django.yml` 会在推送到 `main` 或创建 Pull Request 时自动执行：
+
+- Django 系统检查
+- 数据库迁移检查
+- 自动化测试
+
+这样可以在合并代码前尽早发现配置、迁移和回归问题。
 
 ## 开发检查
 

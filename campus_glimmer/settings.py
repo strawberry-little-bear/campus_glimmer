@@ -6,6 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-local-development-only-change-me')
 DEBUG = os.getenv('DJANGO_DEBUG', '1').lower() in {'1', 'true', 'yes'}
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',') if host.strip()]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -52,7 +53,7 @@ WSGI_APPLICATION = 'campus_glimmer.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.getenv('DJANGO_DB_PATH', str(BASE_DIR / 'db.sqlite3')),
     }
 }
 
@@ -77,3 +78,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 LOGIN_REDIRECT_URL = 'home'
 LOGIN_URL = 'login'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# 反向代理 / HTTPS 部署时可通过环境变量开启这些安全选项。
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = os.getenv('DJANGO_SECURE_SSL_REDIRECT', '0').lower() in {'1', 'true', 'yes'}
+SESSION_COOKIE_SECURE = os.getenv('DJANGO_SESSION_COOKIE_SECURE', '0').lower() in {'1', 'true', 'yes'}
+CSRF_COOKIE_SECURE = os.getenv('DJANGO_CSRF_COOKIE_SECURE', '0').lower() in {'1', 'true', 'yes'}

@@ -95,4 +95,8 @@ class ListingFlowTests(TestCase):
         self.assertEqual(recommendations[0].item, matching_item)
         self.assertNotIn(self.item, [recommendation.item for recommendation in recommendations])
         self.assertTrue(recommendations[0].reason)
+    def test_health_check_returns_service_status(self):
+        response = self.client.get(reverse('health_check'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'ok')
 
