@@ -14,6 +14,7 @@ urlpatterns = [
     path('item/<int:item_id>/favorite/', views.toggle_favorite, name='toggle_favorite'),
     path('favorites/', views.favorite_list, name='favorite_list'),
     path('orders/', views.my_orders, name='my_orders'),
+    path('history/', views.browsing_history, name='browsing_history'),
     path('order/<int:order_id>/', views.order_detail, name='order_detail'),
     path('order/<int:order_id>/status/', views.update_order_status, name='update_order_status'),
     path('my_items/', views.my_items, name='my_items'),

@@ -5,7 +5,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.db.models import Count
 from django.utils import timezone
 
-from .models import Favorite, Item, Order
+from .models import BrowsingHistory, Favorite, Item, Order
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,11 @@ class RecommendationService:
         self.category_ids.update(favorite_items.values_list('item__category_id', flat=True))
         self.location_ids.update(
             favorite_items.exclude(item__location_id=None).values_list('item__location_id', flat=True)
+        )
+        viewed_items = BrowsingHistory.objects.filter(user=self.user).select_related('item')
+        self.category_ids.update(viewed_items.values_list('item__category_id', flat=True))
+        self.location_ids.update(
+            viewed_items.exclude(item__location_id=None).values_list('item__location_id', flat=True)
         )
         completed_orders = Order.objects.filter(
             buyer=self.user,

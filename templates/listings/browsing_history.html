@@ -1,0 +1,6 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">留下你的探索轨迹</span><h1>最近浏览</h1><p>上次看到一半的商品，可以从这里继续了解。</p></div><a href="{% url 'item_list' %}" class="btn btn-outline-primary"><i class="bi bi-compass me-2"></i>继续发现</a></div>
+<div class="row g-4">{% for record in history %}<div class="col-sm-6 col-xl-3"><div class="history-card"><div class="history-card-meta"><span><i class="bi bi-clock-history me-1"></i>{{ record.last_viewed_at|date:'m月d日 H:i' }}</span><span>看过 {{ record.view_count }} 次</span></div>{% include 'listings/_item_card.html' with item=record.item %}</div></div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-clock-history display-6 d-block mb-3"></i><h3>还没有浏览记录</h3><p>登录后浏览商品，之后可以从这里快速找回。</p><a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a></div></div>{% endfor %}</div>
+{% endblock %}

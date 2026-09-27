@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import CampusLocation, Category, Favorite, Item, ItemImage, Order, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Order, Report
 
 
 class ItemImageInline(admin.TabularInline):
@@ -62,3 +62,12 @@ class OrderAdmin(admin.ModelAdmin):
     search_fields = ('item__title', 'buyer__username', 'seller__username')
     autocomplete_fields = ('item', 'buyer', 'seller', 'meeting_location')
     readonly_fields = ('agreed_price', 'created_at', 'updated_at')
+
+
+@admin.register(BrowsingHistory)
+class BrowsingHistoryAdmin(admin.ModelAdmin):
+    list_display = ('user', 'item', 'view_count', 'first_viewed_at', 'last_viewed_at')
+    list_filter = ('last_viewed_at',)
+    search_fields = ('user__username', 'item__title')
+    autocomplete_fields = ('user', 'item')
+    readonly_fields = ('first_viewed_at', 'last_viewed_at')

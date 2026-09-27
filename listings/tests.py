@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CampusLocation, Category, Favorite, Item, Order, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report
 from .recommendations import get_recommendations
 
 
@@ -99,4 +99,13 @@ class ListingFlowTests(TestCase):
         response = self.client.get(reverse('health_check'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()['status'], 'ok')
+    def test_logged_in_item_view_creates_browsing_history(self):
+        self.client.login(username='bob', password='safe-password-123')
+        detail_url = reverse('item_detail', args=[self.item.id])
+        self.client.get(detail_url)
+        self.client.get(detail_url)
+        record = BrowsingHistory.objects.get(user=self.other_user, item=self.item)
+        self.assertEqual(record.view_count, 2)
+        response = self.client.get(reverse('browsing_history'))
+        self.assertContains(response, '便携键盘')
 

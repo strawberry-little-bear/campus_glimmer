@@ -165,3 +165,25 @@ class Order(models.Model):
 
     def __str__(self):
         return f'{self.item.title} · {self.get_status_display()}'
+
+
+class BrowsingHistory(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='browsing_history', verbose_name='用户')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='view_history', verbose_name='商品')
+    view_count = models.PositiveIntegerField('浏览次数', default=1)
+    first_viewed_at = models.DateTimeField('首次浏览时间', auto_now_add=True)
+    last_viewed_at = models.DateTimeField('最近浏览时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '浏览记录'
+        verbose_name_plural = '浏览记录'
+        ordering = ['-last_viewed_at']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'item'], name='unique_user_browsing_item'),
+        ]
+        indexes = [
+            models.Index(fields=['user', '-last_viewed_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username}浏览了{self.item.title}'

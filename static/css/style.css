@@ -156,3 +156,5 @@ a { color: inherit; text-decoration: none; }
 .order-list-card small { margin-top: 5px; color: #73847d; }
 .recommendation-wrap { position: relative; padding-top: 20px; }
 .recommendation-reason { position: absolute; top: 0; left: 14px; z-index: 2; padding: 5px 9px; color: #2a7054; background: #e7f5ec; border-radius: 999px; font-size: .72rem; font-weight: 700; }
+.history-card { position: relative; padding-top: 20px; }
+.history-card-meta { position: absolute; top: 0; left: 14px; right: 14px; z-index: 2; display: flex; justify-content: space-between; gap: 8px; color: #7c8b84; font-size: .72rem; }

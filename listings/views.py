@@ -4,12 +4,14 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import ItemForm, ItemImageFormSet, OrderForm, ReportForm
-from .models import CampusLocation, Category, Favorite, Item, Order, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report
 from .recommendations import get_recommendations
 
 
@@ -77,6 +79,13 @@ def item_detail(request, item_id):
         Item.objects.select_related('category', 'seller', 'location').prefetch_related('images', 'comments__author__profile'),
         id=item_id,
     )
+    if request.user.is_authenticated and request.user != item.seller:
+        history, created = BrowsingHistory.objects.get_or_create(user=request.user, item=item)
+        if not created:
+            BrowsingHistory.objects.filter(pk=history.pk).update(
+                view_count=F('view_count') + 1,
+                last_viewed_at=timezone.now(),
+            )
     related_items = Item.objects.filter(category=item.category, status='available').exclude(id=item.id).select_related('seller', 'location').prefetch_related('images')[:4]
     context = {
         'item': item,
@@ -294,6 +303,12 @@ def mark_sold(request, item_id):
             messages.success(request, f'商品状态已更新为{item.get_status_display()}。')
         return redirect('item_detail', item_id=item.id)
     return render(request, 'listings/mark_sold.html', {'item': item})
+
+
+@login_required
+def browsing_history(request):
+    history = BrowsingHistory.objects.filter(user=request.user).select_related('item__category', 'item__seller', 'item__location').prefetch_related('item__images')[:30]
+    return render(request, 'listings/browsing_history.html', {'history': history, 'title': '最近浏览'})
 
 
 @login_required
