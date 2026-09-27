@@ -829,6 +829,7 @@ def operations_dashboard_export(request):
         ('zero_result_rate', '无结果占比（%）'),
         ('new_users', '新增用户'),
         ('active_users', '周期活跃用户'),
+        ('retention_rate', '上一周期新用户回访率（%）'),
         ('new_reports', '新增举报'),
         ('pending_reports', '待处理举报'),
     )
@@ -849,6 +850,16 @@ def operations_dashboard_export(request):
     writer.writerow(['活跃用户分层', '人数', '占活跃用户（%）', '识别口径'])
     for row in dashboard['activity_segments']:
         writer.writerow([row['label'], row['count'], row['share'], row['note']])
+
+    writer.writerow([])
+    writer.writerow(['用户回访', '人数', '比例（%）', '口径说明'])
+    writer.writerow([
+        '上一周期新用户', dashboard['user_retention']['cohort_size'], '', '上一周期内注册的新用户',
+    ])
+    writer.writerow([
+        '回访用户', dashboard['user_retention']['retained_users'],
+        dashboard['user_retention']['rate'], dashboard['user_retention']['note'],
+    ])
 
     writer.writerow([])
     writer.writerow(['转化漏斗', '数量', '相对上一步转化率（%）', '口径说明'])

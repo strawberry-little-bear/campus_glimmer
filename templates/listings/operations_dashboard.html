@@ -105,6 +105,18 @@
 
 <section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Cohort retention</span><h2>用户回访率</h2></div>
+        <span class="ops-panel-hint">上一周期新用户 → 当前周期</span>
+    </div>
+    <div class="ops-retention-grid">
+        <div class="ops-retention-stat"><span>上一周期新用户</span><strong>{{ user_retention.cohort_size }}</strong><small>作为本次回访样本</small></div>
+        <div class="ops-retention-stat"><span>回访用户</span><strong>{{ user_retention.retained_users }}</strong><small>产生至少一次结构化行为</small></div>
+        <div class="ops-retention-stat ops-retention-highlight"><span>回访率</span><strong>{{ user_retention.rate }}%</strong><small>{{ user_retention.note }}</small></div>
+    </div>
+</section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Conversion funnel</span><h2>用户行为转化漏斗</h2></div>
         <span class="ops-panel-hint">按当前统计周期计算</span>
     </div>

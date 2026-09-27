@@ -5,6 +5,7 @@ from django.db.models import Avg, Count, Max, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
+from chat_messages.models import PrivateMessage
 
 from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report, SearchQuery
 
@@ -181,6 +182,62 @@ def _build_user_activity_segments(start, end):
     return active_user_count, segments
 
 
+
+def _build_user_retention(start, previous_start, end):
+    """Measure how many users from the previous new-user cohort returned this period."""
+    user_model = get_user_model()
+    cohort_ids = set(user_model.objects.filter(
+        date_joined__gte=previous_start,
+        date_joined__lt=start,
+    ).values_list('id', flat=True))
+    if not cohort_ids:
+        return {
+            'cohort_size': 0,
+            'retained_users': 0,
+            'rate': 0,
+            'note': '上一周期没有足够的新用户样本',
+        }
+
+    active_ids = set()
+    active_ids.update(Item.objects.filter(
+        seller_id__in=cohort_ids, created_at__gte=start, created_at__lte=end,
+    ).values_list('seller_id', flat=True))
+    active_ids.update(SearchQuery.objects.filter(
+        user_id__in=cohort_ids, created_at__gte=start, created_at__lte=end,
+    ).values_list('user_id', flat=True))
+    active_ids.update(BrowsingHistory.objects.filter(
+        user_id__in=cohort_ids, last_viewed_at__gte=start, last_viewed_at__lte=end,
+    ).values_list('user_id', flat=True))
+    active_ids.update(Favorite.objects.filter(
+        user_id__in=cohort_ids, created_at__gte=start, created_at__lte=end,
+    ).values_list('user_id', flat=True))
+    active_ids.update(Order.objects.filter(
+        Q(buyer_id__in=cohort_ids) | Q(seller_id__in=cohort_ids),
+        created_at__gte=start, created_at__lte=end,
+    ).values_list('buyer_id', flat=True))
+    active_ids.update(Order.objects.filter(
+        Q(buyer_id__in=cohort_ids) | Q(seller_id__in=cohort_ids),
+        created_at__gte=start, created_at__lte=end,
+    ).values_list('seller_id', flat=True))
+    active_ids.update(Report.objects.filter(
+        reporter_id__in=cohort_ids, created_at__gte=start, created_at__lte=end,
+    ).values_list('reporter_id', flat=True))
+    active_ids.update(PrivateMessage.objects.filter(
+        sender_id__in=cohort_ids, created_at__gte=start, created_at__lte=end,
+    ).values_list('sender_id', flat=True))
+    active_ids.update(PrivateMessage.objects.filter(
+        receiver_id__in=cohort_ids, created_at__gte=start, created_at__lte=end,
+    ).values_list('receiver_id', flat=True))
+
+    retained_users = len(cohort_ids & active_ids)
+    return {
+        'cohort_size': len(cohort_ids),
+        'retained_users': retained_users,
+        'rate': round(retained_users / len(cohort_ids) * 100, 1),
+        'note': '上一周期新用户在当前周期产生至少一次结构化行为',
+    }
+
+
 def build_operations_dashboard(days=30):
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
@@ -314,6 +371,7 @@ def build_operations_dashboard(days=30):
     ]
 
     active_user_count, activity_segments = _build_user_activity_segments(start, now)
+    user_retention = _build_user_retention(start, previous_start, now)
 
     current_comparison_values = {
         'new_items': item_period.count(),
@@ -380,6 +438,7 @@ def build_operations_dashboard(days=30):
         'previous_period_end': start - timedelta(days=1),
         'period_comparisons': period_comparisons,
         'activity_segments': activity_segments,
+        'user_retention': user_retention,
         'metrics': {
             'active_items': Item.objects.filter(status='available').count(),
             'new_items': item_period.count(),
@@ -394,6 +453,7 @@ def build_operations_dashboard(days=30):
             'zero_result_rate': round(zero_result_search_count / search_count * 100, 1) if search_count else 0,
             'new_users': user_period.count(),
             'active_users': active_user_count,
+            'retention_rate': user_retention['rate'],
             'new_reports': report_period.count(),
             'pending_reports': Report.objects.filter(status__in=['pending', 'reviewing']).count(),
         },

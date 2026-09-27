@@ -533,6 +533,23 @@ class ListingFlowTests(TestCase):
         self.assertEqual(segments['light']['count'], 2)
         self.assertContains(response, '活跃用户分层')
 
+    def test_operations_dashboard_reports_previous_new_user_retention(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        cohort_user = User.objects.create_user(username='cohort-user', password='safe-password-123')
+        cohort_time = timezone.now() - timedelta(days=10)
+        User.objects.filter(pk=cohort_user.pk).update(date_joined=cohort_time)
+        SearchQuery.objects.create(user=cohort_user, query='回访搜索', result_count=1)
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 7})
+        self.assertEqual(response.status_code, 200)
+        retention = response.context['user_retention']
+        self.assertEqual(retention['cohort_size'], 1)
+        self.assertEqual(retention['retained_users'], 1)
+        self.assertEqual(retention['rate'], 100.0)
+        self.assertContains(response, '用户回访率')
+
     def test_operations_dashboard_export_includes_activity_segments(self):
         self.user.is_staff = True
         self.user.save(update_fields=['is_staff'])
@@ -544,6 +561,7 @@ class ListingFlowTests(TestCase):
         self.assertIn('周期活跃用户,1', report)
         self.assertIn('活跃用户分层,人数,占活跃用户（%）,识别口径', report)
         self.assertIn('供给贡献者,0,0.0,周期内发布了多件商品', report)
+        self.assertIn('用户回访,人数,比例（%）,口径说明', report)
 
     def test_operations_dashboard_export_includes_period_comparison(self):
         self.user.is_staff = True
