@@ -22,7 +22,7 @@
 <section class="content-card notification-panel">
     <div class="notification-toolbar">
         <div>
-            <strong>{{ notification_total }}</strong> 条通知
+            <strong>{{ notification_total }}</strong>{% if notification_total != notification_total_all %} / {{ notification_total_all }}{% endif %} 条通知
             {% if unread_notification_count %}
             <span class="notification-unread-summary">{{ unread_notification_count }} 条未读</span>
             {% else %}
@@ -31,6 +31,21 @@
         </div>
         <a class="text-decoration-none small" href="{% url 'inbox' %}"><i class="bi bi-chat-dots me-1"></i>查看私信</a>
     </div>
+
+    <form method="get" class="notification-filter-bar">
+        <div class="notification-search"><i class="bi bi-search"></i><input type="search" name="q" value="{{ notification_search_query }}" placeholder="搜索通知标题、内容或商品" aria-label="搜索通知"></div>
+        <select class="form-select form-select-sm" name="kind" aria-label="通知类型">
+            <option value="">全部类型</option>
+            {% for option in notification_kind_options %}<option value="{{ option.value }}" {% if notification_kind_filter == option.value %}selected{% endif %}>{{ option.label }}（{{ option.count }}）</option>{% endfor %}
+        </select>
+        <select class="form-select form-select-sm" name="status" aria-label="通知状态">
+            {% for value, label in notification_status_options %}<option value="{{ value }}" {% if notification_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-funnel me-1"></i>筛选</button>
+        {% if notification_search_query or notification_kind_filter or notification_status_filter != 'all' %}<a class="btn btn-light btn-sm" href="{% url 'notification_list' %}">重置</a>{% endif %}
+    </form>
+
+    <div class="notification-filter-summary"><i class="bi bi-sliders me-1"></i>当前结果中有 {{ notification_filtered_unread_count }} 条未读{% if notification_total != notification_total_all %} · 已应用筛选条件{% endif %}</div>
 
     <div class="notification-list">
         {% for notification in notifications %}
@@ -75,9 +90,9 @@
     {% if notifications.has_other_pages %}
     <nav class="mt-4" aria-label="通知分页">
         <ul class="pagination justify-content-center mb-0">
-            {% if notifications.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ notifications.previous_page_number }}">上一页</a></li>{% endif %}
+            {% if notifications.has_previous %}<li class="page-item"><a class="page-link" href="?{% if notification_filter_query %}{{ notification_filter_query }}&{% endif %}page={{ notifications.previous_page_number }}">上一页</a></li>{% endif %}
             <li class="page-item active"><span class="page-link">{{ notifications.number }} / {{ notifications.paginator.num_pages }}</span></li>
-            {% if notifications.has_next %}<li class="page-item"><a class="page-link" href="?page={{ notifications.next_page_number }}">下一页</a></li>{% endif %}
+            {% if notifications.has_next %}<li class="page-item"><a class="page-link" href="?{% if notification_filter_query %}{{ notification_filter_query }}&{% endif %}page={{ notifications.next_page_number }}">下一页</a></li>{% endif %}
         </ul>
     </nav>
     {% endif %}

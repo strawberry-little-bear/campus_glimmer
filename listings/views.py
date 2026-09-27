@@ -860,15 +860,61 @@ def delete_saved_search(request, saved_search_id):
 
 @login_required
 def notification_list(request):
-    notifications = Notification.objects.filter(
-        recipient=request.user,
-    ).select_related('actor', 'item', 'order__item')
+    status_filter = request.GET.get('status', 'all').strip()
+    if status_filter not in {'all', 'unread', 'read'}:
+        status_filter = 'all'
+    kind_filter = request.GET.get('kind', '').strip()
+    allowed_kinds = {value for value, _ in Notification.KIND_CHOICES}
+    if kind_filter not in allowed_kinds:
+        kind_filter = ''
+    search_query = request.GET.get('q', '').strip()[:120]
+
+    all_notifications = Notification.objects.filter(recipient=request.user)
+    notifications = all_notifications
+    if status_filter == 'unread':
+        notifications = notifications.filter(is_read=False)
+    elif status_filter == 'read':
+        notifications = notifications.filter(is_read=True)
+    if kind_filter:
+        notifications = notifications.filter(kind=kind_filter)
+    if search_query:
+        notifications = notifications.filter(
+            Q(title__icontains=search_query)
+            | Q(message__icontains=search_query)
+            | Q(item__title__icontains=search_query)
+            | Q(order__item__title__icontains=search_query)
+        )
+
+    notifications = notifications.select_related('actor', 'item', 'order__item')
     paginator = Paginator(notifications, 20)
     page = paginator.get_page(request.GET.get('page'))
+
+    kind_counts = dict(
+        all_notifications.values('kind').annotate(count=Count('id')).values_list('kind', 'count')
+    )
+    notification_kind_options = [
+        {'value': value, 'label': label, 'count': kind_counts.get(value, 0)}
+        for value, label in Notification.KIND_CHOICES
+    ]
+    notification_status_options = (
+        ('all', '全部状态'),
+        ('unread', '仅看未读'),
+        ('read', '仅看已读'),
+    )
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
     return render(request, 'listings/notifications.html', {
         'notifications': page,
         'notification_page': page,
         'notification_total': paginator.count,
+        'notification_total_all': all_notifications.count(),
+        'notification_filtered_unread_count': notifications.filter(is_read=False).count(),
+        'notification_kind_options': notification_kind_options,
+        'notification_status_options': notification_status_options,
+        'notification_status_filter': status_filter,
+        'notification_kind_filter': kind_filter,
+        'notification_search_query': search_query,
+        'notification_filter_query': filter_params.urlencode(),
     })
 
 

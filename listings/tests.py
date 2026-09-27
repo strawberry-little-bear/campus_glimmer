@@ -246,6 +246,16 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '商品收到新的留言')
         self.assertContains(response, '2 条未读')
 
+        filtered = self.client.get(reverse('notification_list'), {'kind': 'comment_received', 'status': 'unread'})
+        self.assertEqual(filtered.status_code, 200)
+        self.assertEqual(filtered.context['notification_total'], 1)
+        self.assertContains(filtered, '商品收到新的留言')
+        self.assertEqual(filtered.context['notifications'][0].id, one.id)
+
+        searched = self.client.get(reverse('notification_list'), {'q': '留言'})
+        self.assertEqual(searched.context['notification_total'], 1)
+        self.assertContains(searched, '已应用筛选条件')
+
         response = self.client.post(
             reverse('mark_notification_read', args=[one.id]),
             {'next': reverse('notification_list')},
@@ -256,6 +266,24 @@ class ListingFlowTests(TestCase):
         self.client.post(reverse('mark_all_notifications_read'))
         self.assertFalse(Notification.objects.filter(recipient=self.user, is_read=False).exists())
 
+    def test_notification_filters_keep_query_when_paginating(self):
+        Notification.objects.bulk_create([
+            Notification(
+                recipient=self.user,
+                kind='comment_received',
+                title=f'留言提醒 {index}',
+                message='分页测试通知',
+            )
+            for index in range(21)
+        ])
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('notification_list'), {
+            'kind': 'comment_received', 'status': 'unread',
+        })
+        self.assertEqual(response.context['notification_total'], 21)
+        self.assertEqual(response.context['notifications'].paginator.num_pages, 2)
+        self.assertContains(response, 'kind=comment_received')
+        self.assertContains(response, 'status=unread')
 
     def test_search_matches_category_location_and_condition(self):
         response = self.client.get(reverse('item_list'), {'q': '东校区'})
