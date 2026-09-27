@@ -23,13 +23,41 @@
     <div class="notification-toolbar">
         <div>
             <strong>{{ notification_total }}</strong>{% if notification_total != notification_total_all %} / {{ notification_total_all }}{% endif %} 条通知
-            {% if unread_notification_count %}
-            <span class="notification-unread-summary">{{ unread_notification_count }} 条未读</span>
+            {% if notification_unread_total %}
+            <span class="notification-unread-summary">{{ notification_unread_total }} 条未读</span>
             {% else %}
             <span class="text-muted">全部已读</span>
             {% endif %}
         </div>
         <span class="d-flex flex-wrap gap-3"><a class="text-decoration-none small" href="{% url 'notification_preferences' %}"><i class="bi bi-sliders2 me-1"></i>通知偏好</a><a class="text-decoration-none small" href="{% url 'inbox' %}"><i class="bi bi-chat-dots me-1"></i>查看私信</a></span>
+    </div>
+
+    <div class="notification-insight-grid" aria-label="通知概览">
+        <div class="notification-insight-card">
+            <span class="notification-insight-icon"><i class="bi bi-inbox"></i></span>
+            <span><small>全部通知</small><strong>{{ notification_total_all }}</strong></span>
+        </div>
+        <div class="notification-insight-card is-highlighted">
+            <span class="notification-insight-icon"><i class="bi bi-bell"></i></span>
+            <span><small>待处理未读</small><strong>{{ notification_unread_total }}</strong></span>
+        </div>
+        <div class="notification-insight-card">
+            <span class="notification-insight-icon"><i class="bi bi-funnel"></i></span>
+            <span><small>当前筛选未读</small><strong>{{ notification_filtered_unread_count }}</strong></span>
+        </div>
+    </div>
+
+    <div class="notification-kind-summary" aria-label="通知类型未读分布">
+        <div class="notification-kind-summary-heading"><strong>类型未读分布</strong><span>了解哪类事项最需要及时回应</span></div>
+        <div class="notification-kind-summary-list">
+            {% for option in notification_kind_options %}
+            <div class="notification-kind-chip {% if option.unread_count %}has-unread{% endif %}">
+                <span>{{ option.label }}</span>
+                <strong>{{ option.unread_count }}</strong>
+                <small>/ {{ option.count }}</small>
+            </div>
+            {% endfor %}
+        </div>
     </div>
 
     <form method="get" class="notification-filter-bar">

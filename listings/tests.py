@@ -288,6 +288,12 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '商品收到新的留言')
         self.assertContains(response, '2 条未读')
+        self.assertEqual(response.context['notification_unread_total'], 2)
+        kind_options = {
+            option['value']: option for option in response.context['notification_kind_options']
+        }
+        self.assertEqual(kind_options['comment_received']['unread_count'], 1)
+        self.assertEqual(kind_options['order_status']['unread_count'], 1)
 
         filtered = self.client.get(reverse('notification_list'), {'kind': 'comment_received', 'status': 'unread'})
         self.assertEqual(filtered.status_code, 200)

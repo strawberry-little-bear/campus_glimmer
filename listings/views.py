@@ -1005,8 +1005,19 @@ def notification_list(request):
     kind_counts = dict(
         all_notifications.values('kind').annotate(count=Count('id')).values_list('kind', 'count')
     )
+    unread_kind_counts = dict(
+        all_notifications.filter(is_read=False)
+        .values('kind')
+        .annotate(count=Count('id'))
+        .values_list('kind', 'count')
+    )
     notification_kind_options = [
-        {'value': value, 'label': label, 'count': kind_counts.get(value, 0)}
+        {
+            'value': value,
+            'label': label,
+            'count': kind_counts.get(value, 0),
+            'unread_count': unread_kind_counts.get(value, 0),
+        }
         for value, label in Notification.KIND_CHOICES
     ]
     notification_status_options = (
@@ -1014,13 +1025,16 @@ def notification_list(request):
         ('unread', '仅看未读'),
         ('read', '仅看已读'),
     )
+    notification_total_all = all_notifications.count()
+    notification_unread_total = all_notifications.filter(is_read=False).count()
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
     return render(request, 'listings/notifications.html', {
         'notifications': page,
         'notification_page': page,
         'notification_total': paginator.count,
-        'notification_total_all': all_notifications.count(),
+        'notification_total_all': notification_total_all,
+        'notification_unread_total': notification_unread_total,
         'notification_filtered_unread_count': notifications.filter(is_read=False).count(),
         'notification_kind_options': notification_kind_options,
         'notification_status_options': notification_status_options,
