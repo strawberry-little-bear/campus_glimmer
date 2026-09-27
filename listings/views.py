@@ -918,6 +918,73 @@ def search_insights(request):
 
 
 @login_required
+def search_insights_export(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    try:
+        period_days = int(request.GET.get('days', 30))
+    except (TypeError, ValueError):
+        period_days = 30
+    dashboard = build_search_insights(period_days, request.GET.get('q', ''))
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = (
+        f"attachment; filename=campus-glimmer-search-insights-{dashboard['period_days']}d.csv"
+    )
+    response.write('\ufeff')
+    writer = csv.writer(response)
+    writer.writerow(['拾光校园搜索需求洞察导出'])
+    writer.writerow(['统计周期', f"最近 {dashboard['period_days']} 天"])
+    writer.writerow(['数据范围', f"{dashboard['period_start']:%Y-%m-%d} 至 {dashboard['period_end']:%Y-%m-%d}"])
+    writer.writerow(['搜索词筛选', dashboard['query_filter'] or '全部搜索词'])
+
+    writer.writerow([])
+    writer.writerow(['核心指标', '数值'])
+    writer.writerow(['搜索次数', dashboard['metrics']['searches']])
+    writer.writerow(['搜索词数量', dashboard['metrics']['unique_terms']])
+    writer.writerow(['无结果搜索', dashboard['metrics']['zero_result_searches']])
+    writer.writerow(['无结果占比（%）', dashboard['metrics']['zero_result_rate']])
+
+    writer.writerow([])
+    writer.writerow(['搜索词分析', '搜索次数', '无结果次数', '无结果占比（%）', '平均结果数', '独立用户数', '最近搜索时间'])
+    for row in dashboard['term_rows']:
+        writer.writerow([
+            row['query'], row['search_count'], row['zero_result_count'], row['zero_result_rate'],
+            row['average_results'], row['unique_users'], row['last_searched'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['高需求缺口', '搜索次数', '无结果次数', '无结果占比（%）', '运营建议'])
+    for row in dashboard['insights']:
+        writer.writerow([row['query'], row['search_count'], row['zero_result_count'], row['zero_result_rate'], row['message']])
+
+    writer.writerow([])
+    writer.writerow(['搜索时段趋势', '时段', '搜索次数', '无结果次数', '无结果占比（%）'])
+    for row in dashboard['search_rhythm']['hourly']:
+        writer.writerow([row['label'], row['hour'], row['count'], row['zero_result_count'], row['zero_result_rate']])
+
+    writer.writerow([])
+    writer.writerow(['星期分布', '星期', '搜索次数', '无结果次数'])
+    for row in dashboard['search_rhythm']['weekdays']:
+        writer.writerow([row['label'], row['weekday'], row['count'], row['zero_result_count']])
+
+    comparison = dashboard['period_comparison']
+    writer.writerow([])
+    writer.writerow(['周期对比', '当前周期', '上一周期', '变化'])
+    writer.writerow(['搜索次数', comparison['current_searches'], comparison['previous_searches'], comparison['search_change']['change_display']])
+    writer.writerow(['无结果占比（%）', comparison['current_zero_result_rate'], comparison['previous_zero_result_rate'], comparison['zero_result_rate_change_display']])
+    writer.writerow([])
+    writer.writerow(['上升搜索词', '上一周期', '当前周期', '变化'])
+    for row in comparison['rising_terms']:
+        writer.writerow([row['query'], row['previous_count'], row['current_count'], f"+{row['delta']}"])
+    writer.writerow([])
+    writer.writerow(['下降搜索词', '上一周期', '当前周期', '变化'])
+    for row in comparison['falling_terms']:
+        writer.writerow([row['query'], row['previous_count'], row['current_count'], row['delta']])
+    return response
+
+
+@login_required
 def save_search(request):
     if request.method != 'POST':
         return redirect('item_list')

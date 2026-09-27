@@ -924,6 +924,29 @@ class ListingFlowTests(TestCase):
         self.assertEqual(rising['键盘'], 1)
         self.assertEqual(falling['书籍'], -2)
 
+        filtered_comparison = build_search_insights(30, '台灯')['period_comparison']
+        self.assertEqual(filtered_comparison['current_searches'], 3)
+        self.assertEqual(filtered_comparison['previous_searches'], 1)
+        self.assertEqual([row['query'] for row in filtered_comparison['falling_terms']], [])
+
+    def test_staff_can_export_filtered_search_insights(self):
+        SearchQuery.objects.create(user=self.other_user, query='台灯', result_count=0)
+        SearchQuery.objects.create(user=self.other_user, query='键盘', result_count=3)
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.login(username='alice', password='safe-password-123')
+
+        response = self.client.get(reverse('search_insights_export'), {'days': 7, 'q': '台灯'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertIn('attachment; filename=campus-glimmer-search-insights-7d.csv', response['Content-Disposition'])
+        report = response.content.decode('utf-8-sig')
+        self.assertIn('拾光校园搜索需求洞察导出', report)
+        self.assertIn('搜索词筛选,台灯', report)
+        self.assertIn('台灯,1,1,100.0', report)
+        self.assertNotIn('键盘,1,0', report)
+
     def test_search_insights_is_staff_only(self):
         self.client.login(username='bob', password='safe-password-123')
         response = self.client.get(reverse('search_insights'))

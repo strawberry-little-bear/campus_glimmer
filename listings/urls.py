@@ -26,6 +26,7 @@ urlpatterns = [
     path('operations/', views.operations_dashboard, name='operations_dashboard'),
     path('operations/export/', views.operations_dashboard_export, name='operations_dashboard_export'),
     path('operations/search-insights/', views.search_insights, name='search_insights'),
+    path('operations/search-insights/export/', views.search_insights_export, name='search_insights_export'),
     path('reports/', views.report_list, name='report_list'),
     path('reports/<int:report_id>/review/', views.review_report, name='review_report'),
     path('disputes/', views.dispute_list, name='dispute_list'),

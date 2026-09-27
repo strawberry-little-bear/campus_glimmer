@@ -170,6 +170,12 @@ def build_search_insights(days=30, query=''):
     query = (query or '').strip()[:120]
     if query:
         search_period = search_period.filter(query__icontains=query)
+    previous_search_period = SearchQuery.objects.filter(
+        created_at__gte=start - timedelta(days=days),
+        created_at__lt=start,
+    )
+    if query:
+        previous_search_period = previous_search_period.filter(query__icontains=query)
 
     term_rows = list(
         search_period.values('query').annotate(
@@ -210,7 +216,7 @@ def build_search_insights(days=30, query=''):
         'search_rhythm': _build_search_rhythm(search_period),
         'period_comparison': _build_search_period_comparison(
             search_period,
-            SearchQuery.objects.filter(created_at__gte=start - timedelta(days=days), created_at__lt=start),
+            previous_search_period,
         ),
         'period_start': start,
         'period_end': now,

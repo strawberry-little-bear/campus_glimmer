@@ -9,7 +9,10 @@
         <h1>搜索需求洞察</h1>
         <p>从真实搜索记录里找出热门需求和供给缺口，为补货、分类调整与运营活动提供依据。</p>
     </div>
-    <a href="{% url 'operations_dashboard' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>返回运营看板</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="{% url 'search_insights_export' %}?days={{ period_days }}{% if query_filter %}&amp;q={{ query_filter|urlencode }}{% endif %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download me-1"></i>导出 CSV</a>
+        <a href="{% url 'operations_dashboard' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>返回运营看板</a>
+    </div>
 </div>
 
 <div class="content-card search-insights-toolbar mb-4">
