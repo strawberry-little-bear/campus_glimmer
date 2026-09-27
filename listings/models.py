@@ -383,6 +383,52 @@ class Notification(models.Model):
         return f'{self.recipient.username} · {self.title}'
 
 
+class NotificationPreference(models.Model):
+    """Per-user switches for the notification channels created by the app."""
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='notification_preference', verbose_name='用户',
+    )
+    order_created = models.BooleanField(
+        '新的交易预约', default=True, help_text='有人预约你的商品时提醒。',
+    )
+    order_status = models.BooleanField(
+        '订单状态更新', default=True, help_text='订单状态推进、取消或完成时提醒。',
+    )
+    rating_received = models.BooleanField(
+        '收到交易评价', default=True, help_text='交易对方完成评价时提醒。',
+    )
+    message_received = models.BooleanField(
+        '收到新私信', default=True, help_text='收到新的私信时提醒。',
+    )
+    comment_received = models.BooleanField(
+        '收到商品留言', default=True, help_text='有人在你的商品下留言时提醒。',
+    )
+    saved_search_match = models.BooleanField(
+        '关注的搜索有新商品', default=True, help_text='关注的搜索匹配到新商品时提醒。',
+    )
+    order_dispute = models.BooleanField(
+        '交易争议更新', default=True, help_text='交易争议状态发生变化时提醒。',
+    )
+    order_expiring = models.BooleanField(
+        '交易预约即将超时', default=True, help_text='交易预约接近确认截止时间时提醒。',
+    )
+    order_expired = models.BooleanField(
+        '交易预约已超时', default=True, help_text='交易预约因超时被释放时提醒。',
+    )
+    report_update = models.BooleanField(
+        '举报处理更新', default=True, help_text='你提交的举报有处理进展时提醒。',
+    )
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '通知偏好'
+        verbose_name_plural = '通知偏好'
+
+    def __str__(self):
+        return f'{self.user.username} · 通知偏好'
+
+
 class SearchQuery(models.Model):
     user = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}通知偏好 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-heading notification-heading">
+    <div>
+        <span class="eyebrow">把提醒调成适合你的节奏</span>
+        <h1 class="mt-2">通知偏好</h1>
+        <p class="text-muted mb-0">默认全部开启。关闭某类提醒后，新的站内通知不会再写入通知中心，历史记录不受影响。</p>
+    </div>
+    <a href="{% url 'notification_list' %}" class="btn btn-outline-primary"><i class="bi bi-bell me-1"></i>返回通知中心</a>
+</div>
+
+<section class="content-card notification-preference-panel">
+    <div class="notification-preference-summary">
+        <div class="notification-preference-summary-icon"><i class="bi bi-sliders2"></i></div>
+        <div>
+            <strong>当前已开启 {{ enabled_notification_count }} / {{ notification_kind_count }} 类提醒</strong>
+            <p>交易进展、互动消息和运营反馈可以分别管理，之后也能随时恢复。</p>
+        </div>
+    </div>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="notification-preference-list">
+            {% for field in form.visible_fields %}
+            <label class="notification-preference-row" for="{{ field.id_for_label }}">
+                <span class="notification-preference-copy">
+                    <strong>{{ field.label }}</strong>
+                    <small>{{ field.help_text }}</small>
+                    {% for error in field.errors %}<em>{{ error }}</em>{% endfor %}
+                </span>
+                <span class="notification-switch">
+                    {{ field }}
+                    <span class="notification-switch-track" aria-hidden="true"><span></span></span>
+                </span>
+            </label>
+            {% endfor %}
+        </div>
+        <div class="notification-preference-actions">
+            <a href="{% url 'notification_list' %}" class="btn btn-light">取消</a>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>保存设置</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

@@ -29,7 +29,7 @@
             <span class="text-muted">全部已读</span>
             {% endif %}
         </div>
-        <a class="text-decoration-none small" href="{% url 'inbox' %}"><i class="bi bi-chat-dots me-1"></i>查看私信</a>
+        <span class="d-flex flex-wrap gap-3"><a class="text-decoration-none small" href="{% url 'notification_preferences' %}"><i class="bi bi-sliders2 me-1"></i>通知偏好</a><a class="text-decoration-none small" href="{% url 'inbox' %}"><i class="bi bi-chat-dots me-1"></i>查看私信</a></span>
     </div>
 
     <form method="get" class="notification-filter-bar">

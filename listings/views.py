@@ -14,8 +14,8 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
-from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .saved_searches import notify_saved_search_matches
@@ -915,6 +915,27 @@ def notification_list(request):
         'notification_kind_filter': kind_filter,
         'notification_search_query': search_query,
         'notification_filter_query': filter_params.urlencode(),
+    })
+
+
+@login_required
+def notification_preferences(request):
+    preference, _ = NotificationPreference.objects.get_or_create(user=request.user)
+    if request.method == 'POST':
+        form = NotificationPreferenceForm(request.POST, instance=preference)
+        if form.is_valid():
+            form.save()
+            messages.success(request, '通知偏好已保存，之后可以随时调整。')
+            return redirect('notification_preferences')
+    else:
+        form = NotificationPreferenceForm(instance=preference)
+    return render(request, 'listings/notification_preferences.html', {
+        'form': form,
+        'enabled_notification_count': sum(
+            bool(getattr(preference, field_name))
+            for field_name in form.fields
+        ),
+        'notification_kind_count': len(form.fields),
     })
 
 

@@ -1,11 +1,26 @@
 from django import forms
-from .models import CampusLocation, Category, Item, ItemImage, Order, OrderDispute, Rating, Report, SavedSearch
+from .models import CampusLocation, Category, Item, ItemImage, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
     def _style_fields(self):
         for field in self.fields.values():
             field.widget.attrs.setdefault('class', 'form-control')
+
+
+class NotificationPreferenceForm(forms.ModelForm):
+    class Meta:
+        model = NotificationPreference
+        fields = [
+            'order_created', 'order_status', 'rating_received', 'message_received',
+            'comment_received', 'saved_search_match', 'order_dispute', 'order_expiring',
+            'order_expired', 'report_update',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget = forms.CheckboxInput(attrs={'class': 'form-check-input'})
 
 
 class ItemForm(StyledModelFormMixin, forms.ModelForm):

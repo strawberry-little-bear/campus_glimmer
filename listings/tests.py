@@ -5,10 +5,11 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .analytics import build_search_insights
 from .order_maintenance import process_order_timeouts
 from .recommendations import get_recommendations
+from .notifications import create_notification
 
 
 class ListingFlowTests(TestCase):
@@ -231,6 +232,48 @@ class ListingFlowTests(TestCase):
         self.assertEqual(notice.actor, self.other_user)
         self.assertIn('5星', notice.message)
 
+    def test_notification_preferences_default_to_enabled_and_can_suppress_kind(self):
+        self.assertFalse(NotificationPreference.objects.filter(user=self.user).exists())
+        created = create_notification(
+            self.user,
+            kind='comment_received',
+            title='商品收到新的留言',
+            message='有人留言了。',
+        )
+        self.assertIsNotNone(created)
+        preference = NotificationPreference.objects.get(user=self.user)
+        preference.comment_received = False
+        preference.save(update_fields=['comment_received', 'updated_at'])
+        suppressed = create_notification(
+            self.user,
+            kind='comment_received',
+            title='第二条留言',
+            message='这条不应写入通知中心。',
+        )
+        self.assertIsNone(suppressed)
+        self.assertEqual(Notification.objects.filter(recipient=self.user, kind='comment_received').count(), 1)
+
+    def test_notification_preferences_page_saves_only_current_user_settings(self):
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('notification_preferences'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '通知偏好')
+        preference = NotificationPreference.objects.get(user=self.user)
+        form_data = {field: 'on' for field in (
+            'order_created', 'order_status', 'rating_received', 'message_received',
+            'comment_received', 'saved_search_match', 'order_dispute', 'order_expiring',
+            'order_expired', 'report_update',
+        ) if field != 'message_received'}
+        response = self.client.post(reverse('notification_preferences'), form_data)
+        self.assertRedirects(response, reverse('notification_preferences'))
+        preference.refresh_from_db()
+        self.assertFalse(preference.message_received)
+        self.assertTrue(preference.comment_received)
+        self.assertFalse(NotificationPreference.objects.filter(user=self.other_user).exists())
+
+    def test_notification_preferences_require_login(self):
+        response = self.client.get(reverse('notification_preferences'))
+        self.assertRedirects(response, f'{reverse("login")}?next={reverse("notification_preferences")}')
     def test_notification_center_can_mark_one_or_all_as_read(self):
         one = Notification.objects.create(
             recipient=self.user, kind='comment_received', title='商品收到新的留言',

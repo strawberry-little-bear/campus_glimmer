@@ -48,7 +48,7 @@
                             <span>{{ user.username }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="bi bi-person me-2"></i>个人资料</a></li>
+                            <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="bi bi-person me-2"></i>个人资料</a></li><li><a class="dropdown-item" href="{% url 'notification_preferences' %}"><i class="bi bi-sliders2 me-2"></i>通知偏好</a></li>
                             <li><a class="dropdown-item" href="{% url 'my_items' %}"><i class="bi bi-box-seam me-2"></i>我的商品</a></li><li><a class="dropdown-item" href="{% url 'my_orders' %}"><i class="bi bi-receipt me-2"></i>我的交易</a></li><li><a class="dropdown-item" href="{% url 'browsing_history' %}"><i class="bi bi-clock-history me-2"></i>最近浏览</a></li>
                             <li><a class="dropdown-item" href="{% url 'favorite_list' %}"><i class="bi bi-heart me-2"></i>我的心愿单</a></li>
                             <li><hr class="dropdown-divider"></li>
