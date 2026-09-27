@@ -10,6 +10,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import ItemForm, ItemImageFormSet, OrderForm, ReportForm
 from .models import CampusLocation, Category, Favorite, Item, Order, Report
+from .recommendations import get_recommendations
 
 
 def _favorite_ids(request):
@@ -26,6 +27,7 @@ def home(request):
         'categories': categories,
         'locations': locations,
         'recent_items': recent_items,
+        'recommendations': get_recommendations(request.user, limit=8),
         'favorite_ids': _favorite_ids(request),
         'stats': {
             'items': Item.objects.filter(status='available').count(),

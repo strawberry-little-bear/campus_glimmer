@@ -154,3 +154,5 @@ a { color: inherit; text-decoration: none; }
 .order-list-icon { width: 42px; height: 42px; flex: 0 0 auto; }
 .order-list-card strong, .order-list-card small { display: block; }
 .order-list-card small { margin-top: 5px; color: #73847d; }
+.recommendation-wrap { position: relative; padding-top: 20px; }
+.recommendation-reason { position: absolute; top: 0; left: 14px; z-index: 2; padding: 5px 9px; color: #2a7054; background: #e7f5ec; border-radius: 999px; font-size: .72rem; font-weight: 700; }

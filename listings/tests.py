@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import CampusLocation, Category, Favorite, Item, Order, Report
+from .recommendations import get_recommendations
 
 
 class ListingFlowTests(TestCase):
@@ -79,4 +80,19 @@ class ListingFlowTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(order.status, 'completed')
         self.assertEqual(self.item.status, 'sold')
+    def test_recommendations_prioritize_matching_category_and_location(self):
+        books = Category.objects.create(name='书籍', description='教材资料')
+        matching_item = Item.objects.create(
+            title='高等数学教材', description='教材', price='45.00', category=self.category,
+            location=self.location, condition='9成新', seller=self.other_user,
+        )
+        unrelated_item = Item.objects.create(
+            title='考研资料', description='资料', price='30.00', category=books,
+            condition='8成新', seller=self.other_user,
+        )
+        Favorite.objects.create(user=self.user, item=self.item)
+        recommendations = get_recommendations(self.user, limit=2)
+        self.assertEqual(recommendations[0].item, matching_item)
+        self.assertNotIn(self.item, [recommendation.item for recommendation in recommendations])
+        self.assertTrue(recommendations[0].reason)
 
