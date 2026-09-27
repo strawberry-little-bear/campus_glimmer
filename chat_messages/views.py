@@ -1,5 +1,6 @@
 # chat_messages/views.py (原messages/views.py)
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages as django_messages
 from django.contrib.auth.models import User
@@ -7,6 +8,7 @@ from django.db.models import Q
 from .models import Comment, PrivateMessage
 from .forms import CommentForm, PrivateMessageForm
 from listings.models import Item
+from listings.notifications import create_notification
 
 @login_required
 def add_comment(request, item_id):
@@ -19,6 +21,13 @@ def add_comment(request, item_id):
             comment.item = item
             comment.author = request.user
             comment.save()
+            if item.seller != request.user:
+                create_notification(
+                    item.seller, actor=request.user, kind='comment_received',
+                    title='商品收到新的留言',
+                    message=f'{request.user.username}评论了你的商品“{item.title}”。',
+                    item=item, target_url=reverse('item_detail', args=[item.id]),
+                )
             django_messages.success(request, '评论已发布！')
             return redirect('item_detail', item_id=item.id)
     else:
@@ -82,6 +91,12 @@ def send_message(request, receiver_id, item_id=None):
             message.receiver = receiver
             message.item = item
             message.save()
+            create_notification(
+                receiver, actor=request.user, kind='message_received',
+                title='收到新的私信',
+                message=f'{request.user.username}给你发来了一条新消息。',
+                item=item, target_url=reverse('conversation', args=[request.user.id]),
+            )
             django_messages.success(request, '消息已发送！')
             
             if item:
@@ -122,6 +137,12 @@ def conversation(request, user_id):
             message.sender = request.user
             message.receiver = other_user
             message.save()
+            create_notification(
+                other_user, actor=request.user, kind='message_received',
+                title='收到新的私信',
+                message=f'{request.user.username}给你发来了一条新消息。',
+                target_url=reverse('conversation', args=[request.user.id]),
+            )
             django_messages.success(request, '消息已发送！')
             return redirect('conversation', user_id=other_user.id)
     else:

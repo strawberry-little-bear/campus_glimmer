@@ -238,3 +238,39 @@ class Rating(models.Model):
 
     def __str__(self):
         return f'{self.rater.username}评价{self.ratee.username} · {self.score}星'
+
+
+class Notification(models.Model):
+    KIND_CHOICES = (
+        ('order_created', '新的交易预约'),
+        ('order_status', '订单状态更新'),
+        ('rating_received', '收到交易评价'),
+        ('message_received', '收到新私信'),
+        ('comment_received', '收到商品留言'),
+    )
+
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
+    actor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='triggered_notifications', verbose_name='触发人',
+    )
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications', verbose_name='相关订单')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications', verbose_name='相关商品')
+    kind = models.CharField('通知类型', max_length=30, choices=KIND_CHOICES)
+    title = models.CharField('通知标题', max_length=120)
+    message = models.CharField('通知内容', max_length=255)
+    target_url = models.CharField('跳转地址', max_length=255, blank=True)
+    is_read = models.BooleanField('已读', default=False)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '站内通知'
+        verbose_name_plural = '站内通知'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', 'is_read', '-created_at']),
+            models.Index(fields=['recipient', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.recipient.username} · {self.title}'

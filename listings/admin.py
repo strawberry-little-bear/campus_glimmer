@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Order, OrderEvent, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, ItemImage, Notification, Order, OrderEvent, Rating, Report
 
 
 class ItemImageInline(admin.TabularInline):
@@ -94,4 +94,13 @@ class OrderEventAdmin(admin.ModelAdmin):
     list_filter = ('to_status', 'created_at')
     search_fields = ('order__item__title', 'actor__username', 'note')
     autocomplete_fields = ('order', 'actor')
+    readonly_fields = ('created_at',)
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ('recipient', 'kind', 'title', 'is_read', 'actor', 'created_at')
+    list_filter = ('kind', 'is_read', 'created_at')
+    search_fields = ('recipient__username', 'actor__username', 'title', 'message')
+    autocomplete_fields = ('recipient', 'actor', 'order', 'item')
     readonly_fields = ('created_at',)

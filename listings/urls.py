@@ -20,4 +20,7 @@ urlpatterns = [
     path('order/<int:order_id>/rate/', views.rate_order, name='rate_order'),
     path('my_items/', views.my_items, name='my_items'),
     path('search/', views.search_items, name='search_items'),
+    path('notifications/', views.notification_list, name='notification_list'),
+    path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
+    path('notifications/read-all/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
 ]

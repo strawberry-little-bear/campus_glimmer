@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}通知中心 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-heading notification-heading">
+    <div>
+        <span class="eyebrow">及时回应每一次互动</span>
+        <h1 class="mt-2">通知中心</h1>
+        <p class="text-muted mb-0">交易进展、留言、私信和评价都会在这里留下记录。</p>
+    </div>
+    {% if unread_notification_count %}
+    <form method="post" action="{% url 'mark_all_notifications_read' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-primary">
+            <i class="bi bi-check2-all me-1"></i>全部标记为已读
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+<section class="content-card notification-panel">
+    <div class="notification-toolbar">
+        <div>
+            <strong>{{ notification_total }}</strong> 条通知
+            {% if unread_notification_count %}
+            <span class="notification-unread-summary">{{ unread_notification_count }} 条未读</span>
+            {% else %}
+            <span class="text-muted">全部已读</span>
+            {% endif %}
+        </div>
+        <a class="text-decoration-none small" href="{% url 'inbox' %}"><i class="bi bi-chat-dots me-1"></i>查看私信</a>
+    </div>
+
+    <div class="notification-list">
+        {% for notification in notifications %}
+        <form method="post" action="{% url 'mark_notification_read' notification.id %}" class="notification-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% if notification.target_url %}{{ notification.target_url }}{% else %}{% url 'notification_list' %}{% endif %}">
+            <button type="submit" class="notification-card {% if not notification.is_read %}is-unread{% endif %}">
+                <span class="notification-icon notification-icon-{{ notification.kind }}">
+                    {% if notification.kind == 'order_created' %}<i class="bi bi-bag-plus"></i>
+                    {% elif notification.kind == 'order_status' %}<i class="bi bi-arrow-repeat"></i>
+                    {% elif notification.kind == 'rating_received' %}<i class="bi bi-star"></i>
+                    {% elif notification.kind == 'message_received' %}<i class="bi bi-chat-dots"></i>
+                    {% else %}<i class="bi bi-chat-square-text"></i>{% endif %}
+                </span>
+                <span class="notification-body">
+                    <span class="notification-title-row">
+                        <strong>{{ notification.title }}</strong>
+                        <time datetime="{{ notification.created_at|date:'c' }}">{{ notification.created_at|date:'Y-m-d H:i' }}</time>
+                    </span>
+                    <span class="notification-message">{{ notification.message }}</span>
+                    {% if notification.item %}<span class="notification-context"><i class="bi bi-box-seam me-1"></i>{{ notification.item.title }}</span>{% elif notification.order %}<span class="notification-context"><i class="bi bi-receipt me-1"></i>{{ notification.order.item.title }}</span>{% endif %}
+                </span>
+                {% if not notification.is_read %}<span class="notification-dot" aria-label="未读"></span>{% endif %}
+                <i class="bi bi-chevron-right notification-arrow" aria-hidden="true"></i>
+            </button>
+        </form>
+        {% empty %}
+        <div class="empty-state notification-empty">
+            <i class="bi bi-bell-slash"></i>
+            <h2>暂时没有通知</h2>
+            <p>当有人预约商品、给你留言或推进订单时，提醒会出现在这里。</p>
+            <a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if notifications.has_other_pages %}
+    <nav class="mt-4" aria-label="通知分页">
+        <ul class="pagination justify-content-center mb-0">
+            {% if notifications.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ notifications.previous_page_number }}">上一页</a></li>{% endif %}
+            <li class="page-item active"><span class="page-link">{{ notifications.number }} / {{ notifications.paginator.num_pages }}</span></li>
+            {% if notifications.has_next %}<li class="page-item"><a class="page-link" href="?page={{ notifications.next_page_number }}">下一页</a></li>{% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}

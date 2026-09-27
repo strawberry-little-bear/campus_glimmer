@@ -6,12 +6,14 @@ from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .forms import ItemForm, ItemImageFormSet, OrderForm, RatingForm, ReportForm
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, OrderEvent, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report
 from .recommendations import get_recommendations
+from .notifications import create_notification
 
 
 def _favorite_ids(request):
@@ -171,6 +173,13 @@ def create_order(request, item_id):
                         order=order, actor=request.user, to_status=order.status,
                         note='买家发起交易预约',
                     )
+                    create_notification(
+                        order.seller, actor=request.user, kind='order_created',
+                        title='收到新的交易预约',
+                        message=f'{request.user.username}预约了你的商品“{order.item.title}”。',
+                        order=order, item=order.item,
+                        target_url=reverse('order_detail', args=[order.id]),
+                    )
                     locked_item.status = 'reserved'
                     locked_item.save(update_fields=['status', 'updated_at'])
             except IntegrityError:
@@ -231,6 +240,13 @@ def rate_order(request, order_id):
             except IntegrityError:
                 messages.info(request, '你已经评价过这笔交易。')
             else:
+                create_notification(
+                    ratee, actor=request.user, kind='rating_received',
+                    title='收到新的交易评价',
+                    message=f'{request.user.username}给你留下了{rating.score}星评价。',
+                    order=order, item=order.item,
+                    target_url=reverse('item_detail', args=[order.item.id]),
+                )
                 messages.success(request, '评价已提交，感谢你的真实反馈。')
             return redirect('order_detail', order_id=order.id)
     else:
@@ -276,6 +292,14 @@ def update_order_status(request, order_id):
                 from_status=previous_status,
                 to_status=target_status,
                 note=event_notes.get(target_status, '订单状态已更新'),
+            )
+            other_party = order.buyer if request.user == order.seller else order.seller
+            create_notification(
+                other_party, actor=request.user, kind='order_status',
+                title='订单状态有更新',
+                message=f'商品“{order.item.title}”的订单已更新为“{order.get_status_display()}”。',
+                order=order, item=order.item,
+                target_url=reverse('order_detail', args=[order.id]),
             )
             if target_status == 'cancelled':
                 order.item.status = 'available'
@@ -392,3 +416,49 @@ def my_items(request):
 def search_items(request):
     query = request.GET.get('q', '').strip()
     return redirect(f'/listings/?{urlencode({"q": query})}') if query else redirect('item_list')
+
+
+@login_required
+def notification_list(request):
+    notifications = Notification.objects.filter(
+        recipient=request.user,
+    ).select_related('actor', 'item', 'order__item')
+    paginator = Paginator(notifications, 20)
+    page = paginator.get_page(request.GET.get('page'))
+    return render(request, 'listings/notifications.html', {
+        'notifications': page,
+        'notification_page': page,
+        'notification_total': paginator.count,
+    })
+
+
+@login_required
+def mark_notification_read(request, notification_id):
+    notification = get_object_or_404(
+        Notification,
+        id=notification_id,
+        recipient=request.user,
+    )
+    if request.method == 'POST' and not notification.is_read:
+        notification.is_read = True
+        notification.save(update_fields=['is_read'])
+
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('notification_list')
+    return redirect(next_url)
+
+
+@login_required
+def mark_all_notifications_read(request):
+    if request.method == 'POST':
+        Notification.objects.filter(
+            recipient=request.user,
+            is_read=False,
+        ).update(is_read=True)
+        messages.success(request, '所有通知已标记为已读。')
+    return redirect('notification_list')

@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, OrderEvent, Rating, Report
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Rating, Report
 from .recommendations import get_recommendations
 
 
@@ -184,4 +184,64 @@ class ListingFlowTests(TestCase):
         response = self.client.get(reverse('order_detail', args=[order.id]))
         self.assertContains(response, '买家发起交易预约')
         self.assertContains(response, '双方确认交易已完成')
+
+    def test_new_order_notifies_seller_and_status_change_notifies_buyer(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '周三晚课后见面'},
+        )
+        order = Order.objects.get(item=self.item)
+        seller_notice = Notification.objects.get(
+            recipient=self.user, kind='order_created', order=order,
+        )
+        self.assertEqual(seller_notice.actor, self.other_user)
+        self.assertFalse(seller_notice.is_read)
+
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        buyer_notice = Notification.objects.get(
+            recipient=self.other_user, kind='order_status', order=order,
+        )
+        self.assertIn('卖家已确认', buyer_notice.message)
+
+    def test_rating_notifies_the_rated_user(self):
+        order = self._complete_order()
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('rate_order', args=[order.id]),
+            {'score': 5, 'comment': '交付顺利'},
+        )
+        notice = Notification.objects.get(
+            recipient=self.user, kind='rating_received', order=order,
+        )
+        self.assertEqual(notice.actor, self.other_user)
+        self.assertIn('5星', notice.message)
+
+    def test_notification_center_can_mark_one_or_all_as_read(self):
+        one = Notification.objects.create(
+            recipient=self.user, kind='comment_received', title='商品收到新的留言',
+            message='bob评论了你的商品。', target_url=reverse('item_detail', args=[self.item.id]),
+        )
+        Notification.objects.create(
+            recipient=self.user, kind='order_status', title='订单状态更新',
+            message='订单已确认。',
+        )
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('notification_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '商品收到新的留言')
+        self.assertContains(response, '2 条未读')
+
+        response = self.client.post(
+            reverse('mark_notification_read', args=[one.id]),
+            {'next': reverse('notification_list')},
+        )
+        self.assertRedirects(response, reverse('notification_list'))
+        one.refresh_from_db()
+        self.assertTrue(one.is_read)
+        self.client.post(reverse('mark_all_notifications_read'))
+        self.assertFalse(Notification.objects.filter(recipient=self.user, is_read=False).exists())
 

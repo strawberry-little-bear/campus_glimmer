@@ -39,7 +39,8 @@
                 <ul class="navbar-nav align-items-lg-center gap-lg-1">
                     {% if user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link nav-icon-link" href="{% url 'favorite_list' %}" title="我的心愿单"><i class="bi bi-heart"></i><span class="d-lg-none ms-2">心愿单</span></a></li>
-                    <li class="nav-item"><a class="nav-link nav-icon-link" href="{% url 'inbox' %}" title="消息中心"><i class="bi bi-chat-dots"></i><span class="d-lg-none ms-2">消息中心</span></a></li>
+                    <li class="nav-item"><a class="nav-link nav-icon-link nav-badge-link" href="{% url 'inbox' %}" title="消息中心"><i class="bi bi-chat-dots"></i>{% if unread_message_count %}<span class="nav-unread-badge">{{ unread_message_count }}</span>{% endif %}<span class="d-lg-none ms-2">消息中心{% if unread_message_count %}（{{ unread_message_count }}）{% endif %}</span></a></li>
+                    <li class="nav-item"><a class="nav-link nav-icon-link nav-badge-link" href="{% url 'notification_list' %}" title="通知中心"><i class="bi bi-bell"></i>{% if unread_notification_count %}<span class="nav-unread-badge">{{ unread_notification_count }}</span>{% endif %}<span class="d-lg-none ms-2">通知中心{% if unread_notification_count %}（{{ unread_notification_count }}）{% endif %}</span></a></li>
                     <li class="nav-item dropdown">
                         <a class="nav-link user-menu dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <img src="{{ user.profile.avatar.url }}" alt="{{ user.username }}">
