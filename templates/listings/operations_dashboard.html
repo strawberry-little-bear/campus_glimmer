@@ -326,5 +326,33 @@
     </div>
 </div>
 
+<section class="content-card ops-panel mb-4 campus-pulse-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Campus pulse</span><h2>校园供需热力</h2></div>
+        <span class="ops-panel-hint">按配置地点聚合，不使用实时定位</span>
+    </div>
+    <div class="campus-pulse-summary">
+        <div><span>活跃地点</span><strong>{{ campus_pulse.summary.location_count }}</strong></div>
+        <div><span>当前在售</span><strong>{{ campus_pulse.summary.available_supply }}</strong></div>
+        <div><span>有效求购</span><strong>{{ campus_pulse.summary.active_demands }}</strong></div>
+        <div class="campus-pulse-warning"><span>需求紧张地点</span><strong>{{ campus_pulse.summary.high_pressure_count }}</strong></div>
+    </div>
+    {% if campus_pulse.rows %}
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0"><thead><tr><th>校园地点</th><th>供给</th><th>需求</th><th>预约</th><th>供需状态</th><th>活跃度</th></tr></thead><tbody>
+        {% for row in campus_pulse.rows %}
+        <tr>
+            <td><strong>{{ row.name }}</strong>{% if row.building %}<small class="d-block text-muted">{{ row.building }}</small>{% endif %}</td>
+            <td><strong>{{ row.available_supply }}</strong><small class="d-block text-muted">周期新增 {{ row.new_supply }}</small></td>
+            <td><strong>{{ row.active_demands }}</strong><small class="d-block text-muted">有效求购</small></td>
+            <td>{{ row.period_orders }}<small class="d-block text-muted">完成 {{ row.completed_orders }}</small></td>
+            <td><span class="campus-pressure campus-pressure-{{ row.pressure }}">{{ row.pressure_label }}</span></td>
+            <td class="campus-heat-cell"><div class="campus-heat-track"><span style="width: {{ row.heat_percent }}%;"></span></div><small>{{ row.heat_percent }}%</small></td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有地点供需数据。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>“需求紧张”表示有效求购相对于当前在售供给偏多，热力值综合周期新增、求购和预约，仅用于运营补给判断。</div>
+</section>
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

@@ -8,6 +8,7 @@ from django.utils import timezone
 from chat_messages.models import PrivateMessage
 
 from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DemandResponse, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
+from .campus_pulse import build_campus_pulse
 
 
 PERIOD_CHOICES = (
@@ -1121,6 +1122,7 @@ def build_operations_dashboard(days=30):
         'demand_response_acceptance_demand_rate': demand_match_insights['response_acceptance_demand_rate'],
     }
     operational_alerts = build_operational_alerts(metrics, period_comparisons)
+    campus_pulse = build_campus_pulse(days=days, now=now)
 
 
     return {
@@ -1145,6 +1147,7 @@ def build_operations_dashboard(days=30):
         'search_quality': search_quality,
         'category_stats': category_stats,
         'location_stats': location_stats,
+        'campus_pulse': campus_pulse,
         'order_statuses': order_statuses,
         'notification_insights': notification_insights,
         'demand_match_insights': demand_match_insights,
