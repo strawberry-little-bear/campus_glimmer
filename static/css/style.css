@@ -771,3 +771,5 @@ a { color: inherit; text-decoration: none; }
 
 .campus-verified-badge { display: inline-flex; align-items: center; gap: 3px; padding: 3px 7px; border-radius: 999px; color: #317853; background: #eaf8ee; font-size: .68rem; font-weight: 700; white-space: nowrap; vertical-align: middle; }.campus-verified-badge i { color: #4d9d6d; }
 .campus-verification-page h1 { color: #315746; }.verification-success { display: flex; align-items: flex-start; gap: 13px; padding: 16px; border: 1px solid #cfe8d6; border-radius: 14px; color: #397653; background: #f0fbf3; }.verification-success > i { font-size: 1.8rem; color: #5baa73; }.verification-success p { color: #5b7665; }.campus-verification-card p { color: #60746a; font-size: .82rem; }
+
+.dispute-evidence-form { padding-top: 14px; border-top: 1px dashed #dce9df; }.dispute-evidence-list .list-group-item { border-color: #edf2ee; }.dispute-evidence-list a { color: #3e815d; font-size: .8rem; font-weight: 600; text-decoration: none; }.dispute-evidence-list a:hover { text-decoration: underline; }.dispute-evidence-list small { display: block; margin-top: 3px; font-size: .68rem; }

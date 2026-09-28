@@ -1,14 +1,16 @@
 from datetime import datetime, time, timedelta
 
 from datetime import timedelta
+from pathlib import Path
 
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -1339,6 +1341,86 @@ class ListingFlowTests(TestCase):
         self.assertEqual(dispute.status, 'resolved')
         self.assertEqual(dispute.reviewer, self.user)
         self.assertTrue(Notification.objects.filter(recipient=self.other_user, kind='order_dispute').exists())
+
+    def test_dispute_participants_can_add_and_download_evidence(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '需要核对商品'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('open_dispute', args=[order.id]), {
+            'reason': 'mismatch', 'detail': '收到的商品与描述不一致。',
+        })
+        dispute = OrderDispute.objects.get(order=order)
+        upload = SimpleUploadedFile('condition.jpg', b'fake-image-bytes', content_type='image/jpeg')
+
+        response = self.client.post(
+            reverse('add_dispute_evidence', args=[dispute.id]),
+            {'attachment': upload, 'note': '商品表面划痕的现场照片。'},
+        )
+
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        evidence = OrderDisputeEvidence.objects.get(dispute=dispute)
+        self.assertEqual(evidence.uploaded_by, self.other_user)
+        self.assertTrue(evidence.attachment.name.startswith('dispute_evidence/'))
+        self.assertTrue(OrderEvent.objects.filter(order=order, note='补充了交易争议证据').exists())
+        self.assertTrue(
+            Notification.objects.filter(recipient=self.user, kind='order_dispute').exists(),
+        )
+
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        download = self.client.get(reverse('download_dispute_evidence', args=[evidence.id]))
+
+        self.assertEqual(download.status_code, 200)
+        self.assertIn(
+            f'filename="{Path(evidence.attachment.name).name}"',
+            download['Content-Disposition'],
+        )
+        self.assertEqual(b''.join(download.streaming_content), b'fake-image-bytes')
+
+        intruder = User.objects.create_user(username='charlie', password='safe-password-123')
+        self.client.logout()
+        self.client.login(username=intruder.username, password='safe-password-123')
+        self.assertEqual(
+            self.client.get(reverse('download_dispute_evidence', args=[evidence.id])).status_code,
+            403,
+        )
+
+    def test_dispute_evidence_rejects_unsupported_files(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '需要核对商品'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('open_dispute', args=[order.id]), {
+            'reason': 'safety', 'detail': '需要平台核实交付过程。',
+        })
+        dispute = OrderDispute.objects.get(order=order)
+        upload = SimpleUploadedFile('script.exe', b'not-allowed', content_type='application/octet-stream')
+
+        response = self.client.post(
+            reverse('add_dispute_evidence', args=[dispute.id]),
+            {'attachment': upload},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(OrderDisputeEvidence.objects.filter(dispute=dispute).exists())
+        self.assertContains(response, '证据未保存')
+
 
     def test_recommendation_feedback_closes_the_personalization_loop(self):
         second_item = Item.objects.create(

@@ -4,7 +4,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
+from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -287,6 +287,27 @@ class DisputeForm(StyledModelFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._style_fields()
         self.fields['reason'].widget.attrs['class'] = 'form-select'
+
+
+class DisputeEvidenceForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = OrderDisputeEvidence
+        fields = ['attachment', 'note']
+        widgets = {
+            'attachment': forms.ClearableFileInput(attrs={
+                'accept': '.jpg,.jpeg,.png,.webp,.pdf',
+            }),
+            'note': forms.TextInput(attrs={
+                'placeholder': '例如：交付现场照片、商品瑕疵截图或沟通记录。',
+            }),
+        }
+        help_texts = {
+            'attachment': '支持 JPG、PNG、WebP 或 PDF，单个文件不超过 5 MB。',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
 
 
 class DisputeResolutionForm(StyledModelFormMixin, forms.ModelForm):

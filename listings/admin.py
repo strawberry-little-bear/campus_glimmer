@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -176,6 +176,19 @@ class OrderDisputeAdmin(admin.ModelAdmin):
     search_fields = ('order__item__title', 'opened_by__username', 'detail', 'resolution_note')
     autocomplete_fields = ('order', 'opened_by', 'reviewer')
     readonly_fields = ('created_at', 'updated_at', 'resolved_at')
+
+
+@admin.register(OrderDisputeEvidence)
+class OrderDisputeEvidenceAdmin(admin.ModelAdmin):
+    list_display = ('dispute', 'uploaded_by', 'attachment_name', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('dispute__order__item__title', 'uploaded_by__username', 'note')
+    autocomplete_fields = ('dispute', 'uploaded_by')
+    readonly_fields = ('created_at',)
+
+    @admin.display(description='文件')
+    def attachment_name(self, obj):
+        return obj.filename
 
 
 @admin.register(RecommendationFeedback)

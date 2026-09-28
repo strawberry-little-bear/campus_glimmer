@@ -1,6 +1,8 @@
 import csv
+import mimetypes
 import secrets
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from datetime import timedelta
 from urllib.parse import urlencode
 
@@ -10,7 +12,7 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, HttpResponse, JsonResponse
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Case, Count, ExpressionWrapper, F, FloatField, IntegerField, Q, Value, When
 from django.db.models.functions import Cast
@@ -22,8 +24,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .demand_matching import notify_demand_matches
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -564,6 +566,13 @@ def order_detail(request, order_id):
     rating_form = RatingForm() if order.status == 'completed' and not my_rating else None
     ratings = order.ratings.select_related('rater', 'ratee').all()
     events = order.events.select_related('actor').all()
+    dispute = getattr(order, 'dispute', None)
+    dispute_evidence = dispute.evidence.select_related('uploaded_by').all() if dispute else []
+    dispute_evidence_form = (
+        DisputeEvidenceForm()
+        if dispute and dispute.status in {'open', 'reviewing'}
+        else None
+    )
     return render(request, 'listings/order_detail.html', {
         'order': order,
         'title': '交易订单',
@@ -579,7 +588,9 @@ def order_detail(request, order_id):
         'meeting_form': meeting_form,
         'incident': incident,
         'incident_form': incident_form,
-        'dispute': getattr(order, 'dispute', None),
+        'dispute': dispute,
+        'dispute_evidence': dispute_evidence,
+        'dispute_evidence_form': dispute_evidence_form,
     })
 
 
@@ -1059,6 +1070,76 @@ def open_dispute(request, order_id):
         'order': order,
         'title': '发起交易争议',
     })
+
+
+@login_required
+def add_dispute_evidence(request, dispute_id):
+    dispute = get_object_or_404(
+        OrderDispute.objects.select_related('order__item', 'order__buyer', 'order__seller'),
+        id=dispute_id,
+    )
+    order = dispute.order
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限补充这条交易争议的证据。')
+        return redirect('home')
+    if dispute.status not in {'open', 'reviewing'}:
+        messages.info(request, '这条争议已经结束，不能继续补充证据。')
+        return redirect('order_detail', order_id=order.id)
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+
+    form = DisputeEvidenceForm(request.POST, request.FILES)
+    if form.is_valid():
+        with transaction.atomic():
+            evidence = form.save(commit=False)
+            evidence.dispute = dispute
+            evidence.uploaded_by = request.user
+            evidence.save()
+            OrderEvent.objects.create(
+                order=order,
+                actor=request.user,
+                from_status=order.status,
+                to_status=order.status,
+                note='补充了交易争议证据',
+            )
+            other_party = order.seller if request.user == order.buyer else order.buyer
+            create_notification(
+                other_party, actor=request.user, kind='order_dispute',
+                title='交易争议有新的证据',
+                message=f'{request.user.username}补充了商品“{order.item.title}”的争议证据。',
+                order=order, item=order.item,
+                target_url=reverse('order_detail', args=[order.id]),
+            )
+        messages.success(request, '证据已补充，相关参与人会收到提醒。')
+    else:
+        error_text = ' '.join(
+            error for field_errors in form.errors.values() for error in field_errors
+        )
+        messages.error(request, f'证据未保存：{error_text or "请检查上传内容。"}')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def download_dispute_evidence(request, evidence_id):
+    evidence = get_object_or_404(
+        OrderDisputeEvidence.objects.select_related('dispute__order__buyer', 'dispute__order__seller'),
+        id=evidence_id,
+    )
+    order = evidence.dispute.order
+    if request.user not in {order.buyer, order.seller} and not request.user.is_staff:
+        raise PermissionDenied
+    if not evidence.attachment:
+        messages.error(request, '这份证据文件已不可用。')
+        return redirect('order_detail', order_id=order.id)
+    filename = Path(evidence.attachment.name).name
+    content_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
+    response = FileResponse(
+        evidence.attachment.open('rb'),
+        as_attachment=True,
+        filename=filename,
+        content_type=content_type,
+    )
+    return response
 
 
 @login_required

@@ -1,5 +1,7 @@
 from datetime import timedelta
+from pathlib import Path
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -420,6 +422,46 @@ class OrderDispute(models.Model):
 
     def __str__(self):
         return f'{self.order.item.title} · {self.get_reason_display()}'
+
+
+def validate_dispute_evidence(upload):
+    """Keep dispute attachments small and limited to reviewable document types."""
+    max_size = 5 * 1024 * 1024
+    allowed_extensions = {'.jpg', '.jpeg', '.png', '.webp', '.pdf'}
+    suffix = Path(upload.name).suffix.lower()
+    if upload.size > max_size:
+        raise ValidationError('证据文件不能超过 5 MB。')
+    if suffix not in allowed_extensions:
+        raise ValidationError('证据文件仅支持 JPG、PNG、WebP 或 PDF。')
+
+
+class OrderDisputeEvidence(models.Model):
+    dispute = models.ForeignKey(
+        OrderDispute, on_delete=models.CASCADE, related_name='evidence', verbose_name='交易争议',
+    )
+    uploaded_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='uploaded_order_dispute_evidence', verbose_name='上传人',
+    )
+    attachment = models.FileField(
+        '证据文件', upload_to='dispute_evidence/%Y/%m/', validators=[validate_dispute_evidence],
+    )
+    note = models.CharField('证据说明', max_length=300, blank=True)
+    created_at = models.DateTimeField('上传时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '交易争议证据'
+        verbose_name_plural = '交易争议证据'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['dispute', '-created_at']),
+        ]
+
+    @property
+    def filename(self):
+        return Path(self.attachment.name).name
+
+    def __str__(self):
+        return f'{self.dispute} · {self.uploaded_by.username}'
 
 
 class BrowsingHistory(models.Model):
