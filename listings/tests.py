@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -998,6 +998,127 @@ class ListingFlowTests(TestCase):
         self.assertRedirects(response, reverse('saved_search_list'))
         self.assertFalse(SavedSearch.objects.filter(pk=saved_search.id).exists())
 
+
+    def test_buyer_can_propose_meeting_and_seller_can_accept(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '希望当面验货'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+
+        start_at = timezone.now() + timedelta(hours=2)
+        end_at = start_at + timedelta(hours=1)
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(reverse('propose_meeting', args=[order.id]), {
+            'start_at': start_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'end_at': end_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'location': self.location.id,
+        })
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        appointment = MeetingAppointment.objects.get(order=order)
+        self.assertEqual(appointment.status, 'pending')
+        self.assertEqual(appointment.proposed_by, self.other_user)
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.user, order=order, title='收到新的交付时间安排',
+        ).exists())
+
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.post(reverse('respond_meeting', args=[order.id, 'accept']))
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        appointment.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(appointment.status, 'confirmed')
+        self.assertEqual(appointment.responded_by, self.user)
+        self.assertEqual(order.status, 'meeting')
+        self.assertTrue(OrderEvent.objects.filter(order=order, to_status='meeting', note='双方确认了交付时间安排').exists())
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.other_user, order=order, title='交付时间安排已确认',
+        ).exists())
+
+    def test_meeting_proposal_can_be_declined_and_replaced(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('create_order', args=[self.item.id]), {})
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        start_at = timezone.now() + timedelta(days=1)
+        end_at = start_at + timedelta(minutes=45)
+        response = self.client.post(reverse('propose_meeting', args=[order.id]), {
+            'start_at': start_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'end_at': end_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'location': self.location.id,
+        })
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('respond_meeting', args=[order.id, 'decline']))
+        appointment = MeetingAppointment.objects.get(order=order)
+        self.assertEqual(appointment.status, 'declined')
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'confirmed')
+
+        replacement_start = timezone.now() + timedelta(days=2)
+        replacement_end = replacement_start + timedelta(minutes=30)
+        response = self.client.post(reverse('propose_meeting', args=[order.id]), {
+            'start_at': replacement_start.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'end_at': replacement_end.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'location': self.location.id,
+        })
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'pending')
+        self.assertEqual(appointment.proposed_by, self.other_user)
+        self.assertEqual(appointment.decline_reason, '')
+
+    def test_cancelled_order_cannot_accept_pending_meeting(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('create_order', args=[self.item.id]), {})
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        start_at = timezone.now() + timedelta(days=1)
+        end_at = start_at + timedelta(minutes=30)
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('propose_meeting', args=[order.id]), {
+            'start_at': start_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'end_at': end_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'location': self.location.id,
+        })
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'cancelled'})
+        response = self.client.post(reverse('respond_meeting', args=[order.id, 'accept']))
+        self.assertEqual(response.status_code, 302)
+        order.refresh_from_db()
+        appointment = MeetingAppointment.objects.get(order=order)
+        self.assertEqual(order.status, 'cancelled')
+        self.assertEqual(appointment.status, 'pending')
+
+    def test_meeting_proposal_rejects_past_or_oversized_window(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('create_order', args=[self.item.id]), {})
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'confirmed'})
+        start_at = timezone.now() + timedelta(minutes=5)
+        end_at = start_at + timedelta(hours=13)
+        response = self.client.post(reverse('propose_meeting', args=[order.id]), {
+            'start_at': start_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'end_at': end_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'location': self.location.id,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(MeetingAppointment.objects.filter(order=order).exists())
 
     def test_delivery_confirmation_requires_both_parties(self):
         self.client.login(username='bob', password='safe-password-123')

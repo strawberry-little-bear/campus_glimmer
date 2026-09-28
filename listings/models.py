@@ -244,6 +244,63 @@ class DeliveryConfirmation(models.Model):
         return f'{self.order.item.title} · 交付确认'
 
 
+class MeetingAppointment(models.Model):
+    STATUS_CHOICES = (
+        ('pending', '待对方确认'),
+        ('confirmed', '已确认'),
+        ('declined', '对方未接受'),
+        ('cancelled', '已取消'),
+    )
+
+    order = models.OneToOneField(
+        Order, on_delete=models.CASCADE, related_name='appointment', verbose_name='订单',
+    )
+    proposed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name='proposed_appointments', verbose_name='提议人',
+    )
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='meeting_appointments', verbose_name='交付地点',
+    )
+    start_at = models.DateTimeField('开始时间')
+    end_at = models.DateTimeField('结束时间')
+    status = models.CharField('安排状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    responded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='responded_appointments', verbose_name='回应人',
+    )
+    responded_at = models.DateTimeField('回应时间', null=True, blank=True)
+    decline_reason = models.CharField('未接受原因', max_length=200, blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '交付时间安排'
+        verbose_name_plural = '交付时间安排'
+        ordering = ['start_at']
+        indexes = [
+            models.Index(fields=['status', 'start_at']),
+            models.Index(fields=['proposed_by', '-created_at']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_at__gt=models.F('start_at')),
+                name='meeting_appointment_end_after_start',
+            ),
+        ]
+
+    @property
+    def is_pending(self):
+        return self.status == 'pending'
+
+    @property
+    def is_confirmed(self):
+        return self.status == 'confirmed'
+
+    def __str__(self):
+        return f'{self.order.item.title} · {self.start_at:%Y-%m-%d %H:%M}'
+
+
 class OrderDispute(models.Model):
     REASON_CHOICES = (
         ('not_received', '未收到商品'),

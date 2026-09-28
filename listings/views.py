@@ -19,8 +19,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .demand_matching import notify_demand_matches
-from .forms import DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .forms import DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -528,13 +528,18 @@ def create_order(request, item_id):
 def order_detail(request, order_id):
     order = get_object_or_404(
         Order.objects.select_related(
-            'item', 'buyer', 'seller', 'meeting_location', 'delivery_confirmation', 'dispute',
+            'item', 'buyer', 'seller', 'meeting_location', 'delivery_confirmation', 'dispute', 'appointment__location', 'appointment__proposed_by', 'appointment__responded_by',
         ),
         id=order_id,
     )
     if request.user not in {order.buyer, order.seller}:
         messages.error(request, '你没有权限查看这笔订单。')
         return redirect('home')
+    appointment = getattr(order, 'appointment', None)
+    meeting_form = None
+    if order.status in {'confirmed', 'meeting'} and not (appointment and appointment.status == 'pending' and appointment.proposed_by_id != request.user.id):
+        form_initial = {'location': order.meeting_location_id} if not appointment else None
+        meeting_form = MeetingAppointmentForm(instance=appointment, initial=form_initial)
     rating_target = order.seller if request.user == order.buyer else order.buyer
     my_rating = Rating.objects.filter(order=order, rater=request.user).first()
     rating_form = RatingForm() if order.status == 'completed' and not my_rating else None
@@ -549,8 +554,167 @@ def order_detail(request, order_id):
         'ratings': ratings,
         'events': events,
         'confirmation': getattr(order, 'delivery_confirmation', None),
+        'appointment': appointment,
+        'meeting_form': meeting_form,
         'dispute': getattr(order, 'dispute', None),
     })
+
+
+@login_required
+def propose_meeting(request, order_id):
+    order = get_object_or_404(
+        Order.objects.select_related('item', 'buyer', 'seller', 'meeting_location'), id=order_id,
+    )
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限安排这笔订单的交付。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+    if order.status not in {'confirmed', 'meeting'}:
+        messages.error(request, '卖家确认订单后，才能安排交付时间。')
+        return redirect('order_detail', order_id=order.id)
+
+    form = MeetingAppointmentForm(request.POST)
+    if not form.is_valid():
+        error_text = ' '.join(
+            error for field_errors in form.errors.values() for error in field_errors
+        )
+        messages.error(request, f'交付安排未保存：{error_text or "请检查填写内容。"}')
+        return redirect('order_detail', order_id=order.id)
+
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().select_related(
+            'item', 'buyer', 'seller',
+        ).get(pk=order.id)
+        if locked_order.status not in {'confirmed', 'meeting'}:
+            messages.error(request, '订单状态已经发生变化，请刷新后再试。')
+            return redirect('order_detail', order_id=locked_order.id)
+        appointment, created = MeetingAppointment.objects.select_for_update().get_or_create(
+            order=locked_order,
+            defaults={
+                'proposed_by': request.user,
+                'start_at': form.cleaned_data['start_at'],
+                'end_at': form.cleaned_data['end_at'],
+                'location': form.cleaned_data['location'],
+            },
+        )
+        if not created:
+            appointment.proposed_by = request.user
+            appointment.start_at = form.cleaned_data['start_at']
+            appointment.end_at = form.cleaned_data['end_at']
+            appointment.location = form.cleaned_data['location']
+            appointment.status = 'pending'
+            appointment.responded_by = None
+            appointment.responded_at = None
+            appointment.decline_reason = ''
+            appointment.save(update_fields=[
+                'proposed_by', 'start_at', 'end_at', 'location', 'status',
+                'responded_by', 'responded_at', 'decline_reason', 'updated_at',
+            ])
+        if locked_order.meeting_location_id != appointment.location_id:
+            locked_order.meeting_location_id = appointment.location_id
+            locked_order.save(update_fields=['meeting_location', 'updated_at'])
+        OrderEvent.objects.create(
+            order=locked_order,
+            actor=request.user,
+            from_status=locked_order.status,
+            to_status=locked_order.status,
+            note='提出了新的交付时间安排' if created else '更新了交付时间安排，等待对方确认',
+        )
+        other_party = locked_order.seller if request.user == locked_order.buyer else locked_order.buyer
+        create_notification(
+            other_party,
+            actor=request.user,
+            kind='order_status',
+            title='收到新的交付时间安排',
+            message=(
+                f'{request.user.username}为商品“{locked_order.item.title}”安排了 '
+                f'{appointment.start_at:%m月%d日 %H:%M} 的交付时间，请确认。'
+            ),
+            order=locked_order,
+            item=locked_order.item,
+            target_url=reverse('order_detail', args=[locked_order.id]),
+        )
+    messages.success(request, '交付时间已提交，等待对方确认。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def respond_meeting(request, order_id, decision):
+    if decision not in {'accept', 'decline'}:
+        messages.error(request, '无效的交付安排操作。')
+        return redirect('order_detail', order_id=order_id)
+    order = get_object_or_404(
+        Order.objects.select_related('item', 'buyer', 'seller'), id=order_id,
+    )
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限回应这笔订单的交付安排。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().select_related(
+            'item', 'buyer', 'seller',
+        ).get(pk=order.id)
+        appointment = MeetingAppointment.objects.select_for_update().select_related(
+            'proposed_by',
+        ).filter(order=locked_order).first()
+        if locked_order.status not in {'confirmed', 'meeting'}:
+            messages.info(request, '当前订单已经结束，不能再回应交付安排。')
+            return redirect('order_detail', order_id=locked_order.id)
+        if not appointment or appointment.status != 'pending':
+            messages.info(request, '当前没有等待你确认的交付安排。')
+            return redirect('order_detail', order_id=locked_order.id)
+        if appointment.proposed_by_id == request.user.id:
+            messages.info(request, '请等待对方回应你提出的交付安排。')
+            return redirect('order_detail', order_id=locked_order.id)
+
+        now = timezone.now()
+        appointment.responded_by = request.user
+        appointment.responded_at = now
+        appointment.status = 'confirmed' if decision == 'accept' else 'declined'
+        if decision == 'decline':
+            appointment.decline_reason = '对方暂未接受这次时间安排'
+        appointment.save(update_fields=['status', 'responded_by', 'responded_at', 'decline_reason', 'updated_at'])
+
+        proposer = appointment.proposed_by
+        if decision == 'accept':
+            previous_status = locked_order.status
+            if locked_order.status == 'confirmed':
+                locked_order.status = 'meeting'
+                locked_order.save(update_fields=['status', 'updated_at'])
+            OrderEvent.objects.create(
+                order=locked_order,
+                actor=request.user,
+                from_status=previous_status,
+                to_status=locked_order.status,
+                note='双方确认了交付时间安排',
+            )
+            title = '交付时间安排已确认'
+            message = f'{request.user.username}已确认商品“{locked_order.item.title}”的交付时间。'
+        else:
+            OrderEvent.objects.create(
+                order=locked_order,
+                actor=request.user,
+                from_status=locked_order.status,
+                to_status=locked_order.status,
+                note='暂未接受本次交付时间安排',
+            )
+            title = '交付时间安排未被接受'
+            message = f'{request.user.username}暂未接受商品“{locked_order.item.title}”的这次交付安排，请重新协商。'
+        create_notification(
+            proposer,
+            actor=request.user,
+            kind='order_status',
+            title=title,
+            message=message,
+            order=locked_order,
+            item=locked_order.item,
+            target_url=reverse('order_detail', args=[locked_order.id]),
+        )
+    messages.success(request, '已回应交付时间安排。' if decision == 'accept' else '已记录你的暂不接受。')
+    return redirect('order_detail', order_id=order.id)
 
 
 @login_required

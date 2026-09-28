@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -62,6 +62,15 @@ class OrderAdmin(admin.ModelAdmin):
     search_fields = ('item__title', 'buyer__username', 'seller__username')
     autocomplete_fields = ('item', 'buyer', 'seller', 'meeting_location')
     readonly_fields = ('agreed_price', 'created_at', 'updated_at', 'confirmation_reminder_sent_at')
+
+
+@admin.register(MeetingAppointment)
+class MeetingAppointmentAdmin(admin.ModelAdmin):
+    list_display = ('order', 'start_at', 'end_at', 'location', 'status', 'proposed_by', 'responded_by')
+    list_filter = ('status', 'location', 'start_at')
+    search_fields = ('order__item__title', 'proposed_by__username', 'responded_by__username')
+    autocomplete_fields = ('order', 'proposed_by', 'responded_by', 'location')
+    readonly_fields = ('created_at', 'updated_at', 'responded_at')
 
 
 @admin.register(BrowsingHistory)

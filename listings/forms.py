@@ -1,5 +1,10 @@
+from datetime import timedelta
+
 from django import forms
-from .models import CampusLocation, Category, DemandPost, Item, ItemImage, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
+from django.db.models import Q
+from django.utils import timezone
+
+from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -112,6 +117,62 @@ class OrderForm(StyledModelFormMixin, forms.ModelForm):
         self.fields['meeting_location'].widget.attrs['class'] = 'form-select'
         self.fields['meeting_location'].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields['meeting_location'].empty_label = '沿用商品交易地点'
+
+
+class MeetingAppointmentForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = MeetingAppointment
+        fields = ['start_at', 'end_at', 'location']
+        widgets = {
+            'start_at': forms.DateTimeInput(
+                format='%Y-%m-%dT%H:%M',
+                attrs={'class': 'form-control', 'type': 'datetime-local'},
+            ),
+            'end_at': forms.DateTimeInput(
+                format='%Y-%m-%dT%H:%M',
+                attrs={'class': 'form-control', 'type': 'datetime-local'},
+            ),
+            'location': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['start_at'].input_formats = ['%Y-%m-%dT%H:%M']
+        self.fields['end_at'].input_formats = ['%Y-%m-%dT%H:%M']
+        location_queryset = CampusLocation.objects.filter(is_active=True)
+        if self.instance and self.instance.location_id:
+            location_queryset = CampusLocation.objects.filter(
+                Q(is_active=True) | Q(pk=self.instance.location_id),
+            )
+        self.fields['location'].queryset = location_queryset
+        self.fields['location'].required = False
+        self.fields['start_at'].help_text = '建议预留至少 15 分钟，时间以东八区显示。'
+        self.fields['end_at'].help_text = '单次交付安排最长 12 小时。'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        start_at = cleaned_data.get('start_at')
+        end_at = cleaned_data.get('end_at')
+        if not start_at or not end_at:
+            return cleaned_data
+        if timezone.is_naive(start_at):
+            start_at = timezone.make_aware(start_at)
+            cleaned_data['start_at'] = start_at
+        if timezone.is_naive(end_at):
+            end_at = timezone.make_aware(end_at)
+            cleaned_data['end_at'] = end_at
+        if end_at <= start_at:
+            self.add_error('end_at', '结束时间必须晚于开始时间。')
+            return cleaned_data
+        now = timezone.now()
+        if start_at < now + timedelta(minutes=15):
+            self.add_error('start_at', '开始时间至少应晚于当前时间 15 分钟。')
+        if start_at > now + timedelta(days=60):
+            self.add_error('start_at', '最多只能安排未来 60 天内的时间。')
+        if end_at - start_at > timedelta(hours=12):
+            self.add_error('end_at', '单次交付安排不能超过 12 小时。')
+        return cleaned_data
 
 
 class RatingForm(StyledModelFormMixin, forms.ModelForm):
