@@ -170,6 +170,57 @@ def item_list(request, category_id=None):
     }
     return render(request, 'listings/item_list.html', context)
 
+
+def search_suggestions(request):
+    """Return compact, privacy-conscious suggestions for the global search box."""
+    query = request.GET.get('q', '').strip()[:40]
+    if len(query) < 2:
+        return JsonResponse({'suggestions': []})
+
+    suggestions = []
+    seen = set()
+
+    def add_suggestion(text, kind, label, meta=''):
+        normalized = text.casefold()
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        suggestions.append({
+            'text': text,
+            'kind': kind,
+            'label': label,
+            'meta': meta,
+        })
+
+    popular_queries = SearchQuery.objects.filter(
+        query__icontains=query,
+    ).values('query').annotate(
+        search_count=Count('id'),
+    ).filter(search_count__gte=2).order_by('-search_count', 'query')[:5]
+    for row in popular_queries:
+        add_suggestion(row['query'], 'history', '大家搜过', f"{row['search_count']} 次")
+
+    categories = Category.objects.filter(
+        name__icontains=query,
+    ).annotate(
+        available_count=Count('items', filter=Q(items__status='available')),
+    ).order_by('-available_count', 'name')[:3]
+    for category in categories:
+        add_suggestion(category.name, 'category', '分类', f"{category.available_count} 件在售")
+
+    locations = CampusLocation.objects.filter(
+        Q(name__icontains=query)
+        | Q(building__icontains=query)
+        | Q(address__icontains=query),
+        is_active=True,
+    ).annotate(
+        available_count=Count('items', filter=Q(items__status='available')),
+    ).order_by('-available_count', 'sort_order', 'name')[:3]
+    for location in locations:
+        add_suggestion(location.name, 'location', '交易地点', f"{location.available_count} 件在售")
+
+    return JsonResponse({'suggestions': suggestions[:8]})
+
 def item_detail(request, item_id):
     item = get_object_or_404(
         Item.objects.select_related('category', 'seller', 'location').prefetch_related('images', 'comments__author__profile'),
@@ -1206,5 +1257,3 @@ def mark_selected_notifications_read(request):
     ):
         next_url = reverse('notification_list')
     return redirect(next_url)
-
-\r\n

@@ -33,9 +33,10 @@
                     {% if user.is_staff %}<li class="nav-item"><a class="nav-link" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>运营看板</a></li>{% endif %}
                     {% endif %}
                 </ul>
-                <form class="nav-search my-3 my-lg-0 me-lg-3" action="{% url 'search_items' %}" method="get">
+                <form class="nav-search my-3 my-lg-0 me-lg-3" action="{% url 'search_items' %}" method="get" data-search-suggest-endpoint="{% url 'search_suggestions' %}">
                     <i class="bi bi-search"></i>
-                    <input name="q" type="search" value="{{ request.GET.q|default:'' }}" placeholder="搜索书籍、数码、生活好物…" aria-label="搜索商品">
+                    <input name="q" type="search" value="{{ request.GET.q|default:'' }}" placeholder="搜索书籍、数码、生活好物…" aria-label="搜索商品" autocomplete="off" aria-controls="search-suggestions" aria-expanded="false">
+                    <div class="search-suggest-menu" id="search-suggestions" role="listbox" hidden></div>
                 </form>
                 <ul class="navbar-nav align-items-lg-center gap-lg-1">
                     {% if user.is_authenticated %}

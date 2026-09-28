@@ -1009,3 +1009,39 @@ class ListingFlowTests(TestCase):
         second_result = process_order_timeouts(now=expired_at + timedelta(hours=1))
         self.assertEqual(second_result, {'expired': 0, 'reminded': 0})
         self.assertEqual(Notification.objects.filter(order=order, kind='order_expired').count(), 2)
+
+class SearchSuggestionTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='searcher', password='safe-password-123')
+        self.category = Category.objects.create(name='数码配件')
+        self.location = CampusLocation.objects.create(
+            name='图书馆东门', building='东校区', address='图书馆一层东侧',
+        )
+        Item.objects.create(
+            title='宿舍台灯', description='暖光护眼', price='39.00',
+            category=self.category, location=self.location, seller=self.user,
+        )
+
+    def test_suggestions_combine_popular_queries_categories_and_locations(self):
+        for _ in range(3):
+            SearchQuery.objects.create(query='台灯')
+        SearchQuery.objects.create(query='台灯罩')
+
+        response = self.client.get(reverse('search_suggestions'), {'q': '台灯'})
+
+        self.assertEqual(response.status_code, 200)
+        suggestions = response.json()['suggestions']
+        self.assertLessEqual(len(suggestions), 8)
+        self.assertEqual(suggestions[0]['text'], '台灯')
+        self.assertEqual(suggestions[0]['kind'], 'history')
+
+        location_response = self.client.get(reverse('search_suggestions'), {'q': '图书'})
+        self.assertIn({'text': '图书馆东门', 'kind': 'location', 'label': '交易地点', 'meta': '1 件在售'}, location_response.json()['suggestions'])
+
+    def test_short_queries_return_empty_without_revealing_history(self):
+        SearchQuery.objects.create(query='台灯')
+
+        response = self.client.get(reverse('search_suggestions'), {'q': '台'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'suggestions': []})
