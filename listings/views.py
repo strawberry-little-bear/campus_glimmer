@@ -848,6 +848,9 @@ def operations_dashboard(request):
         status__in={'open', 'reviewing'},
     ).count()
     dashboard['pending_moderation_count'] = ModerationEvent.objects.filter(status='pending').count()
+    dashboard['pending_high_moderation_count'] = ModerationEvent.objects.filter(
+        status='pending', risk_level='high',
+    ).count()
     return render(request, 'listings/operations_dashboard.html', dashboard)
 
 

@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from listings.models import CampusLocation, Category, Item, Notification
 from .models import Comment, ModerationEvent, PrivateMessage
+from .moderation import analyze_content
 from .views import _build_conversation_data
 
 
@@ -185,6 +186,8 @@ class ModerationFlowTests(TestCase):
         self.assertIn('微信导流', event.matched_terms)
         self.assertIn('手机号', event.matched_terms)
         self.assertIn('高风险交易', event.matched_terms)
+        self.assertEqual(event.risk_score, 100)
+        self.assertEqual(event.risk_level, 'high')
 
     def test_risky_private_message_is_blocked_before_delivery(self):
         self.client.login(username='mod-buyer', password='safe-password-123')
@@ -213,6 +216,28 @@ class ModerationFlowTests(TestCase):
         self.assertEqual(event.reviewed_by, self.staff)
         notice = Notification.objects.get(recipient=self.buyer, kind='moderation_update')
         self.assertIn('确认违规', notice.title)
+
+    def test_risk_analysis_is_explainable_and_capped(self):
+        analysis = analyze_content('请发微信号，手机号 13812345678，押金和 https://example.com')
+        self.assertEqual(analysis['matched_terms'], ['微信导流', '外部链接', '手机号', '高风险交易'])
+        self.assertEqual(analysis['risk_score'], 100)
+        self.assertEqual(analysis['risk_level'], 'high')
+
+    def test_moderation_queue_can_filter_high_risk_events(self):
+        ModerationEvent.objects.create(
+            channel='comment', author=self.buyer, item=self.item,
+            content='外链', matched_terms='外部链接', risk_score=20, risk_level='low',
+        )
+        high = ModerationEvent.objects.create(
+            channel='private_message', author=self.buyer,
+            content='押金和手机号', matched_terms='高风险交易、手机号',
+            risk_score=85, risk_level='high',
+        )
+        self.client.login(username='mod-staff', password='safe-password-123')
+        response = self.client.get(reverse('moderation_queue'), {'risk': 'high'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['moderation_events']), [high])
+        self.assertEqual(response.context['moderation_pending_high_count'], 1)
 
     def test_non_staff_cannot_open_moderation_queue(self):
         self.client.login(username='mod-buyer', password='safe-password-123')

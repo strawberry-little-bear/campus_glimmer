@@ -23,6 +23,11 @@ class ModerationEvent(models.Model):
         ('confirmed', '确认违规'),
         ('dismissed', '误判放行'),
     )
+    RISK_LEVEL_CHOICES = (
+        ('low', '低风险'),
+        ('medium', '中风险'),
+        ('high', '高风险'),
+    )
 
     channel = models.CharField('内容渠道', max_length=30, choices=CHANNEL_CHOICES)
     author = models.ForeignKey(
@@ -35,6 +40,10 @@ class ModerationEvent(models.Model):
     )
     content = models.TextField('被拦截内容')
     matched_terms = models.CharField('命中规则', max_length=255)
+    risk_score = models.PositiveSmallIntegerField('风险分数', default=0)
+    risk_level = models.CharField(
+        '风险等级', max_length=10, choices=RISK_LEVEL_CHOICES, default='low',
+    )
     status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='pending')
     reviewed_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
@@ -46,9 +55,10 @@ class ModerationEvent(models.Model):
     class Meta:
         verbose_name = '内容审核记录'
         verbose_name_plural = '内容审核记录'
-        ordering = ['status', '-created_at']
+        ordering = ['status', '-risk_score', '-created_at']
         indexes = [
-            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['status', '-risk_score', '-created_at']),
+            models.Index(fields=['risk_level', 'status', '-created_at']),
             models.Index(fields=['channel', '-created_at']),
             models.Index(fields=['author', '-created_at']),
         ]

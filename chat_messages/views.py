@@ -268,6 +268,9 @@ def moderation_queue(request):
     channel_filter = request.GET.get('channel', 'all').strip()
     if channel_filter not in {'all', 'comment', 'private_message'}:
         channel_filter = 'all'
+    risk_filter = request.GET.get('risk', 'all').strip()
+    if risk_filter not in {'all', 'low', 'medium', 'high'}:
+        risk_filter = 'all'
     search_query = request.GET.get('q', '').strip()[:120]
 
     base_events = ModerationEvent.objects.all()
@@ -276,6 +279,8 @@ def moderation_queue(request):
         events = events.filter(status=status_filter)
     if channel_filter != 'all':
         events = events.filter(channel=channel_filter)
+    if risk_filter != 'all':
+        events = events.filter(risk_level=risk_filter)
     if search_query:
         events = events.filter(
             Q(content__icontains=search_query)
@@ -290,13 +295,19 @@ def moderation_queue(request):
         'moderation_total_count': base_events.count(),
         'moderation_status_filter': status_filter,
         'moderation_channel_filter': channel_filter,
+        'moderation_risk_filter': risk_filter,
         'moderation_search_query': search_query,
+        'moderation_pending_high_count': base_events.filter(status='pending', risk_level='high').count(),
         'moderation_status_options': (
             ('pending', '待复核'), ('confirmed', '确认违规'),
             ('dismissed', '误判放行'), ('all', '全部记录'),
         ),
         'moderation_channel_options': (
             ('all', '全部渠道'), ('comment', '商品留言'), ('private_message', '私信'),
+        ),
+        'moderation_risk_options': (
+            ('all', '全部风险等级'), ('high', '高风险'),
+            ('medium', '中风险'), ('low', '低风险'),
         ),
     })
 

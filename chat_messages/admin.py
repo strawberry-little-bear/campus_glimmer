@@ -18,12 +18,12 @@ class PrivateMessageAdmin(admin.ModelAdmin):
 
 @admin.register(ModerationEvent)
 class ModerationEventAdmin(admin.ModelAdmin):
-    list_display = ('channel', 'author', 'item', 'matched_terms', 'status', 'reviewed_by', 'created_at')
-    list_filter = ('channel', 'status', 'created_at', 'reviewed_at')
+    list_display = ('channel', 'author', 'item', 'risk_level', 'risk_score', 'matched_terms', 'status', 'reviewed_by', 'created_at')
+    list_filter = ('channel', 'risk_level', 'status', 'created_at', 'reviewed_at')
     search_fields = ('content', 'matched_terms', 'author__username', 'item__title')
     autocomplete_fields = ('author', 'item', 'reviewed_by')
     readonly_fields = ('created_at', 'reviewed_at')
     fieldsets = (
-        ('拦截内容', {'fields': ('channel', 'author', 'item', 'content', 'matched_terms', 'created_at')}),
+        ('拦截内容', {'fields': ('channel', 'author', 'item', 'risk_level', 'risk_score', 'content', 'matched_terms', 'created_at')}),
         ('复核结果', {'fields': ('status', 'reviewed_by', 'reviewed_at')}),
     )
