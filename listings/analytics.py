@@ -221,6 +221,59 @@ def _build_facet_supply_gaps(search_period):
     }
 
 
+def _build_search_quality(search_count, zero_result_count, result_search_count, clicked_search_count):
+    """Translate search funnel signals into a transparent, actionable quality score."""
+    if not search_count:
+        return {
+            'score': 0,
+            'level': '暂无数据',
+            'level_key': 'empty',
+            'sample_size': 0,
+            'sample_label': '等待搜索记录积累',
+            'supply_score': 0,
+            'engagement_score': 0,
+            'recommendations': ['扩大统计周期或等待新的搜索记录，再评估搜索质量。'],
+        }
+
+    zero_result_rate = zero_result_count / search_count * 100
+    click_through_rate = (
+        clicked_search_count / result_search_count * 100
+        if result_search_count else 0
+    )
+    supply_score = round(max(0, 100 - zero_result_rate))
+    engagement_score = round(click_through_rate)
+    score = round(supply_score * 0.55 + engagement_score * 0.45)
+    if score >= 80:
+        level, level_key = '健康', 'healthy'
+    elif score >= 60:
+        level, level_key = '需要优化', 'attention'
+    else:
+        level, level_key = '重点关注', 'critical'
+
+    recommendations = []
+    if zero_result_rate >= 20:
+        recommendations.append(
+            f'无结果占比为 {zero_result_rate:.1f}%，优先补充高频缺口或配置同义词。'
+        )
+    if result_search_count and click_through_rate < 45:
+        recommendations.append(
+            f'有结果搜索的点击率为 {click_through_rate:.1f}%，建议检查排序、首图和标题信息。'
+        )
+    if not recommendations:
+        recommendations.append('供给覆盖与结果点击表现稳定，可继续观察趋势并做小步优化。')
+
+    return {
+        'score': score,
+        'level': level,
+        'level_key': level_key,
+        'sample_size': search_count,
+        'sample_label': '样本量较小，建议结合更长周期判断' if search_count < 10 else '基于当前统计周期',
+        'supply_score': supply_score,
+        'engagement_score': engagement_score,
+        'recommendations': recommendations,
+    }
+
+
 def build_search_insights(days=30, query=''):
     """Build an actionable view of search demand for staff operations work."""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
@@ -308,6 +361,12 @@ def build_search_insights(days=30, query=''):
         key=lambda row: (-row['zero_result_count'], -row['search_count'], row['query']),
     )[:12]
     facet_supply_gaps = _build_facet_supply_gaps(search_period)
+    search_quality = _build_search_quality(
+        search_count,
+        zero_result_count,
+        result_search_count,
+        clicked_search_count,
+    )
     insights = []
     for row in gap_terms[:6]:
         insights.append({
@@ -332,6 +391,7 @@ def build_search_insights(days=30, query=''):
         'period_start': start,
         'period_end': now,
         'query_filter': query,
+        'search_quality': search_quality,
         'metrics': {
             'searches': search_count,
             'unique_terms': len(term_rows),

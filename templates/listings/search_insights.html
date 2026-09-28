@@ -46,6 +46,33 @@
     <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-arrow-down-circle"></i>无点击搜索</span><strong>{{ metrics.zero_click_searches }}</strong><small>{{ metrics.zero_click_rate }}% 的有结果搜索没有后续点击</small></div>
 </div>
 
+<section class="content-card search-quality-panel mb-4">
+    <div class="search-quality-score search-quality-{{ search_quality.level_key }}">
+        <span class="search-quality-icon"><i class="bi bi-speedometer2"></i></span>
+        <div class="search-quality-score-copy">
+            <span class="eyebrow eyebrow-soft">Search quality score</span>
+            <div class="search-quality-title"><strong>{{ search_quality.score }}</strong><span>/ 100</span><b>{{ search_quality.level }}</b></div>
+            <small>{{ search_quality.sample_label }} · 样本量 {{ search_quality.sample_size }} 次搜索</small>
+        </div>
+    </div>
+    <div class="search-quality-breakdown">
+        <div class="search-quality-dimension">
+            <div><span>供给覆盖</span><strong>{{ search_quality.supply_score }}</strong></div>
+            <div class="search-quality-track"><i style="width: {{ search_quality.supply_score }}%"></i></div>
+            <small>无结果越少，覆盖得分越高</small>
+        </div>
+        <div class="search-quality-dimension">
+            <div><span>结果互动</span><strong>{{ search_quality.engagement_score }}</strong></div>
+            <div class="search-quality-track"><i style="width: {{ search_quality.engagement_score }}%"></i></div>
+            <small>有结果搜索产生点击的比例</small>
+        </div>
+    </div>
+    <div class="search-quality-actions">
+        <span><i class="bi bi-lightbulb me-1"></i>建议动作</span>
+        <ul>{% for recommendation in search_quality.recommendations %}<li>{{ recommendation }}</li>{% endfor %}</ul>
+    </div>
+</section>
+
 <div class="content-card ops-panel search-period-comparison mb-4">
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Period movement</span><h2>需求变化</h2></div><span class="ops-panel-hint">与上一周期对比</span></div>
     <div class="search-comparison-metrics">

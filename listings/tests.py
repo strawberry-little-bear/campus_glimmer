@@ -593,6 +593,22 @@ class ListingFlowTests(TestCase):
         self.assertEqual(dashboard['metrics']['click_through_rate'], 100.0)
         self.assertEqual(dashboard['term_rows'][0]['click_count'], 1)
         self.assertEqual(dashboard['clicked_items'][0]['item_id'], self.item.id)
+        self.assertEqual(dashboard['search_quality']['score'], 100)
+        self.assertEqual(dashboard['search_quality']['level'], '健康')
+
+    def test_search_quality_score_surfaces_supply_and_engagement_risks(self):
+        for query, result_count in (
+            ('显示器', 0), ('显示器', 0), ('显示器', 2), ('显示器', 1),
+        ):
+            SearchQuery.objects.create(query=query, result_count=result_count)
+
+        dashboard = build_search_insights(30, query='显示器')
+
+        self.assertEqual(dashboard['search_quality']['score'], 28)
+        self.assertEqual(dashboard['search_quality']['level'], '重点关注')
+        self.assertEqual(dashboard['search_quality']['supply_score'], 50)
+        self.assertEqual(dashboard['search_quality']['engagement_score'], 0)
+        self.assertTrue(any('同义词' in item for item in dashboard['search_quality']['recommendations']))
 
     def test_invalid_price_filters_are_ignored_safely(self):
         response = self.client.get(reverse('item_list'), {
