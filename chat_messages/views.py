@@ -39,6 +39,7 @@ def add_comment(request, item_id):
                     title='商品收到新的留言',
                     message=f'{request.user.username}评论了你的商品“{item.title}”。',
                     item=item, target_url=reverse('item_detail', args=[item.id]),
+                    dedupe_key=f'comment:{item.id}:{request.user.id}',
                 )
             django_messages.success(request, '评论已发布！')
             return redirect('item_detail', item_id=item.id)
@@ -190,6 +191,7 @@ def send_message(request, receiver_id, item_id=None):
                     title='收到新的私信',
                     message=f'{request.user.username}给你发来了一条新消息。',
                     item=item, target_url=reverse('conversation', args=[request.user.id]),
+                    dedupe_key=f'message:{request.user.id}',
                 )
                 django_messages.success(request, '消息已发送！')
 
@@ -243,6 +245,7 @@ def conversation(request, user_id):
                     title='收到新的私信',
                     message=f'{request.user.username}给你发来了一条新消息。',
                     target_url=reverse('conversation', args=[request.user.id]),
+                    dedupe_key=f'message:{request.user.id}',
                 )
                 django_messages.success(request, '消息已发送！')
                 return redirect('conversation', user_id=other_user.id)

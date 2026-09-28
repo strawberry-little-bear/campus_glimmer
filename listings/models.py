@@ -397,6 +397,9 @@ class Notification(models.Model):
     message = models.CharField('通知内容', max_length=255)
     target_url = models.CharField('跳转地址', max_length=255, blank=True)
     is_read = models.BooleanField('已读', default=False)
+    dedupe_key = models.CharField('聚合键', max_length=120, blank=True, default='')
+    occurrence_count = models.PositiveIntegerField('聚合次数', default=1)
+    last_occurred_at = models.DateTimeField('最近发生时间', null=True, blank=True)
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
 
     class Meta:
@@ -406,6 +409,7 @@ class Notification(models.Model):
         indexes = [
             models.Index(fields=['recipient', 'is_read', '-created_at']),
             models.Index(fields=['recipient', '-created_at']),
+            models.Index(fields=['recipient', 'kind', 'dedupe_key', 'is_read']),
         ]
 
     def __str__(self):

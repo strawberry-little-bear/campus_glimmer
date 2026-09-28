@@ -115,8 +115,8 @@
                     </span>
                     <span class="notification-body">
                         <span class="notification-title-row">
-                            <strong>{{ notification.title }}</strong>
-                            <time datetime="{{ notification.created_at|date:'c' }}">{{ notification.created_at|date:'Y-m-d H:i' }}</time>
+                            <strong>{{ notification.title }}{% if notification.occurrence_count > 1 %} <span class="badge rounded-pill text-bg-light">累计 {{ notification.occurrence_count }} 次</span>{% endif %}</strong>
+                            <time datetime="{{ notification.last_occurred_at|default:notification.created_at|date:'c' }}">{{ notification.last_occurred_at|default:notification.created_at|date:'Y-m-d H:i' }}</time>
                         </span>
                         <span class="notification-message">{{ notification.message }}</span>
                         {% if notification.item %}<span class="notification-context"><i class="bi bi-box-seam me-1"></i>{{ notification.item.title }}</span>{% elif notification.order %}<span class="notification-context"><i class="bi bi-receipt me-1"></i>{{ notification.order.item.title }}</span>{% endif %}

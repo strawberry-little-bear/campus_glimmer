@@ -292,6 +292,30 @@ class ListingFlowTests(TestCase):
         self.assertIsNone(suppressed)
         self.assertEqual(Notification.objects.filter(recipient=self.user, kind='comment_received').count(), 1)
 
+    def test_unread_notifications_are_aggregated_by_dedupe_key(self):
+        first = create_notification(
+            self.user, kind='comment_received', title='商品收到新的留言',
+            message='有人留言了。', dedupe_key='comment:item:alice',
+        )
+        second = create_notification(
+            self.user, kind='comment_received', title='商品收到新的留言',
+            message='又有人留言了。', dedupe_key='comment:item:alice',
+        )
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(Notification.objects.filter(recipient=self.user).count(), 1)
+        first.refresh_from_db()
+        self.assertEqual(first.occurrence_count, 2)
+        self.assertEqual(first.message, '又有人留言了。')
+
+        first.is_read = True
+        first.save(update_fields=['is_read'])
+        third = create_notification(
+            self.user, kind='comment_received', title='商品收到新的留言',
+            message='已读后重新提醒。', dedupe_key='comment:item:alice',
+        )
+        self.assertNotEqual(third.pk, first.pk)
+        self.assertEqual(Notification.objects.filter(recipient=self.user).count(), 2)
+
     def test_notification_preferences_page_saves_only_current_user_settings(self):
         self.client.login(username='alice', password='safe-password-123')
         response = self.client.get(reverse('notification_preferences'))
