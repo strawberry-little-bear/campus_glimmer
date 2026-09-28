@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -525,6 +525,14 @@ class ListingFlowTests(TestCase):
         self.client.get(reverse('item_list'), {'q': '键盘'})
         self.client.get(reverse('item_list'), {'q': '键盘', 'page': 2})
         self.assertEqual(SearchQuery.objects.filter(query='键盘').count(), 1)
+
+    def test_search_results_record_item_exposures_for_quality_analysis(self):
+        response = self.client.get(reverse('item_list'), {'q': '键盘'})
+        self.assertEqual(response.status_code, 200)
+        record = SearchQuery.objects.get(query='键盘')
+        exposure = SearchImpression.objects.get(search_query=record, item=self.item)
+        self.assertEqual(exposure.position, 1)
+        self.assertIsNone(exposure.user)
 
     def test_search_result_detail_records_click_context(self):
         response = self.client.get(reverse('item_list'), {'q': '键盘', 'sort': 'relevance'})

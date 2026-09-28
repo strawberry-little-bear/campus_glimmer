@@ -40,6 +40,7 @@
     <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-tags"></i>搜索词数量</span><strong>{{ metrics.unique_terms }}</strong><small>去重后的需求表达</small></div>
     <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-exclamation-circle"></i>无结果搜索</span><strong>{{ metrics.zero_result_searches }}</strong><small>值得跟进的需求信号</small></div>
     <div class="ops-metric-card ops-metric-green"><span><i class="bi bi-graph-up-arrow"></i>无结果占比</span><strong>{{ metrics.zero_result_rate }}%</strong><small>搜索体验健康度参考</small></div>
+    <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-eye"></i>结果曝光</span><strong>{{ metrics.impressions }}</strong><small>{{ metrics.exposed_searches }} 次搜索产生结果曝光</small></div>
     <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-cursor"></i>结果点击</span><strong>{{ metrics.clicks }}</strong><small>从搜索结果进入详情</small></div>
     <div class="ops-metric-card ops-metric-purple"><span><i class="bi bi-bullseye"></i>搜索点击率</span><strong>{{ metrics.click_through_rate }}%</strong><small>搜索后产生详情点击</small></div>
     <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-arrow-down-circle"></i>无点击搜索</span><strong>{{ metrics.zero_click_searches }}</strong><small>{{ metrics.zero_click_rate }}% 的有结果搜索没有后续点击</small></div>
@@ -96,7 +97,13 @@
 </div>
 
 <div class="row g-4 mb-4">
-    <div class="col-lg-7">
+    <div class="col-lg-6">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Exposure leaders</span><h2>曝光最多的商品</h2></div><span class="ops-panel-hint">搜索结果展现</span></div>
+            {% if exposed_items %}<div class="search-gap-list">{% for row in exposed_items %}<a class="search-gap-row" href="{% url 'item_detail' row.item_id %}"><span><strong>{{ row.item__title }}</strong><small>{{ row.impression_count }} 次曝光 · 出现在 {{ row.exposed_searches }} 次搜索</small></span><b>{{ row.impression_count }}<em>曝光</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前周期还没有可分析的搜索曝光。</div>{% endif %}
+        </section>
+    </div>
+    <div class="col-lg-6">
         <section class="content-card ops-panel h-100">
             <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Click-through leaders</span><h2>被点击最多的商品</h2></div><span class="ops-panel-hint">{{ metrics.clicks }} 次点击 · {{ metrics.searches_with_results }} 次有结果搜索</span></div>
             {% if clicked_items %}<div class="search-gap-list">{% for row in clicked_items %}<a class="search-gap-row" href="{% url 'item_detail' row.item_id %}"><span><strong>{{ row.item__title }}</strong><small>{{ row.click_count }} 次点击 · 来自 {{ row.unique_searches }} 次搜索</small></span><b>{{ row.click_count }}<em>点击</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前周期还没有可分析的搜索点击。</div>{% endif %}

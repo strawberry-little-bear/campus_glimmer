@@ -533,6 +533,38 @@ class SearchClick(models.Model):
         return f'{query} · {self.item.title}'
 
 
+class SearchImpression(models.Model):
+    """An exposure event for one listing rendered in a search result page."""
+
+    search_query = models.ForeignKey(
+        SearchQuery, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impressions', verbose_name='搜索记录',
+    )
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE, related_name='search_impressions', verbose_name='商品',
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='search_impressions', verbose_name='用户',
+    )
+    position = models.PositiveIntegerField('结果位置', default=0)
+    created_at = models.DateTimeField('曝光时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '搜索曝光'
+        verbose_name_plural = '搜索曝光'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['search_query', '-created_at']),
+            models.Index(fields=['item', '-created_at']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        query = self.search_query.query if self.search_query else '未知搜索'
+        return f'{query} · {self.item.title}'
+
+
 class SavedSearch(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_searches', verbose_name='用户')
     name = models.CharField('关注名称', max_length=80)

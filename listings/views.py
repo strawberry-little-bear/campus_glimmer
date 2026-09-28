@@ -18,7 +18,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .order_workflow import OrderTransitionError, transition_order
@@ -174,11 +174,20 @@ def item_list(request, category_id=None):
     paginator = Paginator(items, 12)
     page_obj = paginator.get_page(request.GET.get('page'))
     if search_query_record:
+        impressions = []
         for position, result_item in enumerate(page_obj.object_list, start=page_obj.start_index()):
             result_item.search_click_url = (
                 f"{reverse('item_detail', args=[result_item.id])}?"
                 f"{urlencode({'search_id': search_query_record.id, 'position': position})}"
             )
+            impressions.append(SearchImpression(
+                search_query=search_query_record,
+                item=result_item,
+                user=request.user if request.user.is_authenticated else None,
+                position=position,
+            ))
+        if impressions:
+            SearchImpression.objects.bulk_create(impressions)
     context = {
         'categories': categories,
         'locations': locations,
@@ -1076,6 +1085,8 @@ def search_insights_export(request):
     writer.writerow(['搜索词数量', dashboard['metrics']['unique_terms']])
     writer.writerow(['无结果搜索', dashboard['metrics']['zero_result_searches']])
     writer.writerow(['无结果占比（%）', dashboard['metrics']['zero_result_rate']])
+    writer.writerow(['结果曝光', dashboard['metrics']['impressions']])
+    writer.writerow(['产生曝光的搜索次数', dashboard['metrics']['exposed_searches']])
     writer.writerow(['结果点击', dashboard['metrics']['clicks']])
     writer.writerow(['搜索点击率（%）', dashboard['metrics']['click_through_rate']])
     writer.writerow(['无点击搜索', dashboard['metrics']['zero_click_searches']])

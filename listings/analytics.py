@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
 
 
 PERIOD_CHOICES = (
@@ -244,6 +244,7 @@ def build_search_insights(days=30, query=''):
         previous_search_period = previous_search_period.filter(query__icontains=query)
 
     click_filter = Q(clicks__created_at__gte=start, clicks__created_at__lte=now)
+    impression_filter = Q(impressions__created_at__gte=start, impressions__created_at__lte=now)
     term_rows = list(
         search_period.values('query').annotate(
             search_count=Count('id'),
@@ -252,6 +253,7 @@ def build_search_insights(days=30, query=''):
             average_results=Avg('result_count'),
             unique_users=Count('user', distinct=True),
             click_count=Count('clicks', filter=click_filter),
+            impression_count=Count('impressions', filter=impression_filter),
             clicked_searches=Count(
                 'clicks__search_query',
                 filter=click_filter & Q(result_count__gt=0),
@@ -277,7 +279,21 @@ def build_search_insights(days=30, query=''):
     )
     if query:
         click_period = click_period.filter(search_query__query__icontains=query)
+    impression_period = SearchImpression.objects.filter(
+        created_at__gte=start, created_at__lte=now,
+        search_query__isnull=False,
+    )
+    if query:
+        impression_period = impression_period.filter(search_query__query__icontains=query)
     click_count = click_period.count()
+    impression_count = impression_period.count()
+    exposed_search_count = impression_period.values('search_query_id').distinct().count()
+    exposed_items = list(
+        impression_period.values('item_id', 'item__title').annotate(
+            impression_count=Count('id'),
+            exposed_searches=Count('search_query', distinct=True),
+        ).order_by('-impression_count', 'item__title')[:10]
+    )
     result_search_count = search_period.filter(result_count__gt=0).count()
     clicked_search_count = click_period.values('search_query_id').distinct().count()
     zero_click_search_count = max(result_search_count - clicked_search_count, 0)
@@ -322,12 +338,15 @@ def build_search_insights(days=30, query=''):
             'zero_result_searches': zero_result_count,
             'zero_result_rate': round(zero_result_count / search_count * 100, 1) if search_count else 0,
             'clicks': click_count,
+            'impressions': impression_count,
+            'exposed_searches': exposed_search_count,
             'searches_with_results': result_search_count,
             'click_through_rate': round(clicked_search_count / result_search_count * 100, 1) if result_search_count else 0,
             'zero_click_searches': zero_click_search_count,
             'zero_click_rate': round(zero_click_search_count / result_search_count * 100, 1) if result_search_count else 0,
         },
         'clicked_items': clicked_items,
+        'exposed_items': exposed_items,
         'no_click_terms': sorted(
             (row for row in term_rows if row['result_search_count'] and not row['clicked_searches']),
             key=lambda row: (-row['search_count'], row['query']),
