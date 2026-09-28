@@ -260,6 +260,8 @@ class GiftApplication(models.Model):
 
 
 class Order(models.Model):
+    ACTIVE_STATUS_VALUES = ('pending', 'confirmed', 'meeting', 'borrowed')
+
     STATUS_CHOICES = (
         ('pending', '待卖家确认'),
         ('confirmed', '卖家已确认'),
@@ -270,7 +272,7 @@ class Order(models.Model):
         ('returned', '已归还'),
     )
 
-    item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name='order', verbose_name='商品')
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='orders', verbose_name='商品')
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, related_name='purchased_orders', verbose_name='买家')
     seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sold_orders', verbose_name='卖家')
     meeting_location = models.ForeignKey(
@@ -294,6 +296,13 @@ class Order(models.Model):
         verbose_name = '交易订单'
         verbose_name_plural = '交易订单'
         ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['item'],
+                condition=Q(status__in=['pending', 'confirmed', 'meeting', 'borrowed']),
+                name='unique_active_order_per_item',
+            ),
+        ]
         indexes = [
             models.Index(fields=['buyer', 'status']),
             models.Index(fields=['seller', 'status']),

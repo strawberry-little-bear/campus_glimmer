@@ -166,3 +166,32 @@ class BorrowingFlowTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.status, 'completed')
         self.assertFalse(DeliveryConfirmation.objects.filter(order=order).exists())
+
+class BorrowingReuseTests(BorrowingFlowTests):
+    def test_returned_item_can_start_a_new_borrowing_cycle(self):
+        first_order = self._start_borrowing()
+
+        self.client.login(username='borrow-buyer', password='safe-password-123')
+        response = self.client.post(
+            reverse('confirm_return', args=[first_order.id]),
+        )
+        self.assertRedirects(response, reverse('order_detail', args=[first_order.id]))
+        self.client.logout()
+
+        self.client.login(username='borrow-seller', password='safe-password-123')
+        response = self.client.post(
+            reverse('confirm_return', args=[first_order.id]),
+        )
+        self.assertRedirects(response, reverse('order_detail', args=[first_order.id]))
+        self.client.logout()
+
+        self.client.login(username='borrow-buyer', password='safe-password-123')
+        response = self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '第二轮借用'},
+        )
+        self.assertEqual(response.status_code, 302)
+        second_order = Order.objects.exclude(pk=first_order.pk).get(item=self.item)
+        self.assertEqual(second_order.status, 'pending')
+        self.assertEqual(Order.objects.filter(item=self.item).count(), 2)
+        self.assertEqual(Item.objects.get(pk=self.item.pk).status, 'reserved')

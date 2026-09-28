@@ -46,7 +46,7 @@ class ItemLifecycleTests(TestCase):
         response = self.client.get(reverse('create_order', args=[item.pk]))
 
         self.assertEqual(response.status_code, 404)
-        self.assertFalse(item.__class__.objects.filter(order__buyer=self.buyer).exists())
+        self.assertFalse(item.__class__.objects.filter(orders__buyer=self.buyer).exists())
 
     def test_expire_items_archives_and_notifies_once(self):
         now = timezone.now()

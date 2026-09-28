@@ -377,6 +377,9 @@ def item_detail(request, item_id):
     rating_summary = Rating.objects.filter(ratee=item.seller).aggregate(average=Avg('score'), count=Count('id'))
     context = {
         'item': item,
+        'active_order': Order.objects.filter(
+            item_id=item.id, status__in=Order.ACTIVE_STATUS_VALUES,
+        ).order_by('-created_at').first(),
         'related_items': related_items,
         'rating_summary': rating_summary,
         'seller_reputation': build_seller_reputation(item.seller),
@@ -552,16 +555,24 @@ def create_order(request, item_id):
             form = OrderForm(initial={'meeting_location': item.location_id})
         return render(request, 'listings/order_form.html', {'form': form, 'item': item, 'title': '申请领取'})
 
-    if hasattr(item, 'order'):
-        messages.info(request, '这个商品已经有一笔交易预约。')
-        return redirect('order_detail', order_id=item.order.id)
+    active_order = Order.objects.filter(
+        item_id=item.id, status__in=Order.ACTIVE_STATUS_VALUES,
+    ).order_by('-created_at').first()
+    if active_order:
+        messages.info(request, '这个商品已经有一笔进行中的交易预约。')
+        return redirect('order_detail', order_id=active_order.id)
     if request.method == 'POST':
         form = OrderForm(request.POST)
         if form.is_valid():
             try:
                 with transaction.atomic():
                     locked_item = Item.objects.select_for_update().select_related('seller').get(id=item.id)
-                    if not locked_item.is_available_now or hasattr(locked_item, 'order'):
+                    if (
+                        not locked_item.is_available_now
+                        or Order.objects.filter(
+                            item_id=locked_item.id, status__in=Order.ACTIVE_STATUS_VALUES,
+                        ).exists()
+                    ):
                         messages.info(request, '这个商品刚刚被其他同学预约了。')
                         return redirect('item_detail', item_id=item.id)
                     order = form.save(commit=False)
@@ -665,8 +676,10 @@ def accept_gift_application(request, application_id):
             if locked_item.trade_mode != 'free' or not locked_item.is_available_now:
                 messages.info(request, '商品已经无法继续选择领取人。')
                 return redirect('manage_gift_applications', item_id=locked_item.id)
-            if hasattr(locked_item, 'order'):
-                messages.info(request, '这个商品已经生成交易订单。')
+            if Order.objects.filter(
+                item_id=locked_item.id, status__in=Order.ACTIVE_STATUS_VALUES,
+            ).exists():
+                messages.info(request, '这个商品已经有一笔进行中的交易。')
                 return redirect('manage_gift_applications', item_id=locked_item.id)
 
             order = Order.objects.create(
