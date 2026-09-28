@@ -354,5 +354,41 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>“需求紧张”表示有效求购相对于当前在售供给偏多，热力值综合周期新增、求购和预约，仅用于运营补给判断。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 campaign-analytics-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Campaign performance</span><h2>校园专题表现</h2></div>
+        <span class="ops-panel-hint">按专题周期与当前统计周期重叠部分计算</span>
+    </div>
+    <div class="campaign-analytics-summary">
+        <div><span>统计专题</span><strong>{{ campaign_analytics.summary.campaign_count }}</strong></div>
+        <div><span>专题新增商品</span><strong>{{ campaign_analytics.summary.new_items }}</strong></div>
+        <div><span>专题预约</span><strong>{{ campaign_analytics.summary.orders }}</strong></div>
+        <div class="campaign-summary-warning"><span>需要关注</span><strong>{{ campaign_analytics.summary.attention_count }}</strong></div>
+    </div>
+    {% if campaign_analytics.attention_rows %}
+    <div class="campaign-attention-list mt-3">
+        {% for campaign in campaign_analytics.attention_rows %}
+        <div class="campaign-attention campaign-attention-{{ campaign.performance_tone }}"><i class="bi bi-lightbulb"></i><span><strong>{{ campaign.title }}：{{ campaign.performance_label }}</strong><small>{{ campaign.performance_note }}</small></span></div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if campaign_analytics.rows %}
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 campaign-analytics-table"><thead><tr><th>专题</th><th>供给</th><th>曝光</th><th>收藏</th><th>预约</th><th>完成</th><th>转化</th><th>判断</th></tr></thead><tbody>
+        {% for campaign in campaign_analytics.rows %}
+        <tr>
+            <td><strong>{{ campaign.title }}</strong><small class="d-block text-muted">卖家 {{ campaign.seller_count }} · 当前在售 {{ campaign.current_items }}</small></td>
+            <td>{{ campaign.new_items }}<small class="d-block text-muted">周期新增</small></td>
+            <td>{{ campaign.views }}<small class="d-block text-muted">{{ campaign.viewers }} 位用户</small></td>
+            <td>{{ campaign.favorites }}<small class="d-block text-muted">{{ campaign.view_to_favorite_rate }}%</small></td>
+            <td><strong>{{ campaign.orders }}</strong><small class="d-block text-muted">浏览转预约 {{ campaign.view_to_order_rate }}%</small></td>
+            <td>{{ campaign.completed_orders }}<small class="d-block text-muted">完成率 {{ campaign.completion_rate }}%</small></td>
+            <td>{{ campaign.favorite_to_order_rate }}%<small class="d-block text-muted">收藏转预约</small></td>
+            <td><span class="campaign-performance campaign-performance-{{ campaign.performance_tone }}">{{ campaign.performance_label }}</span></td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="empty-inline mt-3">当前统计周期还没有专题行为数据。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>曝光、收藏和预约按业务记录统计；转化率用于比较专题表现，不代表单个用户的完整行为路径。运营人员仍需结合商品质量和活动内容人工判断。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

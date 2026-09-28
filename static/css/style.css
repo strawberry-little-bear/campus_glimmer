@@ -868,3 +868,25 @@ a { color: inherit; text-decoration: none; }
 .bulk-campaign-toolbar form { min-width: min(100%, 390px); }
 .bulk-campaign-toolbar select { min-width: 175px; }
 @media (max-width: 575px) { .bulk-campaign-toolbar { align-items: flex-start; flex-direction: column; }.bulk-campaign-toolbar form { width: 100%; }.bulk-campaign-toolbar select { flex: 1; } }
+
+.campaign-analytics-panel { overflow: hidden; }
+.campaign-analytics-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.campaign-analytics-summary > div { display: flex; flex-direction: column; gap: 7px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.campaign-analytics-summary span { color: #83938b; font-size: .71rem; }
+.campaign-analytics-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; }
+.campaign-summary-warning { border-color: #f2e2d5 !important; background: #fffaf5 !important; }
+.campaign-summary-warning strong { color: #b06d44; }
+.campaign-attention-list { display: grid; gap: 8px; }
+.campaign-attention { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; border-radius: 11px; font-size: .76rem; }
+.campaign-attention > i { margin-top: 2px; }
+.campaign-attention span { display: grid; gap: 2px; }
+.campaign-attention small { color: #7e8f86; }
+.campaign-attention-warning { color: #92553e; background: #fff4ee; }
+.campaign-attention-muted { color: #6d7d74; background: #f4f7f4; }
+.campaign-performance { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 999px; white-space: nowrap; font-size: .68rem; font-weight: 700; }
+.campaign-performance-success { color: #397b57; background: #e4f3e7; }
+.campaign-performance-info { color: #4d7197; background: #eaf2fb; }
+.campaign-performance-warning { color: #a05b42; background: #fff0e8; }
+.campaign-performance-muted, .campaign-performance-neutral { color: #718178; background: #eef3ef; }
+.campaign-analytics-table td { min-width: 76px; }
+@media (max-width: 575px) { .campaign-analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.campaign-analytics-summary > div { min-height: 72px; padding: 11px; }.campaign-analytics-panel .ops-table { min-width: 860px; } }
