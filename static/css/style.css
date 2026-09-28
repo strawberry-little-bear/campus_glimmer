@@ -808,3 +808,24 @@ a { color: inherit; text-decoration: none; }
 .transaction-safety-signal-positive { border: 1px solid #dceee0; background: #f8fdf8; }
 .transaction-safety-signal-positive > i { color: #4d9b68; }
 .transaction-safety-signal-info > i { color: #77978a; }
+.price-insight-card { padding: 16px; border: 1px solid #e2ebe5; border-radius: 16px; background: linear-gradient(145deg, #f8fcf9, #fff); }
+.price-insight-positive { border-color: #d4ead9; background: linear-gradient(145deg, #f5fcf6, #fff); }
+.price-insight-warning { border-color: #f0ddd4; background: linear-gradient(145deg, #fff9f6, #fff); }
+.price-insight-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.price-insight-heading h3 { color: #315746; font-size: 1.02rem; }
+.price-insight-confidence { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; color: #6b8978; background: #edf6ef; font-size: .68rem; font-weight: 700; }
+.price-insight-warning .price-insight-confidence { color: #a66c59; background: #fff0ea; }
+.price-insight-detail { margin: 11px 0 0; color: #718178; font-size: .73rem; line-height: 1.6; }
+.price-insight-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 13px; }
+.price-insight-metrics > div { padding: 9px 10px; border-radius: 11px; background: rgba(255, 255, 255, .78); }
+.price-insight-metrics small { display: block; color: #83958a; font-size: .65rem; }
+.price-insight-metrics strong { display: block; margin-top: 3px; color: #3d604d; font-size: .83rem; }
+.price-insight-demand { display: flex; align-items: flex-start; gap: 9px; margin-top: 11px; padding: 10px 11px; border-radius: 11px; background: rgba(233, 246, 236, .72); }
+.price-insight-demand > i { margin-top: 2px; color: #4c9b68; }
+.price-insight-demand strong, .price-insight-demand span { display: block; }
+.price-insight-demand strong { color: #4b7059; font-size: .75rem; }
+.price-insight-demand span { margin-top: 2px; color: #799080; font-size: .68rem; }
+.price-insight-action { margin-top: 11px; color: #5c7566; font-size: .71rem; line-height: 1.55; }
+.price-insight-action i { color: #bd8b48; }
+.price-insight-note { display: block; margin-top: 9px; color: #98a99f; font-size: .64rem; line-height: 1.5; }
+@media (max-width: 575.98px) { .price-insight-metrics { grid-template-columns: 1fr; } }

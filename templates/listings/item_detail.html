@@ -36,6 +36,24 @@
             <h6 class="section-label">商品描述</h6>
             <p class="detail-description">{{ item.description|linebreaksbr }}</p>
 
+            {% if price_insight %}
+            <section class="price-insight-card price-insight-{{ price_insight.tone }} mt-4" aria-label="商品价格参考">
+                <div class="price-insight-heading">
+                    <div><span class="eyebrow eyebrow-soft">数据化参考</span><h3 class="mt-2 mb-1">{{ price_insight.position_label }}</h3></div>
+                    <span class="price-insight-confidence"><i class="bi bi-bar-chart-line me-1"></i>{{ price_insight.confidence_label }}</span>
+                </div>
+                <p class="price-insight-detail">{{ price_insight.detail }}</p>
+                <div class="price-insight-metrics">
+                    <div><small>当前价格</small><strong>¥{{ price_insight.current_price|floatformat:2 }}</strong></div>
+                    <div><small>同类中位数</small><strong>¥{{ price_insight.median_price|floatformat:2 }}</strong></div>
+                    <div><small>常见区间</small><strong>¥{{ price_insight.lower_price|floatformat:2 }}～{{ price_insight.upper_price|floatformat:2 }}</strong></div>
+                </div>
+                <div class="price-insight-demand"><i class="bi bi-graph-up-arrow"></i><div><strong>{{ price_insight.demand_label }}</strong><span>{{ price_insight.demand_detail }}</span></div></div>
+                <p class="price-insight-action mb-0"><i class="bi bi-lightbulb me-1"></i>{{ price_insight.action }}</p>
+                <small class="price-insight-note">参考数据来自站内同类商品和公开互动记录，不代表平台定价或成交保证。</small>
+            </section>
+            {% endif %}
+
             <div class="d-flex flex-wrap gap-2 mt-4">
                 {% if user.is_authenticated %}
                     <form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>

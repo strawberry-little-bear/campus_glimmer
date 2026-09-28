@@ -29,6 +29,7 @@ from .models import BrowsingHistory, CampusLocation, Category, DemandPost, Deliv
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
+from .price_insights import build_price_insight
 from .meeting_scheduling import (
     find_appointment_conflicts,
     recommend_meeting_locations,
@@ -388,6 +389,7 @@ def item_detail(request, item_id):
         'related_items': related_items,
         'rating_summary': rating_summary,
         'seller_reputation': build_seller_reputation(item.seller),
+        'price_insight': build_price_insight(item),
         'seller_ratings': seller_ratings,
         'seller_verification': CampusVerification.objects.filter(
             user=item.seller, status='verified', verified_at__isnull=False,
