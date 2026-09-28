@@ -24,6 +24,7 @@ from .models import BrowsingHistory, CampusLocation, Category, DemandPost, Deliv
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
+from .meeting_scheduling import find_appointment_conflicts
 from .order_workflow import OrderTransitionError, transition_order
 from .saved_searches import notify_saved_search_matches
 from chat_messages.models import ModerationEvent, PrivateMessage
@@ -588,6 +589,30 @@ def propose_meeting(request, order_id):
         ).get(pk=order.id)
         if locked_order.status not in {'confirmed', 'meeting'}:
             messages.error(request, '订单状态已经发生变化，请刷新后再试。')
+            return redirect('order_detail', order_id=locked_order.id)
+        candidate_start = form.cleaned_data['start_at']
+        candidate_end = form.cleaned_data['end_at']
+        conflicts = find_appointment_conflicts(
+            user=locked_order.buyer,
+            start_at=candidate_start,
+            end_at=candidate_end,
+            exclude_order_id=locked_order.id,
+            lock=True,
+        ).first()
+        if not conflicts:
+            conflicts = find_appointment_conflicts(
+                user=locked_order.seller,
+                start_at=candidate_start,
+                end_at=candidate_end,
+                exclude_order_id=locked_order.id,
+                lock=True,
+            ).first()
+        conflict = conflicts
+        if conflict:
+            messages.error(
+                request,
+                f'这段时间与“{conflict.order.item.title}”的另一笔交付安排冲突，请换一个时间。',
+            )
             return redirect('order_detail', order_id=locked_order.id)
         appointment, created = MeetingAppointment.objects.select_for_update().get_or_create(
             order=locked_order,

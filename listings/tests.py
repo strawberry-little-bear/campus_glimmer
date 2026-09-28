@@ -1077,6 +1077,45 @@ class ListingFlowTests(TestCase):
         self.assertEqual(appointment.proposed_by, self.other_user)
         self.assertEqual(appointment.decline_reason, '')
 
+    def test_meeting_proposal_rejects_overlapping_active_appointment(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('create_order', args=[self.item.id]), {})
+        first_order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[first_order.id]), {'status': 'confirmed'})
+        start_at = timezone.now() + timedelta(days=1, hours=2)
+        end_at = start_at + timedelta(hours=1)
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        payload = {
+            'start_at': start_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'end_at': end_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'location': self.location.id,
+        }
+        self.client.post(reverse('propose_meeting', args=[first_order.id]), payload)
+
+        second_item = Item.objects.create(
+            title='宿舍台灯', description='暖光台灯', price='39.00',
+            category=self.category, location=self.location, condition='全新', seller=self.user,
+        )
+        self.client.post(reverse('create_order', args=[second_item.id]), {})
+        second_order = Order.objects.get(item=second_item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('update_order_status', args=[second_order.id]), {'status': 'confirmed'})
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        overlapping_start = start_at + timedelta(minutes=30)
+        overlapping_end = end_at + timedelta(minutes=30)
+        response = self.client.post(reverse('propose_meeting', args=[second_order.id]), {
+            'start_at': overlapping_start.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'end_at': overlapping_end.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%dT%H:%M'),
+            'location': self.location.id,
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(MeetingAppointment.objects.filter(order=second_order).exists())
+
     def test_cancelled_order_cannot_accept_pending_meeting(self):
         self.client.login(username='bob', password='safe-password-123')
         self.client.post(reverse('create_order', args=[self.item.id]), {})
