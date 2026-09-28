@@ -55,6 +55,23 @@
                 {% if order.item.trade_mode == 'borrow' and order.returned_at %}<dt class="col-sm-4">实际归还</dt><dd class="col-sm-8">{{ order.returned_at|date:'Y年m月d日 H:i' }}</dd>{% endif %}
             </dl>
 
+            {% if transaction_safety %}
+            <section class="transaction-safety-card transaction-safety-{{ transaction_safety.tone }} mt-5">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div><span class="eyebrow eyebrow-soft">交易安全卡</span><h3 class="mt-2 mb-1">{{ transaction_safety.label }}</h3><p class="small text-muted mb-0">基于订单、公开交易记录和当前预约状态生成，仅作提醒，不会替代双方判断。</p></div>
+                    <i class="bi {% if transaction_safety.tone == 'warning' %}bi-shield-exclamation{% elif transaction_safety.tone == 'safe' %}bi-shield-check{% else %}bi-shield{% endif %} transaction-safety-icon"></i>
+                </div>
+                <div class="transaction-safety-list mt-3">
+                    {% for signal in transaction_safety.signals %}
+                    <article class="transaction-safety-signal transaction-safety-signal-{{ signal.level }}">
+                        <i class="bi {% if signal.level == 'warning' %}bi-exclamation-triangle{% elif signal.level == 'positive' %}bi-check-circle{% else %}bi-info-circle{% endif %}"></i>
+                        <div><strong>{{ signal.title }}</strong><p>{{ signal.detail }}</p>{% if signal.action %}<small><i class="bi bi-arrow-right-short me-1"></i>{{ signal.action }}</small>{% endif %}</div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
             {% if order.status == 'completed' or order.status == 'returned' %}
             <div class="rating-panel mt-5">
                 <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">

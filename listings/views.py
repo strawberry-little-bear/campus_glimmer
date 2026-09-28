@@ -36,6 +36,7 @@ from .meeting_scheduling import (
 )
 from .order_workflow import OrderTransitionError, transition_order
 from .saved_searches import notify_saved_search_matches
+from .transaction_safety import build_transaction_safety
 from chat_messages.models import ModerationEvent, PrivateMessage
 from accounts.models import CampusVerification
 
@@ -757,7 +758,7 @@ def withdraw_gift_application(request, application_id):
 def order_detail(request, order_id):
     order = get_object_or_404(
         Order.objects.select_related(
-            'item', 'item__location', 'buyer', 'seller', 'meeting_location', 'delivery_confirmation', 'dispute', 'appointment__location', 'appointment__proposed_by', 'appointment__responded_by',
+            'item', 'item__category', 'item__location', 'buyer', 'seller', 'meeting_location', 'delivery_confirmation', 'dispute', 'appointment__location', 'appointment__proposed_by', 'appointment__responded_by',
         ),
         id=order_id,
     )
@@ -765,6 +766,7 @@ def order_detail(request, order_id):
         messages.error(request, '你没有权限查看这笔订单。')
         return redirect('home')
     appointment = getattr(order, 'appointment', None)
+    transaction_safety = build_transaction_safety(order)
     meeting_form = None
     meeting_location_recommendations = []
     meeting_time_recommendations = []
@@ -808,6 +810,7 @@ def order_detail(request, order_id):
         'delivery_code_form': delivery_code_form,
         'handoff_code_display': handoff_code_display,
         'appointment': appointment,
+        'transaction_safety': transaction_safety,
         'meeting_form': meeting_form,
         'meeting_location_recommendations': meeting_location_recommendations,
         'meeting_time_recommendations': meeting_time_recommendations,
