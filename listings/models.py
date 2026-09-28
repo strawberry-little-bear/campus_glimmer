@@ -383,6 +383,7 @@ class Notification(models.Model):
         ('order_expired', '交易预约已超时'),
         ('report_update', '举报处理更新'),
         ('moderation_update', '内容审核结果'),
+        ('operations_digest', '运营告警日报'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -457,6 +458,9 @@ class NotificationPreference(models.Model):
     )
     moderation_update = models.BooleanField(
         '内容审核结果', default=True, help_text='你提交的留言或私信完成复核时提醒。',
+    )
+    operations_digest = models.BooleanField(
+        '运营告警日报', default=True, help_text='管理员运营看板出现高优先级信号时发送每日摘要。',
     )
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
