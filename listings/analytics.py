@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Report, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchQuery
 
 
 PERIOD_CHOICES = (
@@ -243,12 +243,21 @@ def build_search_insights(days=30, query=''):
     if query:
         previous_search_period = previous_search_period.filter(query__icontains=query)
 
+    click_filter = Q(clicks__created_at__gte=start, clicks__created_at__lte=now)
     term_rows = list(
         search_period.values('query').annotate(
             search_count=Count('id'),
+            result_search_count=Count('id', filter=Q(result_count__gt=0)),
             zero_result_count=Count('id', filter=Q(result_count=0)),
             average_results=Avg('result_count'),
             unique_users=Count('user', distinct=True),
+            click_count=Count('clicks', filter=click_filter),
+            clicked_searches=Count(
+                'clicks__search_query',
+                filter=click_filter & Q(result_count__gt=0),
+                distinct=True,
+            ),
+            clicked_items=Count('clicks__item', filter=click_filter, distinct=True),
             last_searched=Max('created_at'),
         ).order_by('-search_count', 'query')
     )
@@ -256,9 +265,28 @@ def build_search_insights(days=30, query=''):
         row['zero_result_rate'] = round(
             row['zero_result_count'] / row['search_count'] * 100, 1
         ) if row['search_count'] else 0
+        row['click_rate'] = round(
+            row['clicked_searches'] / row['result_search_count'] * 100, 1
+        ) if row['result_search_count'] else 0
 
     search_count = search_period.count()
     zero_result_count = search_period.filter(result_count=0).count()
+    click_period = SearchClick.objects.filter(
+        created_at__gte=start, created_at__lte=now,
+        search_query__isnull=False, search_query__result_count__gt=0,
+    )
+    if query:
+        click_period = click_period.filter(search_query__query__icontains=query)
+    click_count = click_period.count()
+    result_search_count = search_period.filter(result_count__gt=0).count()
+    clicked_search_count = click_period.values('search_query_id').distinct().count()
+    zero_click_search_count = max(result_search_count - clicked_search_count, 0)
+    clicked_items = list(
+        click_period.values('item_id', 'item__title').annotate(
+            click_count=Count('id'),
+            unique_searches=Count('search_query', distinct=True),
+        ).order_by('-click_count', 'item__title')[:10]
+    )
     gap_terms = sorted(
         (row for row in term_rows if row['zero_result_count']),
         key=lambda row: (-row['zero_result_count'], -row['search_count'], row['query']),
@@ -293,7 +321,17 @@ def build_search_insights(days=30, query=''):
             'unique_terms': len(term_rows),
             'zero_result_searches': zero_result_count,
             'zero_result_rate': round(zero_result_count / search_count * 100, 1) if search_count else 0,
+            'clicks': click_count,
+            'searches_with_results': result_search_count,
+            'click_through_rate': round(clicked_search_count / result_search_count * 100, 1) if result_search_count else 0,
+            'zero_click_searches': zero_click_search_count,
+            'zero_click_rate': round(zero_click_search_count / result_search_count * 100, 1) if result_search_count else 0,
         },
+        'clicked_items': clicked_items,
+        'no_click_terms': sorted(
+            (row for row in term_rows if row['result_search_count'] and not row['clicked_searches']),
+            key=lambda row: (-row['search_count'], row['query']),
+        )[:12],
         'term_rows': term_rows[:30],
         'gap_terms': gap_terms,
         'facet_supply_gaps': facet_supply_gaps,

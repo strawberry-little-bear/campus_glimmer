@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchQuery
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -509,6 +509,34 @@ class ListingFlowTests(TestCase):
         self.client.get(reverse('item_list'), {'q': '键盘'})
         self.client.get(reverse('item_list'), {'q': '键盘', 'page': 2})
         self.assertEqual(SearchQuery.objects.filter(query='键盘').count(), 1)
+
+    def test_search_result_detail_records_click_context(self):
+        response = self.client.get(reverse('item_list'), {'q': '键盘', 'sort': 'relevance'})
+        self.assertEqual(response.status_code, 200)
+        record = SearchQuery.objects.get(query='键盘')
+        self.assertContains(response, f'search_id={record.id}')
+
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.get(
+            reverse('item_detail', args=[self.item.id]),
+            {'search_id': record.id, 'position': 1},
+        )
+        click = SearchClick.objects.get(search_query=record, item=self.item)
+        self.assertEqual(click.user, self.other_user)
+        self.assertEqual(click.position, 1)
+
+    def test_search_insights_reports_click_through_quality(self):
+        record = SearchQuery.objects.create(
+            user=self.user, query='键盘', result_count=3,
+        )
+        SearchClick.objects.create(
+            search_query=record, item=self.item, user=self.other_user, position=1,
+        )
+        dashboard = build_search_insights(30)
+        self.assertEqual(dashboard['metrics']['clicks'], 1)
+        self.assertEqual(dashboard['metrics']['click_through_rate'], 100.0)
+        self.assertEqual(dashboard['term_rows'][0]['click_count'], 1)
+        self.assertEqual(dashboard['clicked_items'][0]['item_id'], self.item.id)
 
     def test_invalid_price_filters_are_ignored_safely(self):
         response = self.client.get(reverse('item_list'), {

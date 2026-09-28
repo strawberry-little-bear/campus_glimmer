@@ -18,7 +18,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .order_workflow import OrderTransitionError, transition_order
@@ -59,6 +59,18 @@ def _parse_price(value):
     if not amount.is_finite() or amount < 0:
         return None
     return amount
+
+
+def _search_context_signature(query, condition, category, location, raw_min_price, raw_max_price, sort):
+    return '|'.join((
+        query[:120],
+        condition[:120],
+        str(category.id if category else ''),
+        str(location.id if location else ''),
+        raw_min_price,
+        raw_max_price,
+        sort,
+    ))
 
 
 def item_list(request, category_id=None):
@@ -114,17 +126,28 @@ def item_list(request, category_id=None):
         items = items.order_by(sort_map[sort])
 
     result_count = items.count()
-    if query and not request.GET.get('page'):
-        SearchQuery.objects.create(
-            user=request.user if request.user.is_authenticated else None,
-            query=query[:120],
-            condition=condition[:120],
-            category=category,
-            location=location,
-            min_price=min_price,
-            max_price=max_price,
-            result_count=result_count,
+    search_query_record = None
+    if query:
+        search_signature = _search_context_signature(
+            query, condition, category, location, raw_min_price, raw_max_price, sort,
         )
+        if not request.GET.get('page'):
+            search_query_record = SearchQuery.objects.create(
+                user=request.user if request.user.is_authenticated else None,
+                query=query[:120],
+                condition=condition[:120],
+                category=category,
+                location=location,
+                min_price=min_price,
+                max_price=max_price,
+                result_count=result_count,
+            )
+            request.session['active_search_query_id'] = search_query_record.id
+            request.session['active_search_signature'] = search_signature
+        elif request.session.get('active_search_signature') == search_signature:
+            search_query_record = SearchQuery.objects.filter(
+                id=request.session.get('active_search_query_id'),
+            ).first()
 
     filter_params = {}
     if query:
@@ -142,6 +165,12 @@ def item_list(request, category_id=None):
 
     paginator = Paginator(items, 12)
     page_obj = paginator.get_page(request.GET.get('page'))
+    if search_query_record:
+        for position, result_item in enumerate(page_obj.object_list, start=page_obj.start_index()):
+            result_item.search_click_url = (
+                f"{reverse('item_detail', args=[result_item.id])}?"
+                f"{urlencode({'search_id': search_query_record.id, 'position': position})}"
+            )
     context = {
         'categories': categories,
         'locations': locations,
@@ -169,6 +198,7 @@ def item_list(request, category_id=None):
         )),
         'title': f'{category.name} · 商品集' if category else '发现校园好物',
         'favorite_ids': _favorite_ids(request),
+        'search_query_id': search_query_record.id if search_query_record else None,
     }
     return render(request, 'listings/item_list.html', context)
 
@@ -228,6 +258,20 @@ def item_detail(request, item_id):
         Item.objects.select_related('category', 'seller', 'location').prefetch_related('images', 'comments__author__profile'),
         id=item_id,
     )
+    search_id = request.GET.get('search_id', '').strip()
+    if search_id.isdigit():
+        search_query_record = SearchQuery.objects.filter(id=int(search_id)).first()
+        if search_query_record:
+            try:
+                position = max(int(request.GET.get('position', 0)), 0)
+            except (TypeError, ValueError):
+                position = 0
+            SearchClick.objects.create(
+                search_query=search_query_record,
+                item=item,
+                user=request.user if request.user.is_authenticated else None,
+                position=position,
+            )
     if request.user.is_authenticated and request.user != item.seller:
         history, created = BrowsingHistory.objects.get_or_create(user=request.user, item=item)
         if not created:
@@ -1024,13 +1068,18 @@ def search_insights_export(request):
     writer.writerow(['搜索词数量', dashboard['metrics']['unique_terms']])
     writer.writerow(['无结果搜索', dashboard['metrics']['zero_result_searches']])
     writer.writerow(['无结果占比（%）', dashboard['metrics']['zero_result_rate']])
+    writer.writerow(['结果点击', dashboard['metrics']['clicks']])
+    writer.writerow(['搜索点击率（%）', dashboard['metrics']['click_through_rate']])
+    writer.writerow(['无点击搜索', dashboard['metrics']['zero_click_searches']])
+    writer.writerow(['无点击占比（%）', dashboard['metrics']['zero_click_rate']])
 
     writer.writerow([])
-    writer.writerow(['搜索词分析', '搜索次数', '无结果次数', '无结果占比（%）', '平均结果数', '独立用户数', '最近搜索时间'])
+    writer.writerow(['搜索词分析', '搜索次数', '点击次数', '点击率（%）', '无结果次数', '无结果占比（%）', '平均结果数', '独立用户数', '最近搜索时间'])
     for row in dashboard['term_rows']:
         writer.writerow([
-            row['query'], row['search_count'], row['zero_result_count'], row['zero_result_rate'],
-            row['average_results'], row['unique_users'], row['last_searched'],
+            row['query'], row['search_count'], row['click_count'], row['click_rate'],
+            row['zero_result_count'], row['zero_result_rate'], row['average_results'],
+            row['unique_users'], row['last_searched'],
         ])
 
     writer.writerow([])

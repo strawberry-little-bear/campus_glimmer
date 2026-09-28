@@ -40,6 +40,9 @@
     <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-tags"></i>搜索词数量</span><strong>{{ metrics.unique_terms }}</strong><small>去重后的需求表达</small></div>
     <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-exclamation-circle"></i>无结果搜索</span><strong>{{ metrics.zero_result_searches }}</strong><small>值得跟进的需求信号</small></div>
     <div class="ops-metric-card ops-metric-green"><span><i class="bi bi-graph-up-arrow"></i>无结果占比</span><strong>{{ metrics.zero_result_rate }}%</strong><small>搜索体验健康度参考</small></div>
+    <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-cursor"></i>结果点击</span><strong>{{ metrics.clicks }}</strong><small>从搜索结果进入详情</small></div>
+    <div class="ops-metric-card ops-metric-purple"><span><i class="bi bi-bullseye"></i>搜索点击率</span><strong>{{ metrics.click_through_rate }}%</strong><small>搜索后产生详情点击</small></div>
+    <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-arrow-down-circle"></i>无点击搜索</span><strong>{{ metrics.zero_click_searches }}</strong><small>{{ metrics.zero_click_rate }}% 的有结果搜索没有后续点击</small></div>
 </div>
 
 <div class="content-card ops-panel search-period-comparison mb-4">
@@ -78,8 +81,8 @@
         <section class="content-card ops-panel h-100">
             <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Demand table</span><h2>搜索词表现</h2></div><span class="ops-panel-hint">最多展示 30 个词</span></div>
             {% if term_rows %}
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>搜索词</th><th>次数</th><th>用户</th><th>无结果</th><th>平均结果</th><th>最近搜索</th></tr></thead><tbody>
-                {% for row in term_rows %}<tr><td><strong>{{ row.query }}</strong></td><td>{{ row.search_count }}</td><td>{{ row.unique_users }}</td><td>{% if row.zero_result_count %}<span class="ops-warning">{{ row.zero_result_count }}（{{ row.zero_result_rate }}%）</span>{% else %}—{% endif %}</td><td>{{ row.average_results|floatformat:1 }}</td><td class="text-nowrap">{{ row.last_searched|date:"m-d H:i" }}</td></tr>{% endfor %}
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>搜索词</th><th>次数</th><th>用户</th><th>点击</th><th>点击率</th><th>无结果</th><th>平均结果</th><th>最近搜索</th></tr></thead><tbody>
+                {% for row in term_rows %}<tr><td><strong>{{ row.query }}</strong></td><td>{{ row.search_count }}</td><td>{{ row.unique_users }}</td><td>{{ row.click_count }}</td><td>{% if row.click_rate %}<span class="text-success">{{ row.click_rate }}%</span>{% else %}—{% endif %}</td><td>{% if row.zero_result_count %}<span class="ops-warning">{{ row.zero_result_count }}（{{ row.zero_result_rate }}%）</span>{% else %}—{% endif %}</td><td>{{ row.average_results|floatformat:1 }}</td><td class="text-nowrap">{{ row.last_searched|date:"m-d H:i" }}</td></tr>{% endfor %}
             </tbody></table></div>
             {% else %}<div class="empty-inline">当前周期还没有匹配的搜索记录。</div>{% endif %}
         </section>
@@ -88,6 +91,21 @@
         <section class="content-card ops-panel h-100">
             <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Supply gaps</span><h2>供给缺口</h2></div><span class="ops-panel-hint">按无结果次数排序</span></div>
             {% if gap_terms %}<div class="search-gap-list">{% for row in gap_terms %}<a class="search-gap-row" href="{% url 'item_list' %}?q={{ row.query|urlencode }}"><span><strong>{{ row.query }}</strong><small>{{ row.search_count }} 次搜索 · {{ row.unique_users }} 位用户</small></span><b>{{ row.zero_result_count }}<em>无结果</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前周期没有明显的无结果需求。</div>{% endif %}
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Click-through leaders</span><h2>被点击最多的商品</h2></div><span class="ops-panel-hint">{{ metrics.clicks }} 次点击 · {{ metrics.searches_with_results }} 次有结果搜索</span></div>
+            {% if clicked_items %}<div class="search-gap-list">{% for row in clicked_items %}<a class="search-gap-row" href="{% url 'item_detail' row.item_id %}"><span><strong>{{ row.item__title }}</strong><small>{{ row.click_count }} 次点击 · 来自 {{ row.unique_searches }} 次搜索</small></span><b>{{ row.click_count }}<em>点击</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前周期还没有可分析的搜索点击。</div>{% endif %}
+        </section>
+    </div>
+    <div class="col-lg-5">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Needs attention</span><h2>有搜索但未点击</h2></div><span class="ops-panel-hint">可优化排序或供给</span></div>
+            {% if no_click_terms %}<div class="search-gap-list">{% for row in no_click_terms %}<a class="search-gap-row" href="{% url 'item_list' %}?q={{ row.query|urlencode }}"><span><strong>{{ row.query }}</strong><small>{{ row.search_count }} 次搜索 · 平均结果 {{ row.average_results|floatformat:1 }}</small></span><b>{{ row.search_count }}<em>无点击</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前没有出现明显的无点击搜索词。</div>{% endif %}
         </section>
     </div>
 </div>
