@@ -501,6 +501,33 @@ class SearchQuery(models.Model):
         return f'{self.query} · {self.result_count} 条结果'
 
 
+class SearchSynonym(models.Model):
+    """An operator-managed pair of equivalent terms used by marketplace search."""
+
+    keyword = models.CharField('主关键词', max_length=120)
+    synonym = models.CharField('同义词', max_length=120)
+    is_active = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '搜索同义词'
+        verbose_name_plural = '搜索同义词'
+        ordering = ['keyword', 'synonym']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['keyword', 'synonym'], name='unique_search_synonym_pair',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['keyword', 'is_active']),
+            models.Index(fields=['synonym', 'is_active']),
+        ]
+
+    def __str__(self):
+        return f'{self.keyword} ↔ {self.synonym}'
+
+
 class SearchClick(models.Model):
     """A click-through event from a recorded search to a listing detail page."""
 

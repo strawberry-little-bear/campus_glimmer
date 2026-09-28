@@ -12,6 +12,7 @@
             {% if query %}正在为你筛选“{{ query }}”
             {% elif location %}正在浏览 {{ location.name }} 附近的好物
             {% else %}找到适合自己的好物，也把不再需要的分享出去。{% endif %}
+            {% if query and search_terms|length > 1 %}<span class="d-block small text-muted mt-2"><i class="bi bi-stars me-1"></i>已扩展匹配：{% for term in search_terms %}{% if not forloop.first %}{{ term }}{% if not forloop.last %}、{% endif %}{% endif %}{% endfor %}</span>{% endif %}
         </p>
     </div>
     {% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>发布闲置</a>{% endif %}

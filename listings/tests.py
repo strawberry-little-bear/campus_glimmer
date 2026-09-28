@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -464,6 +464,17 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '便携键盘')
         self.assertNotContains(response, '低价鼠标')
         self.assertNotContains(response, '高价显示器')
+
+    def test_search_expands_operator_managed_synonyms(self):
+        SearchSynonym.objects.create(keyword='电脑', synonym='笔记本')
+        laptop = Item.objects.create(
+            title='轻薄笔记本', description='适合上课使用', price='1200.00',
+            category=self.category, location=self.location, condition='九成新', seller=self.other_user,
+        )
+        response = self.client.get(reverse('item_list'), {'q': '电脑'})
+        self.assertContains(response, laptop.title)
+        self.assertContains(response, '已扩展匹配：笔记本')
+        self.assertEqual(response.context['search_terms'], ['电脑', '笔记本'])
 
     def test_relevance_sort_prioritizes_exact_and_prefix_matches(self):
         exact = Item.objects.create(

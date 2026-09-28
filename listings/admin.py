@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -182,3 +182,11 @@ class SearchImpressionAdmin(admin.ModelAdmin):
     list_filter = ('created_at',)
     search_fields = ('search_query__query', 'item__title', 'user__username')
     date_hierarchy = 'created_at'
+
+
+@admin.register(SearchSynonym)
+class SearchSynonymAdmin(admin.ModelAdmin):
+    list_display = ('keyword', 'synonym', 'is_active', 'updated_at')
+    list_filter = ('is_active',)
+    search_fields = ('keyword', 'synonym')
+    list_editable = ('is_active',)

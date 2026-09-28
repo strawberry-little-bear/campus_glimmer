@@ -19,7 +19,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .order_workflow import OrderTransitionError, transition_order
@@ -62,6 +62,26 @@ def _parse_price(value):
     return amount
 
 
+def _expand_search_terms(query):
+    """Expand a query with active operator-managed synonyms without changing the original query record."""
+    query = (query or '').strip()[:120]
+    if not query:
+        return []
+    normalized_query = query.casefold()
+    terms = [query]
+    synonym_rows = SearchSynonym.objects.filter(
+        is_active=True,
+    ).filter(
+        Q(keyword__icontains=query) | Q(synonym__icontains=query)
+    )
+    for row in synonym_rows:
+        if normalized_query in row.keyword.casefold():
+            terms.append(row.synonym)
+        if normalized_query in row.synonym.casefold():
+            terms.append(row.keyword)
+    return list(dict.fromkeys(term[:120] for term in terms))[:8]
+
+
 def _search_context_signature(query, condition, category, location, raw_min_price, raw_max_price, sort):
     return '|'.join((
         query[:120],
@@ -81,6 +101,7 @@ def item_list(request, category_id=None):
     location_id = request.GET.get('location', '').strip()
     location = get_object_or_404(CampusLocation, id=location_id, is_active=True) if location_id.isdigit() else None
     query = request.GET.get('q', '').strip()
+    search_terms = _expand_search_terms(query)
     condition = request.GET.get('condition', '').strip()
     raw_min_price = request.GET.get('min_price', '').strip()
     raw_max_price = request.GET.get('max_price', '').strip()
@@ -92,15 +113,18 @@ def item_list(request, category_id=None):
         items = items.filter(category=category)
     if location:
         items = items.filter(location=location)
-    if query:
-        items = items.filter(
-            Q(title__icontains=query)
-            | Q(description__icontains=query)
-            | Q(condition__icontains=query)
-            | Q(category__name__icontains=query)
-            | Q(location__name__icontains=query)
-            | Q(location__building__icontains=query)
-        )
+    if search_terms:
+        search_filter = Q()
+        for term in search_terms:
+            search_filter |= (
+                Q(title__icontains=term)
+                | Q(description__icontains=term)
+                | Q(condition__icontains=term)
+                | Q(category__name__icontains=term)
+                | Q(location__name__icontains=term)
+                | Q(location__building__icontains=term)
+            )
+        items = items.filter(search_filter)
     if condition:
         items = items.filter(condition__icontains=condition)
     if min_price is not None:
@@ -124,9 +148,18 @@ def item_list(request, category_id=None):
         )
         items = items.annotate(
             search_rank=Case(
-                When(title__iexact=query, then=Value(3)),
-                When(title__istartswith=query, then=Value(2)),
-                When(title__icontains=query, then=Value(1)),
+                *[
+                    When(title__iexact=term, then=Value(3))
+                    for term in search_terms
+                ],
+                *[
+                    When(title__istartswith=term, then=Value(2))
+                    for term in search_terms
+                ],
+                *[
+                    When(title__icontains=term, then=Value(1))
+                    for term in search_terms
+                ],
                 default=Value(0),
                 output_field=IntegerField(),
             ),
@@ -217,6 +250,7 @@ def item_list(request, category_id=None):
         'items': page_obj,
         'page_obj': page_obj,
         'query': query,
+        'search_terms': search_terms,
         'condition': condition,
         'min_price': raw_min_price,
         'max_price': raw_max_price,
