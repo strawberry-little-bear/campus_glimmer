@@ -1,4 +1,4 @@
-# 拾光校园 · Campus Glimmer
+   # 拾光校园 · Campus Glimmer
 
 > 让闲置在校园里继续流转，也让每一次相遇都更有回应。
 
@@ -284,3 +284,8 @@ GitHub Actions 会在推送到 `main` 或提交 Pull Request 时执行系统检�
 ## License
 
 本项目采用 [MIT License](LICENSE)。
+## 项目架构与业务闭环
+### 系统架构
+![系统架构图](docs/architecture.svg)
+### 交易闭环
+![校园交易闭环](docs/business-flow.svg)
