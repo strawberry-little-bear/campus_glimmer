@@ -500,6 +500,27 @@ class ListingFlowTests(TestCase):
         result_ids = [item.id for item in response.context['items']]
         self.assertLess(result_ids.index(clicked.id), result_ids.index(first.id))
 
+    def test_relevance_sort_prefers_higher_click_through_rate_not_only_click_volume(self):
+        low_ctr = Item.objects.create(
+            title='键盘低转化', description='曝光很多但点击少', price='30.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        high_ctr = Item.objects.create(
+            title='键盘高转化', description='曝光少但点击稳定', price='60.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        search = SearchQuery.objects.create(query='键盘', result_count=2)
+        SearchImpression.objects.bulk_create([
+            SearchImpression(search_query=search, item=low_ctr, position=1)
+            for _ in range(10)
+        ] + [SearchImpression(search_query=search, item=high_ctr, position=2)])
+        SearchClick.objects.create(search_query=search, item=low_ctr, position=1)
+        SearchClick.objects.create(search_query=search, item=high_ctr, position=2)
+
+        response = self.client.get(reverse('item_list'), {'q': '键盘', 'sort': 'relevance'})
+        result_ids = [item.id for item in response.context['items']]
+        self.assertLess(result_ids.index(high_ctr.id), result_ids.index(low_ctr.id))
+
     def test_search_query_records_filters_and_result_count(self):
         self.client.login(username='alice', password='safe-password-123')
         response = self.client.get(reverse('item_list'), {

@@ -9,7 +9,8 @@ from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse, JsonResponse
 from django.db import IntegrityError, transaction
-from django.db.models import Avg, Case, Count, F, IntegerField, Q, Value, When
+from django.db.models import Avg, Case, Count, ExpressionWrapper, F, FloatField, IntegerField, Q, Value, When
+from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -113,6 +114,14 @@ def item_list(request, category_id=None):
         sort = 'latest'
     if sort == 'relevance':
         feedback_window = timezone.now() - timedelta(days=90)
+        feedback_click_filter = Q(
+            search_clicks__created_at__gte=feedback_window,
+            search_clicks__search_query__query__iexact=query,
+        )
+        feedback_impression_filter = Q(
+            search_impressions__created_at__gte=feedback_window,
+            search_impressions__search_query__query__iexact=query,
+        )
         items = items.annotate(
             search_rank=Case(
                 When(title__iexact=query, then=Value(3)),
@@ -122,13 +131,25 @@ def item_list(request, category_id=None):
                 output_field=IntegerField(),
             ),
             feedback_click_count=Count(
-                'search_clicks',
-                filter=Q(
-                    search_clicks__created_at__gte=feedback_window,
-                    search_clicks__search_query__query__iexact=query,
-                ),
+                'search_clicks', filter=feedback_click_filter, distinct=True,
             ),
-        ).order_by('-search_rank', '-feedback_click_count', '-created_at')
+            feedback_impression_count=Count(
+                'search_impressions', filter=feedback_impression_filter, distinct=True,
+            ),
+        ).annotate(
+            feedback_ctr=Case(
+                When(
+                    feedback_impression_count__gt=0,
+                    then=ExpressionWrapper(
+                        Cast(F('feedback_click_count'), FloatField())
+                        / Cast(F('feedback_impression_count'), FloatField()),
+                        output_field=FloatField(),
+                    ),
+                ),
+                default=Value(0.0),
+                output_field=FloatField(),
+            ),
+        ).order_by('-search_rank', '-feedback_ctr', '-feedback_click_count', '-created_at')
     else:
         sort_map = {'latest': '-created_at', 'price_asc': 'price', 'price_desc': '-price'}
         items = items.order_by(sort_map[sort])
