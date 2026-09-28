@@ -164,6 +164,24 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>浏览和收藏使用用户-商品去重记录，转化率用于观察趋势，不代表单个用户的完整路径。</div>
 </section>
 
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Order health</span><h2>交易健康度</h2></div>
+        <span class="ops-panel-hint">识别取消、超时与响应摩擦</span>
+    </div>
+    <div class="order-health-banner order-health-{{ order_health.risk_level }}">
+        <div class="order-health-banner-icon"><i class="bi {% if order_health.risk_level == 'critical' %}bi-exclamation-octagon{% elif order_health.risk_level == 'warning' %}bi-exclamation-triangle{% else %}bi-shield-check{% endif %}"></i></div>
+        <div><strong>{{ order_health.risk_label }}</strong><p>{{ order_health.risk_message }}</p></div>
+    </div>
+    <div class="order-health-grid mt-3">
+        <div class="order-health-card"><span>取消率</span><strong>{{ order_health.cancellation_rate }}%</strong><small>{{ order_health.cancelled_orders }} 笔已取消</small></div>
+        <div class="order-health-card"><span>超时待确认</span><strong>{{ order_health.overdue_pending_orders }}</strong><small>仍在等待卖家确认</small></div>
+        <div class="order-health-card"><span>完成率</span><strong>{{ order_health.completion_rate }}%</strong><small>{{ order_health.completed_orders }} 笔完成交易</small></div>
+        <div class="order-health-card"><span>平均确认耗时</span><strong>{% if order_health.average_confirmation_hours != None %}{{ order_health.average_confirmation_hours }} 小时{% else %}—{% endif %}</strong><small>{% if order_health.confirmation_sample_size %}基于 {{ order_health.confirmation_sample_size }} 笔有效样本{% else %}暂无状态事件样本{% endif %}</small></div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-lightbulb me-1"></i>健康度同时参考订单最终状态、确认截止时间和状态事件耗时，帮助运营区分库存问题与履约问题。</div>
+</section>
+
 <div class="row g-4 mb-4">
     <div class="col-xl-8">
         <section class="content-card ops-panel h-100">

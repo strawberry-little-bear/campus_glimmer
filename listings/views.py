@@ -946,6 +946,16 @@ def operations_dashboard_export(request):
     for row in dashboard['order_statuses']:
         writer.writerow([row['label'], row['count']])
 
+    health = dashboard['order_health']
+    writer.writerow([])
+    writer.writerow(['交易健康度', '数值'])
+    writer.writerow(['取消率（%）', health['cancellation_rate']])
+    writer.writerow(['超时待确认', health['overdue_pending_orders']])
+    writer.writerow(['完成率（%）', health['completion_rate']])
+    writer.writerow(['平均确认耗时（小时）', '' if health['average_confirmation_hours'] is None else health['average_confirmation_hours']])
+    writer.writerow(['风险等级', health['risk_label']])
+    writer.writerow(['风险说明', health['risk_message']])
+
     writer.writerow([])
     writer.writerow(['分类供给', '周期内新增', '当前在售'])
     for row in dashboard['category_stats']:

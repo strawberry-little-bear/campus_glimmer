@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
-from .analytics import build_operational_alerts, build_search_insights
+from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
 from .recommendations import get_recommendations
@@ -541,6 +541,49 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.context['conversion_funnel'][2]['rate'], 100.0)
         self.assertContains(response, '用户行为转化漏斗')
         self.assertContains(response, '图书馆东门')
+
+    def test_operations_dashboard_reports_order_health_signals(self):
+        overdue_item = Item.objects.create(
+            title='待确认商品', description='测试超时预约', price='20.00',
+            category=self.category, location=self.location, condition='全新', seller=self.user,
+        )
+        cancelled_item = Item.objects.create(
+            title='取消商品', description='测试取消率', price='30.00',
+            category=self.category, location=self.location, condition='全新', seller=self.user,
+        )
+        overdue_order = Order.objects.create(
+            item=overdue_item, buyer=self.other_user, seller=self.user,
+            meeting_location=self.location, agreed_price='20.00', status='pending',
+            confirmation_deadline=timezone.now() - timedelta(hours=2),
+        )
+        cancelled_order = Order.objects.create(
+            item=cancelled_item, buyer=self.other_user, seller=self.user,
+            meeting_location=self.location, agreed_price='30.00', status='cancelled',
+        )
+        OrderEvent.objects.create(
+            order=cancelled_order, actor=self.other_user,
+            from_status='pending', to_status='cancelled', note='买家取消',
+        )
+
+        dashboard = build_operations_dashboard(30)
+        health = dashboard['order_health']
+        self.assertEqual(health['total_orders'], 2)
+        self.assertEqual(health['cancelled_orders'], 1)
+        self.assertEqual(health['overdue_pending_orders'], 1)
+        self.assertEqual(health['cancellation_rate'], 50.0)
+        self.assertEqual(health['risk_level'], 'critical')
+        self.assertIn('超过卖家确认截止时间', health['risk_message'])
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'))
+        self.assertContains(response, '交易健康度')
+        self.assertContains(response, '需要立即跟进')
+        export = self.client.get(reverse('operations_dashboard_export'))
+        self.assertContains(export, '交易健康度')
+        self.assertContains(export, '超时待确认')
+
 
     def test_operations_dashboard_surfaces_actionable_alerts(self):
         self.user.is_staff = True

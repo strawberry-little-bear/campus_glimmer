@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, Report, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, OrderEvent, Report, SearchQuery
 
 
 PERIOD_CHOICES = (
@@ -507,6 +507,71 @@ def build_operational_alerts(metrics, period_comparisons):
     return sorted(alerts, key=lambda alert: severity_order.get(alert['severity'], 9))
 
 
+
+def _build_order_health(order_period, now):
+    """Summarize order friction signals that are easy to miss in a status count."""
+    total_orders = order_period.count()
+    completed_orders = order_period.filter(status='completed').count()
+    cancelled_orders = order_period.filter(status='cancelled').count()
+    pending_orders = order_period.filter(status='pending').count()
+    overdue_pending_orders = order_period.filter(
+        status='pending', confirmation_deadline__lt=now,
+    ).count()
+
+    created_at_by_order = dict(order_period.values_list('id', 'created_at'))
+    confirmation_events = OrderEvent.objects.filter(
+        order__in=order_period,
+        to_status='confirmed',
+    ).values('order_id', 'created_at').order_by('order_id', 'created_at')
+    confirmation_hours = []
+    seen_orders = set()
+    for event in confirmation_events:
+        order_id = event['order_id']
+        if order_id in seen_orders or order_id not in created_at_by_order:
+            continue
+        elapsed = (event['created_at'] - created_at_by_order[order_id]).total_seconds() / 3600
+        if elapsed >= 0:
+            confirmation_hours.append(elapsed)
+            seen_orders.add(order_id)
+
+    average_confirmation_hours = (
+        round(sum(confirmation_hours) / len(confirmation_hours), 1)
+        if confirmation_hours else None
+    )
+    cancellation_rate = round(cancelled_orders / total_orders * 100, 1) if total_orders else 0
+    if overdue_pending_orders:
+        risk_level = 'critical'
+        risk_label = '需要立即跟进'
+        risk_message = f'有 {overdue_pending_orders} 笔预约已经超过卖家确认截止时间。'
+    elif total_orders >= 3 and cancellation_rate >= 30:
+        risk_level = 'warning'
+        risk_label = '建议复盘'
+        risk_message = f'取消率达到 {cancellation_rate}%，建议检查预约确认和沟通流程。'
+    elif average_confirmation_hours is not None and average_confirmation_hours > 24:
+        risk_level = 'warning'
+        risk_label = '响应偏慢'
+        risk_message = f'平均确认耗时 {average_confirmation_hours} 小时，建议优化确认提醒。'
+    else:
+        risk_level = 'stable'
+        risk_label = '交易健康'
+        risk_message = '当前周期暂未发现明显的交易流程风险。'
+
+    return {
+        'total_orders': total_orders,
+        'completed_orders': completed_orders,
+        'cancelled_orders': cancelled_orders,
+        'pending_orders': pending_orders,
+        'overdue_pending_orders': overdue_pending_orders,
+        'cancellation_rate': cancellation_rate,
+        'completion_rate': round(completed_orders / total_orders * 100, 1) if total_orders else 0,
+        'average_confirmation_hours': average_confirmation_hours,
+        'confirmation_sample_size': len(confirmation_hours),
+        'risk_level': risk_level,
+        'risk_label': risk_label,
+        'risk_message': risk_message,
+    }
+
+
 def build_operations_dashboard(days=30):
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
@@ -537,6 +602,7 @@ def build_operations_dashboard(days=30):
     completed_order_count = order_period.filter(status='completed').count()
     completion_rate = round(completed_order_count / order_count * 100, 1) if order_count else 0
     average_order_price = order_period.aggregate(value=Avg('agreed_price'))['value']
+    order_health = _build_order_health(order_period, now)
     detail_view_count = view_period.count()
     favorite_count = favorite_period.count()
 
@@ -735,6 +801,7 @@ def build_operations_dashboard(days=30):
         'trend_max': trend_max,
         'conversion_funnel': conversion_funnel,
         'funnel_max': funnel_max,
+        'order_health': order_health,
         'top_searches': top_searches,
         'zero_result_searches': zero_result_searches,
         'category_stats': category_stats,
