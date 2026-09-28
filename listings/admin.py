@@ -107,10 +107,10 @@ class NotificationPreferenceAdmin(admin.ModelAdmin):
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ('recipient', 'kind', 'title', 'is_read', 'actor', 'created_at')
+    list_display = ('recipient', 'kind', 'title', 'is_read', 'actor', 'item', 'demand', 'created_at')
     list_filter = ('kind', 'is_read', 'created_at')
     search_fields = ('recipient__username', 'actor__username', 'title', 'message')
-    autocomplete_fields = ('recipient', 'actor', 'order', 'item')
+    autocomplete_fields = ('recipient', 'actor', 'order', 'item', 'demand')
     readonly_fields = ('created_at',)
 
 

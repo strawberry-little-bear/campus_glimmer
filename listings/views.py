@@ -18,6 +18,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
+from .demand_matching import notify_demand_matches
 from .forms import DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
@@ -873,6 +874,7 @@ def new_item(request):
                     image.item = item
                     image.save()
             notify_saved_search_matches(item)
+            notify_demand_matches(item)
             messages.success(request, '商品已成功发布，快去分享给同学吧！')
             return redirect('item_detail', item_id=item.id)
     else:
@@ -1486,9 +1488,10 @@ def notification_list(request):
             | Q(message__icontains=search_query)
             | Q(item__title__icontains=search_query)
             | Q(order__item__title__icontains=search_query)
+            | Q(demand__title__icontains=search_query)
         )
 
-    notifications = notifications.select_related('actor', 'item', 'order__item')
+    notifications = notifications.select_related('actor', 'item', 'order__item', 'demand')
     paginator = Paginator(notifications, 20)
     page = paginator.get_page(request.GET.get('page'))
 
@@ -1560,6 +1563,7 @@ def activity_center(request):
             | Q(message__icontains=search_query)
             | Q(item__title__icontains=search_query)
             | Q(order__item__title__icontains=search_query)
+            | Q(demand__title__icontains=search_query)
         )
         message_queryset = message_queryset.filter(
             Q(content__icontains=search_query)
@@ -1579,13 +1583,16 @@ def activity_center(request):
     row_limit = page_number * page_size
 
     rows = []
-    for notification in filtered_notifications.select_related('actor', 'item', 'order__item').order_by('-created_at', '-id')[:row_limit]:
+    for notification in filtered_notifications.select_related('actor', 'item', 'order__item', 'demand').order_by('-created_at', '-id')[:row_limit]:
         rows.append({
             'source': 'notification',
             'source_label': '通知',
             'title': notification.title,
             'message': notification.message,
-            'context': notification.item.title if notification.item else '',
+            'context': (
+                notification.item.title if notification.item else
+                (notification.demand.title if notification.demand else '')
+            ),
             'created_at': notification.created_at,
             'is_read': notification.is_read,
             'url': notification.target_url or reverse('notification_list'),

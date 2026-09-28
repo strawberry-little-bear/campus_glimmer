@@ -7,8 +7,8 @@ from .models import Notification, NotificationPreference
 
 
 def create_notification(
-    recipient, *, kind, title, message, actor=None, order=None, item=None,
-    target_url='', dedupe_key='', dedupe_window_seconds=300,
+    recipient, *, kind, title, message, actor=None, order=None, item=None, demand=None,
+    target_url='', dedupe_key='', dedupe_window_seconds=300, dedupe_forever=False,
 ):
     """Create a notification, aggregating repeated unread events when requested."""
     if not recipient or (actor and recipient.pk == actor.pk):
@@ -21,18 +21,22 @@ def create_notification(
     if dedupe_key:
         cutoff = now - timedelta(seconds=max(0, dedupe_window_seconds))
         with transaction.atomic():
-            existing = Notification.objects.select_for_update().filter(
+            existing_query = Notification.objects.select_for_update().filter(
                 recipient=recipient,
                 kind=kind,
                 dedupe_key=dedupe_key,
-                is_read=False,
-            ).filter(
-                last_occurred_at__gte=cutoff,
-            ).order_by('-created_at').first()
+            )
+            if not dedupe_forever:
+                existing_query = existing_query.filter(
+                    is_read=False,
+                    last_occurred_at__gte=cutoff,
+                )
+            existing = existing_query.order_by('-created_at').first()
             if existing:
                 existing.actor = actor
                 existing.order = order
                 existing.item = item
+                existing.demand = demand
                 existing.message = message
                 existing.target_url = target_url
                 existing.occurrence_count += 1
@@ -48,6 +52,7 @@ def create_notification(
         actor=actor,
         order=order,
         item=item,
+        demand=demand,
         kind=kind,
         title=title,
         message=message,

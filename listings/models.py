@@ -384,6 +384,7 @@ class Notification(models.Model):
         ('report_update', '举报处理更新'),
         ('moderation_update', '内容审核结果'),
         ('operations_digest', '运营告警日报'),
+        ('demand_match', '求购匹配提醒'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -393,6 +394,10 @@ class Notification(models.Model):
     )
     order = models.ForeignKey(Order, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications', verbose_name='相关订单')
     item = models.ForeignKey(Item, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications', verbose_name='相关商品')
+    demand = models.ForeignKey(
+        'DemandPost', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='notifications', verbose_name='相关求购',
+    )
     kind = models.CharField('通知类型', max_length=30, choices=KIND_CHOICES)
     title = models.CharField('通知标题', max_length=120)
     message = models.CharField('通知内容', max_length=255)
@@ -461,6 +466,9 @@ class NotificationPreference(models.Model):
     )
     operations_digest = models.BooleanField(
         '运营告警日报', default=True, help_text='管理员运营看板出现高优先级信号时发送每日摘要。',
+    )
+    demand_match = models.BooleanField(
+        '求购匹配提醒', default=True, help_text='有商品可能符合你发布的求购信息时提醒。',
     )
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 

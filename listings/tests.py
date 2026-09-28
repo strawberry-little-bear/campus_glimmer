@@ -12,6 +12,7 @@ from .order_workflow import OrderTransitionError, transition_order
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .availability import notify_item_available
+from .demand_matching import notify_demand_matches
 from chat_messages.models import PrivateMessage
 
 
@@ -1555,3 +1556,73 @@ class DemandPostTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '最高预算不能低于最低预算')
         self.assertFalse(DemandPost.objects.filter(title='预算校验').exists())
+
+
+class DemandMatchingNotificationTests(TestCase):
+    def setUp(self):
+        self.seller = User.objects.create_user(username='match-seller', password='safe-password-123')
+        self.requester = User.objects.create_user(username='match-requester', password='safe-password-123')
+        self.other = User.objects.create_user(username='match-other', password='safe-password-123')
+        self.category = Category.objects.create(name='匹配教材')
+        self.location = CampusLocation.objects.create(name='匹配图书馆')
+        self.demand = DemandPost.objects.create(
+            requester=self.requester, title='高等数学教材', description='需要一本教材',
+            category=self.category, location=self.location, min_price='20', max_price='80',
+        )
+
+    def test_new_item_notifies_matching_demand_and_is_idempotent(self):
+        item = Item.objects.create(
+            seller=self.seller, title='高等数学教材九成新', description='课本', price='50',
+            category=self.category, location=self.location, condition='9成新',
+        )
+
+        self.assertEqual(notify_demand_matches(item), 1)
+        notice = Notification.objects.get(recipient=self.requester, kind='demand_match')
+        self.assertEqual(notice.item, item)
+        self.assertEqual(notice.demand, self.demand)
+        self.assertEqual(notice.target_url, reverse('demand_detail', args=[self.demand.id]))
+        self.assertIn('价格符合预算', notice.message)
+
+        self.assertEqual(notify_demand_matches(item), 0)
+        self.assertEqual(Notification.objects.filter(
+            recipient=self.requester, kind='demand_match',
+        ).count(), 1)
+
+    def test_publishing_item_triggers_matching_notification(self):
+        self.client.login(username='match-seller', password='safe-password-123')
+        response = self.client.post(reverse('new_item'), {
+            'title': '高等数学教材九成新',
+            'description': '适合备考使用',
+            'price': '50',
+            'category': self.category.id,
+            'location': self.location.id,
+            'condition': '9成新',
+            'images-TOTAL_FORMS': '3',
+            'images-INITIAL_FORMS': '0',
+            'images-MIN_NUM_FORMS': '0',
+            'images-MAX_NUM_FORMS': '5',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.requester, kind='demand_match', item__title='高等数学教材九成新',
+        ).exists())
+
+    def test_mismatch_and_disabled_preference_do_not_notify(self):
+        wrong_category = Category.objects.create(name='匹配家具')
+        item = Item.objects.create(
+            seller=self.seller, title='高等数学教材', description='课本', price='50',
+            category=wrong_category, location=self.location, condition='9成新',
+        )
+        self.assertEqual(notify_demand_matches(item), 0)
+
+        preference = NotificationPreference.objects.create(
+            user=self.requester, demand_match=False,
+        )
+        item.category = self.category
+        item.save(update_fields=['category', 'updated_at'])
+        self.assertEqual(notify_demand_matches(item), 0)
+        self.assertFalse(Notification.objects.filter(
+            recipient=self.requester, kind='demand_match',
+        ).exists())
+        preference.refresh_from_db()
+        self.assertFalse(preference.demand_match)
