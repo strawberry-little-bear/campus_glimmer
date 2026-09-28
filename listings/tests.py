@@ -10,6 +10,7 @@ from .analytics import build_operations_dashboard, build_operational_alerts, bui
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
 from .recommendations import get_recommendations
+from .reputation import build_seller_reputation
 from .notifications import create_notification
 from .availability import notify_item_available
 from .demand_matching import notify_demand_matches
@@ -1626,3 +1627,44 @@ class DemandMatchingNotificationTests(TestCase):
         ).exists())
         preference.refresh_from_db()
         self.assertFalse(preference.demand_match)
+
+
+class SellerReputationTests(TestCase):
+    def setUp(self):
+        self.seller = User.objects.create_user(username='reputation-seller', password='safe-password-123')
+        self.buyer = User.objects.create_user(username='reputation-buyer', password='safe-password-123')
+        self.category = Category.objects.create(name='信誉测试分类')
+        self.location = CampusLocation.objects.create(name='信誉测试地点')
+
+    def _item(self, title):
+        return Item.objects.create(
+            seller=self.seller, title=title, description='测试商品', price='20',
+            category=self.category, location=self.location, condition='9成新',
+        )
+
+    def test_reputation_summary_explains_completion_and_public_ratings(self):
+        completed_item = self._item('已完成商品')
+        cancelled_item = self._item('已取消商品')
+        completed_order = Order.objects.create(
+            item=completed_item, buyer=self.buyer, seller=self.seller,
+            agreed_price='20', status='completed',
+        )
+        Order.objects.create(
+            item=cancelled_item, buyer=self.buyer, seller=self.seller,
+            agreed_price='20', status='cancelled',
+        )
+        Rating.objects.create(
+            order=completed_order, rater=self.buyer, ratee=self.seller, score=5, comment='顺利',
+        )
+
+        reputation = build_seller_reputation(self.seller)
+        self.assertEqual(reputation['completed_orders'], 1)
+        self.assertEqual(reputation['closed_orders'], 2)
+        self.assertEqual(reputation['completion_rate'], 50.0)
+        self.assertEqual(reputation['rating_average'], 5.0)
+        self.assertIn('有完成交易记录', reputation['badges'])
+
+        response = self.client.get(reverse('item_detail', args=[completed_item.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '交易概览')
+        self.assertContains(response, '完成交易')

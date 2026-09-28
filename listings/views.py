@@ -22,6 +22,7 @@ from .demand_matching import notify_demand_matches
 from .forms import DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
+from .reputation import build_seller_reputation
 from .notifications import create_notification
 from .order_workflow import OrderTransitionError, transition_order
 from .saved_searches import notify_saved_search_matches
@@ -359,6 +360,7 @@ def item_detail(request, item_id):
         'item': item,
         'related_items': related_items,
         'rating_summary': rating_summary,
+        'seller_reputation': build_seller_reputation(item.seller),
         'seller_ratings': seller_ratings,
         'is_favorite': item_id in _favorite_ids(request),
         'availability_watch': (
