@@ -33,7 +33,7 @@
 
             <dl class="row order-info-list mt-5 mb-0">
                 <dt class="col-sm-4">商品</dt><dd class="col-sm-8"><a href="{% url 'item_detail' order.item.id %}">{{ order.item.title }}</a></dd>
-                <dt class="col-sm-4">成交价格</dt><dd class="col-sm-8">¥{{ order.agreed_price|floatformat:2 }}</dd>
+                <dt class="col-sm-4">交易方式</dt><dd class="col-sm-8">{% if order.item.trade_mode == 'free' %}<span class="text-success">免费领取</span>{% else %}出售 · ¥{{ order.agreed_price|floatformat:2 }}{% endif %}</dd>
                 <dt class="col-sm-4">买家</dt><dd class="col-sm-8">{{ order.buyer.username }}</dd>
                 <dt class="col-sm-4">卖家</dt><dd class="col-sm-8">{{ order.seller.username }}</dd>
                 <dt class="col-sm-4">交付地点</dt><dd class="col-sm-8">{% if order.meeting_location %}{{ order.meeting_location.name }}{% if order.meeting_location.address %} · {{ order.meeting_location.address }}{% endif %}{% else %}待双方沟通{% endif %}</dd>

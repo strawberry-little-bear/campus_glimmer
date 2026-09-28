@@ -527,10 +527,11 @@ def create_order(request, item_id):
                         order=order, actor=request.user, to_status=order.status,
                         note='买家发起交易预约',
                     )
+                    action_label = '申请领取' if order.item.trade_mode == 'free' else '预约'
                     create_notification(
                         order.seller, actor=request.user, kind='order_created',
-                        title='收到新的交易预约',
-                        message=f'{request.user.username}预约了你的商品“{order.item.title}”。',
+                        title='收到新的领取申请' if order.item.trade_mode == 'free' else '收到新的交易预约',
+                        message=f'{request.user.username}{action_label}了你的商品“{order.item.title}”。',
                         order=order, item=order.item,
                         target_url=reverse('order_detail', args=[order.id]),
                     )
@@ -539,7 +540,7 @@ def create_order(request, item_id):
             except IntegrityError:
                 messages.info(request, '这个商品刚刚被其他同学预约了。')
                 return redirect('item_detail', item_id=item.id)
-            messages.success(request, '预约已提交，等待卖家确认。')
+            messages.success(request, '领取申请已提交，等待发布者确认。' if order.item.trade_mode == 'free' else '预约已提交，等待卖家确认。')
             return redirect('order_detail', order_id=order.id)
     else:
         form = OrderForm(initial={'meeting_location': item.location_id})

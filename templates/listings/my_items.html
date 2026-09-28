@@ -52,7 +52,7 @@
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
                                 </td>
-                                <td>¥{{ item.price }}</td>
+                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
                                 <td>
                                     <span class="badge {% if item.status == 'available' %}bg-success{% elif item.status == 'reserved' %}bg-warning{% else %}bg-secondary{% endif %}">
                                         {{ item.get_status_display }}
@@ -104,7 +104,7 @@
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
                                 </td>
-                                <td>¥{{ item.price }}</td>
+                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
                                 <td>{{ item.created_at|date:"Y-m-d" }}</td>
                                 <td>
                                     <div class="btn-group btn-group-sm">
@@ -152,7 +152,7 @@
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
                                 </td>
-                                <td>¥{{ item.price }}</td>
+                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
                                 <td>{{ item.created_at|date:"Y-m-d" }}</td>
                                 <td>
                                     <div class="btn-group btn-group-sm">
@@ -200,7 +200,7 @@
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
                                 </td>
-                                <td>¥{{ item.price }}</td>
+                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
                                 <td>{{ item.created_at|date:"Y-m-d" }}</td>
                                 <td>
                                     <div class="btn-group btn-group-sm">

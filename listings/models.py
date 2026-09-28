@@ -54,12 +54,17 @@ class Item(models.Model):
         ('sold', '已售出'),
         ('expired', '已过期'),
     )
+    TRADE_MODE_CHOICES = (
+        ('sale', '出售'),
+        ('free', '免费赠送'),
+    )
 
     objects = ItemQuerySet.as_manager()
 
     title = models.CharField('商品标题', max_length=200)
     description = models.TextField('商品描述')
-    price = models.DecimalField('价格', max_digits=10, decimal_places=2)
+    trade_mode = models.CharField('交易方式', max_length=20, choices=TRADE_MODE_CHOICES, default='sale')
+    price = models.DecimalField('价格', max_digits=10, decimal_places=2, default=0)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='items', verbose_name='分类')
     location = models.ForeignKey(
         CampusLocation,

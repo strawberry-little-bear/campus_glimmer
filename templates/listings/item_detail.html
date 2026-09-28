@@ -23,7 +23,7 @@
         <div class="detail-content">
             <div class="product-meta mb-3"><span>{{ item.category.name }}</span><span>{{ item.created_at|date:'Y年m月d日' }}</span></div>
             <h1>{{ item.title }}</h1>
-            <div class="detail-price">¥{{ item.price|floatformat:2 }}</div>
+            <div class="detail-price">{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price|floatformat:2 }}{% endif %}</div>
             <div class="detail-tags">
                 <span><i class="bi bi-stars"></i>{{ item.condition }}</span>
                 <span><i class="bi bi-person"></i>{{ item.seller.username }}</span>

@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django import forms
 from django.db.models import Q
@@ -43,7 +44,7 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
 
     class Meta:
         model = Item
-        fields = ['title', 'description', 'price', 'category', 'location', 'condition', 'expires_at']
+        fields = ['title', 'description', 'trade_mode', 'price', 'category', 'location', 'condition', 'expires_at']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 6, 'placeholder': '介绍商品的新旧程度、配件、交易方式等'}),
             'price': forms.NumberInput(attrs={'min': '0', 'step': '0.01', 'placeholder': '0.00'}),
@@ -57,11 +58,24 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._style_fields()
+        self.fields['trade_mode'].widget.attrs['class'] = 'form-select'
+        # Keep existing integrations and older saved forms compatible: sale is the
+        # historical default when the new field is omitted from a POST.
+        self.fields['trade_mode'].required = False
+        self.fields['trade_mode'].initial = self.instance.trade_mode or 'sale'
         self.fields['category'].widget.attrs['class'] = 'form-select'
         self.fields['location'].widget.attrs['class'] = 'form-select'
         self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields['location'].empty_label = '请选择交易地点（可选）'
         self.fields['expires_at'].widget.attrs['class'] = 'form-control'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get('trade_mode'):
+            cleaned_data['trade_mode'] = 'sale'
+        if cleaned_data.get('trade_mode') == 'free':
+            cleaned_data['price'] = Decimal('0.00')
+        return cleaned_data
 
     def clean_expires_at(self):
         value = self.cleaned_data.get('expires_at')
