@@ -29,6 +29,7 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door me-1"></i>首页</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'item_list' %}"><i class="bi bi-grid me-1"></i>发现好物</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'demand_list' %}"><i class="bi bi-bullseye me-1"></i>求购广场</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'campaign_list' %}"><i class="bi bi-stars me-1"></i>校园专题</a></li>
                     {% if user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'new_item' %}"><i class="bi bi-plus-circle me-1"></i>发布闲置</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'new_demand' %}"><i class="bi bi-megaphone me-1"></i>发布求购</a></li>

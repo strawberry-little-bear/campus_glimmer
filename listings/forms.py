@@ -5,7 +5,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
+from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -57,7 +57,7 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
 
     class Meta:
         model = Item
-        fields = ['title', 'description', 'trade_mode', 'price', 'deposit_amount', 'borrow_days', 'category', 'location', 'condition', 'expires_at']
+        fields = ['title', 'description', 'trade_mode', 'price', 'deposit_amount', 'borrow_days', 'category', 'location', 'campaign', 'condition', 'expires_at']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 6, 'placeholder': '介绍商品的新旧程度、配件、交易方式等'}),
             'price': forms.NumberInput(attrs={'min': '0', 'step': '0.01', 'placeholder': '0.00'}),
@@ -86,6 +86,13 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
         self.fields['location'].widget.attrs['class'] = 'form-select'
         self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields['location'].empty_label = '请选择交易地点（可选）'
+        campaign_filter = Q(is_active=True)
+        if self.instance and self.instance.campaign_id:
+            campaign_filter |= Q(pk=self.instance.campaign_id)
+        self.fields['campaign'].queryset = CampusCampaign.objects.filter(campaign_filter).order_by('-starts_at', 'title')
+        self.fields['campaign'].empty_label = '不加入专题（可选）'
+        self.fields['campaign'].help_text = '可加入毕业季、教材交换周等正在运营的校园专题。'
+        self.fields['campaign'].widget.attrs['class'] = 'form-select'
         self.fields['expires_at'].widget.attrs['class'] = 'form-control'
 
     def clean(self):

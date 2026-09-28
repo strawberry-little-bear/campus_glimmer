@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -22,10 +22,22 @@ class CampusLocationAdmin(admin.ModelAdmin):
     list_editable = ('is_public', 'is_active', 'sort_order')
 
 
+@admin.register(CampusCampaign)
+class CampusCampaignAdmin(admin.ModelAdmin):
+    list_display = ('title', 'slug', 'starts_at', 'ends_at', 'is_active', 'item_count')
+    list_filter = ('is_active', 'starts_at', 'ends_at')
+    search_fields = ('title', 'slug', 'description')
+    prepopulated_fields = {'slug': ('title',)}
+
+    @admin.display(description='商品数')
+    def item_count(self, obj):
+        return obj.items.filter(status='available').count()
+
+
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ('title', 'trade_mode', 'price', 'category', 'location', 'seller', 'status', 'expires_at', 'report_count', 'created_at')
-    list_filter = ('trade_mode', 'status', 'category', 'location', 'created_at', 'expires_at')
+    list_display = ('title', 'trade_mode', 'price', 'category', 'location', 'campaign', 'seller', 'status', 'expires_at', 'report_count', 'created_at')
+    list_filter = ('trade_mode', 'status', 'category', 'location', 'campaign', 'created_at', 'expires_at')
     search_fields = ('title', 'description', 'seller__username', 'location__name')
     date_hierarchy = 'created_at'
     inlines = [ItemImageInline]

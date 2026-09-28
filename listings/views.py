@@ -25,7 +25,7 @@ from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -294,6 +294,47 @@ def item_list(request, category_id=None):
         'search_query_id': search_query_record.id if search_query_record else None,
     }
     return render(request, 'listings/item_list.html', context)
+
+
+def _live_campaigns(now=None):
+    now = now or timezone.now()
+    return CampusCampaign.objects.filter(
+        is_active=True,
+        starts_at__lte=now,
+    ).filter(
+        Q(ends_at__isnull=True) | Q(ends_at__gt=now),
+    )
+
+
+def campaign_list(request):
+    now = timezone.now()
+    campaigns = _live_campaigns(now).annotate(
+        available_item_count=Count(
+            'items',
+            filter=(
+                Q(items__status='available')
+                & (Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=now))
+            ),
+            distinct=True,
+        ),
+    ).order_by('-starts_at', 'title')
+    return render(request, 'listings/campaign_list.html', {
+        'campaigns': campaigns,
+        'title': '校园专题',
+    })
+
+
+def campaign_detail(request, slug):
+    campaign = get_object_or_404(_live_campaigns(), slug=slug)
+    items = Item.objects.available().filter(campaign=campaign).select_related(
+        'category', 'seller', 'location',
+    ).prefetch_related('images')
+    return render(request, 'listings/campaign_detail.html', {
+        'campaign': campaign,
+        'items': items,
+        'favorite_ids': _favorite_ids(request),
+        'title': campaign.title,
+    })
 
 
 def search_suggestions(request):

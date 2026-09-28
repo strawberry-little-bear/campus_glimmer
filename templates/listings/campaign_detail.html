@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ campaign.title }} · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="campaign-hero content-card mb-4">
+    <div class="campaign-hero-icon"><i class="bi bi-stars"></i></div>
+    <div>
+        <span class="eyebrow eyebrow-soft">Campus campaign</span>
+        <h1>{{ campaign.title }}</h1>
+        <p>{{ campaign.description|default:'把校园里的短期需求集中起来，让闲置在合适的时间遇见合适的人。' }}</p>
+        <div class="campaign-hero-meta"><span><i class="bi bi-calendar3 me-1"></i>{{ campaign.starts_at|date:'Y年m月d日' }} 开始</span>{% if campaign.ends_at %}<span><i class="bi bi-hourglass-split me-1"></i>至 {{ campaign.ends_at|date:'Y年m月d日' }}</span>{% endif %}<span><i class="bi bi-box-seam me-1"></i>{{ items|length }} 件当前在售</span></div>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div><span class="eyebrow eyebrow-soft">Featured listings</span><h2 class="section-title mt-1">专题商品</h2></div>
+    <a href="{% url 'campaign_list' %}" class="text-link small">返回专题列表 <i class="bi bi-arrow-left"></i></a>
+</div>
+<div class="row g-4">
+    {% for item in items %}
+    <div class="col-md-6 col-xl-4">{% include 'listings/_item_card.html' %}</div>
+    {% empty %}
+    <div class="col-12"><div class="content-card empty-state"><i class="bi bi-box-seam"></i><h2>专题里还没有在售商品</h2><p>你可以发布一件闲置，并在发布时选择这个专题。</p>{% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-primary mt-2">发布第一件商品</a>{% endif %}</div></div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block title %}校园专题 · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-intro mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">Campus moments</span>
+        <h1>校园专题</h1>
+        <p>围绕毕业季、教材交换和新生入学等校园节点，把分散的闲置组织成更容易参与的活动。</p>
+    </div>
+    {% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-2"></i>发布到专题</a>{% endif %}
+</div>
+
+<div class="row g-4 campaign-grid">
+    {% for campaign in campaigns %}
+    <div class="col-md-6 col-xl-4">
+        <article class="content-card campaign-card h-100">
+            <div class="campaign-card-icon"><i class="bi bi-stars"></i></div>
+            <div class="campaign-card-body">
+                <div class="campaign-card-meta"><span>校园活动</span><span>{{ campaign.available_item_count }} 件在售</span></div>
+                <h2><a href="{% url 'campaign_detail' campaign.slug %}">{{ campaign.title }}</a></h2>
+                <p>{{ campaign.description|default:'把同一时间段、同一类校园需求聚到一起，让闲置更快找到下一位使用者。'|truncatechars:100 }}</p>
+                <div class="campaign-card-footer"><span><i class="bi bi-calendar3 me-1"></i>{{ campaign.starts_at|date:'Y年m月d日' }} 起</span><a href="{% url 'campaign_detail' campaign.slug %}" class="text-link">进入专题 <i class="bi bi-arrow-up-right"></i></a></div>
+            </div>
+        </article>
+    </div>
+    {% empty %}
+    <div class="col-12"><div class="content-card empty-state"><i class="bi bi-stars"></i><h2>暂时没有进行中的专题</h2><p>专题开启后，会在这里集中展示本校正在发生的闲置活动。</p></div></div>
+    {% endfor %}
+</div>
+{% endblock %}

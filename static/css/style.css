@@ -843,3 +843,21 @@ a { color: inherit; text-decoration: none; }
 .price-insight-action i { color: #bd8b48; }
 .price-insight-note { display: block; margin-top: 9px; color: #98a99f; font-size: .64rem; line-height: 1.5; }
 @media (max-width: 575.98px) { .price-insight-metrics { grid-template-columns: 1fr; } }
+
+.campaign-grid { align-items: stretch; }
+.campaign-card { display: flex; flex-direction: column; overflow: hidden; border-color: #deebe1; background: linear-gradient(145deg, #ffffff, #f8fcf9); }
+.campaign-card-icon { display: grid; width: 52px; height: 52px; margin: 22px 22px 0; place-items: center; color: #3d9667; background: #e5f4e8; border-radius: 16px; font-size: 1.4rem; }
+.campaign-card-body { display: flex; flex: 1; flex-direction: column; padding: 17px 22px 21px; }
+.campaign-card-meta, .campaign-card-footer, .campaign-hero-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: #8b9b92; font-size: .71rem; }
+.campaign-card-meta span:first-child { color: #5e9d75; font-weight: 700; }
+.campaign-card h2 { margin: 12px 0 8px; color: #2d5745; font-size: 1.18rem; }
+.campaign-card h2 a { text-decoration: none; }
+.campaign-card p { flex: 1; margin: 0 0 21px; color: #73847b; font-size: .8rem; line-height: 1.7; }
+.campaign-card-footer { padding-top: 13px; border-top: 1px solid #e8f0ea; }
+.campaign-hero { display: flex; align-items: flex-start; gap: 20px; padding: 28px; background: linear-gradient(125deg, #f2faf3, #ffffff 65%); }
+.campaign-hero-icon { display: grid; width: 68px; height: 68px; flex: 0 0 68px; place-items: center; color: #3d9667; background: #e1f2e6; border-radius: 21px; font-size: 1.8rem; }
+.campaign-hero h1 { margin: 6px 0 8px; color: #2c5845; }
+.campaign-hero p { max-width: 720px; margin: 0 0 16px; color: #708279; line-height: 1.75; }
+.campaign-hero-meta { justify-content: flex-start; gap: 18px; }
+.campaign-hero-meta i { color: #5e9d75; }
+@media (max-width: 575px) { .campaign-hero { flex-direction: column; padding: 21px; }.campaign-hero-icon { width: 54px; height: 54px; flex-basis: 54px; font-size: 1.4rem; }.campaign-hero h1 { font-size: 1.65rem; }.campaign-hero-meta { align-items: flex-start; flex-direction: column; gap: 8px; }.campaign-card-body { padding: 15px 18px 18px; } }

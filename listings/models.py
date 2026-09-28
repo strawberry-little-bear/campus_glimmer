@@ -49,6 +49,40 @@ class CampusLocation(models.Model):
         ordering = ['sort_order', 'name']
 
 
+class CampusCampaign(models.Model):
+    """A time-bounded public collection for seasonal campus activity."""
+
+    title = models.CharField('专题名称', max_length=100)
+    slug = models.SlugField('专题标识', max_length=120, unique=True)
+    description = models.TextField('专题说明', blank=True)
+    starts_at = models.DateTimeField('开始时间', default=timezone.now)
+    ends_at = models.DateTimeField('结束时间', null=True, blank=True)
+    is_active = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '校园专题'
+        verbose_name_plural = '校园专题'
+        ordering = ['-starts_at', 'title']
+        indexes = [
+            models.Index(fields=['is_active', 'starts_at', 'ends_at']),
+        ]
+
+    def __str__(self):
+        return self.title
+
+    def is_live(self, now=None):
+        now = now or timezone.now()
+        return self.is_active and self.starts_at <= now and (
+            self.ends_at is None or self.ends_at > now
+        )
+
+    def clean(self):
+        super().clean()
+        if self.ends_at and self.ends_at <= self.starts_at:
+            raise ValidationError({'ends_at': '结束时间必须晚于开始时间。'})
+
+
 class ItemQuerySet(models.QuerySet):
     def available(self, now=None):
         """Return listings that are still visible and can accept a reservation."""
@@ -93,6 +127,14 @@ class Item(models.Model):
         blank=True,
         related_name='items',
         verbose_name='交易地点',
+    )
+    campaign = models.ForeignKey(
+        'CampusCampaign',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='items',
+        verbose_name='校园专题',
     )
     condition = models.CharField('成色', max_length=100)
     seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='listed_items', verbose_name='卖家')
