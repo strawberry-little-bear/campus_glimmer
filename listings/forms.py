@@ -119,6 +119,28 @@ class OrderForm(StyledModelFormMixin, forms.ModelForm):
         self.fields['meeting_location'].empty_label = '沿用商品交易地点'
 
 
+class DeliveryCodeForm(forms.Form):
+    code = forms.CharField(
+        label='交付确认码',
+        min_length=6,
+        max_length=6,
+        strip=True,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'inputmode': 'numeric',
+            'autocomplete': 'one-time-code',
+            'placeholder': '输入买家提供的 6 位数字',
+        }),
+        help_text='确认码只用于核对当面交付，不要在公开留言中发送。',
+    )
+
+    def clean_code(self):
+        code = self.cleaned_data['code']
+        if not code.isdigit():
+            raise forms.ValidationError('交付确认码必须是 6 位数字。')
+        return code
+
+
 class MeetingAppointmentForm(StyledModelFormMixin, forms.ModelForm):
     class Meta:
         model = MeetingAppointment

@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 
+from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -1186,6 +1187,79 @@ class ListingFlowTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.status, 'sold')
         self.assertTrue(DeliveryConfirmation.objects.get(order=order).is_complete)
+
+    def _prepare_meeting_order(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '现场核对商品'},
+        )
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        status_url = reverse('update_order_status', args=[order.id])
+        self.client.post(status_url, {'status': 'confirmed'})
+        self.client.post(status_url, {'status': 'meeting'})
+        self.client.logout()
+        return order
+
+    def test_buyer_can_generate_hashed_delivery_code_and_seller_can_verify_it(self):
+        order = self._prepare_meeting_order()
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(reverse('generate_delivery_code', args=[order.id]))
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        confirmation = DeliveryConfirmation.objects.get(order=order)
+        raw_code = self.client.session[f'delivery_code_{order.id}']
+        self.assertEqual(len(raw_code), 6)
+        self.assertNotEqual(confirmation.handoff_code_hash, raw_code)
+        self.assertTrue(check_password(raw_code, confirmation.handoff_code_hash))
+        self.assertEqual(confirmation.handoff_code_attempts, 0)
+
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.post(reverse('confirm_delivery', args=[order.id]), {'code': '000000'})
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        confirmation.refresh_from_db()
+        self.assertEqual(confirmation.handoff_code_attempts, 1)
+        self.assertIsNone(confirmation.seller_confirmed_at)
+        self.client.post(reverse('confirm_delivery', args=[order.id]), {'code': raw_code})
+        confirmation.refresh_from_db()
+        self.assertIsNotNone(confirmation.seller_confirmed_at)
+        self.assertIsNotNone(confirmation.handoff_code_used_at)
+        self.assertEqual(confirmation.handoff_code_attempts, 1)
+
+    def test_delivery_code_locks_after_five_attempts_and_regeneration_invalidates_old_code(self):
+        order = self._prepare_meeting_order()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('generate_delivery_code', args=[order.id]))
+        old_code = self.client.session[f'delivery_code_{order.id}']
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        for _ in range(5):
+            self.client.post(reverse('confirm_delivery', args=[order.id]), {'code': '000000'})
+        confirmation = DeliveryConfirmation.objects.get(order=order)
+        self.assertEqual(confirmation.handoff_code_attempts, 5)
+        self.client.post(reverse('confirm_delivery', args=[order.id]), {'code': old_code})
+        confirmation.refresh_from_db()
+        self.assertIsNone(confirmation.seller_confirmed_at)
+
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(reverse('generate_delivery_code', args=[order.id]))
+        new_code = self.client.session[f'delivery_code_{order.id}']
+        self.assertNotEqual(old_code, new_code)
+        confirmation.refresh_from_db()
+        self.assertEqual(confirmation.handoff_code_attempts, 0)
+        self.assertIsNone(confirmation.handoff_code_used_at)
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('confirm_delivery', args=[order.id]), {'code': old_code})
+        confirmation.refresh_from_db()
+        self.assertEqual(confirmation.handoff_code_attempts, 1)
+        self.assertIsNone(confirmation.seller_confirmed_at)
+        self.client.post(reverse('confirm_delivery', args=[order.id]), {'code': new_code})
+        confirmation.refresh_from_db()
+        self.assertIsNotNone(confirmation.seller_confirmed_at)
 
     def test_user_can_open_dispute_and_staff_can_resolve_it(self):
         self.client.login(username='bob', password='safe-password-123')

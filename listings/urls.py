@@ -28,6 +28,7 @@ urlpatterns = [
     path('order/<int:order_id>/meeting/propose/', views.propose_meeting, name='propose_meeting'),
     path('order/<int:order_id>/meeting/respond/<str:decision>/', views.respond_meeting, name='respond_meeting'),
     path('order/<int:order_id>/confirm-delivery/', views.confirm_delivery, name='confirm_delivery'),
+    path('order/<int:order_id>/delivery-code/', views.generate_delivery_code, name='generate_delivery_code'),
     path('order/<int:order_id>/dispute/', views.open_dispute, name='open_dispute'),
     path('order/<int:order_id>/rate/', views.rate_order, name='rate_order'),
     path('my_items/', views.my_items, name='my_items'),

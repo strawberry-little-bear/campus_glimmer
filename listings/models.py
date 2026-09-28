@@ -229,6 +229,11 @@ class DeliveryConfirmation(models.Model):
     )
     buyer_confirmed_at = models.DateTimeField('买家确认时间', null=True, blank=True)
     seller_confirmed_at = models.DateTimeField('卖家确认时间', null=True, blank=True)
+    handoff_code_hash = models.CharField('交付确认码哈希', max_length=128, blank=True)
+    handoff_code_hint = models.CharField('交付确认码提示', max_length=8, blank=True)
+    handoff_code_issued_at = models.DateTimeField('交付确认码生成时间', null=True, blank=True)
+    handoff_code_used_at = models.DateTimeField('交付确认码使用时间', null=True, blank=True)
+    handoff_code_attempts = models.PositiveSmallIntegerField('交付确认码错误次数', default=0)
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 

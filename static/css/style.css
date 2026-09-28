@@ -758,3 +758,9 @@ a { color: inherit; text-decoration: none; }
 .demand-form-tip { display: flex; align-items: flex-start; padding: 13px 15px; margin-bottom: 26px; border-radius: 12px; color: #547363; background: #f1f9f3; font-size: .78rem; line-height: 1.65; }
 .demand-form-tip i { color: #6aa379; }
 @media (max-width: 767px) { .demand-intro { align-items: flex-start; } .demand-intro > div:last-child { width: 100%; } }
+
+.handoff-code-panel { padding: 14px; border: 1px solid #dcebe1; border-radius: 14px; background: linear-gradient(135deg, #f5fbf6, #fbfdfb); color: #426b53; }
+.handoff-code-panel p { color: #718278; }
+.handoff-code-value { margin: 14px 0 8px; padding: 12px 14px; border: 1px dashed #77ac89; border-radius: 10px; background: #fff; color: #2f7650; font: 700 1.65rem/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .28em; text-align: center; }
+.handoff-code-panel .form-control { background: #fff; border-color: #cfe3d5; letter-spacing: .16em; text-align: center; font-weight: 600; }
+.handoff-code-panel .form-control:focus { border-color: #79ad89; box-shadow: 0 0 0 .2rem rgba(121, 173, 137, .15); }

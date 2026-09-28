@@ -143,11 +143,21 @@ class SavedSearchAdmin(admin.ModelAdmin):
 
 @admin.register(DeliveryConfirmation)
 class DeliveryConfirmationAdmin(admin.ModelAdmin):
-    list_display = ('order', 'buyer_confirmed_at', 'seller_confirmed_at', 'updated_at')
+    list_display = ('order', 'buyer_confirmed_at', 'seller_confirmed_at', 'handoff_code_status', 'handoff_code_attempts', 'updated_at')
     list_filter = ('updated_at',)
     search_fields = ('order__item__title', 'order__buyer__username', 'order__seller__username')
     autocomplete_fields = ('order',)
-    readonly_fields = ('created_at', 'updated_at')
+    readonly_fields = ('created_at', 'updated_at', 'handoff_code_hash', 'handoff_code_issued_at', 'handoff_code_used_at')
+
+    @admin.display(description='确认码状态')
+    def handoff_code_status(self, obj):
+        if not obj.handoff_code_hash:
+            return '未生成'
+        if obj.handoff_code_used_at:
+            return '已使用'
+        if obj.handoff_code_attempts >= 5:
+            return '已锁定'
+        return f'有效（{obj.handoff_code_hint}）'
 
 
 @admin.register(OrderDispute)

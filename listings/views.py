@@ -1,9 +1,11 @@
 import csv
+import secrets
 from decimal import Decimal, InvalidOperation
 from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
@@ -19,7 +21,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .demand_matching import notify_demand_matches
-from .forms import DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
@@ -538,9 +540,16 @@ def order_detail(request, order_id):
         return redirect('home')
     appointment = getattr(order, 'appointment', None)
     meeting_form = None
+    delivery_code_form = None
+    handoff_code_display = None
+    confirmation = getattr(order, 'delivery_confirmation', None)
     if order.status in {'confirmed', 'meeting'} and not (appointment and appointment.status == 'pending' and appointment.proposed_by_id != request.user.id):
         form_initial = {'location': order.meeting_location_id} if not appointment else None
         meeting_form = MeetingAppointmentForm(instance=appointment, initial=form_initial)
+    if confirmation and request.user == order.seller and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at and not confirmation.seller_confirmed_at:
+        delivery_code_form = DeliveryCodeForm()
+    if confirmation and request.user == order.buyer and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at:
+        handoff_code_display = request.session.get(f'delivery_code_{order.id}')
     rating_target = order.seller if request.user == order.buyer else order.buyer
     my_rating = Rating.objects.filter(order=order, rater=request.user).first()
     rating_form = RatingForm() if order.status == 'completed' and not my_rating else None
@@ -554,7 +563,9 @@ def order_detail(request, order_id):
         'rating_form': rating_form,
         'ratings': ratings,
         'events': events,
-        'confirmation': getattr(order, 'delivery_confirmation', None),
+        'confirmation': confirmation,
+        'delivery_code_form': delivery_code_form,
+        'handoff_code_display': handoff_code_display,
         'appointment': appointment,
         'meeting_form': meeting_form,
         'dispute': getattr(order, 'dispute', None),
@@ -743,6 +754,49 @@ def respond_meeting(request, order_id, decision):
 
 
 @login_required
+def generate_delivery_code(request, order_id):
+    order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller'), id=order_id)
+    if request.user != order.buyer:
+        messages.error(request, '只有买家可以生成交付确认码。')
+        return redirect('order_detail', order_id=order.id)
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+    if order.status != 'meeting':
+        messages.error(request, '订单进入“待当面交付”后，才能生成确认码。')
+        return redirect('order_detail', order_id=order.id)
+
+    raw_code = f'{secrets.randbelow(1_000_000):06d}'
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().select_related('item', 'buyer', 'seller').get(pk=order.id)
+        if locked_order.status != 'meeting':
+            messages.error(request, '订单状态已经发生变化，请刷新后再试。')
+            return redirect('order_detail', order_id=locked_order.id)
+        confirmation, _ = DeliveryConfirmation.objects.select_for_update().get_or_create(order=locked_order)
+        confirmation.handoff_code_hash = make_password(raw_code)
+        confirmation.handoff_code_hint = f'末两位 {raw_code[-2:]}'
+        confirmation.handoff_code_issued_at = timezone.now()
+        confirmation.handoff_code_used_at = None
+        confirmation.handoff_code_attempts = 0
+        confirmation.save(update_fields=[
+            'handoff_code_hash', 'handoff_code_hint', 'handoff_code_issued_at',
+            'handoff_code_used_at', 'handoff_code_attempts', 'updated_at',
+        ])
+        request.session[f'delivery_code_{locked_order.id}'] = raw_code
+        create_notification(
+            locked_order.seller,
+            actor=request.user,
+            kind='order_status',
+            title='买家已生成交付确认码',
+            message=f'商品“{locked_order.item.title}”已生成新的交付确认码，请在现场向买家索取并核对。',
+            order=locked_order,
+            item=locked_order.item,
+            target_url=reverse('order_detail', args=[locked_order.id]),
+        )
+    messages.success(request, f'交付确认码已生成：{raw_code}。请只在现场提供给卖家。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
 def confirm_delivery(request, order_id):
     order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller'), id=order_id)
     if request.user not in {order.buyer, order.seller}:
@@ -761,8 +815,28 @@ def confirm_delivery(request, order_id):
         if getattr(confirmation, field_name):
             messages.info(request, '你已经确认过这次交付了，请等待对方操作。')
             return redirect('order_detail', order_id=locked_order.id)
+        code_used = False
+        if request.user == locked_order.seller and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at:
+            if confirmation.handoff_code_attempts >= 5:
+                messages.error(request, '交付确认码错误次数过多，请让买家重新生成一个新码。')
+                return redirect('order_detail', order_id=locked_order.id)
+            code_form = DeliveryCodeForm(request.POST)
+            if not code_form.is_valid():
+                messages.error(request, '请输入买家提供的 6 位数字交付确认码。')
+                return redirect('order_detail', order_id=locked_order.id)
+            if not check_password(code_form.cleaned_data['code'], confirmation.handoff_code_hash):
+                confirmation.handoff_code_attempts += 1
+                confirmation.save(update_fields=['handoff_code_attempts', 'updated_at'])
+                remaining = max(0, 5 - confirmation.handoff_code_attempts)
+                messages.error(request, f'交付确认码不正确，还可以尝试 {remaining} 次。')
+                return redirect('order_detail', order_id=locked_order.id)
+            confirmation.handoff_code_used_at = timezone.now()
+            code_used = True
         setattr(confirmation, field_name, timezone.now())
-        confirmation.save(update_fields=[field_name, 'updated_at'])
+        update_fields = [field_name, 'updated_at']
+        if code_used:
+            update_fields.append('handoff_code_used_at')
+        confirmation.save(update_fields=update_fields)
         other_party = locked_order.seller if request.user == locked_order.buyer else locked_order.buyer
 
         if confirmation.is_complete:
