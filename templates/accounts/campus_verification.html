@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}校园身份认证 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <section class="content-card campus-verification-page">
+            <span class="eyebrow eyebrow-soft">可信交易</span>
+            <h1 class="mt-2">校园身份认证</h1>
+            <p class="text-muted">使用学校或组织邮箱完成一次验证，之后你的商品名片会显示认证标识。平台不会公开展示完整邮箱，也不会把邮箱用于营销。</p>
+            {% if verification and verification.is_verified %}
+                <div class="verification-success mt-4"><i class="bi bi-patch-check-fill"></i><div><strong>认证已完成</strong><p class="mb-0 mt-1">{{ verification.domain_name }} · {{ verification.campus_email }}</p><small>认证时间：{{ verification.verified_at|date:'Y年m月d日 H:i' }}</small></div></div>
+            {% else %}
+                {% if verification and verification.status == 'pending' %}<div class="alert alert-info mt-4">验证邮件已发送到 <strong>{{ verification.campus_email }}</strong>。如果没有收到，请确认邮箱地址或重新发送。</div>{% endif %}
+                <form method="post" class="mt-4">{% csrf_token %}
+                    {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}{% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}
+                    <button class="btn btn-primary"><i class="bi bi-envelope-check me-1"></i>{% if verification %}重新发送验证邮件{% else %}发送验证邮件{% endif %}</button>
+                    <a href="{% url 'profile' %}" class="btn btn-link">返回个人资料</a>
+                </form>
+            {% endif %}
+        </section>
+        <section class="content-card mt-4">
+            <h2 class="h5"><i class="bi bi-shield-lock me-2"></i>认证说明</h2>
+            <ul class="small text-muted mb-0 mt-3 ps-3"><li>验证链接有效期为 24 小时，旧链接在重新发送后失效。</li><li>同一个校园邮箱只能绑定一个账号。</li><li>认证只代表邮箱归属，不替代对商品、价格和交易现场的判断。</li></ul>
+        </section>
+    </div>
+</div>
+{% endblock %}

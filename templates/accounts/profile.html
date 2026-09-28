@@ -14,13 +14,24 @@
                 <img src="{{ user.profile.avatar.url }}" alt="{{ user.username }}" class="avatar-lg mb-3">
                 <h4>{{ user.username }}</h4>
                 <p class="text-muted">{{ user.email }}</p>
-                
+
                 <div class="mt-3">
                     <a href="{% url 'edit_profile' %}" class="btn btn-sm btn-outline-success">编辑资料</a>
                 </div>
             </div>
         </div>
-        
+
+        <div class="card shadow mt-4 campus-verification-card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-patch-check me-1"></i>校园身份</h5>
+                {% if campus_verification and campus_verification.is_verified %}<span class="campus-verified-badge"><i class="bi bi-patch-check-fill"></i> 已认证</span>{% endif %}
+            </div>
+            <div class="card-body">
+                {% if campus_verification and campus_verification.is_verified %}<p class="mb-2">已通过 {{ campus_verification.domain_name }} 的校园邮箱认证。</p><small class="text-muted">认证邮箱：{{ campus_verification.campus_email }}</small>{% elif campus_verification and campus_verification.status == 'pending' %}<p class="mb-2">验证邮件已发送到 {{ campus_verification.campus_email }}，请在 24 小时内完成验证。</p>{% else %}<p class="text-muted mb-2">完成校园邮箱认证后，商品详情会展示可信标识。</p>{% endif %}
+                <a href="{% url 'campus_verification' %}" class="btn btn-sm btn-outline-success mt-3">{% if campus_verification and campus_verification.status == 'pending' %}重新发送验证邮件{% elif campus_verification and campus_verification.is_verified %}查看认证信息{% else %}开始认证{% endif %}</a>
+            </div>
+        </div>
+
         <div class="card shadow mt-4">
             <div class="card-header bg-light">
                 <h5 class="mb-0">联系方式</h5>
@@ -32,13 +43,13 @@
                         <strong>学号：</strong> {{ user.profile.student_id }}
                     </li>
                     {% endif %}
-                    
+
                     {% if user.profile.wechat %}
                     <li class="list-group-item">
                         <strong>微信：</strong> {{ user.profile.wechat }}
                     </li>
                     {% endif %}
-                    
+
                     {% if user.profile.phone %}
                     <li class="list-group-item">
                         <strong>电话：</strong> {{ user.profile.phone }}
@@ -48,7 +59,7 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-8">
         <div class="card shadow">
             <div class="card-header bg-light">
@@ -62,7 +73,7 @@
                 {% endif %}
             </div>
         </div>
-        
+
         <div class="card shadow mt-4">
             <div class="card-header bg-light">
                 <h5 class="mb-0">我的活动</h5>

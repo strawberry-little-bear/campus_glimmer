@@ -9,4 +9,6 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(template_name='accounts/logout.html', http_method_names=['get', 'post']), name='logout'),
     path('profile/', views.profile, name='profile'),
     path('profile/edit/', views.edit_profile, name='edit_profile'),
+    path('profile/campus-verification/', views.campus_verification, name='campus_verification'),
+    path('campus-verification/<uidb64>/<str:token>/', views.verify_campus_email, name='verify_campus_email'),
 ]

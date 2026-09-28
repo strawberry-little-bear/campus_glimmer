@@ -31,6 +31,7 @@ from .meeting_scheduling import find_appointment_conflicts
 from .order_workflow import OrderTransitionError, transition_order
 from .saved_searches import notify_saved_search_matches
 from chat_messages.models import ModerationEvent, PrivateMessage
+from accounts.models import CampusVerification
 
 
 def _favorite_ids(request):
@@ -366,6 +367,9 @@ def item_detail(request, item_id):
         'rating_summary': rating_summary,
         'seller_reputation': build_seller_reputation(item.seller),
         'seller_ratings': seller_ratings,
+        'seller_verification': CampusVerification.objects.filter(
+            user=item.seller, status='verified', verified_at__isnull=False,
+        ).first(),
         'is_favorite': item_id in _favorite_ids(request),
         'availability_watch': (
             ItemAvailabilityWatch.objects.filter(user=request.user, item=item).first()

@@ -77,7 +77,7 @@
     <div class="col-lg-4">
         <section class="seller-card content-card mb-4">
             <span class="eyebrow eyebrow-soft">卖家名片</span>
-            <div class="seller-profile mt-3"><img src="{{ item.seller.profile.avatar.url }}" alt="{{ item.seller.username }}" class="avatar-lg"><div><h5>{{ item.seller.username }}</h5><small>已发布 {{ item.seller.listed_items.count }} 件商品</small></div></div>
+            <div class="seller-profile mt-3"><img src="{{ item.seller.profile.avatar.url }}" alt="{{ item.seller.username }}" class="avatar-lg"><div><h5>{{ item.seller.username }} {% if seller_verification %}<span class="campus-verified-badge" title="已完成校园邮箱认证"><i class="bi bi-patch-check-fill"></i> 校园认证</span>{% endif %}</h5><small>已发布 {{ item.seller.listed_items.count }} 件商品</small></div></div>
             {% if rating_summary.count %}<div class="seller-rating-summary mt-3"><span class="rating-stars" aria-label="平均 {{ rating_summary.average|floatformat:1 }} 星">{% for star in '12345' %}{% if forloop.counter <= rating_summary.average %}★{% else %}☆{% endif %}{% endfor %}</span><strong>{{ rating_summary.average|floatformat:1 }}</strong><span>来自 {{ rating_summary.count }} 条交易评价</span></div>{% else %}<p class="seller-rating-empty mt-3 mb-0"><i class="bi bi-star me-1"></i>暂时还没有交易评价</p>{% endif %}
             <div class="seller-reputation" aria-label="卖家交易概览">
                 <div class="seller-reputation-heading"><span><i class="bi bi-shield-check me-1"></i>交易概览</span><strong>{{ seller_reputation.label }}</strong></div>
