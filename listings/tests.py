@@ -484,6 +484,22 @@ class ListingFlowTests(TestCase):
         self.assertLess(result_ids.index(exact.id), result_ids.index(prefix.id))
         self.assertLess(result_ids.index(prefix.id), result_ids.index(contains.id))
 
+    def test_relevance_sort_uses_recent_search_click_feedback_within_same_text_rank(self):
+        first = Item.objects.create(
+            title='键盘保护套', description='先发布的前缀匹配', price='30.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        clicked = Item.objects.create(
+            title='键盘收纳包', description='被更多用户点击的前缀匹配', price='60.00', category=self.category,
+            location=self.location, condition='全新', seller=self.other_user,
+        )
+        search = SearchQuery.objects.create(query='键盘', result_count=2)
+        SearchClick.objects.create(search_query=search, item=clicked, position=2)
+
+        response = self.client.get(reverse('item_list'), {'q': '键盘', 'sort': 'relevance'})
+        result_ids = [item.id for item in response.context['items']]
+        self.assertLess(result_ids.index(clicked.id), result_ids.index(first.id))
+
     def test_search_query_records_filters_and_result_count(self):
         self.client.login(username='alice', password='safe-password-123')
         response = self.client.get(reverse('item_list'), {

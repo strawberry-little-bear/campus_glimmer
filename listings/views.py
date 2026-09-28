@@ -112,6 +112,7 @@ def item_list(request, category_id=None):
     if sort not in allowed_sorts or (sort == 'relevance' and not query):
         sort = 'latest'
     if sort == 'relevance':
+        feedback_window = timezone.now() - timedelta(days=90)
         items = items.annotate(
             search_rank=Case(
                 When(title__iexact=query, then=Value(3)),
@@ -120,7 +121,14 @@ def item_list(request, category_id=None):
                 default=Value(0),
                 output_field=IntegerField(),
             ),
-        ).order_by('-search_rank', '-created_at')
+            feedback_click_count=Count(
+                'search_clicks',
+                filter=Q(
+                    search_clicks__created_at__gte=feedback_window,
+                    search_clicks__search_query__query__iexact=query,
+                ),
+            ),
+        ).order_by('-search_rank', '-feedback_click_count', '-created_at')
     else:
         sort_map = {'latest': '-created_at', 'price_asc': 'price', 'price_desc': '-price'}
         items = items.order_by(sort_map[sort])
