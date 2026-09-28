@@ -12,6 +12,7 @@ urlpatterns = [
     path('item/<int:item_id>/delete/', views.delete_item, name='delete_item'),
     path('item/<int:item_id>/mark_sold/', views.mark_sold, name='mark_sold'),
     path('item/<int:item_id>/favorite/', views.toggle_favorite, name='toggle_favorite'),
+    path('item/<int:item_id>/availability-watch/', views.toggle_availability_watch, name='toggle_availability_watch'),
     path('item/<int:item_id>/recommendation-feedback/', views.recommendation_feedback, name='recommendation_feedback'),
     path('favorites/', views.favorite_list, name='favorite_list'),
     path('orders/', views.my_orders, name='my_orders'),

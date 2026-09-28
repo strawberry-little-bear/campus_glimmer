@@ -92,6 +92,33 @@ class Favorite(models.Model):
         return f'{self.user.username}收藏了{self.item.title}'
 
 
+class ItemAvailabilityWatch(models.Model):
+    """One-shot reminders for a user waiting for an unavailable item."""
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='item_availability_watches', verbose_name='用户',
+    )
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE, related_name='availability_watches', verbose_name='商品',
+    )
+    created_at = models.DateTimeField('关注时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '商品有货提醒'
+        verbose_name_plural = '商品有货提醒'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'item'], name='unique_user_item_availability_watch'),
+        ]
+        indexes = [
+            models.Index(fields=['item', '-created_at']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username}等待{self.item.title}有货'
+
+
 class Report(models.Model):
     REASON_CHOICES = (
         ('scam', '疑似诈骗或虚假信息'),
@@ -350,6 +377,7 @@ class Notification(models.Model):
         ('message_received', '收到新私信'),
         ('comment_received', '收到商品留言'),
         ('saved_search_match', '关注的搜索有新商品'),
+        ('item_available', '商品重新有货'),
         ('order_dispute', '交易争议更新'),
         ('order_expiring', '交易预约即将超时'),
         ('order_expired', '交易预约已超时'),
@@ -406,6 +434,9 @@ class NotificationPreference(models.Model):
     )
     saved_search_match = models.BooleanField(
         '关注的搜索有新商品', default=True, help_text='关注的搜索匹配到新商品时提醒。',
+    )
+    item_available = models.BooleanField(
+        '商品重新有货', default=True, help_text='你关注的商品恢复为在售时提醒。',
     )
     order_dispute = models.BooleanField(
         '交易争议更新', default=True, help_text='交易争议状态发生变化时提醒。',

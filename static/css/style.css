@@ -377,6 +377,7 @@ a { color: inherit; text-decoration: none; }
 .notification-icon-rating_received { color: #9c6b1d; background: #fff3cd; }
 .notification-icon-message_received { color: #4d6e9b; background: #e9f1ff; }
 .notification-icon-comment_received { color: #8b5d83; background: #f7eafa; }
+.notification-icon-item_available { color: #237a63; background: #e3f7ee; }
 .notification-body { display: grid; min-width: 0; flex: 1; gap: 5px; }
 .notification-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .notification-title-row strong { overflow: hidden; color: #29463a; text-overflow: ellipsis; white-space: nowrap; }

@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Item, Order, OrderEvent
+from .availability import notify_item_available
 from .notifications import create_notification
 
 DEFAULT_CONFIRMATION_TIMEOUT_HOURS = 24
@@ -46,6 +47,7 @@ def process_order_timeouts(*, now=None, reminder_hours=DEFAULT_REMINDER_HOURS):
             if item.status == 'reserved':
                 item.status = 'available'
                 item.save(update_fields=['status', 'updated_at'])
+                notify_item_available(item)
             message = f'商品“{order.item.title}”的交易预约因卖家未在截止时间前确认，已自动取消。'
             create_notification(
                 order.buyer,

@@ -13,8 +13,8 @@ class NotificationPreferenceForm(forms.ModelForm):
         model = NotificationPreference
         fields = [
             'order_created', 'order_status', 'rating_received', 'message_received',
-            'comment_received', 'saved_search_match', 'order_dispute', 'order_expiring',
-            'order_expired', 'report_update',
+            'comment_received', 'saved_search_match', 'item_available', 'order_dispute',
+            'order_expiring', 'order_expired', 'report_update',
         ]
 
     def __init__(self, *args, **kwargs):

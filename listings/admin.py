@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemImage, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 
 
 class ItemImageInline(admin.TabularInline):
@@ -99,8 +99,8 @@ class OrderEventAdmin(admin.ModelAdmin):
 
 @admin.register(NotificationPreference)
 class NotificationPreferenceAdmin(admin.ModelAdmin):
-    list_display = ('user', 'order_created', 'order_status', 'message_received', 'saved_search_match', 'updated_at')
-    list_filter = ('order_created', 'order_status', 'message_received', 'saved_search_match', 'updated_at')
+    list_display = ('user', 'order_created', 'order_status', 'message_received', 'saved_search_match', 'item_available', 'updated_at')
+    list_filter = ('order_created', 'order_status', 'message_received', 'saved_search_match', 'item_available', 'updated_at')
     search_fields = ('user__username',)
     readonly_fields = ('updated_at',)
 
@@ -157,3 +157,12 @@ class RecommendationFeedbackAdmin(admin.ModelAdmin):
     search_fields = ('user__username', 'item__title')
     autocomplete_fields = ('user', 'item')
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(ItemAvailabilityWatch)
+class ItemAvailabilityWatchAdmin(admin.ModelAdmin):
+    list_display = ('item', 'user', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('item__title', 'user__username')
+    autocomplete_fields = ('item', 'user')
+    readonly_fields = ('created_at',)

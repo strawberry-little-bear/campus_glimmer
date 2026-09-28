@@ -16,8 +16,9 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
+from .availability import notify_item_available
 from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .saved_searches import notify_saved_search_matches
@@ -242,6 +243,10 @@ def item_detail(request, item_id):
         'rating_summary': rating_summary,
         'seller_ratings': seller_ratings,
         'is_favorite': item_id in _favorite_ids(request),
+        'availability_watch': (
+            ItemAvailabilityWatch.objects.filter(user=request.user, item=item).first()
+            if request.user.is_authenticated and request.user != item.seller else None
+        ),
         'has_reported': request.user.is_authenticated and Report.objects.filter(item=item, reporter=request.user).exists(),
     }
     return render(request, 'listings/item_detail.html', context)
@@ -261,6 +266,32 @@ def toggle_favorite(request, item_id):
     if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
         next_url = ''
     return redirect(next_url or 'item_detail', item_id=item.id) if not next_url else redirect(next_url)
+
+
+@login_required
+def toggle_availability_watch(request, item_id):
+    item = get_object_or_404(Item.objects.select_related('seller'), id=item_id)
+    if item.seller == request.user:
+        messages.info(request, '自己的商品不需要设置有货提醒。')
+    elif item.status == 'available':
+        messages.info(request, '这个商品当前正在出售，可以直接预约交易。')
+    elif request.method == 'POST':
+        watch, created = ItemAvailabilityWatch.objects.get_or_create(
+            user=request.user, item=item,
+        )
+        if created:
+            messages.success(request, '已设置有货提醒，商品恢复在售时会通知你。')
+        else:
+            watch.delete()
+            messages.info(request, '已取消这个商品的有货提醒。')
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('item_detail', args=[item.id])
+    return redirect(next_url)
 
 
 @login_required
@@ -716,8 +747,11 @@ def update_order_status(request, order_id):
                 target_url=reverse('order_detail', args=[order.id]),
             )
             if target_status == 'cancelled':
+                previous_item_status = order.item.status
                 order.item.status = 'available'
                 order.item.save(update_fields=['status', 'updated_at'])
+                if previous_item_status != 'available':
+                    notify_item_available(order.item, actor=request.user)
             elif target_status == 'completed':
                 order.item.status = 'sold'
                 order.item.save(update_fields=['status', 'updated_at'])
@@ -809,8 +843,14 @@ def mark_sold(request, item_id):
     if request.method == 'POST':
         status = request.POST.get('status')
         if status in dict(Item.STATUS_CHOICES):
+            previous_status = item.status
             item.status = status
             item.save(update_fields=['status', 'updated_at'])
+            if previous_status != 'available' and status == 'available':
+                notified_count = notify_item_available(item, actor=request.user)
+                if notified_count:
+                    messages.info(request, f'商品状态已更新为{item.get_status_display()}，已通知 {notified_count} 位关注者。')
+                    return redirect('item_detail', item_id=item.id)
             messages.success(request, f'商品状态已更新为{item.get_status_display()}。')
         return redirect('item_detail', item_id=item.id)
     return render(request, 'listings/mark_sold.html', {'item': item})

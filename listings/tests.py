@@ -5,11 +5,12 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .analytics import build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .recommendations import get_recommendations
 from .notifications import create_notification
+from .availability import notify_item_available
 
 
 class ListingFlowTests(TestCase):
@@ -261,8 +262,8 @@ class ListingFlowTests(TestCase):
         preference = NotificationPreference.objects.get(user=self.user)
         form_data = {field: 'on' for field in (
             'order_created', 'order_status', 'rating_received', 'message_received',
-            'comment_received', 'saved_search_match', 'order_dispute', 'order_expiring',
-            'order_expired', 'report_update',
+            'comment_received', 'saved_search_match', 'item_available', 'order_dispute',
+            'order_expiring', 'order_expired', 'report_update',
         ) if field != 'message_received'}
         response = self.client.post(reverse('notification_preferences'), form_data)
         self.assertRedirects(response, reverse('notification_preferences'))
@@ -1009,6 +1010,106 @@ class ListingFlowTests(TestCase):
         second_result = process_order_timeouts(now=expired_at + timedelta(hours=1))
         self.assertEqual(second_result, {'expired': 0, 'reminded': 0})
         self.assertEqual(Notification.objects.filter(order=order, kind='order_expired').count(), 2)
+
+
+class AvailabilityWatchTests(TestCase):
+    def setUp(self):
+        self.seller = User.objects.create_user(username='seller', password='safe-password-123')
+        self.watcher = User.objects.create_user(username='watcher', password='safe-password-123')
+        self.category = Category.objects.create(name='教材')
+        self.item = Item.objects.create(
+            title='高等数学教材', description='课本', price='35.00',
+            category=self.category, condition='八成新', seller=self.seller, status='sold',
+        )
+
+    def test_user_can_toggle_watch_for_unavailable_item_but_seller_cannot(self):
+        self.client.login(username='watcher', password='safe-password-123')
+        url = reverse('toggle_availability_watch', args=[self.item.id])
+        response = self.client.post(url)
+        self.assertRedirects(response, reverse('item_detail', args=[self.item.id]))
+        self.assertTrue(ItemAvailabilityWatch.objects.filter(user=self.watcher, item=self.item).exists())
+
+        self.client.post(url)
+        self.assertFalse(ItemAvailabilityWatch.objects.filter(user=self.watcher, item=self.item).exists())
+
+        self.client.logout()
+        self.client.login(username='seller', password='safe-password-123')
+        self.client.post(url)
+        self.assertFalse(ItemAvailabilityWatch.objects.filter(user=self.seller, item=self.item).exists())
+
+    def test_reopening_item_notifies_watchers_and_consumes_watch(self):
+        ItemAvailabilityWatch.objects.create(user=self.watcher, item=self.item)
+        notified_count = notify_item_available(self.item)
+        self.assertEqual(notified_count, 0)
+
+        self.item.status = 'available'
+        self.item.save(update_fields=['status', 'updated_at'])
+        notified_count = notify_item_available(self.item, actor=self.seller)
+
+        self.assertEqual(notified_count, 1)
+        self.assertFalse(ItemAvailabilityWatch.objects.filter(user=self.watcher, item=self.item).exists())
+        notification = Notification.objects.get(recipient=self.watcher, kind='item_available')
+        self.assertEqual(notification.item, self.item)
+        self.assertEqual(notification.target_url, reverse('item_detail', args=[self.item.id]))
+
+        self.assertEqual(notify_item_available(self.item), 0)
+        self.assertEqual(Notification.objects.filter(recipient=self.watcher, kind='item_available').count(), 1)
+
+    def test_disabled_preference_keeps_watch_without_creating_notification(self):
+        ItemAvailabilityWatch.objects.create(user=self.watcher, item=self.item)
+        NotificationPreference.objects.create(user=self.watcher, item_available=False)
+        self.item.status = 'available'
+        self.item.save(update_fields=['status', 'updated_at'])
+
+        self.assertEqual(notify_item_available(self.item), 0)
+        self.assertTrue(ItemAvailabilityWatch.objects.filter(user=self.watcher, item=self.item).exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.watcher, kind='item_available').exists())
+
+    def test_manual_reopen_notifies_watcher(self):
+        ItemAvailabilityWatch.objects.create(user=self.watcher, item=self.item)
+        self.client.login(username='seller', password='safe-password-123')
+        response = self.client.post(
+            reverse('mark_sold', args=[self.item.id]),
+            {'status': 'available'},
+        )
+        self.assertRedirects(response, reverse('item_detail', args=[self.item.id]))
+        self.assertEqual(Notification.objects.filter(recipient=self.watcher, kind='item_available').count(), 1)
+
+    def test_order_cancellation_releases_item_and_notifies_watcher(self):
+        buyer = User.objects.create_user(username='buyer', password='safe-password-123')
+        ItemAvailabilityWatch.objects.create(user=self.watcher, item=self.item)
+        self.item.status = 'available'
+        self.item.save(update_fields=['status', 'updated_at'])
+
+        self.client.login(username='buyer', password='safe-password-123')
+        self.client.post(reverse('create_order', args=[self.item.id]), {})
+        order = Order.objects.get(item=self.item)
+        self.client.logout()
+        self.client.login(username='seller', password='safe-password-123')
+        response = self.client.post(reverse('update_order_status', args=[order.id]), {'status': 'cancelled'})
+
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'available')
+        self.assertEqual(Notification.objects.filter(recipient=self.watcher, kind='item_available').count(), 1)
+
+    def test_order_timeout_releases_item_and_notifies_watcher(self):
+        buyer = User.objects.create_user(username='timeout-buyer', password='safe-password-123')
+        ItemAvailabilityWatch.objects.create(user=self.watcher, item=self.item)
+        self.item.status = 'available'
+        self.item.save(update_fields=['status', 'updated_at'])
+
+        self.client.login(username='timeout-buyer', password='safe-password-123')
+        self.client.post(reverse('create_order', args=[self.item.id]), {})
+        order = Order.objects.get(item=self.item)
+        expired_at = timezone.now()
+        order.confirmation_deadline = expired_at - timedelta(minutes=1)
+        order.save(update_fields=['confirmation_deadline', 'updated_at'])
+
+        result = process_order_timeouts(now=expired_at)
+        self.assertEqual(result, {'expired': 1, 'reminded': 0})
+        self.assertEqual(Notification.objects.filter(recipient=self.watcher, kind='item_available').count(), 1)
+
 
 class SearchSuggestionTests(TestCase):
     def setUp(self):

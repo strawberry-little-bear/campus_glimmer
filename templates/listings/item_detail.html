@@ -42,6 +42,9 @@
                         <a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-outline-primary"><i class="bi bi-chat-dots me-2"></i>联系卖家</a>
                     {% elif user != item.seller and item.status == 'reserved' %}
                         {% if item.order %}<a href="{% url 'order_detail' item.order.id %}" class="btn btn-outline-primary"><i class="bi bi-receipt me-2"></i>查看交易进度</a>{% endif %}
+                        <form method="post" action="{% url 'toggle_availability_watch' item.id %}"><input type="hidden" name="next" value="{{ request.get_full_path }}">{% csrf_token %}<button class="btn {% if availability_watch %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if availability_watch %}bi-bell-fill{% else %}bi-bell{% endif %} me-2"></i>{% if availability_watch %}已设置有货提醒{% else %}有货时提醒我{% endif %}</button></form>
+                    {% elif user != item.seller and item.status == 'sold' %}
+                        <form method="post" action="{% url 'toggle_availability_watch' item.id %}"><input type="hidden" name="next" value="{{ request.get_full_path }}">{% csrf_token %}<button class="btn {% if availability_watch %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if availability_watch %}bi-bell-fill{% else %}bi-bell{% endif %} me-2"></i>{% if availability_watch %}已设置有货提醒{% else %}有货时提醒我{% endif %}</button></form>
                     {% endif %}
                 {% else %}
                     <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-primary">登录后收藏或联系卖家</a>
