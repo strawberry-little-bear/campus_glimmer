@@ -270,13 +270,14 @@ def conversation(request, user_id):
     other_user = get_object_or_404(User, id=user_id)
 
     # 获取与特定用户的所有对话
-    messages_list = PrivateMessage.objects.filter(
+    messages_queryset = PrivateMessage.objects.filter(
         (Q(sender=request.user) & Q(receiver=other_user)) |
         (Q(sender=other_user) & Q(receiver=request.user))
-    ).order_by('created_at')
+    ).select_related('sender', 'receiver', 'item').order_by('created_at')
 
     # 打开会话时一次性更新未读状态，避免逐条保存造成额外查询。
-    messages_list.filter(receiver=request.user, is_read=False).update(is_read=True)
+    messages_queryset.filter(receiver=request.user, is_read=False).update(is_read=True)
+    messages_page = Paginator(messages_queryset, 30).get_page(request.GET.get('page', 1))
 
     # 发送新消息的表单
     if request.method == 'POST':
@@ -307,7 +308,8 @@ def conversation(request, user_id):
 
     context = {
         'other_user': other_user,
-        'messages_list': messages_list,
+        'messages_list': messages_page.object_list,
+        'conversation_page': messages_page,
         'form': form
     }
     # 修改这里的模板路径

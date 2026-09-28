@@ -138,6 +138,22 @@ class MessageNotificationTests(TestCase):
         self.assertEqual(response.context['message_filter_query']['status'], 'unread')
         self.assertContains(response, '收到的消息分页')
 
+    def test_conversation_paginates_history_and_marks_all_unread(self):
+        for index in range(31):
+            PrivateMessage.objects.create(
+                sender=self.buyer, receiver=self.seller, content=f'历史消息 {index}',
+            )
+        self.client.login(username='seller', password='safe-password-123')
+
+        response = self.client.get(reverse('conversation', args=[self.buyer.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['conversation_page'].paginator.num_pages, 2)
+        self.assertEqual(response.context['conversation_page'].paginator.count, 31)
+        self.assertEqual(len(response.context['messages_list']), 30)
+        self.assertEqual(PrivateMessage.objects.filter(receiver=self.seller, is_read=False).count(), 0)
+        self.assertContains(response, '会话分页')
+
     def test_conversation_summary_uses_bounded_queries(self):
         for index in range(4):
             PrivateMessage.objects.create(
