@@ -1803,8 +1803,48 @@ def browsing_history(request):
 
 @login_required
 def my_items(request):
-    items = Item.objects.filter(seller=request.user).select_related('category', 'location').prefetch_related('images')
-    return render(request, 'listings/my_items.html', {'items': items, 'title': '我的商品'})
+    items = Item.objects.filter(seller=request.user).select_related(
+        'category', 'location', 'campaign',
+    ).prefetch_related('images')
+    now = timezone.now()
+    campaigns = CampusCampaign.objects.filter(is_active=True).filter(
+        Q(ends_at__isnull=True) | Q(ends_at__gt=now),
+    ).order_by('-starts_at', 'title')
+    return render(request, 'listings/my_items.html', {
+        'items': items,
+        'campaigns': campaigns,
+        'title': '我的商品',
+    })
+
+
+@login_required
+def bulk_assign_campaign(request):
+    if request.method != 'POST':
+        return redirect('my_items')
+
+    item_ids = [value for value in request.POST.getlist('item_ids') if value.isdigit()]
+    if not item_ids:
+        messages.warning(request, '请先选择至少一件商品。')
+        return redirect('my_items')
+
+    campaign_id = request.POST.get('campaign_id', '').strip()
+    campaign = None
+    if campaign_id and campaign_id != 'none':
+        campaign = get_object_or_404(
+            CampusCampaign.objects.filter(is_active=True).filter(
+                Q(ends_at__isnull=True) | Q(ends_at__gt=timezone.now()),
+            ),
+            pk=campaign_id,
+        )
+
+    with transaction.atomic():
+        updated = Item.objects.select_for_update().filter(
+            seller=request.user, id__in=item_ids,
+        ).update(campaign=campaign, updated_at=timezone.now())
+
+    action = f'加入“{campaign.title}”' if campaign else '移出当前专题'
+    messages.success(request, f'已将 {updated} 件商品{action}。')
+    return redirect('my_items')
 
 
 def _operations_period_days(request):

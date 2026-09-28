@@ -45,6 +45,7 @@ urlpatterns = [
     path('disputes/evidence/<int:evidence_id>/download/', views.download_dispute_evidence, name='download_dispute_evidence'),
     path('order/<int:order_id>/rate/', views.rate_order, name='rate_order'),
     path('my_items/', views.my_items, name='my_items'),
+    path('my_items/bulk-campaign/', views.bulk_assign_campaign, name='bulk_assign_campaign'),
     path('search/', views.search_items, name='search_items'),
     path('search/suggestions/', views.search_suggestions, name='search_suggestions'),
     path('operations/', views.operations_dashboard, name='operations_dashboard'),

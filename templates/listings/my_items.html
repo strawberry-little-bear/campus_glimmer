@@ -9,6 +9,24 @@
     <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
 </div>
 
+{% if items %}
+<div class="content-card bulk-campaign-toolbar mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">Campaign tools</span>
+        <strong>批量加入校园专题</strong>
+        <p>勾选商品后统一加入或移出专题，适合毕业季清仓、教材交换周等集中运营场景。</p>
+    </div>
+    <form method="post" action="{% url 'bulk_assign_campaign' %}" id="bulk-campaign-form" class="d-flex flex-wrap gap-2 align-items-center">
+        {% csrf_token %}
+        <select name="campaign_id" class="form-select form-select-sm" aria-label="选择校园专题">
+            <option value="none">移出当前专题</option>
+            {% for campaign in campaigns %}<option value="{{ campaign.id }}">加入：{{ campaign.title }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-stars me-1"></i>应用到勾选商品</button>
+    </form>
+</div>
+{% endif %}
+
 <div class="card shadow">
     <div class="card-header bg-light">
         <ul class="nav nav-tabs card-header-tabs" id="itemsTabs" role="tablist">
@@ -34,6 +52,7 @@
                     <table class="table table-hover">
                         <thead>
                             <tr>
+                                <th><input type="checkbox" class="form-check-input" aria-label="选择全部商品" onclick="document.querySelectorAll('.bulk-item-checkbox').forEach((box) => { box.checked = this.checked; });"></th>
                                 <th>商品</th>
                                 <th>价格</th>
                                 <th>状态</th>
@@ -44,6 +63,7 @@
                         <tbody>
                             {% for item in items %}
                             <tr>
+                                <td><input type="checkbox" name="item_ids" value="{{ item.id }}" class="form-check-input bulk-item-checkbox" form="bulk-campaign-form"></td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         {% if item.images.first %}
@@ -69,7 +89,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center py-4">
+                                <td colspan="6" class="text-center py-4">
                                     <p class="text-muted mb-0">您还没有发布任何商品</p>
                                     <a href="{% url 'new_item' %}" class="btn btn-success mt-3">立即发布</a>
                                 </td>
