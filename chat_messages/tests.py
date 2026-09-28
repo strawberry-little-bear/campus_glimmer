@@ -70,6 +70,39 @@ class MessageNotificationTests(TestCase):
         self.assertRedirects(response, reverse('inbox'))
         self.assertEqual(PrivateMessage.objects.filter(receiver=self.seller, is_read=False).count(), 0)
 
+    def test_inbox_can_mark_selected_messages_read(self):
+        first = PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller, content='第一条未读',
+        )
+        second = PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller, content='第二条未读',
+        )
+        self.client.login(username='seller', password='safe-password-123')
+        response = self.client.post(
+            reverse('mark_selected_messages_read'),
+            {'message_ids': [str(first.id)]},
+        )
+        self.assertRedirects(response, reverse('inbox'))
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertTrue(first.is_read)
+        self.assertFalse(second.is_read)
+
+    def test_conversation_can_mark_only_one_sender_read(self):
+        selected = PrivateMessage.objects.create(
+            sender=self.buyer, receiver=self.seller, content='来自买家的未读',
+        )
+        other = User.objects.create_user(username='third-party', password='safe-password-123')
+        untouched = PrivateMessage.objects.create(
+            sender=other, receiver=self.seller, content='来自其他人的未读',
+        )
+        self.client.login(username='seller', password='safe-password-123')
+        response = self.client.post(reverse('mark_conversation_read', args=[self.buyer.id]))
+        self.assertRedirects(response, reverse('conversation', args=[self.buyer.id]))
+        selected.refresh_from_db()
+        untouched.refresh_from_db()
+        self.assertTrue(selected.is_read)
+        self.assertFalse(untouched.is_read)
     def test_inbox_can_filter_received_messages_by_read_state(self):
         unread = PrivateMessage.objects.create(
             sender=self.buyer, receiver=self.seller, content='这是一条未读消息',

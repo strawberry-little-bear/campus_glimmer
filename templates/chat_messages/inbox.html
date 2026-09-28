@@ -7,7 +7,7 @@
     <div>
         <span class="eyebrow eyebrow-soft">Message center</span>
         <h1 class="mb-1">消息中心</h1>
-        <p class="text-muted mb-0">搜索历史私信，或一次性处理所有未读消息。</p>
+        <p class="text-muted mb-0">把私信按会话和未读状态整理好，重要回复不会被新消息淹没。</p>
     </div>
     <div class="d-flex flex-wrap gap-2 align-items-center">
         <form method="get" class="message-search-form">
@@ -28,125 +28,80 @@
     </div>
 </div>
 
+<div class="row g-3 mb-4">
+    <div class="col-md-4"><div class="content-card p-3 h-100"><div class="text-muted small">收到的私信</div><div class="h3 mb-0">{{ message_total_count }}</div></div></div>
+    <div class="col-md-4"><div class="content-card p-3 h-100"><div class="text-muted small">待处理未读</div><div class="h3 mb-0 text-primary">{{ unread_message_count }}</div></div></div>
+    <div class="col-md-4"><div class="content-card p-3 h-100"><div class="text-muted small">有未读的会话</div><div class="h3 mb-0 text-success">{{ conversation_unread_count }}</div></div></div>
+</div>
+
 <div class="message-filter-summary mb-3"><i class="bi bi-funnel me-1"></i>当前收到的消息 {{ received_messages|length }} 条，其中 {{ message_filtered_unread_count }} 条未读{% if search_query or message_status_filter != 'all' %} · 已应用筛选条件{% endif %}</div>
 
 <div class="row">
-    <!-- 左侧会话列表 -->
     <div class="col-md-4 mb-4">
         <div class="card shadow">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0">我的对话{% if conversation_data %} <small class="opacity-75">{{ conversation_data|length }}</small>{% endif %}</h5>
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">我的对话</h5><small class="opacity-75">{{ conversation_data|length }} 个</small>
             </div>
             <div class="list-group list-group-flush">
                 {% for data in conversation_data %}
-                <a href="{% url 'conversation' data.user.id %}" class="list-group-item list-group-item-action d-flex align-items-center">
-                    <img src="{{ data.user.profile.avatar.url }}" alt="{{ data.user.username }}" class="avatar-sm me-3">
-                    <div class="flex-grow-1">
-                        <div class="d-flex justify-content-between">
-                            <h6 class="mb-0">{{ data.user.username }}</h6>
-                            <small class="text-muted">
-                                {% if data.last_message %}
-                                {{ data.last_message.created_at|date:"m-d H:i" }}
-                                {% endif %}
-                            </small>
-                        </div>
-                        <small class="text-muted">
-                            {% if data.last_message %}
-                            {{ data.last_message.content|truncatechars:20 }}
-                            {% endif %}
-                            {% if data.message_count %}<span class="ms-1">· {{ data.message_count }} 条</span>{% endif %}
-                        </small>
-                    </div>
+                <div class="list-group-item d-flex align-items-center">
+                    <a href="{% url 'conversation' data.user.id %}" class="d-flex align-items-center text-decoration-none flex-grow-1 min-width-0">
+                        <img src="{{ data.user.profile.avatar.url }}" alt="{{ data.user.username }}" class="avatar-sm me-3">
+                        <span class="flex-grow-1 min-width-0">
+                            <span class="d-flex justify-content-between"><strong>{{ data.user.username }}</strong><small class="text-muted">{% if data.last_message %}{{ data.last_message.created_at|date:"m-d H:i" }}{% endif %}</small></span>
+                            <small class="text-muted d-block text-truncate">{% if data.last_message %}{{ data.last_message.content|truncatechars:24 }}{% endif %} · {{ data.message_count }} 条</small>
+                        </span>
+                    </a>
                     {% if data.unread_count > 0 %}
-                    <span class="badge bg-danger rounded-pill ms-2">{{ data.unread_count }}</span>
+                    <form method="post" action="{% url 'mark_conversation_read' data.user.id %}" class="ms-2" title="将此会话标记为已读">
+                        {% csrf_token %}<button type="submit" class="btn btn-sm btn-link text-success p-0" aria-label="将 {{ data.user.username }} 的会话标记为已读"><span class="badge bg-danger rounded-pill">{{ data.unread_count }}</span></button>
+                    </form>
                     {% endif %}
-                </a>
-                {% empty %}
-                <div class="list-group-item text-center py-4">
-                    <p class="text-muted mb-0">暂无对话</p>
                 </div>
-                {% endfor %}
+                {% empty %}<div class="list-group-item text-center py-4"><p class="text-muted mb-0">暂无对话</p></div>{% endfor %}
             </div>
         </div>
     </div>
-    
-    <!-- 右侧消息概览 -->
+
     <div class="col-md-8">
         <div class="card shadow">
             <div class="card-header bg-light d-flex justify-content-between align-items-center gap-2">
                 <span class="small text-muted">{% if search_query %}“{{ search_query }}”的搜索结果{% else %}最近消息{% endif %}</span>
                 <ul class="nav nav-tabs card-header-tabs" id="messagesTabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="received-tab" data-bs-toggle="tab" data-bs-target="#received" type="button" role="tab" aria-controls="received" aria-selected="true">收到的消息</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="sent-tab" data-bs-toggle="tab" data-bs-target="#sent" type="button" role="tab" aria-controls="sent" aria-selected="false">发出的消息</button>
-                    </li>
+                    <li class="nav-item" role="presentation"><button class="nav-link active" id="received-tab" data-bs-toggle="tab" data-bs-target="#received" type="button" role="tab">收到的消息</button></li>
+                    <li class="nav-item" role="presentation"><button class="nav-link" id="sent-tab" data-bs-toggle="tab" data-bs-target="#sent" type="button" role="tab">发出的消息</button></li>
                 </ul>
             </div>
             <div class="card-body">
                 <div class="tab-content" id="messagesTabContent">
-                    <!-- 收到的消息 -->
-                    <div class="tab-pane fade show active" id="received" role="tabpanel" aria-labelledby="received-tab">
-                        <div class="list-group">
-                            {% for message in received_messages %}
-                            <div class="list-group-item list-group-item-action {% if not message.is_read %}bg-light{% endif %}">
-                                <div class="d-flex">
-                                    <img src="{{ message.sender.profile.avatar.url }}" alt="{{ message.sender.username }}" class="avatar-sm me-3">
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between">
-                                            <h6 class="mb-0">{{ message.sender.username }}</h6>
-                                            <small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small>
-                                        </div>
-                                        <p class="mb-1">{{ message.content }}</p>
-                                        {% if message.item %}
-                                        <small class="text-muted">
-                                            关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a>
-                                        </small>
-                                        {% endif %}
-                                        <div class="mt-2">
-                                            <a href="{% url 'conversation' message.sender.id %}" class="btn btn-sm btn-outline-success">查看对话</a>
+                    <div class="tab-pane fade show active" id="received" role="tabpanel">
+                        <form method="post" action="{% url 'mark_selected_messages_read' %}" id="selected-messages-form">
+                            {% csrf_token %}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="small text-muted mb-0"><input type="checkbox" id="select-all-messages" class="form-check-input me-2">全选未读</label>
+                                <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-square me-1"></i>标记选中为已读</button>
+                            </div>
+                            <div class="list-group">
+                                {% for message in received_messages %}
+                                <div class="list-group-item list-group-item-action {% if not message.is_read %}bg-light{% endif %}">
+                                    <div class="d-flex align-items-start">
+                                        {% if not message.is_read %}<input type="checkbox" name="message_ids" value="{{ message.id }}" class="form-check-input message-select mt-1 me-3">{% else %}<span class="message-select-spacer me-3"></span>{% endif %}
+                                        <img src="{{ message.sender.profile.avatar.url }}" alt="{{ message.sender.username }}" class="avatar-sm me-3">
+                                        <div class="flex-grow-1"><div class="d-flex justify-content-between"><h6 class="mb-0">{{ message.sender.username }}{% if not message.is_read %}<span class="badge bg-primary-subtle text-primary ms-2">未读</span>{% endif %}</h6><small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small></div>
+                                            <p class="mb-1">{{ message.content }}</p>
+                                            {% if message.item %}<small class="text-muted">关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a></small>{% endif %}
+                                            <div class="mt-2"><a href="{% url 'conversation' message.sender.id %}" class="btn btn-sm btn-outline-success">查看对话</a></div>
                                         </div>
                                     </div>
                                 </div>
+                                {% empty %}<div class="text-center py-4"><p class="text-muted mb-0">暂无收到的消息</p></div>{% endfor %}
                             </div>
-                            {% empty %}
-                            <div class="text-center py-4">
-                                <p class="text-muted mb-0">暂无收到的消息</p>
-                            </div>
-                            {% endfor %}
-                        </div>
+                        </form>
                     </div>
-                    
-                    <!-- 发出的消息 -->
-                    <div class="tab-pane fade" id="sent" role="tabpanel" aria-labelledby="sent-tab">
+                    <div class="tab-pane fade" id="sent" role="tabpanel">
                         <div class="list-group">
-                            {% for message in sent_messages %}
-                            <div class="list-group-item list-group-item-action">
-                                <div class="d-flex">
-                                    <img src="{{ message.receiver.profile.avatar.url }}" alt="{{ message.receiver.username }}" class="avatar-sm me-3">
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex justify-content-between">
-                                            <h6 class="mb-0">发送给: {{ message.receiver.username }}</h6>
-                                            <small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small>
-                                        </div>
-                                        <p class="mb-1">{{ message.content }}</p>
-                                        {% if message.item %}
-                                        <small class="text-muted">
-                                            关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a>
-                                        </small>
-                                        {% endif %}
-                                        <div class="mt-2">
-                                            <a href="{% url 'conversation' message.receiver.id %}" class="btn btn-sm btn-outline-success">查看对话</a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% empty %}
-                            <div class="text-center py-4">
-                                <p class="text-muted mb-0">暂无发出的消息</p>
-                            </div>
-                            {% endfor %}
+                            {% for message in sent_messages %}<div class="list-group-item list-group-item-action"><div class="d-flex"><img src="{{ message.receiver.profile.avatar.url }}" alt="{{ message.receiver.username }}" class="avatar-sm me-3"><div class="flex-grow-1"><div class="d-flex justify-content-between"><h6 class="mb-0">发送给: {{ message.receiver.username }}</h6><small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small></div><p class="mb-1">{{ message.content }}</p>{% if message.item %}<small class="text-muted">关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a></small>{% endif %}<div class="mt-2"><a href="{% url 'conversation' message.receiver.id %}" class="btn btn-sm btn-outline-success">查看对话</a></div></div></div></div>
+                            {% empty %}<div class="text-center py-4"><p class="text-muted mb-0">暂无发出的消息</p></div>{% endfor %}
                         </div>
                     </div>
                 </div>
@@ -154,4 +109,16 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const selectAll = document.getElementById('select-all-messages');
+    if (!selectAll) return;
+    const checkboxes = Array.from(document.querySelectorAll('.message-select'));
+    selectAll.addEventListener('change', function () { checkboxes.forEach(function (checkbox) { checkbox.checked = selectAll.checked; }); });
+    checkboxes.forEach(function (checkbox) { checkbox.addEventListener('change', function () { selectAll.checked = checkboxes.length > 0 && checkboxes.every(function (item) { return item.checked; }); }); });
+});
+</script>
 {% endblock %}

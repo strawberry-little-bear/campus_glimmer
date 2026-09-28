@@ -137,10 +137,11 @@ def inbox(request):
             | Q(received_messages__sender=request.user, received_messages__item__title__icontains=search_query)
         ).distinct()
 
+    conversation_data = _build_conversation_data(request.user, conversation_users)
     context = {
         'received_messages': received_messages,
         'sent_messages': sent_messages,
-        'conversation_data': _build_conversation_data(request.user, conversation_users),
+        'conversation_data': conversation_data,
         'search_query': search_query,
         'message_status_filter': status_filter,
         'message_status_options': (
@@ -149,6 +150,8 @@ def inbox(request):
             ('read', '仅看已读'),
         ),
         'message_filtered_unread_count': received_messages.filter(is_read=False).count(),
+        'message_total_count': PrivateMessage.objects.filter(receiver=request.user).count(),
+        'conversation_unread_count': sum(1 for data in conversation_data if data['unread_count']),
     }
     return render(request, 'chat_messages/inbox.html', context)
 
@@ -165,6 +168,45 @@ def mark_all_messages_read(request):
         else:
             django_messages.info(request, '当前没有未读私信。')
     return redirect('inbox')
+
+
+@login_required
+def mark_selected_messages_read(request):
+    """Mark only the messages selected in the inbox as read."""
+    if request.method == 'POST':
+        message_ids = []
+        for raw_id in request.POST.getlist('message_ids'):
+            try:
+                message_ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                continue
+        updated_count = PrivateMessage.objects.filter(
+            id__in=message_ids,
+            receiver=request.user,
+            is_read=False,
+        ).update(is_read=True)
+        if updated_count:
+            django_messages.success(request, f'已将 {updated_count} 条选中私信标记为已读。')
+        else:
+            django_messages.info(request, '请选择至少一条未读私信。')
+    return redirect('inbox')
+
+
+@login_required
+def mark_conversation_read(request, user_id):
+    """Mark one sender's unread messages as read without touching other conversations."""
+    other_user = get_object_or_404(User, id=user_id)
+    if request.method == 'POST':
+        updated_count = PrivateMessage.objects.filter(
+            sender=other_user,
+            receiver=request.user,
+            is_read=False,
+        ).update(is_read=True)
+        if updated_count:
+            django_messages.success(request, f'已读完与 {other_user.username} 的未读私信。')
+        else:
+            django_messages.info(request, '这个会话当前没有未读私信。')
+    return redirect('conversation', user_id=other_user.id)
 
 @login_required
 def send_message(request, receiver_id, item_id=None):
@@ -219,11 +261,8 @@ def conversation(request, user_id):
         (Q(sender=other_user) & Q(receiver=request.user))
     ).order_by('created_at')
 
-    # 标记收到的消息为已读
-    unread_messages = messages_list.filter(receiver=request.user, is_read=False)
-    for msg in unread_messages:
-        msg.is_read = True
-        msg.save()
+    # 打开会话时一次性更新未读状态，避免逐条保存造成额外查询。
+    messages_list.filter(receiver=request.user, is_read=False).update(is_read=True)
 
     # 发送新消息的表单
     if request.method == 'POST':
