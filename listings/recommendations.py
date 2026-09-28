@@ -52,7 +52,7 @@ class RecommendationService:
         )
 
     def get(self, limit=8, exclude_item_id=None):
-        items = Item.objects.filter(status='available').annotate(
+        items = Item.objects.available().annotate(
             favorite_count=Count('favorites'),
         ).select_related('category', 'seller', 'location').prefetch_related('images')
         if self.user.is_authenticated:

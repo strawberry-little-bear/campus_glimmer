@@ -9,7 +9,7 @@
         <div class="detail-gallery">
             <div class="detail-main-image">
                 {% if item.images.first %}<img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" id="mainProductImage">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage">{% endif %}
-                <span class="detail-status status-{{ item.status }}">{{ item.get_status_display }}</span>
+                <span class="detail-status status-{% if item.status == 'available' and item.is_expired %}expired{% else %}{{ item.status }}{% endif %}">{% if item.status == 'available' and item.is_expired %}已过期{% else %}{{ item.get_status_display }}{% endif %}</span>
             </div>
             {% if item.images.count > 1 %}
             <div class="detail-thumbs">
@@ -29,6 +29,7 @@
                 <span><i class="bi bi-person"></i>{{ item.seller.username }}</span>
                 {% if rating_summary.count %}<span class="rating-inline"><i class="bi bi-star-fill"></i>{{ rating_summary.average|floatformat:1 }}（{{ rating_summary.count }} 条评价）</span>{% endif %}
                 {% if item.location %}<span><i class="bi bi-geo-alt"></i>{{ item.location.name }}{% if item.location.building %} · {{ item.location.building }}{% endif %}</span>{% endif %}
+                {% if item.expires_at %}<span class="{% if item.is_expired %}text-danger{% else %}text-muted{% endif %}"><i class="bi bi-hourglass-split"></i>{% if item.is_expired %}展示已到期{% else %}展示至 {{ item.expires_at|date:'Y年m月d日 H:i' }}{% endif %}</span>{% endif %}
             </div>
             <div class="detail-divider"></div>
             <h6 class="section-label">商品描述</h6>
@@ -37,7 +38,7 @@
             <div class="d-flex flex-wrap gap-2 mt-4">
                 {% if user.is_authenticated %}
                     <form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>
-                    {% if user != item.seller and item.status == 'available' %}
+                    {% if user != item.seller and item.is_available_now %}
                         <a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-calendar2-check me-2"></i>预约交易</a>
                         <a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-outline-primary"><i class="bi bi-chat-dots me-2"></i>联系卖家</a>
                     {% elif user != item.seller and item.status == 'reserved' %}

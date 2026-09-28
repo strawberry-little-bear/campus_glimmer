@@ -21,7 +21,7 @@ def build_seller_reputation(seller):
     )
     rating_count = rating_stats['count'] or 0
     average = round(float(rating_stats['average']), 1) if rating_stats['average'] is not None else None
-    active_listings = Item.objects.filter(seller=seller, status='available').count()
+    active_listings = Item.objects.available().filter(seller=seller).count()
 
     badges = []
     if completed:

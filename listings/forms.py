@@ -18,7 +18,7 @@ class NotificationPreferenceForm(forms.ModelForm):
         model = NotificationPreference
         fields = [
             'order_created', 'order_status', 'rating_received', 'message_received',
-            'comment_received', 'saved_search_match', 'item_available', 'order_dispute',
+            'comment_received', 'saved_search_match', 'item_available', 'item_expired', 'order_dispute',
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match',
         ]
@@ -30,9 +30,20 @@ class NotificationPreferenceForm(forms.ModelForm):
 
 
 class ItemForm(StyledModelFormMixin, forms.ModelForm):
+    expires_at = forms.DateTimeField(
+        label='展示截止时间',
+        required=False,
+        input_formats=['%Y-%m-%dT%H:%M'],
+        widget=forms.DateTimeInput(
+            format='%Y-%m-%dT%H:%M',
+            attrs={'type': 'datetime-local'},
+        ),
+        help_text='可选。到期后自动下架；不填写表示长期展示。',
+    )
+
     class Meta:
         model = Item
-        fields = ['title', 'description', 'price', 'category', 'location', 'condition']
+        fields = ['title', 'description', 'price', 'category', 'location', 'condition', 'expires_at']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 6, 'placeholder': '介绍商品的新旧程度、配件、交易方式等'}),
             'price': forms.NumberInput(attrs={'min': '0', 'step': '0.01', 'placeholder': '0.00'}),
@@ -50,6 +61,15 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
         self.fields['location'].widget.attrs['class'] = 'form-select'
         self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields['location'].empty_label = '请选择交易地点（可选）'
+        self.fields['expires_at'].widget.attrs['class'] = 'form-control'
+
+    def clean_expires_at(self):
+        value = self.cleaned_data.get('expires_at')
+        if value and timezone.is_naive(value):
+            value = timezone.make_aware(value, timezone.get_current_timezone())
+        if value and value <= timezone.now():
+            raise forms.ValidationError('展示截止时间必须晚于当前时间。')
+        return value
 
 
 class ItemImageForm(StyledModelFormMixin, forms.ModelForm):

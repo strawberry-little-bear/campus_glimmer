@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -37,12 +38,24 @@ class CampusLocation(models.Model):
         ordering = ['sort_order', 'name']
 
 
+class ItemQuerySet(models.QuerySet):
+    def available(self, now=None):
+        """Return listings that are still visible and can accept a reservation."""
+        now = now or timezone.now()
+        return self.filter(status='available').filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gt=now),
+        )
+
+
 class Item(models.Model):
     STATUS_CHOICES = (
         ('available', '在售'),
         ('reserved', '已预订'),
         ('sold', '已售出'),
+        ('expired', '已过期'),
     )
+
+    objects = ItemQuerySet.as_manager()
 
     title = models.CharField('商品标题', max_length=200)
     description = models.TextField('商品描述')
@@ -59,8 +72,20 @@ class Item(models.Model):
     condition = models.CharField('成色', max_length=100)
     seller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='listed_items', verbose_name='卖家')
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='available')
+    expires_at = models.DateTimeField(
+        '展示截止时间', null=True, blank=True,
+        help_text='可选。到期后商品会自动下架；不填写表示长期展示。',
+    )
     created_at = models.DateTimeField('发布时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    @property
+    def is_expired(self):
+        return bool(self.expires_at and self.expires_at <= timezone.now())
+
+    @property
+    def is_available_now(self):
+        return self.status == 'available' and not self.is_expired
 
     def __str__(self):
         return self.title
@@ -71,6 +96,7 @@ class Item(models.Model):
             models.Index(fields=['status', '-created_at']),
             models.Index(fields=['category', 'status']),
             models.Index(fields=['location', 'status']),
+            models.Index(fields=['status', 'expires_at']),
         ]
 
 
@@ -552,6 +578,7 @@ class Notification(models.Model):
         ('comment_received', '收到商品留言'),
         ('saved_search_match', '关注的搜索有新商品'),
         ('item_available', '商品重新有货'),
+        ('item_expired', '商品展示已到期'),
         ('order_dispute', '交易争议更新'),
         ('meeting_incident', '交付预约异常'),
         ('order_expiring', '交易预约即将超时'),
@@ -623,6 +650,9 @@ class NotificationPreference(models.Model):
     )
     item_available = models.BooleanField(
         '商品重新有货', default=True, help_text='你关注的商品恢复为在售时提醒。',
+    )
+    item_expired = models.BooleanField(
+        '商品展示已到期', default=True, help_text='你发布的商品自动下架时提醒。',
     )
     order_dispute = models.BooleanField(
         '交易争议更新', default=True, help_text='交易争议状态发生变化时提醒。',

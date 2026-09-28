@@ -43,9 +43,12 @@ def _favorite_ids(request):
 
 
 def home(request):
-    categories = Category.objects.annotate(available_count=Count('items', filter=Q(items__status='available')))
-    locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=Q(items__status='available')))
-    recent_items = Item.objects.filter(status='available').select_related('category', 'seller', 'location').prefetch_related('images')[:8]
+    active_item_filter = Q(items__status='available') & (
+        Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=timezone.now())
+    )
+    categories = Category.objects.annotate(available_count=Count('items', filter=active_item_filter))
+    locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=active_item_filter))
+    recent_items = Item.objects.available().select_related('category', 'seller', 'location').prefetch_related('images')[:8]
     context = {
         'categories': categories,
         'locations': locations,
@@ -53,7 +56,7 @@ def home(request):
         'recommendations': get_recommendations(request.user, limit=8),
         'favorite_ids': _favorite_ids(request),
         'stats': {
-            'items': Item.objects.filter(status='available').count(),
+            'items': Item.objects.available().count(),
             'categories': categories.count(),
             'members': Item.objects.values('seller').distinct().count(),
         },
@@ -104,8 +107,11 @@ def _search_context_signature(query, condition, category, location, raw_min_pric
 
 
 def item_list(request, category_id=None):
-    categories = Category.objects.annotate(available_count=Count('items', filter=Q(items__status='available')))
-    locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=Q(items__status='available')))
+    active_item_filter = Q(items__status='available') & (
+        Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=timezone.now())
+    )
+    categories = Category.objects.annotate(available_count=Count('items', filter=active_item_filter))
+    locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=active_item_filter))
     category = get_object_or_404(Category, id=category_id) if category_id else None
     location_id = request.GET.get('location', '').strip()
     location = get_object_or_404(CampusLocation, id=location_id, is_active=True) if location_id.isdigit() else None
@@ -117,7 +123,7 @@ def item_list(request, category_id=None):
     min_price = _parse_price(raw_min_price)
     max_price = _parse_price(raw_max_price)
 
-    items = Item.objects.filter(status='available').select_related('category', 'seller', 'location').prefetch_related('images')
+    items = Item.objects.available().select_related('category', 'seller', 'location').prefetch_related('images')
     if category:
         items = items.filter(category=category)
     if location:
@@ -316,7 +322,10 @@ def search_suggestions(request):
     categories = Category.objects.filter(
         name__icontains=query,
     ).annotate(
-        available_count=Count('items', filter=Q(items__status='available')),
+        available_count=Count('items', filter=(
+            Q(items__status='available')
+            & (Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=timezone.now()))
+        )),
     ).order_by('-available_count', 'name')[:3]
     for category in categories:
         add_suggestion(category.name, 'category', '分类', f"{category.available_count} 件在售")
@@ -327,7 +336,10 @@ def search_suggestions(request):
         | Q(address__icontains=query),
         is_active=True,
     ).annotate(
-        available_count=Count('items', filter=Q(items__status='available')),
+        available_count=Count('items', filter=(
+            Q(items__status='available')
+            & (Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=timezone.now()))
+        )),
     ).order_by('-available_count', 'sort_order', 'name')[:3]
     for location in locations:
         add_suggestion(location.name, 'location', '交易地点', f"{location.available_count} 件在售")
@@ -360,7 +372,7 @@ def item_detail(request, item_id):
                 view_count=F('view_count') + 1,
                 last_viewed_at=timezone.now(),
             )
-    related_items = Item.objects.filter(category=item.category, status='available').exclude(id=item.id).select_related('seller', 'location').prefetch_related('images')[:4]
+    related_items = Item.objects.available().filter(category=item.category).exclude(id=item.id).select_related('seller', 'location').prefetch_related('images')[:4]
     seller_ratings = Rating.objects.filter(ratee=item.seller).select_related('rater', 'order')[:5]
     rating_summary = Rating.objects.filter(ratee=item.seller).aggregate(average=Avg('score'), count=Count('id'))
     context = {
@@ -426,7 +438,7 @@ def toggle_availability_watch(request, item_id):
 
 @login_required
 def recommendation_feedback(request, item_id):
-    item = get_object_or_404(Item, id=item_id, status='available')
+    item = get_object_or_404(Item.objects.available(), id=item_id)
     if item.seller == request.user:
         messages.info(request, '自己的商品不会进入个性化推荐。')
         return redirect('home')
@@ -487,7 +499,7 @@ def report_item(request, item_id):
 
 @login_required
 def create_order(request, item_id):
-    item = get_object_or_404(Item.objects.select_related('seller', 'location'), id=item_id)
+    item = get_object_or_404(Item.objects.available().select_related('seller', 'location'), id=item_id)
     if item.seller == request.user:
         messages.error(request, '不能预约自己发布的商品。')
         return redirect('item_detail', item_id=item.id)
@@ -500,7 +512,7 @@ def create_order(request, item_id):
             try:
                 with transaction.atomic():
                     locked_item = Item.objects.select_for_update().select_related('seller').get(id=item.id)
-                    if locked_item.status != 'available' or hasattr(locked_item, 'order'):
+                    if not locked_item.is_available_now or hasattr(locked_item, 'order'):
                         messages.info(request, '这个商品刚刚被其他同学预约了。')
                         return redirect('item_detail', item_id=item.id)
                     order = form.save(commit=False)
@@ -1382,7 +1394,11 @@ def edit_item(request, item_id):
         form = ItemForm(request.POST, instance=item)
         formset = ItemImageFormSet(request.POST, request.FILES, instance=item)
         if form.is_valid() and formset.is_valid():
-            form.save()
+            saved_item = form.save()
+            if saved_item.status == 'expired' and saved_item.expires_at and saved_item.expires_at > timezone.now():
+                saved_item.status = 'available'
+                saved_item.save(update_fields=['status', 'updated_at'])
+                messages.info(request, '商品已重新上架，并按新的展示截止时间继续展示。')
             formset.save()
             messages.success(request, '商品信息已更新。')
             return redirect('item_detail', item_id=item.id)
@@ -1414,6 +1430,9 @@ def mark_sold(request, item_id):
     if request.method == 'POST':
         status = request.POST.get('status')
         if status in dict(Item.STATUS_CHOICES):
+            if status == 'available' and item.expires_at and item.expires_at <= timezone.now():
+                messages.error(request, '展示截止时间已到，请先编辑商品并设置未来时间。')
+                return redirect('item_detail', item_id=item.id)
             previous_status = item.status
             item.status = status
             item.save(update_fields=['status', 'updated_at'])
@@ -1769,7 +1788,7 @@ def _demand_queryset():
 
 
 def _demand_match_items(demand):
-    items = Item.objects.filter(status='available').select_related(
+    items = Item.objects.available().select_related(
         'category', 'location', 'seller',
     ).prefetch_related('images')
     if demand.category_id:

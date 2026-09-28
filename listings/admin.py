@@ -24,8 +24,8 @@ class CampusLocationAdmin(admin.ModelAdmin):
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ('title', 'price', 'category', 'location', 'seller', 'status', 'report_count', 'created_at')
-    list_filter = ('status', 'category', 'location', 'created_at')
+    list_display = ('title', 'price', 'category', 'location', 'seller', 'status', 'expires_at', 'report_count', 'created_at')
+    list_filter = ('status', 'category', 'location', 'created_at', 'expires_at')
     search_fields = ('title', 'description', 'seller__username', 'location__name')
     date_hierarchy = 'created_at'
     inlines = [ItemImageInline]

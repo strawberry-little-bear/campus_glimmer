@@ -10,6 +10,7 @@
         <h3 class="product-title"><a href="{% if item.search_click_url %}{{ item.search_click_url }}{% else %}{% url 'item_detail' item.id %}{% endif %}">{{ item.title }}</a></h3>
         <p class="product-description">{{ item.description|truncatechars:54 }}</p>
         {% if item.location %}<div class="small text-muted mb-3"><i class="bi bi-geo-alt me-1"></i>{{ item.location.name }}{% if item.location.building %} · {{ item.location.building }}{% endif %}</div>{% endif %}
+        {% if item.expires_at %}<div class="small text-warning-emphasis mb-2"><i class="bi bi-hourglass-split me-1"></i>限时展示至 {{ item.expires_at|date:'m月d日 H:i' }}</div>{% endif %}
         <div class="product-footer"><strong class="product-price">¥{{ item.price|floatformat:2 }}</strong><a href="{% if item.search_click_url %}{{ item.search_click_url }}{% else %}{% url 'item_detail' item.id %}{% endif %}" class="stretched-link text-link small">查看详情 <i class="bi bi-arrow-up-right"></i></a></div>
     </div>
 </article>

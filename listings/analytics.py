@@ -200,13 +200,13 @@ def _build_facet_supply_gaps(search_period):
         )
     )
     category_available = dict(
-        Item.objects.filter(status='available')
+        Item.objects.available()
         .values('category_id')
         .annotate(count=Count('id'))
         .values_list('category_id', 'count')
     )
     location_available = dict(
-        Item.objects.filter(status='available', location__isnull=False)
+        Item.objects.available().filter(location__isnull=False)
         .values('location_id')
         .annotate(count=Count('id'))
         .values_list('location_id', 'count')
@@ -902,7 +902,10 @@ def build_operations_dashboard(days=30):
         ),
         available_count=Count(
             'items',
-            filter=Q(items__status='available'),
+            filter=(
+                Q(items__status='available')
+                & (Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=timezone.now()))
+            ),
             distinct=True,
         ),
     ).filter(new_count__gt=0).order_by('-new_count', 'name')[:8]
@@ -990,7 +993,7 @@ def build_operations_dashboard(days=30):
         })
 
     metrics = {
-        'active_items': Item.objects.filter(status='available').count(),
+        'active_items': Item.objects.available().count(),
         'new_items': item_period.count(),
         'detail_views': detail_view_count,
         'favorites': favorite_count,
