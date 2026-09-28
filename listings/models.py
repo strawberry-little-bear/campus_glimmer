@@ -26,6 +26,17 @@ class CampusLocation(models.Model):
     building = models.CharField('楼栋 / 校区', max_length=100, blank=True)
     address = models.CharField('详细位置', max_length=200, blank=True)
     description = models.CharField('地点说明', max_length=200, blank=True)
+    is_public = models.BooleanField(
+        '公共交付区域',
+        default=True,
+        help_text='用于交付推荐与安全提示。建议将图书馆大厅、门卫室等人流较多区域标记为公共区域。',
+    )
+    safety_note = models.CharField(
+        '安全提示',
+        max_length=200,
+        blank=True,
+        help_text='可填写该地点的开放时间、照明或门禁等注意事项。',
+    )
     is_active = models.BooleanField('启用', default=True)
     sort_order = models.PositiveIntegerField('排序', default=0)
 

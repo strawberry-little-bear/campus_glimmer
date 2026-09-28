@@ -29,7 +29,11 @@ from .models import BrowsingHistory, CampusLocation, Category, DemandPost, Deliv
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
-from .meeting_scheduling import find_appointment_conflicts
+from .meeting_scheduling import (
+    find_appointment_conflicts,
+    recommend_meeting_locations,
+    recommend_meeting_times,
+)
 from .order_workflow import OrderTransitionError, transition_order
 from .saved_searches import notify_saved_search_matches
 from chat_messages.models import ModerationEvent, PrivateMessage
@@ -753,7 +757,7 @@ def withdraw_gift_application(request, application_id):
 def order_detail(request, order_id):
     order = get_object_or_404(
         Order.objects.select_related(
-            'item', 'buyer', 'seller', 'meeting_location', 'delivery_confirmation', 'dispute', 'appointment__location', 'appointment__proposed_by', 'appointment__responded_by',
+            'item', 'item__location', 'buyer', 'seller', 'meeting_location', 'delivery_confirmation', 'dispute', 'appointment__location', 'appointment__proposed_by', 'appointment__responded_by',
         ),
         id=order_id,
     )
@@ -762,6 +766,8 @@ def order_detail(request, order_id):
         return redirect('home')
     appointment = getattr(order, 'appointment', None)
     meeting_form = None
+    meeting_location_recommendations = []
+    meeting_time_recommendations = []
     delivery_code_form = None
     handoff_code_display = None
     incident_form = None
@@ -770,6 +776,8 @@ def order_detail(request, order_id):
     if order.status in {'confirmed', 'meeting'} and not (appointment and appointment.status == 'pending' and appointment.proposed_by_id != request.user.id):
         form_initial = {'location': order.meeting_location_id} if not appointment else None
         meeting_form = MeetingAppointmentForm(instance=appointment, initial=form_initial)
+        meeting_location_recommendations = recommend_meeting_locations(order=order)
+        meeting_time_recommendations = recommend_meeting_times(order=order)
     if confirmation and request.user == order.seller and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at and not confirmation.seller_confirmed_at:
         delivery_code_form = DeliveryCodeForm()
     if confirmation and request.user == order.buyer and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at:
@@ -801,6 +809,8 @@ def order_detail(request, order_id):
         'handoff_code_display': handoff_code_display,
         'appointment': appointment,
         'meeting_form': meeting_form,
+        'meeting_location_recommendations': meeting_location_recommendations,
+        'meeting_time_recommendations': meeting_time_recommendations,
         'incident': incident,
         'incident_form': incident_form,
         'dispute': dispute,

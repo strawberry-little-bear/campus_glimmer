@@ -16,10 +16,10 @@ class CategoryAdmin(admin.ModelAdmin):
 
 @admin.register(CampusLocation)
 class CampusLocationAdmin(admin.ModelAdmin):
-    list_display = ('name', 'building', 'address', 'is_active', 'sort_order')
-    list_filter = ('is_active', 'building')
+    list_display = ('name', 'building', 'address', 'is_public', 'is_active', 'sort_order')
+    list_filter = ('is_active', 'is_public', 'building')
     search_fields = ('name', 'building', 'address')
-    list_editable = ('is_active', 'sort_order')
+    list_editable = ('is_public', 'is_active', 'sort_order')
 
 
 @admin.register(Item)

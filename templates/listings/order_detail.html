@@ -122,6 +122,49 @@
             {% else %}
                 <p class="small text-muted mt-3">还没有确定见面时间。提交后，对方可以直接确认或提出新的安排。</p>
             {% endif %}
+            {% if meeting_location_recommendations or meeting_time_recommendations %}
+            <div class="meeting-recommendation-panel mt-4">
+                <div class="d-flex justify-content-between align-items-start gap-3">
+                    <div><span class="eyebrow eyebrow-soft">智能建议</span><h3 class="mt-2 mb-1">让交付更安全、也更容易约上</h3><p class="small text-muted mb-0">建议来自商品地点、双方历史交付记录和当前预约冲突检查，不替代双方最终协商。</p></div>
+                    <i class="bi bi-stars text-primary fs-4"></i>
+                </div>
+                {% if meeting_location_recommendations %}
+                <div class="meeting-recommendation-group mt-3">
+                    <div class="card-section-heading"><strong><i class="bi bi-geo-alt me-1"></i>推荐交付地点</strong><span>{{ meeting_location_recommendations|length }} 个</span></div>
+                    <div class="meeting-recommendation-list mt-2">
+                        {% for recommendation in meeting_location_recommendations %}
+                        <article class="meeting-recommendation-item">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <div><strong>{{ recommendation.location.name }}</strong>{% if recommendation.location.building %}<small class="d-block text-muted mt-1">{{ recommendation.location.building }}{% if recommendation.location.address %} · {{ recommendation.location.address }}{% endif %}</small>{% endif %}</div>
+                                <span class="recommendation-score">{{ recommendation.score }} 分</span>
+                            </div>
+                            <p class="small mb-1 mt-2">{{ recommendation.reasons|join:' · ' }}</p>
+                            <small class="text-muted d-block"><i class="bi bi-shield-check me-1"></i>{{ recommendation.safety_note }}</small>
+                            <button type="button" class="btn btn-sm btn-link px-0 mt-2 meeting-recommendation-action" data-recommendation-location="{{ recommendation.location.id }}">采用这个地点</button>
+                        </article>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if meeting_time_recommendations %}
+                <div class="meeting-recommendation-group mt-3">
+                    <div class="card-section-heading"><strong><i class="bi bi-calendar-check me-1"></i>推荐空闲时段</strong><span>{{ meeting_time_recommendations|length }} 个</span></div>
+                    <div class="meeting-recommendation-list mt-2">
+                        {% for recommendation in meeting_time_recommendations %}
+                        <article class="meeting-recommendation-item">
+                            <div class="d-flex justify-content-between align-items-start gap-2">
+                                <strong>{{ recommendation.start_at|date:'Y年m月d日 H:i' }} – {{ recommendation.end_at|date:'H:i' }}</strong>
+                                <span class="recommendation-score">{{ recommendation.score }} 分</span>
+                            </div>
+                            <p class="small text-muted mb-0 mt-2">{{ recommendation.reasons|join:' · ' }}</p>
+                            <button type="button" class="btn btn-sm btn-link px-0 mt-2 meeting-recommendation-action" data-recommendation-start="{{ recommendation.start_input }}" data-recommendation-end="{{ recommendation.end_input }}">采用这个时段</button>
+                        </article>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
             {% if meeting_form %}
             <form method="post" action="{% url 'propose_meeting' order.id %}" class="mt-3 appointment-form">
                 {% csrf_token %}
@@ -233,4 +276,28 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+    const locationField = document.getElementById('id_location');
+    const startField = document.getElementById('id_start_at');
+    const endField = document.getElementById('id_end_at');
+    document.querySelectorAll('[data-recommendation-location]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (locationField) {
+                locationField.value = button.dataset.recommendationLocation;
+                locationField.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+    });
+    document.querySelectorAll('[data-recommendation-start]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (startField) startField.value = button.dataset.recommendationStart;
+            if (endField) endField.value = button.dataset.recommendationEnd;
+        });
+    });
+})();
+</script>
 {% endblock %}
