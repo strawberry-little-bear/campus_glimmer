@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DemandResponse, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
 
 
 PERIOD_CHOICES = (
@@ -768,18 +768,107 @@ def _build_notification_insights(notification_period, dates):
         'has_data': bool(row_count),
     }
 
-def _build_demand_match_insights(notification_period):
-    """Summarize whether the matching engine is creating actionable demand signals."""
+def _build_demand_match_insights(notification_period, start, end):
+    """Build a transparent funnel from match reach to an accepted seller response."""
     matches = notification_period.filter(kind='demand_match')
     total = matches.count()
     read = matches.filter(is_read=True).count()
+    matched_demand_ids = matches.exclude(demand_id__isnull=True).values('demand_id').distinct()
+
+    response_period = DemandResponse.objects.filter(
+        created_at__gte=start,
+        created_at__lte=end,
+    )
+    decision_period = DemandResponse.objects.filter(
+        updated_at__gte=start,
+        updated_at__lte=end,
+    ).exclude(status='withdrawn')
+    response_count = response_period.count()
+    responded_demand_count = response_period.values('demand_id').distinct().count()
+    decision_count = decision_period.filter(status__in=['accepted', 'rejected']).count()
+    accepted_response_count = decision_period.filter(status='accepted').count()
+    rejected_response_count = decision_period.filter(status='rejected').count()
+    accepted_demand_count = decision_period.filter(status='accepted').values('demand_id').distinct().count()
+
+    def percent(current, total_value):
+        return round(current / total_value * 100, 1) if total_value else 0
+
+    category_rows = []
+    for row in response_period.filter(demand__category__isnull=False).values(
+        'demand__category__name',
+    ).annotate(
+        response_count=Count('id'),
+        demand_count=Count('demand_id', distinct=True),
+        accepted_count=Count('id', filter=Q(status='accepted')),
+    ).order_by('-accepted_count', '-response_count', 'demand__category__name')[:8]:
+        category_rows.append({
+            'name': row['demand__category__name'],
+            'response_count': row['response_count'],
+            'demand_count': row['demand_count'],
+            'accepted_count': row['accepted_count'],
+            'acceptance_rate': percent(row['accepted_count'], row['response_count']),
+        })
+
+    location_rows = []
+    for row in response_period.filter(demand__location__isnull=False).values(
+        'demand__location__name',
+    ).annotate(
+        response_count=Count('id'),
+        demand_count=Count('demand_id', distinct=True),
+        accepted_count=Count('id', filter=Q(status='accepted')),
+    ).order_by('-accepted_count', '-response_count', 'demand__location__name')[:8]:
+        location_rows.append({
+            'name': row['demand__location__name'],
+            'response_count': row['response_count'],
+            'demand_count': row['demand_count'],
+            'accepted_count': row['accepted_count'],
+            'acceptance_rate': percent(row['accepted_count'], row['response_count']),
+        })
+
+    funnel = [
+        {
+            'key': 'matched',
+            'label': '收到匹配提醒',
+            'count': matched_demand_ids.count(),
+            'rate': 100,
+            'note': '统计周期内至少收到一次匹配通知的求购',
+        },
+        {
+            'key': 'responded',
+            'label': '收到卖家响应',
+            'count': responded_demand_count,
+            'rate': percent(responded_demand_count, matched_demand_ids.count()),
+            'note': '至少收到一条卖家响应的求购',
+        },
+        {
+            'key': 'accepted',
+            'label': '确认匹配成功',
+            'count': accepted_demand_count,
+            'rate': percent(accepted_demand_count, responded_demand_count),
+            'note': '求购者确认使用某条响应商品的求购',
+        },
+    ]
     return {
         'notification_count': total,
         'read_count': read,
-        'read_rate': round(read / total * 100, 1) if total else 0,
-        'demand_count': matches.exclude(demand_id__isnull=True).values('demand_id').distinct().count(),
+        'read_rate': percent(read, total),
+        'demand_count': matched_demand_ids.count(),
         'item_count': matches.exclude(item_id__isnull=True).values('item_id').distinct().count(),
         'active_demands': DemandPost.objects.filter(status='active').count(),
+        'response_count': response_count,
+        'responded_demand_count': responded_demand_count,
+        'decision_count': decision_count,
+        'accepted_response_count': accepted_response_count,
+        'rejected_response_count': rejected_response_count,
+        'accepted_demand_count': accepted_demand_count,
+        'response_acceptance_rate': percent(accepted_response_count, decision_count),
+        'match_response_rate': percent(responded_demand_count, matched_demand_ids.count()),
+        'response_acceptance_demand_rate': percent(accepted_demand_count, responded_demand_count),
+        'funnel': funnel,
+        'funnel_max': max((stage['count'] for stage in funnel), default=1) or 1,
+        'category_rows': category_rows,
+        'location_rows': location_rows,
+        'has_response_data': bool(response_count or decision_count),
     }
 
 
@@ -818,7 +907,7 @@ def build_operations_dashboard(days=30):
     detail_view_count = view_period.count()
     favorite_count = favorite_period.count()
     notification_insights = _build_notification_insights(notification_period, dates)
-    demand_match_insights = _build_demand_match_insights(notification_period)
+    demand_match_insights = _build_demand_match_insights(notification_period, start, now)
 
     def conversion_rate(current, previous):
         return round(current / previous * 100, 1) if previous else 0
@@ -1023,6 +1112,13 @@ def build_operations_dashboard(days=30):
         'demand_matches': demand_match_insights['notification_count'],
         'demand_match_read_rate': demand_match_insights['read_rate'],
         'demand_match_demands': demand_match_insights['demand_count'],
+        'demand_responses': demand_match_insights['response_count'],
+        'demand_responded_demands': demand_match_insights['responded_demand_count'],
+        'demand_accepted_responses': demand_match_insights['accepted_response_count'],
+        'demand_rejected_responses': demand_match_insights['rejected_response_count'],
+        'demand_response_acceptance_rate': demand_match_insights['response_acceptance_rate'],
+        'demand_match_response_rate': demand_match_insights['match_response_rate'],
+        'demand_response_acceptance_demand_rate': demand_match_insights['response_acceptance_demand_rate'],
     }
     operational_alerts = build_operational_alerts(metrics, period_comparisons)
 

@@ -119,6 +119,48 @@
 
 <section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Demand conversion</span><h2>求购匹配转化</h2></div>
+        <span class="ops-panel-hint">从匹配提醒到确认响应的完整链路</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-funnel me-1"></i>将“收到匹配提醒、卖家响应、求购者确认”拆开统计，帮助运营判断匹配算法是否真正带来了有效供给，而不只是在发送通知。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>卖家响应</span><strong>{{ demand_match_insights.response_count }}</strong><small>{{ demand_match_insights.responded_demand_count }} 条求购收到响应</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>确认匹配</span><strong>{{ demand_match_insights.accepted_response_count }}</strong><small>{{ demand_match_insights.accepted_demand_count }} 条求购完成确认</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>提醒到响应</span><strong>{{ demand_match_insights.match_response_rate }}%</strong><small>被触达求购进入响应的比例</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>响应确认率</span><strong>{{ demand_match_insights.response_acceptance_rate }}%</strong><small>已处理响应中被采纳的比例</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">转化漏斗</h3>
+            <div class="activity-chart" aria-label="求购匹配转化漏斗">
+                {% for stage in demand_match_insights.funnel %}
+                <div class="activity-row"><span class="small text-muted" style="min-width: 7em">{{ stage.label }}</span><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio stage.count demand_match_insights.funnel_max 100 %}%" title="{{ stage.count }} 条"></span></div><strong>{{ stage.count }}</strong><small class="text-muted">{{ stage.rate }}%</small></div>
+                <div class="small text-muted mb-2 ms-2">{{ stage.note }}</div>
+                {% empty %}<p class="empty-inline mb-0">当前周期还没有匹配转化数据。</p>{% endfor %}
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">分类表现</h3>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>分类</th><th>响应</th><th>确认</th><th>确认率</th></tr></thead><tbody>
+                {% for row in demand_match_insights.category_rows %}<tr><td><strong>{{ row.name }}</strong><small class="d-block text-muted">{{ row.demand_count }} 条求购</small></td><td>{{ row.response_count }}</td><td>{{ row.accepted_count }}</td><td>{{ row.acceptance_rate }}%</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">当前周期还没有分类响应数据。</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">地点表现</h3>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>期望地点</th><th>响应</th><th>确认</th><th>确认率</th></tr></thead><tbody>
+                {% for row in demand_match_insights.location_rows %}<tr><td><strong>{{ row.name }}</strong><small class="d-block text-muted">{{ row.demand_count }} 条求购</small></td><td>{{ row.response_count }}</td><td>{{ row.accepted_count }}</td><td>{{ row.acceptance_rate }}%</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">当前周期还没有地点响应数据。</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+        <div class="col-lg-6">
+            <div class="ops-mini-summary h-100"><span>未采纳响应</span><strong>{{ demand_match_insights.rejected_response_count }}</strong><span>从响应到确认</span><strong>{{ demand_match_insights.response_acceptance_demand_rate }}%</strong><span>口径说明</span><small>响应按提交时间统计，确认按处理时间统计；同一条求购只计一次转化。</small></div>
+        </div>
+    </div>
+</section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Period comparison</span><h2>周期对比</h2></div>
         <span class="ops-panel-hint">对比上一段同长度周期</span>
     </div>

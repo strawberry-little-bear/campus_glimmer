@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -698,6 +698,59 @@ class ListingFlowTests(TestCase):
         self.assertEqual(insights['read_rate'], 50.0)
         self.assertEqual(dashboard['metrics']['demand_matches'], 2)
         self.assertEqual(dashboard['metrics']['demand_match_demands'], 1)
+
+    def test_operations_dashboard_reports_demand_response_conversion(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        demand = DemandPost.objects.create(
+            requester=self.other_user, title='转化漏斗求购', description='测试响应分析',
+            category=self.category, location=self.location,
+        )
+        second_item = Item.objects.create(
+            title='备用键盘', description='另一件测试商品', price='49.00', category=self.category,
+            location=self.location, condition='8成新', seller=self.user,
+        )
+        Notification.objects.create(
+            recipient=self.other_user, kind='demand_match', title='匹配提醒',
+            message='发现便携键盘', demand=demand, item=self.item,
+        )
+        DemandResponse.objects.create(
+            demand=demand, item=self.item, responder=self.user,
+            message='可以在图书馆东门交付', status='accepted', match_score=92,
+        )
+        DemandResponse.objects.create(
+            demand=demand, item=second_item, responder=self.user,
+            message='也可以考虑这件', status='rejected', match_score=76,
+        )
+
+        dashboard = build_operations_dashboard(30)
+        insights = dashboard['demand_match_insights']
+        self.assertEqual(insights['response_count'], 2)
+        self.assertEqual(insights['responded_demand_count'], 1)
+        self.assertEqual(insights['accepted_response_count'], 1)
+        self.assertEqual(insights['rejected_response_count'], 1)
+        self.assertEqual(insights['accepted_demand_count'], 1)
+        self.assertEqual(insights['response_acceptance_rate'], 50.0)
+        self.assertEqual(insights['match_response_rate'], 100.0)
+        self.assertEqual(insights['response_acceptance_demand_rate'], 100.0)
+        self.assertEqual(insights['funnel'][0]['count'], 1)
+        self.assertEqual(insights['funnel'][1]['count'], 1)
+        self.assertEqual(insights['funnel'][2]['count'], 1)
+        self.assertEqual(insights['category_rows'][0]['name'], '数码')
+        self.assertEqual(dashboard['metrics']['demand_responses'], 2)
+        self.assertEqual(dashboard['metrics']['demand_response_acceptance_rate'], 50.0)
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '求购匹配转化')
+        self.assertContains(response, '提醒到响应')
+
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+        self.assertEqual(export.status_code, 200)
+        report = export.content.decode('utf-8-sig')
+        self.assertIn('求购匹配转化漏斗', report)
+        self.assertIn('求购匹配分类表现', report)
 
     def test_operations_dashboard_reports_notification_deduplication(self):
         Notification.objects.create(

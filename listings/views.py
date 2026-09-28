@@ -1821,10 +1821,32 @@ def operations_dashboard_export(request):
         ('demand_matches', '求购匹配通知'),
         ('demand_match_read_rate', '求购匹配阅读率（%）'),
         ('demand_match_demands', '被匹配求购数'),
+        ('demand_responses', '卖家响应数'),
+        ('demand_responded_demands', '收到响应的求购数'),
+        ('demand_accepted_responses', '确认匹配响应数'),
+        ('demand_rejected_responses', '未采纳响应数'),
+        ('demand_response_acceptance_rate', '响应确认率（%）'),
+        ('demand_match_response_rate', '匹配到响应转化率（%）'),
+        ('demand_response_acceptance_demand_rate', '响应到确认求购转化率（%）'),
     )
     for key, label in metric_labels:
         value = metrics[key]
         writer.writerow([label, '' if value is None else value])
+    writer.writerow([])
+    writer.writerow(['求购匹配转化漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
+    for stage in dashboard['demand_match_insights']['funnel']:
+        writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
+
+    writer.writerow([])
+    writer.writerow(['求购匹配分类表现', '响应数', '求购数', '确认数', '响应确认率（%）'])
+    for row in dashboard['demand_match_insights']['category_rows']:
+        writer.writerow([row['name'], row['response_count'], row['demand_count'], row['accepted_count'], row['acceptance_rate']])
+
+    writer.writerow([])
+    writer.writerow(['求购匹配地点表现', '响应数', '求购数', '确认数', '响应确认率（%）'])
+    for row in dashboard['demand_match_insights']['location_rows']:
+        writer.writerow([row['name'], row['response_count'], row['demand_count'], row['accepted_count'], row['acceptance_rate']])
+
     writer.writerow([])
     writer.writerow(['通知类型', '触达事件', '通知记录', '未读记录', '压缩率（%）'])
     for row in dashboard['notification_insights']['kind_rows']:
