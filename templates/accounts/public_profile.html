@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ profile_user.username }}的交易档案 · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="public-profile-page">
+    <div class="page-intro mb-4">
+        <div>
+            <span class="eyebrow eyebrow-soft">Trust profile</span>
+            <h1>{{ profile_user.username }}的交易档案</h1>
+            <p>只展示与校园交易相关的公开信息，不展示联系方式或敏感账户资料。</p>
+        </div>
+        {% if is_self %}<a href="{% url 'profile' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-person me-1"></i>返回我的资料</a>{% endif %}
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <section class="content-card public-profile-card h-100">
+                <div class="public-profile-identity">
+                    <img src="{{ profile_user.profile.avatar.url }}" alt="{{ profile_user.username }}" class="public-profile-avatar">
+                    <div>
+                        <h2>{{ profile_user.username }}</h2>
+                        {% if campus_verification %}<span class="campus-verified-badge"><i class="bi bi-patch-check-fill"></i>{{ campus_verification.domain_name|default:'校园身份已认证' }}</span>{% endif %}
+                    </div>
+                </div>
+                {% if profile_user.profile.bio %}<p class="public-profile-bio">{{ profile_user.profile.bio }}</p>{% else %}<p class="public-profile-bio text-muted">这位同学还没有填写公开简介。</p>{% endif %}
+                <div class="public-profile-status"><i class="bi bi-shield-check"></i><div><strong>{{ reputation.label }}</strong><small>基于公开交易记录生成</small></div></div>
+                {% if reputation.badges %}<div class="seller-reputation-badges">{% for badge in reputation.badges %}<span><i class="bi bi-check2-circle me-1"></i>{{ badge }}</span>{% endfor %}</div>{% endif %}
+                <div class="public-profile-note"><i class="bi bi-info-circle me-1"></i>履约率只统计已关闭的交易，不代表对未来交易结果的保证。</div>
+            </section>
+        </div>
+
+        <div class="col-lg-8">
+            <section class="content-card public-profile-card h-100">
+                <div class="card-section-heading"><h2><i class="bi bi-bar-chart-line me-2"></i>交易表现</h2><span>可解释的公开指标</span></div>
+                <div class="public-profile-stats">
+                    <div><strong>{{ reputation.completed_orders }}</strong><span>完成交易</span></div>
+                    <div><strong>{% if reputation.completion_rate is not None %}{{ reputation.completion_rate }}%{% else %}—{% endif %}</strong><span>履约率</span></div>
+                    <div><strong>{% if reputation.rating_average is not None %}{{ reputation.rating_average }}{% else %}—{% endif %}</strong><span>平均评价</span></div>
+                    <div><strong>{{ reputation.active_listings }}</strong><span>在售商品</span></div>
+                </div>
+                <div class="public-profile-breakdown">
+                    <div><span>作为发布者完成</span><strong>{{ reputation.seller_completed_orders }} 笔</strong></div>
+                    <div><span>作为购买者完成</span><strong>{{ reputation.buyer_completed_orders }} 笔</strong></div>
+                    <div><span>收到评价</span><strong>{{ reputation.rating_count }} 条</strong></div>
+                    <div><span>已确认交付异常</span><strong>{{ reputation.confirmed_incidents }} 次</strong></div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <section class="content-card public-profile-card h-100">
+                <div class="card-section-heading"><h2><i class="bi bi-box-seam me-2"></i>正在发布</h2><span>{{ reputation.active_listings }} 件</span></div>
+                <div class="public-profile-items">
+                    {% for item in active_items %}
+                    <a href="{% url 'item_detail' item.id %}" class="public-profile-item">
+                        {% with image=item.images.first %}{% if image %}<img src="{{ image.image.url }}" alt="{{ item.title }}">{% else %}<div class="public-profile-item-placeholder"><i class="bi bi-image"></i></div>{% endif %}{% endwith %}
+                        <div><strong>{{ item.title }}</strong><small>{{ item.category.name }}{% if item.location %} · {{ item.location.name }}{% endif %}</small><b>{% if item.trade_mode == 'free' %}免费{% elif item.trade_mode == 'borrow' %}限期借用{% else %}¥{{ item.price|floatformat:2 }}{% endif %}</b></div>
+                    </a>
+                    {% empty %}<p class="empty-inline mb-0">当前没有公开中的商品。</p>{% endfor %}
+                </div>
+            </section>
+        </div>
+        <div class="col-lg-5">
+            <section class="content-card public-profile-card h-100">
+                <div class="card-section-heading"><h2><i class="bi bi-chat-square-heart me-2"></i>最近评价</h2><span>{{ reputation.rating_count }} 条</span></div>
+                <div class="public-profile-reviews">
+                    {% for rating in ratings %}
+                    <article><div class="d-flex justify-content-between gap-2"><strong>{{ rating.rater.username }}</strong><span class="rating-stars" aria-label="{{ rating.score }} 星">{% for star in '12345' %}{% if forloop.counter <= rating.score %}★{% else %}☆{% endif %}{% endfor %}</span></div><small>{{ rating.created_at|date:'Y-m-d' }}</small>{% if rating.comment %}<p>{{ rating.comment|linebreaksbr }}</p>{% else %}<p class="text-muted">这位同学给出了 {{ rating.score }} 星评价。</p>{% endif %}</article>
+                    {% empty %}<p class="empty-inline mb-0">暂时还没有公开评价。</p>{% endfor %}
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

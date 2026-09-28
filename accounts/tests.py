@@ -9,6 +9,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import CampusDomain, CampusVerification
+from listings.models import Category, CampusLocation, Item, Order, Rating
+from listings.reputation import build_user_reputation
 
 
 @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
@@ -107,3 +109,67 @@ class CampusVerificationTests(TestCase):
         self.assertContains(response, '已经绑定了其他账号')
         self.assertFalse(CampusVerification.objects.filter(user=self.other_user).exists())
         self.assertEqual(len(mail.outbox), 1)
+
+
+class PublicProfileTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='seller', email='seller@example.com', password='strong-password-123',
+        )
+        self.other_user = User.objects.create_user(
+            username='buyer', email='buyer@example.com', password='strong-password-123',
+        )
+        self.category = Category.objects.create(name='公共资料测试分类')
+        self.location = CampusLocation.objects.create(name='公共资料测试地点')
+
+    def test_public_profile_shows_explainable_trade_record_without_private_contact_data(self):
+        item = Item.objects.create(
+            seller=self.user, title='公开档案测试商品', description='测试描述', price='20',
+            category=self.category, location=self.location, condition='9成新',
+        )
+        order = Order.objects.create(
+            item=item, buyer=self.other_user, seller=self.user,
+            agreed_price='20', status='completed',
+        )
+        Rating.objects.create(
+            order=order, rater=self.other_user, ratee=self.user,
+            score=5, comment='沟通顺利',
+        )
+
+        response = self.client.get(reverse('public_profile', args=[self.user.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'seller的交易档案')
+        self.assertContains(response, '公开档案测试商品')
+        self.assertContains(response, '完成交易')
+        self.assertContains(response, '沟通顺利')
+        self.assertNotContains(response, 'seller@example.com')
+
+    def test_user_reputation_combines_buyer_and_seller_history(self):
+        sold_item = Item.objects.create(
+            seller=self.user, title='卖出商品', description='测试描述', price='20',
+            category=self.category, location=self.location, condition='9成新',
+        )
+        bought_item = Item.objects.create(
+            seller=self.other_user, title='买入商品', description='测试描述', price='30',
+            category=self.category, location=self.location, condition='9成新',
+        )
+        sold_order = Order.objects.create(
+            item=sold_item, buyer=self.other_user, seller=self.user,
+            agreed_price='20', status='completed',
+        )
+        bought_order = Order.objects.create(
+            item=bought_item, buyer=self.user, seller=self.other_user,
+            agreed_price='30', status='returned',
+        )
+        Rating.objects.create(order=sold_order, rater=self.other_user, ratee=self.user, score=5)
+        Rating.objects.create(order=bought_order, rater=self.other_user, ratee=self.user, score=4)
+
+        reputation = build_user_reputation(self.user)
+
+        self.assertEqual(reputation['completed_orders'], 2)
+        self.assertEqual(reputation['seller_completed_orders'], 1)
+        self.assertEqual(reputation['buyer_completed_orders'], 1)
+        self.assertEqual(reputation['rating_count'], 2)
+        self.assertEqual(reputation['rating_average'], 4.5)
+        self.assertIn('有完成交易记录', reputation['badges'])

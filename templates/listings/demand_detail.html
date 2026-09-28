@@ -34,9 +34,9 @@
     </div>
     <div class="col-lg-4">
         <aside class="content-card demand-side-card">
-            <div class="seller-profile"><img class="avatar-lg" src="{{ demand.requester.profile.avatar.url }}" alt="{{ demand.requester.username }}"><div><h5>{{ demand.requester.username }}</h5><small>求购发布者</small></div></div>
+            <div class="seller-profile"><img class="avatar-lg" src="{{ demand.requester.profile.avatar.url }}" alt="{{ demand.requester.username }}"><div><h5><a href="{% url 'public_profile' demand.requester.id %}" class="text-decoration-none text-reset">{{ demand.requester.username }}</a></h5><small>求购发布者</small></div></div>
             <p class="seller-bio">如果你有符合条件的商品，可以直接响应求购，发布者确认后再进入商品页面完成预约。</p>
-            {% if user.is_authenticated and demand.requester_id != user.id and demand.status == 'active' %}<a class="btn btn-outline-primary w-100" href="{% url 'send_message' demand.requester.id %}">发起私信</a>{% endif %}
+            <div class="d-flex gap-2 mt-3"><a class="btn btn-light flex-grow-1" href="{% url 'public_profile' demand.requester.id %}"><i class="bi bi-person-lines-fill me-1"></i>交易档案</a>{% if user.is_authenticated and demand.requester_id != user.id and demand.status == 'active' %}<a class="btn btn-outline-primary flex-grow-1" href="{% url 'send_message' demand.requester.id %}">发起私信</a>{% endif %}</div>
         </aside>
     </div>
 </div>

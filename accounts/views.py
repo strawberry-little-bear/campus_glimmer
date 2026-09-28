@@ -17,6 +17,9 @@ from .forms import CampusVerificationForm, ProfileUpdateForm, UserRegisterForm, 
 from .models import CampusVerification
 from chat_messages.models import PrivateMessage
 
+from listings.models import Item, Rating
+from listings.reputation import build_user_reputation
+
 
 def register(request):
     if request.method == 'POST':
@@ -41,6 +44,28 @@ def profile(request):
         'campus_verification': CampusVerification.objects.filter(user=request.user).first(),
     }
     return render(request, 'accounts/profile.html', context)
+
+
+def public_profile(request, user_id):
+    user = get_object_or_404(User.objects.select_related('profile'), id=user_id)
+    reputation = build_user_reputation(user)
+    active_items = list(
+        Item.objects.available().filter(seller=user)
+        .select_related('category', 'location')
+        .prefetch_related('images')[:8]
+    )
+    ratings = Rating.objects.filter(ratee=user).select_related('rater').order_by('-created_at')[:8]
+    verification = CampusVerification.objects.filter(
+        user=user, status='verified', verified_at__isnull=False,
+    ).first()
+    return render(request, 'accounts/public_profile.html', {
+        'profile_user': user,
+        'reputation': reputation,
+        'active_items': active_items,
+        'ratings': ratings,
+        'campus_verification': verification,
+        'is_self': request.user.is_authenticated and request.user == user,
+    })
 
 
 @login_required
