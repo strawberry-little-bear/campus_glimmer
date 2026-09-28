@@ -679,6 +679,7 @@ class Notification(models.Model):
         ('moderation_update', '内容审核结果'),
         ('operations_digest', '运营告警日报'),
         ('demand_match', '求购匹配提醒'),
+        ('demand_response', '求购响应更新'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -775,6 +776,9 @@ class NotificationPreference(models.Model):
     )
     demand_match = models.BooleanField(
         '求购匹配提醒', default=True, help_text='有商品可能符合你发布的求购信息时提醒。',
+    )
+    demand_response = models.BooleanField(
+        '求购响应更新', default=True, help_text='有人响应你的求购，或你的响应状态发生变化时提醒。',
     )
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
@@ -988,3 +992,53 @@ class DemandPost(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class DemandResponse(models.Model):
+    """A seller's explicit response to an active purchase demand."""
+
+    STATUS_CHOICES = (
+        ('pending', '待处理'),
+        ('accepted', '已确认匹配'),
+        ('rejected', '未采纳'),
+        ('withdrawn', '已撤回'),
+    )
+
+    demand = models.ForeignKey(
+        DemandPost, on_delete=models.CASCADE, related_name='responses', verbose_name='求购信息',
+    )
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE, related_name='demand_responses', verbose_name='响应商品',
+    )
+    responder = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='demand_responses', verbose_name='响应人',
+    )
+    message = models.TextField('响应说明', blank=True)
+    match_score = models.PositiveSmallIntegerField('匹配分数', default=0)
+    match_reason = models.CharField('匹配依据', max_length=200, blank=True)
+    status = models.CharField('响应状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField('响应时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '求购响应'
+        verbose_name_plural = '求购响应'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['demand', 'item'], name='unique_demand_response_item',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['demand', 'status', '-created_at']),
+            models.Index(fields=['responder', 'status', '-created_at']),
+        ]
+
+    def clean(self):
+        if self.item_id and self.responder_id and self.item.seller_id != self.responder_id:
+            raise ValidationError('求购响应人必须是商品发布者。')
+        if self.demand_id and self.responder_id and self.demand.requester_id == self.responder_id:
+            raise ValidationError('不能响应自己的求购信息。')
+
+    def __str__(self):
+        return f'{self.demand.title} · {self.item.title} · {self.get_status_display()}'

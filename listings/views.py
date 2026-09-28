@@ -23,9 +23,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
-from .demand_matching import notify_demand_matches
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .demand_matching import _match_demand, notify_demand_matches
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -2210,6 +2210,168 @@ def close_demand(request, demand_id):
     return redirect('demand_detail', demand_id=demand.id)
 
 
+
+@login_required
+def respond_to_demand(request, demand_id, item_id):
+    demand = get_object_or_404(
+        DemandPost.objects.select_related('requester', 'category', 'location'), id=demand_id,
+    )
+    item = get_object_or_404(
+        Item.objects.select_related('seller', 'category', 'location'), id=item_id,
+    )
+    if request.method != 'POST':
+        return redirect('demand_detail', demand_id=demand.id)
+    if demand.requester_id == request.user.id:
+        messages.error(request, '不能响应自己的求购信息。')
+        return redirect('demand_detail', demand_id=demand.id)
+    if item.seller_id != request.user.id:
+        messages.error(request, '只有商品发布者可以用该商品响应求购。')
+        return redirect('demand_detail', demand_id=demand.id)
+    form = DemandResponseForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, '求购响应内容不符合要求，请检查后重试。')
+        return redirect('demand_detail', demand_id=demand.id)
+
+    try:
+        with transaction.atomic():
+            locked_demand = DemandPost.objects.select_for_update().select_related(
+                'requester', 'category', 'location',
+            ).get(pk=demand.id)
+            locked_item = Item.objects.select_for_update().select_related(
+                'seller', 'category', 'location',
+            ).get(pk=item.id)
+            if locked_demand.status != 'active' or (
+                locked_demand.expires_at and locked_demand.expires_at <= timezone.now()
+            ):
+                messages.info(request, '这条求购已经结束，暂时不能继续响应。')
+                return redirect('demand_detail', demand_id=locked_demand.id)
+            if not locked_item.is_available_now:
+                messages.info(request, '这件商品当前不可用，暂时不能响应求购。')
+                return redirect('demand_detail', demand_id=locked_demand.id)
+            match = _match_demand(locked_demand, locked_item)
+            if not match:
+                messages.error(request, '这件商品当前不满足求购的分类、地点、预算或关键词条件。')
+                return redirect('demand_detail', demand_id=locked_demand.id)
+
+            response = DemandResponse.objects.select_for_update().filter(
+                demand=locked_demand, item=locked_item,
+            ).first()
+            if response and response.status in {'pending', 'accepted'}:
+                messages.info(request, '你已经响应过这条求购信息。')
+                return redirect('demand_detail', demand_id=locked_demand.id)
+            if response:
+                response.responder = request.user
+                response.message = form.cleaned_data['message']
+                response.match_score, response.match_reason = match
+                response.status = 'pending'
+                response.save(update_fields=[
+                    'responder', 'message', 'match_score', 'match_reason', 'status', 'updated_at',
+                ])
+            else:
+                response = DemandResponse.objects.create(
+                    demand=locked_demand,
+                    item=locked_item,
+                    responder=request.user,
+                    message=form.cleaned_data['message'],
+                    match_score=match[0],
+                    match_reason=match[1],
+                )
+            create_notification(
+                locked_demand.requester,
+                actor=request.user,
+                kind='demand_response',
+                title='有人响应了你的求购',
+                message=f'{request.user.username}用“{locked_item.title}”响应了“{locked_demand.title}”（{match[1]}）。',
+                item=locked_item,
+                demand=locked_demand,
+                target_url=reverse('demand_detail', args=[locked_demand.id]),
+                dedupe_key=f'demand-response:{locked_demand.id}:{locked_item.id}',
+                dedupe_window_seconds=3600,
+            )
+    except IntegrityError:
+        messages.info(request, '这件商品刚刚已经响应过该求购，请刷新后查看。')
+        return redirect('demand_detail', demand_id=demand.id)
+
+    messages.success(request, '求购响应已发送，等待发布者确认。')
+    return redirect('demand_detail', demand_id=demand.id)
+
+
+@login_required
+def review_demand_response(request, response_id, action):
+    response = get_object_or_404(
+        DemandResponse.objects.select_related('demand', 'item', 'responder'), id=response_id,
+    )
+    if response.demand.requester_id != request.user.id:
+        messages.error(request, '只有求购发布者可以处理响应。')
+        return redirect('demand_detail', demand_id=response.demand_id)
+    if request.method != 'POST' or action not in {'accept', 'reject'}:
+        return redirect('demand_detail', demand_id=response.demand_id)
+
+    with transaction.atomic():
+        locked_response = DemandResponse.objects.select_for_update().select_related(
+            'demand', 'item', 'responder',
+        ).get(pk=response.id)
+        locked_demand = DemandPost.objects.select_for_update().get(pk=locked_response.demand_id)
+        locked_item = Item.objects.select_for_update().get(pk=locked_response.item_id)
+        if locked_response.status != 'pending':
+            messages.info(request, '这条求购响应已经处理过了。')
+            return redirect('demand_detail', demand_id=locked_demand.id)
+        if action == 'accept':
+            if locked_demand.status != 'active' or not locked_item.is_available_now:
+                messages.info(request, '求购或商品状态已经发生变化，暂时不能确认匹配。')
+                return redirect('demand_detail', demand_id=locked_demand.id)
+            match = _match_demand(locked_demand, locked_item)
+            if not match:
+                messages.info(request, '商品已经不再满足这条求购的条件。')
+                return redirect('demand_detail', demand_id=locked_demand.id)
+            locked_response.status = 'accepted'
+            locked_response.match_score, locked_response.match_reason = match
+            locked_response.save(update_fields=['status', 'match_score', 'match_reason', 'updated_at'])
+            locked_demand.status = 'fulfilled'
+            locked_demand.save(update_fields=['status', 'updated_at'])
+            other_responses = DemandResponse.objects.select_for_update().filter(
+                demand=locked_demand, status='pending',
+            ).exclude(pk=locked_response.pk).select_related('responder', 'item')
+            for other in other_responses:
+                other.status = 'rejected'
+                other.save(update_fields=['status', 'updated_at'])
+                create_notification(
+                    other.responder,
+                    actor=request.user,
+                    kind='demand_response',
+                    title='求购响应未被采纳',
+                    message=f'求购“{locked_demand.title}”已经确认了其他响应，感谢你的参与。',
+                    item=other.item,
+                    demand=locked_demand,
+                    target_url=reverse('demand_detail', args=[locked_demand.id]),
+                )
+            create_notification(
+                locked_response.responder,
+                actor=request.user,
+                kind='demand_response',
+                title='你的求购响应已被确认',
+                message=f'“{locked_demand.title}”已确认使用你的商品“{locked_item.title}”，请继续进入商品详情完成预约或领取申请。',
+                item=locked_item,
+                demand=locked_demand,
+                target_url=reverse('item_detail', args=[locked_item.id]),
+            )
+            messages.success(request, '已确认这条响应，请继续进入商品详情完成交易。')
+        else:
+            locked_response.status = 'rejected'
+            locked_response.save(update_fields=['status', 'updated_at'])
+            create_notification(
+                locked_response.responder,
+                actor=request.user,
+                kind='demand_response',
+                title='求购响应未被采纳',
+                message=f'你对“{locked_demand.title}”的响应暂未被采纳。',
+                item=locked_item,
+                demand=locked_demand,
+                target_url=reverse('demand_detail', args=[locked_demand.id]),
+            )
+            messages.success(request, '已将这条响应标记为未采纳。')
+    return redirect('demand_detail', demand_id=response.demand_id)
+
 def demand_detail(request, demand_id):
     demand = get_object_or_404(
         DemandPost.objects.select_related('requester', 'category', 'location'), id=demand_id,
@@ -2220,9 +2382,24 @@ def demand_detail(request, demand_id):
     elif demand.status == 'active':
         DemandPost.objects.filter(id=demand.id).update(view_count=F('view_count') + 1)
         demand.view_count += 1
+    demand_responses = []
+    responded_item_ids = set()
+    is_demand_owner = request.user.is_authenticated and demand.requester_id == request.user.id
+    if is_demand_owner:
+        demand_responses = demand.responses.select_related(
+            'item', 'item__category', 'item__location', 'responder',
+        ).all()
+    elif request.user.is_authenticated:
+        responded_item_ids = set(demand.responses.filter(
+            responder=request.user,
+        ).values_list('item_id', flat=True))
     return render(request, 'listings/demand_detail.html', {
         'demand': demand,
         'recommended_items': _demand_match_items(demand) if demand.status == 'active' else [],
+        'demand_responses': demand_responses,
+        'is_demand_owner': is_demand_owner,
+        'responded_item_ids': responded_item_ids,
+        'demand_response_form': DemandResponseForm(),
     })
 
 

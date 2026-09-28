@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -260,3 +260,12 @@ class DemandPostAdmin(admin.ModelAdmin):
         if obj.min_price is not None:
             return f'不低于 ¥{obj.min_price}'
         return '未填写'
+
+
+@admin.register(DemandResponse)
+class DemandResponseAdmin(admin.ModelAdmin):
+    list_display = ('demand', 'item', 'responder', 'match_score', 'status', 'created_at', 'updated_at')
+    list_filter = ('status', 'created_at', 'updated_at')
+    search_fields = ('demand__title', 'item__title', 'responder__username', 'message')
+    autocomplete_fields = ('demand', 'item', 'responder')
+    readonly_fields = ('match_score', 'match_reason', 'created_at', 'updated_at')

@@ -5,7 +5,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
+from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -22,13 +22,25 @@ class NotificationPreferenceForm(forms.ModelForm):
             'rating_received', 'message_received', 'comment_received', 'saved_search_match',
             'item_available', 'item_expired', 'order_dispute',
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
-            'operations_digest', 'demand_match',
+            'operations_digest', 'demand_match', 'demand_response',
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget = forms.CheckboxInput(attrs={'class': 'form-check-input'})
+
+
+class DemandResponseForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = DemandResponse
+        fields = ['message']
+        widgets = {
+            'message': forms.Textarea(attrs={
+                'rows': 3,
+                'placeholder': '说明商品成色、可交付时间或你希望补充的信息（可选）。',
+            }),
+        }
 
 
 class ItemForm(StyledModelFormMixin, forms.ModelForm):
