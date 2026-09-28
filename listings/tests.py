@@ -1,12 +1,14 @@
 from datetime import datetime, time, timedelta
 
+from datetime import timedelta
+
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -1260,6 +1262,47 @@ class ListingFlowTests(TestCase):
         self.client.post(reverse('confirm_delivery', args=[order.id]), {'code': new_code})
         confirmation.refresh_from_db()
         self.assertIsNotNone(confirmation.seller_confirmed_at)
+
+    def test_parties_can_check_in_and_report_a_meeting_incident_after_window(self):
+        order = self._prepare_meeting_order()
+        now = timezone.now()
+        appointment = MeetingAppointment.objects.create(
+            order=order,
+            proposed_by=self.user,
+            location=self.location,
+            start_at=now - timedelta(minutes=5),
+            end_at=now + timedelta(minutes=20),
+            status='confirmed',
+        )
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(reverse('check_in_meeting', args=[order.id]))
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        appointment.refresh_from_db()
+        self.assertIsNotNone(appointment.buyer_arrived_at)
+        self.assertTrue(Notification.objects.filter(recipient=self.user, kind='order_status').exists())
+
+        self.client.logout()
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('check_in_meeting', args=[order.id]))
+        appointment.refresh_from_db()
+        self.assertIsNotNone(appointment.seller_arrived_at)
+        self.assertIsNone(MeetingIncident.objects.filter(appointment=appointment).first())
+
+        appointment.end_at = timezone.now() - timedelta(minutes=1)
+        appointment.save(update_fields=['end_at', 'updated_at'])
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.logout()
+        self.client.login(username='bob', password='safe-password-123')
+        response = self.client.post(reverse('report_meeting_incident', args=[order.id]), {
+            'reason': 'late', 'detail': '对方到场时间明显晚于约定，现场等待超过半小时。',
+        })
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        incident = MeetingIncident.objects.get(appointment=appointment)
+        self.assertEqual(incident.reported_by, self.other_user)
+        self.assertEqual(incident.accused, self.user)
+        self.assertTrue(Notification.objects.filter(recipient=self.user, kind='meeting_incident').exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.user, kind='meeting_incident').count() >= 1)
 
     def test_user_can_open_dispute_and_staff_can_resolve_it(self):
         self.client.login(username='bob', password='safe-password-123')

@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 
 class Category(models.Model):
@@ -276,6 +279,8 @@ class MeetingAppointment(models.Model):
     )
     responded_at = models.DateTimeField('回应时间', null=True, blank=True)
     decline_reason = models.CharField('未接受原因', max_length=200, blank=True)
+    buyer_arrived_at = models.DateTimeField('买家到场时间', null=True, blank=True)
+    seller_arrived_at = models.DateTimeField('卖家到场时间', null=True, blank=True)
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
@@ -302,8 +307,73 @@ class MeetingAppointment(models.Model):
     def is_confirmed(self):
         return self.status == 'confirmed'
 
+    @property
+    def check_in_open(self):
+        if self.status != 'confirmed':
+            return False
+        now = timezone.now()
+        return self.start_at - timedelta(minutes=30) <= now <= self.end_at + timedelta(minutes=30)
+
+    @property
+    def can_report_incident(self):
+        return self.status == 'confirmed' and timezone.now() > self.end_at
+
     def __str__(self):
         return f'{self.order.item.title} · {self.start_at:%Y-%m-%d %H:%M}'
+
+
+class MeetingIncident(models.Model):
+    REASON_CHOICES = (
+        ('no_show', '对方未到场'),
+        ('late', '对方严重迟到'),
+        ('safety', '现场安全问题'),
+        ('other', '其他预约异常'),
+    )
+    STATUS_CHOICES = (
+        ('open', '待处理'),
+        ('reviewing', '处理中'),
+        ('resolved', '已确认异常'),
+        ('dismissed', '已驳回'),
+    )
+
+    appointment = models.OneToOneField(
+        MeetingAppointment, on_delete=models.CASCADE, related_name='incident', verbose_name='交付安排',
+    )
+    reported_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='reported_meeting_incidents', verbose_name='提交人',
+    )
+    accused = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='accused_meeting_incidents', verbose_name='相关对方',
+    )
+    reason = models.CharField('异常类型', max_length=20, choices=REASON_CHOICES)
+    detail = models.TextField('情况说明')
+    status = models.CharField('处理状态', max_length=20, choices=STATUS_CHOICES, default='open')
+    reviewer = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_meeting_incidents', verbose_name='处理人',
+    )
+    resolution_note = models.TextField('处理意见', blank=True)
+    reviewed_at = models.DateTimeField('处理时间', null=True, blank=True)
+    created_at = models.DateTimeField('提交时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '交付预约异常'
+        verbose_name_plural = '交付预约异常'
+        ordering = ['status', '-created_at']
+        indexes = [
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['reported_by', '-created_at']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(reported_by=models.F('accused')),
+                name='meeting_incident_reporter_differs_accused',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.appointment.order.item.title} · {self.get_reason_display()}'
 
 
 class OrderDispute(models.Model):
@@ -441,6 +511,7 @@ class Notification(models.Model):
         ('saved_search_match', '关注的搜索有新商品'),
         ('item_available', '商品重新有货'),
         ('order_dispute', '交易争议更新'),
+        ('meeting_incident', '交付预约异常'),
         ('order_expiring', '交易预约即将超时'),
         ('order_expired', '交易预约已超时'),
         ('report_update', '举报处理更新'),
@@ -513,6 +584,9 @@ class NotificationPreference(models.Model):
     )
     order_dispute = models.BooleanField(
         '交易争议更新', default=True, help_text='交易争议状态发生变化时提醒。',
+    )
+    meeting_incident = models.BooleanField(
+        '交付预约异常', default=True, help_text='交付预约出现到场或安全异常时提醒。',
     )
     order_expiring = models.BooleanField(
         '交易预约即将超时', default=True, help_text='交易预约接近确认截止时间时提醒。',

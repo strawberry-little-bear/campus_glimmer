@@ -86,6 +86,16 @@
                     <span>{% if appointment.location %}{{ appointment.location.name }}{% else %}沿用订单交付地点{% endif %}</span>
                     <small>由 {{ appointment.proposed_by.username }} 提出 · {{ appointment.get_status_display }}</small>
                 </div>
+                {% if appointment.status == 'confirmed' and order.status == 'meeting' %}
+                <div class="meeting-attendance mt-3">
+                    <div class="meeting-attendance-row"><span><i class="bi bi-person-check me-1"></i>买家到场</span><strong>{% if appointment.buyer_arrived_at %}已登记 · {{ appointment.buyer_arrived_at|date:'H:i' }}{% else %}待登记{% endif %}</strong></div>
+                    <div class="meeting-attendance-row"><span><i class="bi bi-person-check me-1"></i>卖家到场</span><strong>{% if appointment.seller_arrived_at %}已登记 · {{ appointment.seller_arrived_at|date:'H:i' }}{% else %}待登记{% endif %}</strong></div>
+                </div>
+                {% if appointment.check_in_open and not appointment.buyer_arrived_at and user == order.buyer or appointment.check_in_open and not appointment.seller_arrived_at and user == order.seller %}
+                <form method="post" action="{% url 'check_in_meeting' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-outline-success w-100"><i class="bi bi-geo-alt me-1"></i>登记我已到达</button></form>
+                {% elif appointment.check_in_open %}<p class="small text-muted mt-3 mb-0">你已登记到场，等待对方更新状态。</p>{% endif %}
+                {% if incident %}<div class="meeting-incident-note mt-3"><strong><i class="bi bi-exclamation-diamond me-1"></i>预约异常：{{ incident.get_status_display }}</strong><p class="small mb-0 mt-1">{{ incident.get_reason_display }} · {{ incident.detail|truncatechars:90 }}</p></div>{% elif incident_form %}<div class="meeting-incident-panel mt-3"><strong><i class="bi bi-shield-exclamation me-1"></i>约定结束但出现异常？</strong><p class="small mb-2 mt-1">提交后平台会结合到场登记和订单时间线进行核实。</p><form method="post" action="{% url 'report_meeting_incident' order.id %}">{% csrf_token %}{% for field in incident_form %}<div class="mb-2"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}<button class="btn btn-outline-danger btn-sm w-100">提交预约异常</button></form></div>{% endif %}
+                {% endif %}
                 {% if appointment.status == 'pending' and user != appointment.proposed_by %}
                 <div class="d-grid gap-2 mt-3">
                     <form method="post" action="{% url 'respond_meeting' order.id 'accept' %}">{% csrf_token %}<button class="btn btn-primary w-100"><i class="bi bi-check2-circle me-1"></i>接受这次安排</button></form>

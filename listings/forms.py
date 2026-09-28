@@ -4,7 +4,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
+from .models import CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -195,6 +195,26 @@ class MeetingAppointmentForm(StyledModelFormMixin, forms.ModelForm):
         if end_at - start_at > timedelta(hours=12):
             self.add_error('end_at', '单次交付安排不能超过 12 小时。')
         return cleaned_data
+
+
+class MeetingIncidentForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = MeetingIncident
+        fields = ['reason', 'detail']
+        widgets = {
+            'reason': forms.Select(attrs={'class': 'form-select'}),
+            'detail': forms.Textarea(attrs={
+                'class': 'form-control', 'rows': 4,
+                'placeholder': '请描述约定时间、到场情况和你希望平台核实的内容。',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['detail'].help_text = '请尽量提供客观时间线，不要填写密码或其他敏感信息。'
+        self.fields['detail'].min_length = 10
+
 
 
 class RatingForm(StyledModelFormMixin, forms.ModelForm):

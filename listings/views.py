@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.models import User
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
@@ -21,8 +22,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .demand_matching import notify_demand_matches
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -542,7 +543,9 @@ def order_detail(request, order_id):
     meeting_form = None
     delivery_code_form = None
     handoff_code_display = None
+    incident_form = None
     confirmation = getattr(order, 'delivery_confirmation', None)
+    incident = getattr(appointment, 'incident', None) if appointment else None
     if order.status in {'confirmed', 'meeting'} and not (appointment and appointment.status == 'pending' and appointment.proposed_by_id != request.user.id):
         form_initial = {'location': order.meeting_location_id} if not appointment else None
         meeting_form = MeetingAppointmentForm(instance=appointment, initial=form_initial)
@@ -550,6 +553,8 @@ def order_detail(request, order_id):
         delivery_code_form = DeliveryCodeForm()
     if confirmation and request.user == order.buyer and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at:
         handoff_code_display = request.session.get(f'delivery_code_{order.id}')
+    if appointment and appointment.can_report_incident and not incident:
+        incident_form = MeetingIncidentForm()
     rating_target = order.seller if request.user == order.buyer else order.buyer
     my_rating = Rating.objects.filter(order=order, rater=request.user).first()
     rating_form = RatingForm() if order.status == 'completed' and not my_rating else None
@@ -568,6 +573,8 @@ def order_detail(request, order_id):
         'handoff_code_display': handoff_code_display,
         'appointment': appointment,
         'meeting_form': meeting_form,
+        'incident': incident,
+        'incident_form': incident_form,
         'dispute': getattr(order, 'dispute', None),
     })
 
@@ -750,6 +757,138 @@ def respond_meeting(request, order_id, decision):
             target_url=reverse('order_detail', args=[locked_order.id]),
         )
     messages.success(request, '已回应交付时间安排。' if decision == 'accept' else '已记录你的暂不接受。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def check_in_meeting(request, order_id):
+    order = get_object_or_404(
+        Order.objects.select_related('item', 'buyer', 'seller'), id=order_id,
+    )
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限操作这笔订单的到场状态。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().select_related(
+            'item', 'buyer', 'seller',
+        ).get(pk=order.id)
+        appointment = MeetingAppointment.objects.select_for_update().get(order=locked_order)
+        if locked_order.status != 'meeting' or not appointment.is_confirmed:
+            messages.error(request, '只有进入待当面交付且双方已确认时间后，才能签到。')
+            return redirect('order_detail', order_id=locked_order.id)
+        if not appointment.check_in_open:
+            messages.error(request, '当前还不在签到时间窗口内，请在约定开始前 30 分钟至结束后 30 分钟内签到。')
+            return redirect('order_detail', order_id=locked_order.id)
+
+        field_name = 'buyer_arrived_at' if request.user == locked_order.buyer else 'seller_arrived_at'
+        if getattr(appointment, field_name):
+            messages.info(request, '你已经登记到场，无需重复操作。')
+            return redirect('order_detail', order_id=locked_order.id)
+        now = timezone.now()
+        setattr(appointment, field_name, now)
+        appointment.save(update_fields=[field_name, 'updated_at'])
+        both_arrived = bool(appointment.buyer_arrived_at and appointment.seller_arrived_at)
+        OrderEvent.objects.create(
+            order=locked_order,
+            actor=request.user,
+            from_status=locked_order.status,
+            to_status=locked_order.status,
+            note='双方均已登记到场' if both_arrived else f'{request.user.username}登记已到场',
+        )
+        other_party = locked_order.seller if request.user == locked_order.buyer else locked_order.buyer
+        create_notification(
+            other_party,
+            actor=request.user,
+            kind='order_status',
+            title='对方已到达交付地点' if not both_arrived else '双方已登记到场',
+            message=(
+                f'{request.user.username}已登记到达商品“{locked_order.item.title}”的交付地点。'
+                if not both_arrived else f'商品“{locked_order.item.title}”的买卖双方都已登记到场，可以进行交付确认。'
+            ),
+            order=locked_order,
+            item=locked_order.item,
+            target_url=reverse('order_detail', args=[locked_order.id]),
+        )
+    messages.success(request, '已登记到场，系统会通知交易对方。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def report_meeting_incident(request, order_id):
+    order = get_object_or_404(
+        Order.objects.select_related('item', 'buyer', 'seller', 'appointment'), id=order_id,
+    )
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限提交这笔订单的预约异常。')
+        return redirect('home')
+    appointment = getattr(order, 'appointment', None)
+    if not appointment or order.status not in {'meeting', 'completed'} or not appointment.can_report_incident:
+        messages.error(request, '只有约定结束后，才能提交预约异常记录。')
+        return redirect('order_detail', order_id=order.id)
+    if hasattr(appointment, 'incident'):
+        messages.info(request, '这次预约已经有一条异常记录，平台会按该记录处理。')
+        return redirect('order_detail', order_id=order.id)
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+
+    form = MeetingIncidentForm(request.POST)
+    if not form.is_valid():
+        error_text = ' '.join(error for errors in form.errors.values() for error in errors)
+        messages.error(request, f'预约异常未提交：{error_text or "请检查填写内容。"}')
+        return redirect('order_detail', order_id=order.id)
+
+    with transaction.atomic():
+        locked_appointment = MeetingAppointment.objects.select_for_update().select_related(
+            'order__item', 'order__buyer', 'order__seller',
+        ).get(pk=appointment.id)
+        locked_order = locked_appointment.order
+        if hasattr(locked_appointment, 'incident'):
+            messages.info(request, '这次预约已经有一条异常记录。')
+            return redirect('order_detail', order_id=locked_order.id)
+        if not locked_appointment.can_report_incident:
+            messages.error(request, '约定时间尚未结束，暂时不能提交异常记录。')
+            return redirect('order_detail', order_id=locked_order.id)
+        accused = locked_order.seller if request.user == locked_order.buyer else locked_order.buyer
+        incident = MeetingIncident.objects.create(
+            appointment=locked_appointment,
+            reported_by=request.user,
+            accused=accused,
+            reason=form.cleaned_data['reason'],
+            detail=form.cleaned_data['detail'],
+        )
+        OrderEvent.objects.create(
+            order=locked_order,
+            actor=request.user,
+            from_status=locked_order.status,
+            to_status=locked_order.status,
+            note=f'提交了交付预约异常：{incident.get_reason_display()}',
+        )
+        target_url = reverse('order_detail', args=[locked_order.id])
+        create_notification(
+            accused,
+            actor=request.user,
+            kind='meeting_incident',
+            title='对方提交了交付预约异常',
+            message=f'商品“{locked_order.item.title}”有一条新的交付预约异常记录，平台可能联系你核实。',
+            order=locked_order,
+            item=locked_order.item,
+            target_url=target_url,
+        )
+        for staff_user in User.objects.filter(is_staff=True).exclude(pk=request.user.pk):
+            create_notification(
+                staff_user,
+                actor=request.user,
+                kind='meeting_incident',
+                title='有新的交付预约异常待处理',
+                message=f'商品“{locked_order.item.title}”的交付预约出现异常，请及时核实。',
+                order=locked_order,
+                item=locked_order.item,
+                target_url=target_url,
+            )
+    messages.success(request, '预约异常已提交，平台会结合到场记录和交易时间线进行核实。')
     return redirect('order_detail', order_id=order.id)
 
 

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -70,7 +70,16 @@ class MeetingAppointmentAdmin(admin.ModelAdmin):
     list_filter = ('status', 'location', 'start_at')
     search_fields = ('order__item__title', 'proposed_by__username', 'responded_by__username')
     autocomplete_fields = ('order', 'proposed_by', 'responded_by', 'location')
-    readonly_fields = ('created_at', 'updated_at', 'responded_at')
+    readonly_fields = ('created_at', 'updated_at', 'responded_at', 'buyer_arrived_at', 'seller_arrived_at')
+
+
+@admin.register(MeetingIncident)
+class MeetingIncidentAdmin(admin.ModelAdmin):
+    list_display = ('appointment', 'reported_by', 'accused', 'reason', 'status', 'reviewer', 'created_at')
+    list_filter = ('reason', 'status', 'created_at')
+    search_fields = ('appointment__order__item__title', 'reported_by__username', 'accused__username', 'detail')
+    autocomplete_fields = ('appointment', 'reported_by', 'accused', 'reviewer')
+    readonly_fields = ('created_at', 'updated_at', 'reviewed_at')
 
 
 @admin.register(BrowsingHistory)
@@ -108,8 +117,8 @@ class OrderEventAdmin(admin.ModelAdmin):
 
 @admin.register(NotificationPreference)
 class NotificationPreferenceAdmin(admin.ModelAdmin):
-    list_display = ('user', 'order_created', 'order_status', 'message_received', 'saved_search_match', 'item_available', 'updated_at')
-    list_filter = ('order_created', 'order_status', 'message_received', 'saved_search_match', 'item_available', 'updated_at')
+    list_display = ('user', 'order_created', 'order_status', 'meeting_incident', 'message_received', 'saved_search_match', 'item_available', 'updated_at')
+    list_filter = ('order_created', 'order_status', 'meeting_incident', 'message_received', 'saved_search_match', 'item_available', 'updated_at')
     search_fields = ('user__username',)
     readonly_fields = ('updated_at',)
 
