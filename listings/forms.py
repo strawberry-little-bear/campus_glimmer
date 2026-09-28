@@ -45,10 +45,12 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
 
     class Meta:
         model = Item
-        fields = ['title', 'description', 'trade_mode', 'price', 'category', 'location', 'condition', 'expires_at']
+        fields = ['title', 'description', 'trade_mode', 'price', 'deposit_amount', 'borrow_days', 'category', 'location', 'condition', 'expires_at']
         widgets = {
             'description': forms.Textarea(attrs={'rows': 6, 'placeholder': '介绍商品的新旧程度、配件、交易方式等'}),
             'price': forms.NumberInput(attrs={'min': '0', 'step': '0.01', 'placeholder': '0.00'}),
+            'deposit_amount': forms.NumberInput(attrs={'min': '0', 'step': '0.01', 'placeholder': '0.00'}),
+            'borrow_days': forms.NumberInput(attrs={'min': '1', 'max': '90', 'placeholder': '7'}),
             'condition': forms.TextInput(attrs={'placeholder': '例如：全新、9成新、轻微使用痕迹'}),
             'location': forms.Select(attrs={'class': 'form-select'}),
         }
@@ -60,6 +62,10 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._style_fields()
         self.fields['trade_mode'].widget.attrs['class'] = 'form-select'
+        self.fields['deposit_amount'].required = False
+        self.fields['borrow_days'].required = False
+        self.fields['deposit_amount'].widget.attrs['class'] = 'form-control'
+        self.fields['borrow_days'].widget.attrs['class'] = 'form-control'
         # Keep existing integrations and older saved forms compatible: sale is the
         # historical default when the new field is omitted from a POST.
         self.fields['trade_mode'].required = False
@@ -72,10 +78,22 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        if not cleaned_data.get('trade_mode'):
-            cleaned_data['trade_mode'] = 'sale'
-        if cleaned_data.get('trade_mode') == 'free':
+        mode = cleaned_data.get('trade_mode') or 'sale'
+        cleaned_data['trade_mode'] = mode
+        if mode in {'free', 'borrow'}:
             cleaned_data['price'] = Decimal('0.00')
+        if mode == 'borrow':
+            borrow_days = cleaned_data.get('borrow_days') or 7
+            deposit_amount = cleaned_data.get('deposit_amount') or Decimal('0.00')
+            if not 1 <= borrow_days <= 90:
+                self.add_error('borrow_days', '借用期限必须在 1 到 90 天之间。')
+            if deposit_amount < 0:
+                self.add_error('deposit_amount', '借用押金不能为负数。')
+            cleaned_data['borrow_days'] = borrow_days
+            cleaned_data['deposit_amount'] = deposit_amount
+        else:
+            cleaned_data['borrow_days'] = cleaned_data.get('borrow_days') or 7
+            cleaned_data['deposit_amount'] = Decimal('0.00')
         return cleaned_data
 
     def clean_expires_at(self):

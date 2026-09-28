@@ -8,7 +8,7 @@ from .models import Item, Order, Rating
 def build_seller_reputation(seller):
     """Build a small explainable reputation card without exposing private data."""
     order_stats = Order.objects.filter(seller=seller).aggregate(
-        completed=Count('id', filter=Q(status='completed')),
+        completed=Count('id', filter=Q(status__in={'completed', 'returned'})),
         cancelled=Count('id', filter=Q(status='cancelled')),
     )
     completed = order_stats['completed'] or 0

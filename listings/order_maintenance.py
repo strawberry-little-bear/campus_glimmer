@@ -103,3 +103,85 @@ def process_order_timeouts(*, now=None, reminder_hours=DEFAULT_REMINDER_HOURS):
             reminded_count += 1
 
     return {'expired': expired_count, 'reminded': reminded_count}
+
+
+
+def process_borrow_due_notifications(*, now=None, reminder_hours=DEFAULT_REMINDER_HOURS):
+    """Notify both parties about upcoming or overdue borrowed items once."""
+    now = now or timezone.now()
+    try:
+        reminder_hours = max(0, int(reminder_hours))
+    except (TypeError, ValueError):
+        reminder_hours = DEFAULT_REMINDER_HOURS
+
+    reminded_count = 0
+    overdue_count = 0
+    target_url = lambda order: reverse('order_detail', args=[order.id])
+    reminder_deadline = now + timedelta(hours=reminder_hours)
+
+    reminder_ids = Order.objects.filter(
+        status='borrowed',
+        return_due_at__gt=now,
+        return_due_at__lte=reminder_deadline,
+        return_reminder_sent_at__isnull=True,
+    ).values_list('id', flat=True)
+    for order_id in reminder_ids:
+        with transaction.atomic():
+            order = Order.objects.select_for_update().select_related(
+                'item', 'seller', 'buyer',
+            ).get(id=order_id)
+            if (
+                order.status != 'borrowed'
+                or not order.return_due_at
+                or order.return_due_at <= now
+                or order.return_reminder_sent_at
+            ):
+                continue
+            order.return_reminder_sent_at = now
+            order.save(update_fields=['return_reminder_sent_at', 'updated_at'])
+            hours_left = max(1, round((order.return_due_at - now).total_seconds() / 3600))
+            for recipient in (order.buyer, order.seller):
+                create_notification(
+                    recipient,
+                    kind='order_expiring',
+                    title='借用即将到期',
+                    message=f'商品“{order.item.title}”预计还有约 {hours_left} 小时需要归还，请提前联系并安排交接。',
+                    order=order,
+                    item=order.item,
+                    target_url=target_url(order),
+                )
+            reminded_count += 1
+
+    overdue_ids = Order.objects.filter(
+        status='borrowed',
+        return_due_at__isnull=False,
+        return_due_at__lte=now,
+        return_overdue_notice_sent_at__isnull=True,
+    ).values_list('id', flat=True)
+    for order_id in overdue_ids:
+        with transaction.atomic():
+            order = Order.objects.select_for_update().select_related(
+                'item', 'seller', 'buyer',
+            ).get(id=order_id)
+            if (
+                order.status != 'borrowed'
+                or not order.return_due_at
+                or order.return_due_at > now
+                or order.return_overdue_notice_sent_at
+            ):
+                continue
+            order.return_overdue_notice_sent_at = now
+            order.save(update_fields=['return_overdue_notice_sent_at', 'updated_at'])
+            for recipient in (order.buyer, order.seller):
+                create_notification(
+                    recipient,
+                    kind='order_expired',
+                    title='借用已逾期',
+                    message=f'商品“{order.item.title}”已超过预计归还时间，请尽快联系对方完成归还确认。',
+                    order=order,
+                    item=order.item,
+                    target_url=target_url(order),
+                )
+            overdue_count += 1
+
+    return {'reminded': reminded_count, 'overdue': overdue_count}

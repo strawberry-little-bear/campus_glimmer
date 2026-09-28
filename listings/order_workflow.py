@@ -11,6 +11,8 @@ ORDER_TRANSITIONS = {
     'confirmed': {'meeting', 'cancelled'},
     'meeting': {'cancelled'},
     'completed': set(),
+    'borrowed': set(),
+    'returned': set(),
     'cancelled': set(),
 }
 

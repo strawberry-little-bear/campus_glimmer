@@ -10,12 +10,20 @@
 (function () {
     const mode = document.getElementById('id_trade_mode');
     const price = document.getElementById('id_price');
+    const deposit = document.getElementById('id_deposit_amount');
+    const borrowDays = document.getElementById('id_borrow_days');
     if (!mode || !price) return;
     const priceColumn = price.closest('.col-md-6');
+    const depositColumn = deposit ? deposit.closest('.col-md-6') : null;
+    const borrowDaysColumn = borrowDays ? borrowDays.closest('.col-md-6') : null;
     const syncTradeMode = function () {
         const isFree = mode.value === 'free';
-        if (priceColumn) priceColumn.hidden = isFree;
-        if (isFree) price.value = '0.00';
+        const isBorrow = mode.value === 'borrow';
+        if (priceColumn) priceColumn.hidden = isFree || isBorrow;
+        if (depositColumn) depositColumn.hidden = !isBorrow;
+        if (borrowDaysColumn) borrowDaysColumn.hidden = !isBorrow;
+        if (isFree || isBorrow) price.value = '0.00';
+        if (!isBorrow && deposit) deposit.value = '0.00';
     };
     mode.addEventListener('change', syncTradeMode);
     syncTradeMode();

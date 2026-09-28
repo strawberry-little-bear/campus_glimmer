@@ -23,9 +23,10 @@
         <div class="detail-content">
             <div class="product-meta mb-3"><span>{{ item.category.name }}</span><span>{{ item.created_at|date:'Y年m月d日' }}</span></div>
             <h1>{{ item.title }}</h1>
-            <div class="detail-price">{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price|floatformat:2 }}{% endif %}</div>
+            <div class="detail-price">{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% elif item.trade_mode == 'borrow' %}<span class="text-primary">免费借用</span>{% if item.deposit_amount %}<small class="d-block fs-6 text-muted mt-2">押金 ¥{{ item.deposit_amount|floatformat:2 }}</small>{% endif %}{% else %}¥{{ item.price|floatformat:2 }}{% endif %}</div>
             <div class="detail-tags">
                 <span><i class="bi bi-stars"></i>{{ item.condition }}</span>
+                {% if item.trade_mode == 'borrow' %}<span><i class="bi bi-calendar2-week"></i>默认借用 {{ item.borrow_days }} 天</span>{% endif %}
                 <span><i class="bi bi-person"></i>{{ item.seller.username }}</span>
                 {% if rating_summary.count %}<span class="rating-inline"><i class="bi bi-star-fill"></i>{{ rating_summary.average|floatformat:1 }}（{{ rating_summary.count }} 条评价）</span>{% endif %}
                 {% if item.location %}<span><i class="bi bi-geo-alt"></i>{{ item.location.name }}{% if item.location.building %} · {{ item.location.building }}{% endif %}</span>{% endif %}
@@ -39,7 +40,7 @@
                 {% if user.is_authenticated %}
                     <form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>
                     {% if user != item.seller and item.is_available_now %}
-                        {% if item.trade_mode == 'free' %}{% if pending_gift_application %}<span class="btn btn-success disabled"><i class="bi bi-check2 me-2"></i>已提交领取申请</span>{% else %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-gift me-2"></i>申请领取</a>{% endif %}{% else %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-calendar2-check me-2"></i>预约交易</a>{% endif %}
+                        {% if item.trade_mode == 'free' %}{% if pending_gift_application %}<span class="btn btn-success disabled"><i class="bi bi-check2 me-2"></i>已提交领取申请</span>{% else %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-gift me-2"></i>申请领取</a>{% endif %}{% elif item.trade_mode == 'borrow' %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-arrow-repeat me-2"></i>申请借用</a>{% else %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-calendar2-check me-2"></i>预约交易</a>{% endif %}
                         <a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-outline-primary"><i class="bi bi-chat-dots me-2"></i>联系卖家</a>
                     {% elif user != item.seller and item.status == 'reserved' %}
                         {% if item.order %}<a href="{% url 'order_detail' item.order.id %}" class="btn btn-outline-primary"><i class="bi bi-receipt me-2"></i>查看交易进度</a>{% endif %}

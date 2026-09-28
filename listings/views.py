@@ -568,7 +568,12 @@ def create_order(request, item_id):
                     order.item = locked_item
                     order.buyer = request.user
                     order.seller = locked_item.seller
-                    order.agreed_price = locked_item.price
+                    order.agreed_price = Decimal('0.00') if locked_item.trade_mode == 'borrow' else locked_item.price
+                    order.deposit_amount = locked_item.deposit_amount if locked_item.trade_mode == 'borrow' else Decimal('0.00')
+                    order.return_due_at = (
+                        timezone.now() + timedelta(days=locked_item.borrow_days or 7)
+                        if locked_item.trade_mode == 'borrow' else None
+                    )
                     order.meeting_location = order.meeting_location or locked_item.location
                     order.confirmation_deadline = timezone.now() + timedelta(hours=24)
                     order.save()
@@ -576,10 +581,12 @@ def create_order(request, item_id):
                         order=order, actor=request.user, to_status=order.status,
                         note='买家发起交易预约',
                     )
+                    action_label = '申请借用' if order.item.trade_mode == 'borrow' else '预约'
+                    title = '收到新的借用申请' if order.item.trade_mode == 'borrow' else '收到新的交易预约'
                     create_notification(
                         order.seller, actor=request.user, kind='order_created',
-                        title='收到新的交易预约',
-                        message=f'{request.user.username}预约了你的商品“{order.item.title}”。',
+                        title=title,
+                        message=f'{request.user.username}{action_label}了你的商品“{order.item.title}”。',
                         order=order, item=order.item,
                         target_url=reverse('order_detail', args=[order.id]),
                     )
@@ -588,11 +595,17 @@ def create_order(request, item_id):
             except IntegrityError:
                 messages.info(request, '这个商品刚刚被其他同学预约了。')
                 return redirect('item_detail', item_id=item.id)
-            messages.success(request, '预约已提交，等待卖家确认。')
+            messages.success(
+                request,
+                '借用申请已提交，等待发布者确认。' if order.item.trade_mode == 'borrow' else '预约已提交，等待卖家确认。',
+            )
             return redirect('order_detail', order_id=order.id)
     else:
         form = OrderForm(initial={'meeting_location': item.location_id})
-    return render(request, 'listings/order_form.html', {'form': form, 'item': item, 'title': '预约交易'})
+    return render(request, 'listings/order_form.html', {
+        'form': form, 'item': item,
+        'title': '申请借用' if item.trade_mode == 'borrow' else '预约交易',
+    })
 
 
 @login_required
@@ -752,7 +765,7 @@ def order_detail(request, order_id):
         incident_form = MeetingIncidentForm()
     rating_target = order.seller if request.user == order.buyer else order.buyer
     my_rating = Rating.objects.filter(order=order, rater=request.user).first()
-    rating_form = RatingForm() if order.status == 'completed' and not my_rating else None
+    rating_form = RatingForm() if order.status in {'completed', 'returned'} and not my_rating else None
     ratings = order.ratings.select_related('rater', 'ratee').all()
     events = order.events.select_related('actor').all()
     dispute = getattr(order, 'dispute', None)
@@ -764,7 +777,7 @@ def order_detail(request, order_id):
     )
     return render(request, 'listings/order_detail.html', {
         'order': order,
-        'title': '交易订单',
+        'title': '借用订单' if order.item.trade_mode == 'borrow' else '交易订单',
         'rating_target': rating_target,
         'my_rating': my_rating,
         'rating_form': rating_form,
@@ -780,6 +793,7 @@ def order_detail(request, order_id):
         'dispute': dispute,
         'dispute_evidence': dispute_evidence,
         'dispute_evidence_form': dispute_evidence_form,
+        'now': timezone.now(),
     })
 
 
@@ -1183,25 +1197,35 @@ def confirm_delivery(request, order_id):
         other_party = locked_order.seller if request.user == locked_order.buyer else locked_order.buyer
 
         if confirmation.is_complete:
-            locked_order.status = 'completed'
+            is_borrow = locked_order.item.trade_mode == 'borrow'
+            next_status = 'borrowed' if is_borrow else 'completed'
+            locked_order.status = next_status
             locked_order.save(update_fields=['status', 'updated_at'])
-            locked_order.item.status = 'sold'
-            locked_order.item.save(update_fields=['status', 'updated_at'])
+            if not is_borrow:
+                locked_order.item.status = 'sold'
+                locked_order.item.save(update_fields=['status', 'updated_at'])
             OrderEvent.objects.create(
                 order=locked_order,
                 actor=request.user,
                 from_status='meeting',
-                to_status='completed',
-                note='双方确认交易已完成',
+                to_status=next_status,
+                note='双方确认借用已开始' if is_borrow else '双方确认交易已完成',
             )
             create_notification(
                 other_party, actor=request.user, kind='order_status',
-                title='交易已完成',
-                message=f'商品“{locked_order.item.title}”已完成双方交付确认。',
+                title='借用已开始' if is_borrow else '交易已完成',
+                message=(
+                    f'商品“{locked_order.item.title}”已完成交付确认，借用期限至 '
+                    f'{locked_order.return_due_at:%Y年%m月%d日 %H:%M}。'
+                    if is_borrow else f'商品“{locked_order.item.title}”已完成双方交付确认。'
+                ),
                 order=locked_order, item=locked_order.item,
                 target_url=reverse('order_detail', args=[locked_order.id]),
             )
-            messages.success(request, '双方已完成交付确认，交易正式完成。')
+            messages.success(
+                request,
+                '双方已完成交付确认，借用正式开始。' if is_borrow else '双方已完成交付确认，交易正式完成。',
+            )
         else:
             create_notification(
                 other_party, actor=request.user, kind='order_status',
@@ -1215,12 +1239,91 @@ def confirm_delivery(request, order_id):
 
 
 @login_required
+def confirm_return(request, order_id):
+    """Let both parties independently confirm the return of a borrowed item."""
+    order = get_object_or_404(
+        Order.objects.select_related('item', 'buyer', 'seller'), id=order_id,
+    )
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限确认这笔借用订单。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+    if order.item.trade_mode != 'borrow':
+        messages.error(request, '只有限期借用订单支持归还确认。')
+        return redirect('order_detail', order_id=order.id)
+    if order.status != 'borrowed':
+        messages.error(request, '订单进入“借用中”后才能确认归还。')
+        return redirect('order_detail', order_id=order.id)
+
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().select_related(
+            'item', 'buyer', 'seller',
+        ).get(pk=order.id)
+        if locked_order.item.trade_mode != 'borrow' or locked_order.status != 'borrowed':
+            messages.info(request, '这笔借用订单已经发生变化，请刷新后再试。')
+            return redirect('order_detail', order_id=locked_order.id)
+
+        confirmation, _ = DeliveryConfirmation.objects.select_for_update().get_or_create(
+            order=locked_order,
+        )
+        field_name = 'buyer_returned_at' if request.user == locked_order.buyer else 'seller_returned_at'
+        if getattr(confirmation, field_name):
+            messages.info(request, '你已经登记过归还，请等待对方确认。')
+            return redirect('order_detail', order_id=locked_order.id)
+
+        setattr(confirmation, field_name, timezone.now())
+        confirmation.save(update_fields=[field_name, 'updated_at'])
+        other_party = locked_order.seller if request.user == locked_order.buyer else locked_order.buyer
+
+        if confirmation.return_is_complete:
+            now = timezone.now()
+            locked_order.status = 'returned'
+            locked_order.returned_at = now
+            locked_order.save(update_fields=['status', 'returned_at', 'updated_at'])
+            locked_order.item.status = 'available'
+            locked_order.item.save(update_fields=['status', 'updated_at'])
+            OrderEvent.objects.create(
+                order=locked_order,
+                actor=request.user,
+                from_status='borrowed',
+                to_status='returned',
+                note='双方确认借用物品已归还，商品重新开放借用',
+            )
+            for recipient in (locked_order.buyer, locked_order.seller):
+                create_notification(
+                    recipient,
+                    actor=request.user,
+                    kind='order_status',
+                    title='借用已归还',
+                    message=f'商品“{locked_order.item.title}”已完成双方归还确认，现已重新开放借用。',
+                    order=locked_order,
+                    item=locked_order.item,
+                    target_url=reverse('order_detail', args=[locked_order.id]),
+                )
+            messages.success(request, '双方已确认归还，商品重新开放借用。')
+        else:
+            create_notification(
+                other_party,
+                actor=request.user,
+                kind='order_status',
+                title='等待你确认借用归还',
+                message=f'{request.user.username}已登记归还商品“{locked_order.item.title}”，请确认物品已收到。',
+                order=locked_order,
+                item=locked_order.item,
+                target_url=reverse('order_detail', args=[locked_order.id]),
+            )
+            messages.success(request, '已记录你的归还登记，等待对方确认。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
 def open_dispute(request, order_id):
     order = get_object_or_404(Order.objects.select_related('item', 'buyer', 'seller'), id=order_id)
     if request.user not in {order.buyer, order.seller}:
         messages.error(request, '你没有权限发起这笔订单的争议。')
         return redirect('home')
-    if order.status not in {'confirmed', 'meeting', 'completed'}:
+    if order.status not in {'confirmed', 'meeting', 'completed', 'borrowed', 'returned'}:
         messages.error(request, '当前订单状态不支持发起交易争议。')
         return redirect('order_detail', order_id=order.id)
     if hasattr(order, 'dispute'):
@@ -1461,7 +1564,7 @@ def rate_order(request, order_id):
     if request.user not in {order.buyer, order.seller}:
         messages.error(request, '你没有权限评价这笔订单。')
         return redirect('home')
-    if order.status != 'completed':
+    if order.status not in {'completed', 'returned'}:
         messages.error(request, '交易完成后才可以互相评价。')
         return redirect('order_detail', order_id=order.id)
     ratee = order.seller if request.user == order.buyer else order.buyer

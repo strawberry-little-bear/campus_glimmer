@@ -57,6 +57,7 @@ class Item(models.Model):
     TRADE_MODE_CHOICES = (
         ('sale', '出售'),
         ('free', '免费赠送'),
+        ('borrow', '限期借用'),
     )
 
     objects = ItemQuerySet.as_manager()
@@ -65,6 +66,14 @@ class Item(models.Model):
     description = models.TextField('商品描述')
     trade_mode = models.CharField('交易方式', max_length=20, choices=TRADE_MODE_CHOICES, default='sale')
     price = models.DecimalField('价格', max_digits=10, decimal_places=2, default=0)
+    deposit_amount = models.DecimalField(
+        '借用押金', max_digits=10, decimal_places=2, default=0,
+        help_text='仅限期借用使用，归还确认后由双方线下处理押金。',
+    )
+    borrow_days = models.PositiveSmallIntegerField(
+        '默认借用天数', default=7,
+        help_text='仅限期借用使用，范围为 1 至 90 天。',
+    )
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='items', verbose_name='分类')
     location = models.ForeignKey(
         CampusLocation,
@@ -257,6 +266,8 @@ class Order(models.Model):
         ('meeting', '待当面交付'),
         ('completed', '交易完成'),
         ('cancelled', '已取消'),
+        ('borrowed', '借用中'),
+        ('returned', '已归还'),
     )
 
     item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name='order', verbose_name='商品')
@@ -267,12 +278,17 @@ class Order(models.Model):
         related_name='orders', verbose_name='交付地点',
     )
     agreed_price = models.DecimalField('成交价格', max_digits=10, decimal_places=2)
+    deposit_amount = models.DecimalField('借用押金', max_digits=10, decimal_places=2, default=0)
+    return_due_at = models.DateTimeField('预计归还时间', null=True, blank=True)
+    returned_at = models.DateTimeField('实际归还时间', null=True, blank=True)
     buyer_note = models.TextField('买家备注', blank=True)
     status = models.CharField('订单状态', max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField('下单时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
     confirmation_deadline = models.DateTimeField('卖家确认截止时间', null=True, blank=True)
     confirmation_reminder_sent_at = models.DateTimeField('确认提醒发送时间', null=True, blank=True)
+    return_reminder_sent_at = models.DateTimeField('归还提醒发送时间', null=True, blank=True)
+    return_overdue_notice_sent_at = models.DateTimeField('归还逾期提醒发送时间', null=True, blank=True)
 
     class Meta:
         verbose_name = '交易订单'
@@ -319,6 +335,8 @@ class DeliveryConfirmation(models.Model):
     )
     buyer_confirmed_at = models.DateTimeField('买家确认时间', null=True, blank=True)
     seller_confirmed_at = models.DateTimeField('卖家确认时间', null=True, blank=True)
+    buyer_returned_at = models.DateTimeField('买家归还登记时间', null=True, blank=True)
+    seller_returned_at = models.DateTimeField('卖家归还确认时间', null=True, blank=True)
     handoff_code_hash = models.CharField('交付确认码哈希', max_length=128, blank=True)
     handoff_code_hint = models.CharField('交付确认码提示', max_length=8, blank=True)
     handoff_code_issued_at = models.DateTimeField('交付确认码生成时间', null=True, blank=True)
@@ -334,6 +352,10 @@ class DeliveryConfirmation(models.Model):
     @property
     def is_complete(self):
         return bool(self.buyer_confirmed_at and self.seller_confirmed_at)
+
+    @property
+    def return_is_complete(self):
+        return bool(self.buyer_returned_at and self.seller_returned_at)
 
     def __str__(self):
         return f'{self.order.item.title} · 交付确认'

@@ -34,6 +34,7 @@ urlpatterns = [
     path('order/<int:order_id>/meeting/check-in/', views.check_in_meeting, name='check_in_meeting'),
     path('order/<int:order_id>/meeting/report-incident/', views.report_meeting_incident, name='report_meeting_incident'),
     path('order/<int:order_id>/confirm-delivery/', views.confirm_delivery, name='confirm_delivery'),
+    path('order/<int:order_id>/confirm-return/', views.confirm_return, name='confirm_return'),
     path('order/<int:order_id>/delivery-code/', views.generate_delivery_code, name='generate_delivery_code'),
     path('order/<int:order_id>/dispute/', views.open_dispute, name='open_dispute'),
     path('disputes/<int:dispute_id>/evidence/', views.add_dispute_evidence, name='add_dispute_evidence'),
