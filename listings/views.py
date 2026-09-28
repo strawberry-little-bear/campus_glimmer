@@ -1260,13 +1260,43 @@ def delete_saved_search(request, saved_search_id):
 
 @login_required
 def unread_summary(request):
+    unread_notifications = Notification.objects.filter(
+        recipient=request.user, is_read=False,
+    )
+    unread_messages = PrivateMessage.objects.filter(
+        receiver=request.user, is_read=False,
+    )
+    latest_entries = [
+        {
+            'type': 'notification',
+            'title': notification.title,
+            'message': notification.message,
+            'url': notification.target_url or reverse('notification_list'),
+            'created_at': notification.created_at,
+        }
+        for notification in unread_notifications.order_by('-created_at')[:3]
+    ]
+    latest_entries.extend(
+        {
+            'type': 'message',
+            'title': f'{message.sender.username} 发来新私信',
+            'message': message.content,
+            'url': reverse('conversation', args=[message.sender_id]),
+            'created_at': message.created_at,
+        }
+        for message in unread_messages.select_related('sender').order_by('-created_at')[:3]
+    )
+    latest_entries.sort(key=lambda entry: entry['created_at'], reverse=True)
     return JsonResponse({
-        'notifications': Notification.objects.filter(
-            recipient=request.user, is_read=False,
-        ).count(),
-        'messages': PrivateMessage.objects.filter(
-            receiver=request.user, is_read=False,
-        ).count(),
+        'notifications': unread_notifications.count(),
+        'messages': unread_messages.count(),
+        'latest': [
+            {
+                **entry,
+                'created_at': entry['created_at'].isoformat(),
+            }
+            for entry in latest_entries[:5]
+        ],
     })
 
 

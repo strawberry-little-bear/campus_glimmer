@@ -216,7 +216,15 @@ class UnreadSummaryTests(TestCase):
         response = self.client.get(reverse('unread_summary'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {'notifications': 1, 'messages': 1})
+        payload = response.json()
+        self.assertEqual(payload['notifications'], 1)
+        self.assertEqual(payload['messages'], 1)
+        self.assertEqual(len(payload['latest']), 2)
+        self.assertEqual({entry['type'] for entry in payload['latest']}, {'notification', 'message'})
+        message_entry = next(entry for entry in payload['latest'] if entry['type'] == 'message')
+        self.assertEqual(message_entry['url'], reverse('conversation', args=[self.other_user.id]))
+        notification_entry = next(entry for entry in payload['latest'] if entry['type'] == 'notification')
+        self.assertEqual(notification_entry['url'], reverse('notification_list'))
 
     def test_unread_summary_requires_login(self):
         response = self.client.get(reverse('unread_summary'))

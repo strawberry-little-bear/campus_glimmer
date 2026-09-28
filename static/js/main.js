@@ -119,6 +119,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!unreadAnchor) return;
 
     const endpoint = unreadAnchor.dataset.unreadEndpoint;
+    const toastRegion = document.getElementById('unread-toast-region');
+    let unreadSnapshot = {
+        messages: Number(unreadAnchor.dataset.initialMessages || 0),
+        notifications: Number(unreadAnchor.dataset.initialNotifications || 0),
+    };
+    let hasSyncedUnread = false;
+
     const updateUnreadBadge = function (type, count) {
         const safeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
         document.querySelectorAll(`[data-unread-badge="${type}"]`).forEach(function (badge) {
@@ -131,6 +138,33 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     };
 
+    const showUnreadToast = function (data, increases) {
+        if (!toastRegion) return;
+        const newMessages = increases.messages;
+        const newNotifications = increases.notifications;
+        const summary = [];
+        if (newMessages) summary.push(`${newMessages} 条新私信`);
+        if (newNotifications) summary.push(`${newNotifications} 条新通知`);
+
+        const toast = document.createElement('div');
+        toast.className = 'unread-toast';
+        toast.innerHTML = '<div class="unread-toast-icon"><i class="bi bi-bell"></i></div><div class="unread-toast-body"><strong></strong><span></span><div class="unread-toast-links"></div></div><button type="button" class="unread-toast-close" aria-label="关闭提醒"><i class="bi bi-x"></i></button>';
+        toast.querySelector('strong').textContent = '有新的站内动态';
+        toast.querySelector('span').textContent = summary.join(' · ');
+        const links = toast.querySelector('.unread-toast-links');
+        (data.latest || []).slice(0, 2).forEach(function (entry) {
+            const link = document.createElement('a');
+            link.href = entry.url || (entry.type === 'message' ? '/messages/inbox/' : '/listings/notifications/');
+            link.textContent = `${entry.type === 'message' ? '私信' : '通知'}：${entry.title || entry.message || '查看详情'}`;
+            links.appendChild(link);
+        });
+        toast.querySelector('.unread-toast-close').addEventListener('click', function () {
+            toast.remove();
+        });
+        toastRegion.prepend(toast);
+        window.setTimeout(function () { toast.remove(); }, 9000);
+    };
+
     const refreshUnreadCounts = function () {
         if (document.visibilityState === 'hidden') return;
         fetch(endpoint, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
@@ -139,8 +173,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 return response.json();
             })
             .then(function (data) {
-                updateUnreadBadge('messages', Number(data.messages));
-                updateUnreadBadge('notifications', Number(data.notifications));
+                const nextSnapshot = {
+                    messages: Math.max(0, Number(data.messages) || 0),
+                    notifications: Math.max(0, Number(data.notifications) || 0),
+                };
+                updateUnreadBadge('messages', nextSnapshot.messages);
+                updateUnreadBadge('notifications', nextSnapshot.notifications);
+                if (hasSyncedUnread) {
+                    const increases = {
+                        messages: Math.max(0, nextSnapshot.messages - unreadSnapshot.messages),
+                        notifications: Math.max(0, nextSnapshot.notifications - unreadSnapshot.notifications),
+                    };
+                    if (increases.messages || increases.notifications) showUnreadToast(data, increases);
+                }
+                unreadSnapshot = nextSnapshot;
+                hasSyncedUnread = true;
             })
             .catch(function () {
                 // 未读提醒属于增强体验，请求失败时保持服务端渲染的初始状态。
