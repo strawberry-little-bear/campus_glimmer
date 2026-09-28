@@ -34,7 +34,7 @@
     <div class="col-md-4"><div class="content-card p-3 h-100"><div class="text-muted small">有未读的会话</div><div class="h3 mb-0 text-success">{{ conversation_unread_count }}</div></div></div>
 </div>
 
-<div class="message-filter-summary mb-3"><i class="bi bi-funnel me-1"></i>当前收到的消息 {{ received_messages|length }} 条，其中 {{ message_filtered_unread_count }} 条未读{% if search_query or message_status_filter != 'all' %} · 已应用筛选条件{% endif %}</div>
+<div class="message-filter-summary mb-3"><i class="bi bi-funnel me-1"></i>当前收到的消息 {{ message_filtered_total_count }} 条，其中 {{ message_filtered_unread_count }} 条未读{% if search_query or message_status_filter != 'all' %} · 已应用筛选条件{% endif %}</div>
 
 <div class="row">
     <div class="col-md-4 mb-4">
@@ -82,7 +82,7 @@
                                 <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-square me-1"></i>标记选中为已读</button>
                             </div>
                             <div class="list-group">
-                                {% for message in received_messages %}
+                                {% for message in received_page.object_list %}
                                 <div class="list-group-item list-group-item-action {% if not message.is_read %}bg-light{% endif %}">
                                     <div class="d-flex align-items-start">
                                         {% if not message.is_read %}<input type="checkbox" name="message_ids" value="{{ message.id }}" class="form-check-input message-select mt-1 me-3">{% else %}<span class="message-select-spacer me-3"></span>{% endif %}
@@ -96,12 +96,14 @@
                                 </div>
                                 {% empty %}<div class="text-center py-4"><p class="text-muted mb-0">暂无收到的消息</p></div>{% endfor %}
                             </div>
+                            {% if received_page.has_other_pages %}<nav class="mt-3" aria-label="收到的消息分页"><ul class="pagination pagination-sm justify-content-center mb-0">{% if received_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.previous_page_number }}">上一页</a></li>{% endif %}<li class="page-item active"><span class="page-link">{{ received_page.number }} / {{ received_page.paginator.num_pages }}</span></li>{% if received_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.next_page_number }}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
                         </form>
                     </div>
                     <div class="tab-pane fade" id="sent" role="tabpanel">
                         <div class="list-group">
-                            {% for message in sent_messages %}<div class="list-group-item list-group-item-action"><div class="d-flex"><img src="{{ message.receiver.profile.avatar.url }}" alt="{{ message.receiver.username }}" class="avatar-sm me-3"><div class="flex-grow-1"><div class="d-flex justify-content-between"><h6 class="mb-0">发送给: {{ message.receiver.username }}</h6><small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small></div><p class="mb-1">{{ message.content }}</p>{% if message.item %}<small class="text-muted">关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a></small>{% endif %}<div class="mt-2"><a href="{% url 'conversation' message.receiver.id %}" class="btn btn-sm btn-outline-success">查看对话</a></div></div></div></div>
+                            {% for message in sent_page.object_list %}<div class="list-group-item list-group-item-action"><div class="d-flex"><img src="{{ message.receiver.profile.avatar.url }}" alt="{{ message.receiver.username }}" class="avatar-sm me-3"><div class="flex-grow-1"><div class="d-flex justify-content-between"><h6 class="mb-0">发送给: {{ message.receiver.username }}</h6><small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small></div><p class="mb-1">{{ message.content }}</p>{% if message.item %}<small class="text-muted">关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a></small>{% endif %}<div class="mt-2"><a href="{% url 'conversation' message.receiver.id %}" class="btn btn-sm btn-outline-success">查看对话</a></div></div></div></div>
                             {% empty %}<div class="text-center py-4"><p class="text-muted mb-0">暂无发出的消息</p></div>{% endfor %}
+                            {% if sent_page.has_other_pages %}<nav class="mt-3" aria-label="发出的消息分页"><ul class="pagination pagination-sm justify-content-center mb-0">{% if sent_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.previous_page_number }}">上一页</a></li>{% endif %}<li class="page-item active"><span class="page-link">{{ sent_page.number }} / {{ sent_page.paginator.num_pages }}</span></li>{% if sent_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.next_page_number }}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
                         </div>
                     </div>
                 </div>

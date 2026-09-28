@@ -5,6 +5,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.contrib import messages as django_messages
 from django.contrib.auth.models import User
 from django.db import transaction
@@ -125,6 +126,13 @@ def inbox(request):
     elif status_filter == 'read':
         received_messages = received_messages.filter(is_read=True)
 
+    received_page = Paginator(received_messages, 20).get_page(
+        request.GET.get('received_page', 1),
+    )
+    sent_page = Paginator(sent_messages, 20).get_page(
+        request.GET.get('sent_page', 1),
+    )
+
     conversation_users = User.objects.filter(
         Q(sent_messages__receiver=request.user) | Q(received_messages__sender=request.user)
     ).distinct().exclude(id=request.user.id)
@@ -142,6 +150,8 @@ def inbox(request):
         'received_messages': received_messages,
         'sent_messages': sent_messages,
         'conversation_data': conversation_data,
+        'received_page': received_page,
+        'sent_page': sent_page,
         'search_query': search_query,
         'message_status_filter': status_filter,
         'message_status_options': (
@@ -150,9 +160,13 @@ def inbox(request):
             ('read', '仅看已读'),
         ),
         'message_filtered_unread_count': received_messages.filter(is_read=False).count(),
+        'message_filtered_total_count': received_page.paginator.count,
         'message_total_count': PrivateMessage.objects.filter(receiver=request.user).count(),
         'conversation_unread_count': sum(1 for data in conversation_data if data['unread_count']),
+        'message_filter_query': request.GET.copy(),
     }
+    context['message_filter_query'].pop('received_page', None)
+    context['message_filter_query'].pop('sent_page', None)
     return render(request, 'chat_messages/inbox.html', context)
 
 

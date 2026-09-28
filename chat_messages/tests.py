@@ -122,6 +122,22 @@ class MessageNotificationTests(TestCase):
         self.assertEqual(list(read_response.context['received_messages']), [read])
         self.assertEqual(read_response.context['message_filtered_unread_count'], 0)
 
+    def test_inbox_paginates_large_message_lists_without_losing_filter_state(self):
+        for index in range(21):
+            PrivateMessage.objects.create(
+                sender=self.buyer, receiver=self.seller, content=f'分页消息 {index}',
+            )
+        self.client.login(username='seller', password='safe-password-123')
+
+        response = self.client.get(reverse('inbox'), {'q': '分页', 'status': 'unread'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['received_page'].paginator.num_pages, 2)
+        self.assertEqual(response.context['received_page'].paginator.count, 21)
+        self.assertEqual(response.context['message_filter_query']['q'], '分页')
+        self.assertEqual(response.context['message_filter_query']['status'], 'unread')
+        self.assertContains(response, '收到的消息分页')
+
     def test_conversation_summary_uses_bounded_queries(self):
         for index in range(4):
             PrivateMessage.objects.create(
