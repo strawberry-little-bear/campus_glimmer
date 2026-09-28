@@ -1018,6 +1018,10 @@ def operations_dashboard_export(request):
         ('notification_rows', '通知记录数'),
         ('unread_notifications', '周期结束未读通知'),
         ('notification_compression_rate', '通知聚合压缩率（%）'),
+        ('active_demands', '当前有效求购'),
+        ('demand_matches', '求购匹配通知'),
+        ('demand_match_read_rate', '求购匹配阅读率（%）'),
+        ('demand_match_demands', '被匹配求购数'),
     )
     for key, label in metric_labels:
         value = metrics[key]

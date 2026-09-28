@@ -672,6 +672,28 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '用户行为转化漏斗')
         self.assertContains(response, '图书馆东门')
 
+    def test_operations_dashboard_reports_demand_match_reach(self):
+        demand = DemandPost.objects.create(
+            requester=self.other_user, title='运营求购', description='测试匹配统计',
+            category=self.category, location=self.location,
+        )
+        Notification.objects.create(
+            recipient=self.other_user, kind='demand_match', title='匹配提醒',
+            message='发现商品', demand=demand, item=self.item, is_read=True,
+        )
+        Notification.objects.create(
+            recipient=self.other_user, kind='demand_match', title='匹配提醒',
+            message='发现商品', demand=demand, item=self.item, is_read=False,
+        )
+        dashboard = build_operations_dashboard(30)
+        insights = dashboard['demand_match_insights']
+        self.assertEqual(insights['notification_count'], 2)
+        self.assertEqual(insights['demand_count'], 1)
+        self.assertEqual(insights['item_count'], 1)
+        self.assertEqual(insights['read_rate'], 50.0)
+        self.assertEqual(dashboard['metrics']['demand_matches'], 2)
+        self.assertEqual(dashboard['metrics']['demand_match_demands'], 1)
+
     def test_operations_dashboard_reports_notification_deduplication(self):
         Notification.objects.create(
             recipient=self.user,

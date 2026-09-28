@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
 
 
 PERIOD_CHOICES = (
@@ -768,6 +768,21 @@ def _build_notification_insights(notification_period, dates):
         'has_data': bool(row_count),
     }
 
+def _build_demand_match_insights(notification_period):
+    """Summarize whether the matching engine is creating actionable demand signals."""
+    matches = notification_period.filter(kind='demand_match')
+    total = matches.count()
+    read = matches.filter(is_read=True).count()
+    return {
+        'notification_count': total,
+        'read_count': read,
+        'read_rate': round(read / total * 100, 1) if total else 0,
+        'demand_count': matches.exclude(demand_id__isnull=True).values('demand_id').distinct().count(),
+        'item_count': matches.exclude(item_id__isnull=True).values('item_id').distinct().count(),
+        'active_demands': DemandPost.objects.filter(status='active').count(),
+    }
+
+
 def build_operations_dashboard(days=30):
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
@@ -803,6 +818,7 @@ def build_operations_dashboard(days=30):
     detail_view_count = view_period.count()
     favorite_count = favorite_period.count()
     notification_insights = _build_notification_insights(notification_period, dates)
+    demand_match_insights = _build_demand_match_insights(notification_period)
 
     def conversion_rate(current, previous):
         return round(current / previous * 100, 1) if previous else 0
@@ -1000,6 +1016,10 @@ def build_operations_dashboard(days=30):
         'notification_events': notification_insights['notification_events'],
         'unread_notifications': notification_insights['unread_notifications'],
         'notification_compression_rate': notification_insights['compression_rate'],
+        'active_demands': demand_match_insights['active_demands'],
+        'demand_matches': demand_match_insights['notification_count'],
+        'demand_match_read_rate': demand_match_insights['read_rate'],
+        'demand_match_demands': demand_match_insights['demand_count'],
     }
     operational_alerts = build_operational_alerts(metrics, period_comparisons)
 
@@ -1028,4 +1048,6 @@ def build_operations_dashboard(days=30):
         'location_stats': location_stats,
         'order_statuses': order_statuses,
         'notification_insights': notification_insights,
+        'demand_match_insights': demand_match_insights,
     }
+
