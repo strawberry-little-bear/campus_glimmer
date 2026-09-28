@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}我的领取申请 · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">免费赠送</span><h1>我的领取申请</h1><p>查看申请进度；发布者选中后会生成一笔正式的交易订单。</p></div><a href="{% url 'item_list' %}" class="btn btn-outline-primary"><i class="bi bi-compass me-2"></i>继续逛逛</a></div>
+<div class="row g-3">
+{% for application in applications %}
+<div class="col-12"><article class="content-card d-flex flex-wrap align-items-center justify-content-between gap-3"><div><div class="d-flex align-items-center gap-2"><h3 class="h5 mb-0">{{ application.item.title }}</h3><span class="order-status order-status-{{ application.status }}">{{ application.get_status_display }}</span></div><p class="small text-muted mb-1 mt-2">发布者：{{ application.item.seller.username }}{% if application.meeting_location %} · 领取地点：{{ application.meeting_location.name }}{% endif %}</p><p class="small mb-0">申请于 {{ application.created_at|date:'Y-m-d H:i' }}{% if application.applicant_note %} · {{ application.applicant_note }}{% endif %}</p></div><div class="d-flex gap-2">{% if application.order %}<a href="{% url 'order_detail' application.order.id %}" class="btn btn-sm btn-primary">查看交易</a>{% elif application.status == 'pending' %}<form method="post" action="{% url 'withdraw_gift_application' application.id %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary">撤回申请</button></form>{% endif %}<a href="{% url 'item_detail' application.item.id %}" class="btn btn-sm btn-outline-primary">查看商品</a></div></article></div>
+{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-gift display-6 d-block mb-3"></i><h3>还没有领取申请</h3><p>看到免费赠送的闲置，可以提交申请参与领取。</p><a href="{% url 'item_list' %}" class="btn btn-primary">去发现免费好物</a></div></div>{% endfor %}
+</div>
+{% endblock %}

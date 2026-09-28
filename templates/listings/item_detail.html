@@ -39,7 +39,7 @@
                 {% if user.is_authenticated %}
                     <form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>
                     {% if user != item.seller and item.is_available_now %}
-                        <a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-calendar2-check me-2"></i>预约交易</a>
+                        {% if item.trade_mode == 'free' %}{% if pending_gift_application %}<span class="btn btn-success disabled"><i class="bi bi-check2 me-2"></i>已提交领取申请</span>{% else %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-gift me-2"></i>申请领取</a>{% endif %}{% else %}<a href="{% url 'create_order' item.id %}" class="btn btn-primary"><i class="bi bi-calendar2-check me-2"></i>预约交易</a>{% endif %}
                         <a href="{% url 'send_message_item' item.seller.id item.id %}" class="btn btn-outline-primary"><i class="bi bi-chat-dots me-2"></i>联系卖家</a>
                     {% elif user != item.seller and item.status == 'reserved' %}
                         {% if item.order %}<a href="{% url 'order_detail' item.order.id %}" class="btn btn-outline-primary"><i class="bi bi-receipt me-2"></i>查看交易进度</a>{% endif %}
@@ -53,7 +53,7 @@
             </div>
 
             {% if user == item.seller %}
-            <div class="owner-actions mt-4"><span class="small text-muted">这是你发布的商品</span><div class="d-flex gap-2 mt-2"><a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">编辑</a><a href="{% url 'mark_sold' item.id %}" class="btn btn-sm btn-outline-secondary">更新状态</a><a href="{% url 'delete_item' item.id %}" class="btn btn-sm btn-outline-danger">删除</a></div></div>
+            <div class="owner-actions mt-4"><span class="small text-muted">这是你发布的商品</span><div class="d-flex gap-2 mt-2"><a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">编辑</a><a href="{% url 'mark_sold' item.id %}" class="btn btn-sm btn-outline-secondary">更新状态</a>{% if item.trade_mode == 'free' %}<a href="{% url 'manage_gift_applications' item.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people me-1"></i>领取申请{% if pending_gift_application_count %}（{{ pending_gift_application_count }}）{% endif %}</a>{% endif %}<a href="{% url 'delete_item' item.id %}" class="btn btn-sm btn-outline-danger">删除</a></div></div>
             {% elif user.is_authenticated %}
             <div class="mt-4">{% if has_reported %}<span class="small text-muted"><i class="bi bi-check2-circle me-1"></i>你已提交过举报</span>{% else %}<a href="{% url 'report_item' item.id %}" class="small text-muted report-link"><i class="bi bi-flag me-1"></i>举报此商品</a>{% endif %}</div>
             {% endif %}

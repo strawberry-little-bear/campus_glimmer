@@ -196,6 +196,60 @@ class Report(models.Model):
         return f'{self.item.title} · {self.get_reason_display()}'
 
 
+class GiftApplication(models.Model):
+    """A lightweight queue entry for a free-gift listing.
+
+    Free items can receive multiple applications without reserving the item
+    immediately. The seller selects one applicant to create the actual order.
+    """
+
+    STATUS_CHOICES = (
+        ('pending', '等待选择'),
+        ('selected', '已选中'),
+        ('rejected', '未选中'),
+        ('withdrawn', '已撤回'),
+    )
+
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE, related_name='gift_applications', verbose_name='商品',
+    )
+    applicant = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='gift_applications', verbose_name='申请人',
+    )
+    meeting_location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='gift_applications', verbose_name='领取地点',
+    )
+    applicant_note = models.TextField('申请说明', blank=True)
+    status = models.CharField('申请状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    order = models.OneToOneField(
+        'Order', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='gift_application', verbose_name='生成订单',
+    )
+    decided_at = models.DateTimeField('处理时间', null=True, blank=True)
+    created_at = models.DateTimeField('申请时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '免费领取申请'
+        verbose_name_plural = '免费领取申请'
+        ordering = ['status', 'created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['item', 'applicant'],
+                condition=models.Q(status='pending'),
+                name='unique_pending_gift_application',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['item', 'status', 'created_at']),
+            models.Index(fields=['applicant', 'status', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.item.title} · {self.applicant.username} · {self.get_status_display()}'
+
+
 class Order(models.Model):
     STATUS_CHOICES = (
         ('pending', '待卖家确认'),
@@ -577,6 +631,8 @@ class RecommendationFeedback(models.Model):
 class Notification(models.Model):
     KIND_CHOICES = (
         ('order_created', '新的交易预约'),
+        ('gift_application', '新的领取申请'),
+        ('gift_application_status', '领取申请状态更新'),
         ('order_status', '订单状态更新'),
         ('rating_received', '收到交易评价'),
         ('message_received', '收到新私信'),
@@ -637,6 +693,12 @@ class NotificationPreference(models.Model):
     )
     order_created = models.BooleanField(
         '新的交易预约', default=True, help_text='有人预约你的商品时提醒。',
+    )
+    gift_application = models.BooleanField(
+        '新的领取申请', default=True, help_text='有人申请领取你的免费商品时提醒。',
+    )
+    gift_application_status = models.BooleanField(
+        '领取申请状态更新', default=True, help_text='免费领取申请被选中、未选中或撤回时提醒。',
     )
     order_status = models.BooleanField(
         '订单状态更新', default=True, help_text='订单状态推进、取消或完成时提醒。',

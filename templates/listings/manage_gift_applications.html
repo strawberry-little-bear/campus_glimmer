@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}管理领取申请 · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">免费赠送</span><h1>管理领取申请</h1><p>{{ item.title }} · 当前有 {{ pending_count }} 位同学等待选择。</p></div><a href="{% url 'item_detail' item.id %}" class="btn btn-outline-primary"><i class="bi bi-arrow-left me-2"></i>返回商品</a></div>
+<div class="content-card mb-4"><div class="d-flex justify-content-between align-items-center"><div><h2 class="h5 mb-1">选择规则建议</h2><p class="small text-muted mb-0">可以综合申请说明、领取地点和提交时间做决定；选中后会自动生成交易订单，其余申请会收到未选中通知。</p></div><span class="text-success fw-semibold"><i class="bi bi-people me-1"></i>{{ pending_count }} 待处理</span></div></div>
+<div class="row g-3">
+{% for application in applications %}
+<div class="col-12"><article class="content-card"><div class="d-flex flex-wrap justify-content-between align-items-start gap-3"><div><div class="d-flex align-items-center gap-2"><h3 class="h5 mb-0">{{ application.applicant.username }}</h3><span class="order-status order-status-{{ application.status }}">{{ application.get_status_display }}</span></div><p class="small text-muted mb-1 mt-2">申请于 {{ application.created_at|date:'Y-m-d H:i' }}{% if application.meeting_location %} · 领取地点：{{ application.meeting_location.name }}{% endif %}</p>{% if application.applicant_note %}<p class="mb-0">{{ application.applicant_note|linebreaksbr }}</p>{% else %}<p class="small text-muted mb-0">申请人没有补充说明。</p>{% endif %}</div>{% if application.status == 'pending' %}<form method="post" action="{% url 'accept_gift_application' application.id %}">{% csrf_token %}<button class="btn btn-primary"><i class="bi bi-check2-circle me-1"></i>选中领取人</button></form>{% elif application.order %}<a href="{% url 'order_detail' application.order.id %}" class="btn btn-sm btn-outline-primary">查看订单</a>{% endif %}</div></article></div>
+{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-inbox display-6 d-block mb-3"></i><h3>还没有人申请</h3><p>分享商品后，申请会显示在这里。</p></div></div>{% endfor %}
+</div>
+{% endblock %}

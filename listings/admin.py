@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -53,6 +53,15 @@ class ReportAdmin(admin.ModelAdmin):
         ('举报信息', {'fields': ('item', 'reporter', 'reason', 'detail', 'created_at')}),
         ('审核结果', {'fields': ('status', 'reviewer', 'review_note', 'reviewed_at', 'updated_at')}),
     )
+
+
+@admin.register(GiftApplication)
+class GiftApplicationAdmin(admin.ModelAdmin):
+    list_display = ('item', 'applicant', 'status', 'meeting_location', 'created_at', 'decided_at')
+    list_filter = ('status', 'meeting_location', 'created_at', 'decided_at')
+    search_fields = ('item__title', 'applicant__username', 'applicant_note')
+    autocomplete_fields = ('item', 'applicant', 'meeting_location', 'order')
+    readonly_fields = ('created_at', 'updated_at', 'decided_at')
 
 
 @admin.register(Order)

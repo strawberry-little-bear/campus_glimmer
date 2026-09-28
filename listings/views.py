@@ -25,7 +25,7 @@ from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .demand_matching import notify_demand_matches
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -390,6 +390,14 @@ def item_detail(request, item_id):
             if request.user.is_authenticated and request.user != item.seller else None
         ),
         'has_reported': request.user.is_authenticated and Report.objects.filter(item=item, reporter=request.user).exists(),
+        'pending_gift_application': (
+            GiftApplication.objects.filter(item=item, applicant=request.user, status='pending').first()
+            if request.user.is_authenticated and request.user != item.seller and item.trade_mode == 'free' else None
+        ),
+        'pending_gift_application_count': (
+            GiftApplication.objects.filter(item=item, status='pending').count()
+            if request.user.is_authenticated and request.user == item.seller and item.trade_mode == 'free' else 0
+        ),
     }
     return render(request, 'listings/item_detail.html', context)
 
@@ -501,8 +509,49 @@ def report_item(request, item_id):
 def create_order(request, item_id):
     item = get_object_or_404(Item.objects.available().select_related('seller', 'location'), id=item_id)
     if item.seller == request.user:
-        messages.error(request, '不能预约自己发布的商品。')
+        messages.error(request, '不能预约自己的商品。')
         return redirect('item_detail', item_id=item.id)
+
+    # Free gifts use an application queue instead of reserving the item for
+    # the first person who clicks. The seller can review the queue and select
+    # the most suitable applicant.
+    if item.trade_mode == 'free':
+        if request.method == 'POST':
+            form = OrderForm(request.POST)
+            if form.is_valid():
+                try:
+                    with transaction.atomic():
+                        locked_item = Item.objects.select_for_update().select_related('seller', 'location').get(id=item.id)
+                        if not locked_item.is_available_now:
+                            messages.info(request, '这个免费商品刚刚结束展示或已被选中。')
+                            return redirect('item_detail', item_id=item.id)
+                        if GiftApplication.objects.filter(
+                            item=locked_item, applicant=request.user, status='pending',
+                        ).exists():
+                            messages.info(request, '你已经提交过这个商品的领取申请。')
+                            return redirect('my_gift_applications')
+                        application = GiftApplication.objects.create(
+                            item=locked_item,
+                            applicant=request.user,
+                            meeting_location=form.cleaned_data.get('meeting_location') or locked_item.location,
+                            applicant_note=form.cleaned_data.get('buyer_note', ''),
+                        )
+                        create_notification(
+                            locked_item.seller, actor=request.user, kind='gift_application',
+                            title='收到新的领取申请',
+                            message=f'{request.user.username}申请领取你的免费商品“{locked_item.title}”。',
+                            item=locked_item,
+                            target_url=reverse('manage_gift_applications', args=[locked_item.id]),
+                        )
+                except IntegrityError:
+                    messages.info(request, '你已经提交过这个商品的领取申请。')
+                    return redirect('my_gift_applications')
+                messages.success(request, '领取申请已提交，等待发布者选择。')
+                return redirect('my_gift_applications')
+        else:
+            form = OrderForm(initial={'meeting_location': item.location_id})
+        return render(request, 'listings/order_form.html', {'form': form, 'item': item, 'title': '申请领取'})
+
     if hasattr(item, 'order'):
         messages.info(request, '这个商品已经有一笔交易预约。')
         return redirect('order_detail', order_id=item.order.id)
@@ -527,11 +576,10 @@ def create_order(request, item_id):
                         order=order, actor=request.user, to_status=order.status,
                         note='买家发起交易预约',
                     )
-                    action_label = '申请领取' if order.item.trade_mode == 'free' else '预约'
                     create_notification(
                         order.seller, actor=request.user, kind='order_created',
-                        title='收到新的领取申请' if order.item.trade_mode == 'free' else '收到新的交易预约',
-                        message=f'{request.user.username}{action_label}了你的商品“{order.item.title}”。',
+                        title='收到新的交易预约',
+                        message=f'{request.user.username}预约了你的商品“{order.item.title}”。',
                         order=order, item=order.item,
                         target_url=reverse('order_detail', args=[order.id]),
                     )
@@ -540,11 +588,139 @@ def create_order(request, item_id):
             except IntegrityError:
                 messages.info(request, '这个商品刚刚被其他同学预约了。')
                 return redirect('item_detail', item_id=item.id)
-            messages.success(request, '领取申请已提交，等待发布者确认。' if order.item.trade_mode == 'free' else '预约已提交，等待卖家确认。')
+            messages.success(request, '预约已提交，等待卖家确认。')
             return redirect('order_detail', order_id=order.id)
     else:
         form = OrderForm(initial={'meeting_location': item.location_id})
     return render(request, 'listings/order_form.html', {'form': form, 'item': item, 'title': '预约交易'})
+
+
+@login_required
+def my_gift_applications(request):
+    applications = GiftApplication.objects.filter(
+        applicant=request.user,
+    ).select_related('item__seller', 'item__location', 'meeting_location', 'order').order_by(
+        'status', '-created_at',
+    )
+    return render(request, 'listings/gift_applications.html', {
+        'applications': applications,
+        'title': '我的领取申请',
+    })
+
+
+@login_required
+def manage_gift_applications(request, item_id):
+    item = get_object_or_404(Item.objects.select_related('seller', 'location'), id=item_id)
+    if item.seller != request.user:
+        messages.error(request, '你没有权限查看这个商品的领取申请。')
+        return redirect('item_detail', item_id=item.id)
+    if item.trade_mode != 'free':
+        messages.info(request, '只有免费赠送商品才有领取申请队列。')
+        return redirect('item_detail', item_id=item.id)
+    applications = GiftApplication.objects.filter(item=item).select_related(
+        'applicant', 'meeting_location', 'order',
+    ).order_by('status', 'created_at')
+    return render(request, 'listings/manage_gift_applications.html', {
+        'item': item,
+        'applications': applications,
+        'pending_count': applications.filter(status='pending').count(),
+        'title': '管理领取申请',
+    })
+
+
+@login_required
+def accept_gift_application(request, application_id):
+    application = get_object_or_404(
+        GiftApplication.objects.select_related('item', 'item__seller', 'applicant'),
+        id=application_id,
+    )
+    if application.item.seller != request.user:
+        messages.error(request, '你没有权限处理这个领取申请。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('manage_gift_applications', item_id=application.item_id)
+
+    try:
+        with transaction.atomic():
+            locked_application = GiftApplication.objects.select_for_update().select_related(
+                'item', 'applicant', 'item__seller', 'meeting_location',
+            ).get(pk=application.id)
+            locked_item = Item.objects.select_for_update().get(pk=locked_application.item_id)
+            if locked_application.status != 'pending':
+                messages.info(request, '这个申请已经处理过了。')
+                return redirect('manage_gift_applications', item_id=locked_application.item_id)
+            if locked_item.trade_mode != 'free' or not locked_item.is_available_now:
+                messages.info(request, '商品已经无法继续选择领取人。')
+                return redirect('manage_gift_applications', item_id=locked_item.id)
+            if hasattr(locked_item, 'order'):
+                messages.info(request, '这个商品已经生成交易订单。')
+                return redirect('manage_gift_applications', item_id=locked_item.id)
+
+            order = Order.objects.create(
+                item=locked_item,
+                buyer=locked_application.applicant,
+                seller=locked_item.seller,
+                meeting_location=locked_application.meeting_location or locked_item.location,
+                agreed_price=locked_item.price,
+                buyer_note=locked_application.applicant_note,
+                confirmation_deadline=timezone.now() + timedelta(hours=24),
+            )
+            OrderEvent.objects.create(
+                order=order, actor=request.user, to_status=order.status,
+                note='发布者从免费领取申请队列中选定了领取人',
+            )
+            locked_application.status = 'selected'
+            locked_application.order = order
+            locked_application.decided_at = timezone.now()
+            locked_application.save(update_fields=['status', 'order', 'decided_at', 'updated_at'])
+
+            pending_applications = list(
+                GiftApplication.objects.select_for_update().select_related('applicant').filter(
+                    item=locked_item, status='pending',
+                ).exclude(pk=locked_application.pk)
+            )
+            now = timezone.now()
+            for other in pending_applications:
+                other.status = 'rejected'
+                other.decided_at = now
+                other.save(update_fields=['status', 'decided_at', 'updated_at'])
+            locked_item.status = 'reserved'
+            locked_item.save(update_fields=['status', 'updated_at'])
+
+            create_notification(
+                locked_application.applicant, actor=request.user, kind='gift_application_status',
+                title='你的领取申请已被选中',
+                message=f'你已被选中领取“{locked_item.title}”，请在 24 小时内确认交易安排。',
+                order=order, item=locked_item,
+                target_url=reverse('order_detail', args=[order.id]),
+            )
+            for other in pending_applications:
+                create_notification(
+                    other.applicant, actor=request.user, kind='gift_application_status',
+                    title='领取申请结果更新',
+                    message=f'商品“{locked_item.title}”已选择其他申请人，感谢你的参与。',
+                    item=locked_item,
+                    target_url=reverse('my_gift_applications'),
+                )
+    except IntegrityError:
+        messages.info(request, '这个商品刚刚被其他操作选中了，请刷新申请队列。')
+        return redirect('manage_gift_applications', item_id=application.item_id)
+
+    messages.success(request, '已选中领取人，并生成待确认交易订单。')
+    return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def withdraw_gift_application(request, application_id):
+    application = get_object_or_404(
+        GiftApplication.objects.select_related('item'), id=application_id, applicant=request.user,
+    )
+    if request.method == 'POST' and application.status == 'pending':
+        application.status = 'withdrawn'
+        application.decided_at = timezone.now()
+        application.save(update_fields=['status', 'decided_at', 'updated_at'])
+        messages.success(request, '领取申请已撤回。')
+    return redirect('my_gift_applications')
 
 
 @login_required
