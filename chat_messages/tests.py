@@ -5,7 +5,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from listings.models import CampusLocation, Category, Item, Notification
-from .models import Comment, PrivateMessage
+from .models import Comment, ModerationEvent, PrivateMessage
 from .views import _build_conversation_data
 
 
@@ -13,6 +13,7 @@ class MessageNotificationTests(TestCase):
     def setUp(self):
         self.seller = User.objects.create_user(username='seller', password='safe-password-123')
         self.buyer = User.objects.create_user(username='buyer', password='safe-password-123')
+        self.staff = User.objects.create_user(username='moderator', password='safe-password-123', is_staff=True)
         category = Category.objects.create(name='生活用品')
         self.item = Item.objects.create(
             title='宿舍台灯', description='暖光台灯', price='39.00', category=category,
@@ -156,3 +157,64 @@ class UnreadSummaryTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse('login'), response.url)
+
+
+class ModerationFlowTests(TestCase):
+    def setUp(self):
+        self.seller = User.objects.create_user(username='mod-seller', password='safe-password-123')
+        self.buyer = User.objects.create_user(username='mod-buyer', password='safe-password-123')
+        self.staff = User.objects.create_user(
+            username='mod-staff', password='safe-password-123', is_staff=True,
+        )
+        category = Category.objects.create(name='审核测试')
+        self.item = Item.objects.create(
+            title='审核测试商品', description='测试商品', price='10.00', category=category,
+            condition='九成新', seller=self.seller,
+        )
+
+    def test_risky_comment_is_blocked_and_recorded(self):
+        self.client.login(username='mod-buyer', password='safe-password-123')
+        response = self.client.post(
+            reverse('add_comment', args=[self.item.id]),
+            {'content': '请加微信 13812345678 私下转账'},
+        )
+        self.assertRedirects(response, reverse('item_detail', args=[self.item.id]))
+        self.assertFalse(Comment.objects.filter(item=self.item, author=self.buyer).exists())
+        event = ModerationEvent.objects.get(author=self.buyer, channel='comment')
+        self.assertEqual(event.status, 'pending')
+        self.assertIn('微信导流', event.matched_terms)
+        self.assertIn('手机号', event.matched_terms)
+        self.assertIn('高风险交易', event.matched_terms)
+
+    def test_risky_private_message_is_blocked_before_delivery(self):
+        self.client.login(username='mod-buyer', password='safe-password-123')
+        response = self.client.post(
+            reverse('send_message', args=[self.seller.id]),
+            {'content': '打开 https://example.com 看看'},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(PrivateMessage.objects.filter(sender=self.buyer, receiver=self.seller).exists())
+        self.assertTrue(ModerationEvent.objects.filter(author=self.buyer, channel='private_message').exists())
+        self.assertContains(response, '暂未发送')
+
+    def test_staff_review_updates_event_and_notifies_author(self):
+        event = ModerationEvent.objects.create(
+            channel='comment', author=self.buyer, item=self.item,
+            content='请加微信', matched_terms='微信导流',
+        )
+        self.client.login(username='mod-staff', password='safe-password-123')
+        response = self.client.post(
+            reverse('review_moderation_event', args=[event.id]),
+            {'decision': 'confirmed'},
+        )
+        self.assertRedirects(response, reverse('moderation_queue'))
+        event.refresh_from_db()
+        self.assertEqual(event.status, 'confirmed')
+        self.assertEqual(event.reviewed_by, self.staff)
+        notice = Notification.objects.get(recipient=self.buyer, kind='moderation_update')
+        self.assertIn('确认违规', notice.title)
+
+    def test_non_staff_cannot_open_moderation_queue(self):
+        self.client.login(username='mod-buyer', password='safe-password-123')
+        response = self.client.get(reverse('moderation_queue'))
+        self.assertEqual(response.status_code, 403)

@@ -23,7 +23,7 @@ from .recommendations import get_recommendations
 from .notifications import create_notification
 from .order_workflow import OrderTransitionError, transition_order
 from .saved_searches import notify_saved_search_matches
-from chat_messages.models import PrivateMessage
+from chat_messages.models import ModerationEvent, PrivateMessage
 
 
 def _favorite_ids(request):
@@ -847,6 +847,7 @@ def operations_dashboard(request):
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
+    dashboard['pending_moderation_count'] = ModerationEvent.objects.filter(status='pending').count()
     return render(request, 'listings/operations_dashboard.html', dashboard)
 
 

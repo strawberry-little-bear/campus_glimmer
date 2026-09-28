@@ -1,6 +1,6 @@
 # messages/admin.py
 from django.contrib import admin
-from .models import Comment, PrivateMessage
+from .models import Comment, ModerationEvent, PrivateMessage
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
@@ -15,3 +15,15 @@ class PrivateMessageAdmin(admin.ModelAdmin):
     list_filter = ('created_at', 'is_read')
     search_fields = ('content', 'sender__username', 'receiver__username')
     date_hierarchy = 'created_at'
+
+@admin.register(ModerationEvent)
+class ModerationEventAdmin(admin.ModelAdmin):
+    list_display = ('channel', 'author', 'item', 'matched_terms', 'status', 'reviewed_by', 'created_at')
+    list_filter = ('channel', 'status', 'created_at', 'reviewed_at')
+    search_fields = ('content', 'matched_terms', 'author__username', 'item__title')
+    autocomplete_fields = ('author', 'item', 'reviewed_by')
+    readonly_fields = ('created_at', 'reviewed_at')
+    fieldsets = (
+        ('拦截内容', {'fields': ('channel', 'author', 'item', 'content', 'matched_terms', 'created_at')}),
+        ('复核结果', {'fields': ('status', 'reviewed_by', 'reviewed_at')}),
+    )

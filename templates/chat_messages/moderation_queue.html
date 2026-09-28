@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block title %}内容审核队列 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">社区安全与内容治理</span>
+        <h1 class="mt-2">内容审核队列</h1>
+        <p class="text-muted mb-0">自动拦截可疑留言和私信，保留可解释的命中规则，方便运营复核。</p>
+    </div>
+    <a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a>
+</div>
+
+<section class="content-card mb-4">
+    <div class="notification-insight-grid">
+        <div class="notification-insight-card is-highlighted"><span class="notification-insight-icon"><i class="bi bi-shield-exclamation"></i></span><span><small>待复核</small><strong>{{ moderation_pending_count }}</strong></span></div>
+        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-inbox"></i></span><span><small>累计拦截</small><strong>{{ moderation_total_count }}</strong></span></div>
+        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-lightning-charge"></i></span><span><small>处理方式</small><strong>人工复核</strong></span></div>
+    </div>
+    <form method="get" class="notification-filter-bar mt-3">
+        <div class="notification-search"><i class="bi bi-search"></i><input name="q" type="search" value="{{ moderation_search_query }}" placeholder="搜索内容、作者、商品或命中规则" aria-label="搜索审核记录"></div>
+        <select class="form-select form-select-sm" name="status" aria-label="审核状态">{% for value, label in moderation_status_options %}<option value="{{ value }}" {% if moderation_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <select class="form-select form-select-sm" name="channel" aria-label="内容渠道">{% for value, label in moderation_channel_options %}<option value="{{ value }}" {% if moderation_channel_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-funnel me-1"></i>筛选</button>
+    </form>
+</section>
+
+<section class="content-card">
+    <div class="notification-toolbar"><strong>审核记录</strong><span class="text-muted small">命中规则仅用于辅助判断，最终结果由运营人员确认。</span></div>
+    <div class="list-group list-group-flush">
+        {% for event in moderation_events %}
+        <article class="list-group-item px-0 py-4">
+            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                <div class="d-flex align-items-center gap-2"><span class="badge {% if event.status == 'pending' %}text-bg-warning{% elif event.status == 'confirmed' %}text-bg-danger{% else %}text-bg-success{% endif %}">{{ event.get_status_display }}</span><span class="badge text-bg-light">{{ event.get_channel_display }}</span><small class="text-muted">{{ event.created_at|date:'Y-m-d H:i' }}</small></div>
+                {% if event.author %}<span class="small text-muted">作者：{{ event.author.username }}</span>{% endif %}
+            </div>
+            <div class="p-3 rounded-3 bg-light mb-2"><p class="mb-2" style="white-space: pre-wrap; word-break: break-word;">{{ event.content }}</p><small class="text-danger"><i class="bi bi-fingerprint me-1"></i>命中规则：{{ event.matched_terms }}</small></div>
+            {% if event.item %}<div class="small text-muted mb-3">关联商品：<a href="{% url 'item_detail' event.item.id %}">{{ event.item.title }}</a></div>{% endif %}
+            {% if event.status == 'pending' %}
+            <div class="d-flex flex-wrap gap-2">
+                <form method="post" action="{% url 'review_moderation_event' event.id %}">{% csrf_token %}<input type="hidden" name="decision" value="confirmed"><input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-x-octagon me-1"></i>确认违规</button></form>
+                <form method="post" action="{% url 'review_moderation_event' event.id %}">{% csrf_token %}<input type="hidden" name="decision" value="dismissed"><input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn btn-sm btn-outline-success" type="submit"><i class="bi bi-check2-circle me-1"></i>误判放行</button></form>
+            </div>
+            {% else %}<small class="text-muted">复核人：{{ event.reviewed_by.username|default:'—' }} · {{ event.reviewed_at|date:'Y-m-d H:i' }}</small>{% endif %}
+        </article>
+        {% empty %}<div class="text-center py-5 text-muted"><i class="bi bi-shield-check fs-2 d-block mb-2"></i>当前筛选下没有审核记录。</div>{% endfor %}
+    </div>
+</section>
+{% endblock %}

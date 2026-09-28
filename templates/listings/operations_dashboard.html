@@ -12,7 +12,7 @@
     <div class="d-flex flex-wrap align-items-center gap-2">
         <a href="{% url 'operations_dashboard_export' %}?days={{ period_days }}" class="btn btn-outline-success btn-sm"><i class="bi bi-download me-1"></i>导出 CSV</a>
         <a href="{% url 'search_insights' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-search-heart me-1"></i>搜索洞察</a>
-        <a href="{% url 'report_list' %}" class="btn btn-outline-warning btn-sm"><i class="bi bi-flag me-1"></i>商品举报{% if metrics.pending_reports %}（{{ metrics.pending_reports }}）{% endif %}</a><a href="{% url 'dispute_list' %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-shield-exclamation me-1"></i>交易争议{% if pending_dispute_count %}（{{ pending_dispute_count }}）{% endif %}</a>
+        <a href="{% url 'report_list' %}" class="btn btn-outline-warning btn-sm"><i class="bi bi-flag me-1"></i>商品举报{% if metrics.pending_reports %}（{{ metrics.pending_reports }}）{% endif %}</a><a href="{% url 'moderation_queue' %}" class="btn btn-outline-dark btn-sm"><i class="bi bi-shield-check me-1"></i>内容审核{% if pending_moderation_count %}（{{ pending_moderation_count }}）{% endif %}</a><a href="{% url 'dispute_list' %}" class="btn btn-outline-danger btn-sm"><i class="bi bi-shield-exclamation me-1"></i>交易争议{% if pending_dispute_count %}（{{ pending_dispute_count }}）{% endif %}</a>
         <form method="get" class="operations-period-form">
         <label for="operations-days" class="small text-muted">统计周期</label>
         <select id="operations-days" name="days" class="form-select form-select-sm" onchange="this.form.submit()">

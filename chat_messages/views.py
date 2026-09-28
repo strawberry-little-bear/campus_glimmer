@@ -1,12 +1,17 @@
 # chat_messages/views.py (原messages/views.py)
 from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.contrib import messages as django_messages
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models.functions import Coalesce
 from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
-from .models import Comment, PrivateMessage
+from .models import Comment, ModerationEvent, PrivateMessage
+from .moderation import moderate_submission
 from .forms import CommentForm, PrivateMessageForm
 from listings.models import Item
 from listings.notifications import create_notification
@@ -14,10 +19,16 @@ from listings.notifications import create_notification
 @login_required
 def add_comment(request, item_id):
     item = get_object_or_404(Item, id=item_id)
-    
+
     if request.method == 'POST':
         form = CommentForm(request.POST)
         if form.is_valid():
+            moderation_event = moderate_submission(
+                form.cleaned_data['content'], author=request.user, channel='comment', item=item,
+            )
+            if moderation_event:
+                django_messages.warning(request, '这条留言包含需要复核的内容，暂未发布。请不要在站内交换外部联系方式或进行私下转账。')
+                return redirect('item_detail', item_id=item.id)
             comment = form.save(commit=False)
             comment.item = item
             comment.author = request.user
@@ -33,7 +44,7 @@ def add_comment(request, item_id):
             return redirect('item_detail', item_id=item.id)
     else:
         form = CommentForm()
-        
+
     return redirect('item_detail', item_id=item.id)
 
 def _build_conversation_data(user, conversation_users):
@@ -158,29 +169,36 @@ def mark_all_messages_read(request):
 def send_message(request, receiver_id, item_id=None):
     receiver = get_object_or_404(User, id=receiver_id)
     item = get_object_or_404(Item, id=item_id) if item_id else None
-    
+
     if request.method == 'POST':
         form = PrivateMessageForm(request.POST)
         if form.is_valid():
-            message = form.save(commit=False)
-            message.sender = request.user
-            message.receiver = receiver
-            message.item = item
-            message.save()
-            create_notification(
-                receiver, actor=request.user, kind='message_received',
-                title='收到新的私信',
-                message=f'{request.user.username}给你发来了一条新消息。',
-                item=item, target_url=reverse('conversation', args=[request.user.id]),
+            moderation_event = moderate_submission(
+                form.cleaned_data['content'], author=request.user,
+                channel='private_message', item=item,
             )
-            django_messages.success(request, '消息已发送！')
-            
-            if item:
-                return redirect('item_detail', item_id=item.id)
-            return redirect('conversation', user_id=receiver.id)
+            if moderation_event:
+                form.add_error('content', '消息包含需要复核的内容，暂未发送。请修改后再试。')
+            else:
+                message = form.save(commit=False)
+                message.sender = request.user
+                message.receiver = receiver
+                message.item = item
+                message.save()
+                create_notification(
+                    receiver, actor=request.user, kind='message_received',
+                    title='收到新的私信',
+                    message=f'{request.user.username}给你发来了一条新消息。',
+                    item=item, target_url=reverse('conversation', args=[request.user.id]),
+                )
+                django_messages.success(request, '消息已发送！')
+
+                if item:
+                    return redirect('item_detail', item_id=item.id)
+                return redirect('conversation', user_id=receiver.id)
     else:
         form = PrivateMessageForm()
-        
+
     context = {
         'form': form,
         'receiver': receiver,
@@ -192,38 +210,45 @@ def send_message(request, receiver_id, item_id=None):
 @login_required
 def conversation(request, user_id):
     other_user = get_object_or_404(User, id=user_id)
-    
+
     # 获取与特定用户的所有对话
     messages_list = PrivateMessage.objects.filter(
         (Q(sender=request.user) & Q(receiver=other_user)) |
         (Q(sender=other_user) & Q(receiver=request.user))
     ).order_by('created_at')
-    
+
     # 标记收到的消息为已读
     unread_messages = messages_list.filter(receiver=request.user, is_read=False)
     for msg in unread_messages:
         msg.is_read = True
         msg.save()
-        
+
     # 发送新消息的表单
     if request.method == 'POST':
         form = PrivateMessageForm(request.POST)
         if form.is_valid():
-            message = form.save(commit=False)
-            message.sender = request.user
-            message.receiver = other_user
-            message.save()
-            create_notification(
-                other_user, actor=request.user, kind='message_received',
-                title='收到新的私信',
-                message=f'{request.user.username}给你发来了一条新消息。',
-                target_url=reverse('conversation', args=[request.user.id]),
+            moderation_event = moderate_submission(
+                form.cleaned_data['content'], author=request.user,
+                channel='private_message',
             )
-            django_messages.success(request, '消息已发送！')
-            return redirect('conversation', user_id=other_user.id)
+            if moderation_event:
+                form.add_error('content', '消息包含需要复核的内容，暂未发送。请修改后再试。')
+            else:
+                message = form.save(commit=False)
+                message.sender = request.user
+                message.receiver = other_user
+                message.save()
+                create_notification(
+                    other_user, actor=request.user, kind='message_received',
+                    title='收到新的私信',
+                    message=f'{request.user.username}给你发来了一条新消息。',
+                    target_url=reverse('conversation', args=[request.user.id]),
+                )
+                django_messages.success(request, '消息已发送！')
+                return redirect('conversation', user_id=other_user.id)
     else:
         form = PrivateMessageForm()
-        
+
     context = {
         'other_user': other_user,
         'messages_list': messages_list,
@@ -231,3 +256,90 @@ def conversation(request, user_id):
     }
     # 修改这里的模板路径
     return render(request, 'chat_messages/conversation.html', context)
+
+@login_required
+def moderation_queue(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+
+    status_filter = request.GET.get('status', 'pending').strip()
+    if status_filter not in {'all', 'pending', 'confirmed', 'dismissed'}:
+        status_filter = 'pending'
+    channel_filter = request.GET.get('channel', 'all').strip()
+    if channel_filter not in {'all', 'comment', 'private_message'}:
+        channel_filter = 'all'
+    search_query = request.GET.get('q', '').strip()[:120]
+
+    base_events = ModerationEvent.objects.all()
+    events = base_events.select_related('author', 'item', 'reviewed_by')
+    if status_filter != 'all':
+        events = events.filter(status=status_filter)
+    if channel_filter != 'all':
+        events = events.filter(channel=channel_filter)
+    if search_query:
+        events = events.filter(
+            Q(content__icontains=search_query)
+            | Q(matched_terms__icontains=search_query)
+            | Q(author__username__icontains=search_query)
+            | Q(item__title__icontains=search_query)
+        )
+
+    return render(request, 'chat_messages/moderation_queue.html', {
+        'moderation_events': events,
+        'moderation_pending_count': base_events.filter(status='pending').count(),
+        'moderation_total_count': base_events.count(),
+        'moderation_status_filter': status_filter,
+        'moderation_channel_filter': channel_filter,
+        'moderation_search_query': search_query,
+        'moderation_status_options': (
+            ('pending', '待复核'), ('confirmed', '确认违规'),
+            ('dismissed', '误判放行'), ('all', '全部记录'),
+        ),
+        'moderation_channel_options': (
+            ('all', '全部渠道'), ('comment', '商品留言'), ('private_message', '私信'),
+        ),
+    })
+
+
+@login_required
+def review_moderation_event(request, event_id):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return redirect('moderation_queue')
+
+    next_url = request.POST.get('next', '').strip()
+    if not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+    ):
+        next_url = ''
+    with transaction.atomic():
+        event = get_object_or_404(
+            ModerationEvent.objects.select_for_update().select_related('author', 'item'),
+            id=event_id,
+        )
+        decision = request.POST.get('decision', '').strip()
+        if event.status != 'pending':
+            django_messages.info(request, '这条审核记录已经处理过了。')
+        elif decision not in {'confirmed', 'dismissed'}:
+            django_messages.error(request, '审核结果无效，请重新选择。')
+        else:
+            event.status = decision
+            event.reviewed_by = request.user
+            event.reviewed_at = timezone.now()
+            event.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+            if event.author:
+                title = '内容审核已确认违规' if decision == 'confirmed' else '内容审核完成，内容已放行'
+                message = (
+                    '你提交的一条留言或私信因命中社区安全规则，已确认违规。'
+                    if decision == 'confirmed' else
+                    '你提交的一条留言或私信经复核后未发现违规，已记录为误判放行。'
+                )
+                create_notification(
+                    event.author, actor=request.user, kind='moderation_update',
+                    title=title, message=message,
+                    item=event.item, target_url=reverse('notification_list'),
+                )
+            django_messages.success(request, '审核结果已保存，并已通知内容作者。')
+
+    return redirect(next_url or 'moderation_queue')
