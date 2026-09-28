@@ -1,13 +1,13 @@
 from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
-from django.db.models import Avg, Count, Max, Q
+from django.db.models import Avg, Count, Max, Q, Sum
 from django.db.models.functions import ExtractHour, ExtractIsoWeekDay, TruncDate
 from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Order, OrderEvent, Report, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, Favorite, Item, Notification, Order, OrderEvent, Report, SearchQuery
 
 
 PERIOD_CHOICES = (
@@ -572,6 +572,67 @@ def _build_order_health(order_period, now):
     }
 
 
+def _build_notification_insights(notification_period, dates):
+    """Measure notification reach, unread backlog, and deduplication effectiveness."""
+    aggregate = notification_period.aggregate(
+        row_count=Count('id'),
+        event_count=Sum('occurrence_count'),
+        unread_count=Count('id', filter=Q(is_read=False)),
+    )
+    row_count = aggregate['row_count'] or 0
+    event_count = aggregate['event_count'] or 0
+    unread_count = aggregate['unread_count'] or 0
+    compressed_event_count = max(event_count - row_count, 0)
+
+    kind_labels = dict(Notification.KIND_CHOICES)
+    kind_rows = []
+    for row in notification_period.values('kind').annotate(
+        row_count=Count('id'),
+        event_count=Sum('occurrence_count'),
+        unread_count=Count('id', filter=Q(is_read=False)),
+    ).order_by('-event_count', 'kind'):
+        kind_event_count = row['event_count'] or 0
+        kind_row_count = row['row_count'] or 0
+        kind_rows.append({
+            'kind': row['kind'],
+            'label': kind_labels.get(row['kind'], row['kind']),
+            'row_count': kind_row_count,
+            'event_count': kind_event_count,
+            'unread_count': row['unread_count'] or 0,
+            'compression_rate': round(
+                max(kind_event_count - kind_row_count, 0) / kind_event_count * 100, 1,
+            ) if kind_event_count else 0,
+        })
+
+    daily_rows = notification_period.annotate(day=TruncDate('created_at')).values('day').annotate(
+        row_count=Count('id'),
+        event_count=Sum('occurrence_count'),
+        unread_count=Count('id', filter=Q(is_read=False)),
+    )
+    daily_map = {row['day']: row for row in daily_rows}
+    trend = []
+    for day in dates:
+        row = daily_map.get(day, {})
+        trend.append({
+            'date': day,
+            'row_count': row.get('row_count', 0),
+            'event_count': row.get('event_count', 0) or 0,
+            'unread_count': row.get('unread_count', 0),
+        })
+
+    return {
+        'notification_rows': row_count,
+        'notification_events': event_count,
+        'unread_notifications': unread_count,
+        'compressed_events': compressed_event_count,
+        'compression_rate': round(compressed_event_count / event_count * 100, 1) if event_count else 0,
+        'unread_rate': round(unread_count / row_count * 100, 1) if row_count else 0,
+        'kind_rows': kind_rows,
+        'trend': trend,
+        'trend_max': max((point['event_count'] for point in trend), default=1) or 1,
+        'has_data': bool(row_count),
+    }
+
 def build_operations_dashboard(days=30):
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
@@ -589,6 +650,7 @@ def build_operations_dashboard(days=30):
     report_period = Report.objects.filter(created_at__gte=start, created_at__lte=now)
     view_period = BrowsingHistory.objects.filter(last_viewed_at__gte=start, last_viewed_at__lte=now)
     favorite_period = Favorite.objects.filter(created_at__gte=start, created_at__lte=now)
+    notification_period = Notification.objects.filter(created_at__gte=start, created_at__lte=now)
     previous_start = start - timedelta(days=days)
     previous_item_period = Item.objects.filter(created_at__gte=previous_start, created_at__lt=start)
     previous_order_period = Order.objects.filter(created_at__gte=previous_start, created_at__lt=start)
@@ -605,6 +667,7 @@ def build_operations_dashboard(days=30):
     order_health = _build_order_health(order_period, now)
     detail_view_count = view_period.count()
     favorite_count = favorite_period.count()
+    notification_insights = _build_notification_insights(notification_period, dates)
 
     def conversion_rate(current, previous):
         return round(current / previous * 100, 1) if previous else 0
@@ -781,6 +844,10 @@ def build_operations_dashboard(days=30):
         'retention_rate': user_retention['rate'],
         'new_reports': report_period.count(),
         'pending_reports': Report.objects.filter(status__in=['pending', 'reviewing']).count(),
+        'notification_rows': notification_insights['notification_rows'],
+        'notification_events': notification_insights['notification_events'],
+        'unread_notifications': notification_insights['unread_notifications'],
+        'notification_compression_rate': notification_insights['compression_rate'],
     }
     operational_alerts = build_operational_alerts(metrics, period_comparisons)
 
@@ -807,4 +874,5 @@ def build_operations_dashboard(days=30):
         'category_stats': category_stats,
         'location_stats': location_stats,
         'order_statuses': order_statuses,
+        'notification_insights': notification_insights,
     }

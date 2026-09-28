@@ -566,6 +566,42 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '用户行为转化漏斗')
         self.assertContains(response, '图书馆东门')
 
+    def test_operations_dashboard_reports_notification_deduplication(self):
+        Notification.objects.create(
+            recipient=self.user,
+            kind='message_received',
+            title='收到私信',
+            message='有人给你发来消息。',
+            occurrence_count=3,
+            is_read=False,
+        )
+        Notification.objects.create(
+            recipient=self.user,
+            kind='comment_received',
+            title='收到留言',
+            message='你的商品收到新的留言。',
+            occurrence_count=1,
+            is_read=True,
+        )
+
+        dashboard = build_operations_dashboard(30)
+        insights = dashboard['notification_insights']
+        self.assertEqual(insights['notification_rows'], 2)
+        self.assertEqual(insights['notification_events'], 4)
+        self.assertEqual(insights['compressed_events'], 2)
+        self.assertEqual(insights['compression_rate'], 50.0)
+        self.assertEqual(insights['unread_notifications'], 1)
+        self.assertEqual(insights['unread_rate'], 50.0)
+        self.assertEqual(insights['kind_rows'][0]['label'], '收到新私信')
+        self.assertEqual(insights['kind_rows'][0]['event_count'], 3)
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'))
+        self.assertContains(response, '通知触达与聚合')
+        export = self.client.get(reverse('operations_dashboard_export'))
+        self.assertContains(export, '通知聚合压缩率')
     def test_operations_dashboard_reports_order_health_signals(self):
         overdue_item = Item.objects.create(
             title='待确认商品', description='测试超时预约', price='20.00',

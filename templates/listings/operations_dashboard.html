@@ -83,6 +83,32 @@
 
 <section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Notification intelligence</span><h2>通知触达与聚合</h2></div>
+        <span class="ops-panel-hint">衡量通知是否被压缩、触达与处理</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-bell me-1"></i>将通知记录数与聚合后的触达事件数分开统计，帮助运营判断通知去重是否有效，以及未读提醒是否正在形成积压。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>触达事件</span><strong>{{ notification_insights.notification_events }}</strong><small>用户实际应收到的通知次数</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>通知记录</span><strong>{{ notification_insights.notification_rows }}</strong><small>聚合后保留的通知卡片</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>聚合压缩率</span><strong>{{ notification_insights.compression_rate }}%</strong><small>被合并掉的重复触达</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未读率</span><strong>{{ notification_insights.unread_rate }}%</strong><small>仍待用户处理的通知记录</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>通知类型</th><th>触达事件</th><th>记录</th><th>未读</th><th>压缩率</th></tr></thead><tbody>
+                {% for row in notification_insights.kind_rows %}<tr><td><strong>{{ row.label }}</strong></td><td>{{ row.event_count }}</td><td>{{ row.row_count }}</td><td>{% if row.unread_count %}<span class="ops-warning">{{ row.unread_count }}</span>{% else %}—{% endif %}</td><td>{{ row.compression_rate }}%</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">当前周期还没有通知记录。</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+        <div class="col-lg-5">
+            <div class="activity-chart" aria-label="通知触达趋势">
+                {% for point in notification_insights.trend %}{% if point.event_count %}<div class="activity-row"><time datetime="{{ point.date|date:'Y-m-d' }}">{{ point.date|date:'m-d' }}</time><div class="activity-bars"><span class="activity-bar activity-bar-searches" style="width: {% widthratio point.event_count notification_insights.trend_max 100 %}%" title="触达 {{ point.event_count }}"></span></div><strong>{{ point.event_count }}</strong></div>{% endif %}{% empty %}<p class="empty-inline mb-0">当前周期还没有触达趋势。</p>{% endfor %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Period comparison</span><h2>周期对比</h2></div>
         <span class="ops-panel-hint">对比上一段同长度周期</span>
     </div>

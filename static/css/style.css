@@ -668,3 +668,6 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 991px) {
     .search-suggest-menu { top: calc(100% + 5px); }
 }
+.ops-mini-stat { height: 100%; padding: 14px 15px; border: 1px solid #e5eee8; border-radius: 13px; background: #fbfdfb; }
+.ops-mini-stat span, .ops-mini-stat small { display: block; color: #74857d; font-size: .76rem; }
+.ops-mini-stat strong { display: block; margin: 8px 0 4px; color: #234d3c; font-size: 1.65rem; line-height: 1; letter-spacing: -.04em; }

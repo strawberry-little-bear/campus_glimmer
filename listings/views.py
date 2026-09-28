@@ -892,10 +892,20 @@ def operations_dashboard_export(request):
         ('retention_rate', '上一周期新用户回访率（%）'),
         ('new_reports', '新增举报'),
         ('pending_reports', '待处理举报'),
+        ('notification_events', '通知触达事件数'),
+        ('notification_rows', '通知记录数'),
+        ('unread_notifications', '周期结束未读通知'),
+        ('notification_compression_rate', '通知聚合压缩率（%）'),
     )
     for key, label in metric_labels:
         value = metrics[key]
         writer.writerow([label, '' if value is None else value])
+    writer.writerow([])
+    writer.writerow(['通知类型', '触达事件', '通知记录', '未读记录', '压缩率（%）'])
+    for row in dashboard['notification_insights']['kind_rows']:
+        writer.writerow([row['label'], row['event_count'], row['row_count'], row['unread_count'], row['compression_rate']])
+
+    writer.writerow([])
     writer.writerow([
         '待处理交易争议',
         OrderDispute.objects.filter(status__in={'open', 'reviewing'}).count(),
