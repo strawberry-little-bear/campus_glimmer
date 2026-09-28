@@ -1015,6 +1015,21 @@ def search_insights_export(request):
         writer.writerow([row['query'], row['search_count'], row['zero_result_count'], row['zero_result_rate'], row['message']])
 
     writer.writerow([])
+    writer.writerow(['分类供给缺口', '分类', '搜索次数', '无结果次数', '无结果占比（%）', '当前在售', '缺口优先级'])
+    for row in dashboard['facet_supply_gaps']['categories']:
+        writer.writerow([
+            '分类', row['category__name'], row['search_count'], row['zero_result_count'],
+            row['zero_result_rate'], row['available_count'], row['priority_score'],
+        ])
+    writer.writerow([])
+    writer.writerow(['地点供给缺口', '地点', '搜索次数', '无结果次数', '无结果占比（%）', '当前在售', '缺口优先级'])
+    for row in dashboard['facet_supply_gaps']['locations']:
+        writer.writerow([
+            '地点', row['location__name'], row['search_count'], row['zero_result_count'],
+            row['zero_result_rate'], row['available_count'], row['priority_score'],
+        ])
+
+    writer.writerow([])
     writer.writerow(['搜索时段趋势', '时段', '搜索次数', '无结果次数', '无结果占比（%）'])
     for row in dashboard['search_rhythm']['hourly']:
         writer.writerow([row['label'], row['hour'], row['count'], row['zero_result_count'], row['zero_result_rate']])

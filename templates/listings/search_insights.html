@@ -93,6 +93,27 @@
 </div>
 
 <section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Facet supply gaps</span><h2>分类与地点缺口</h2></div><span class="ops-panel-hint">按缺口优先级排序</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-diagram-3 me-1"></i>将带有分类或地点筛选的搜索，与当前在售库存交叉比对，帮助运营判断应该补什么、在哪里补。</p>
+    {% if facet_supply_gaps.gap_facets %}
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <h3 class="h6 text-muted mb-2"><i class="bi bi-tags me-1"></i>分类需求</h3>
+            <div class="search-gap-list">
+                {% for row in facet_supply_gaps.categories %}<a class="search-gap-row" href="{% url 'item_list_by_category' row.category_id %}"><span><strong>{{ row.category__name }}</strong><small>{{ row.search_count }} 次搜索 · 当前在售 {{ row.available_count }} 件 · 无结果 {{ row.zero_result_rate }}%</small></span><b>{{ row.priority_score }}<em>优先级</em></b></a>{% empty %}<div class="empty-inline">暂无带分类筛选的搜索。</div>{% endfor %}
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 text-muted mb-2"><i class="bi bi-geo-alt me-1"></i>地点需求</h3>
+            <div class="search-gap-list">
+                {% for row in facet_supply_gaps.locations %}<a class="search-gap-row" href="{% url 'item_list' %}?location={{ row.location_id }}"><span><strong>{{ row.location__name }}</strong><small>{{ row.search_count }} 次搜索 · 当前在售 {{ row.available_count }} 件 · 无结果 {{ row.zero_result_rate }}%</small></span><b>{{ row.priority_score }}<em>优先级</em></b></a>{% empty %}<div class="empty-inline">暂无带地点筛选的搜索。</div>{% endfor %}
+            </div>
+        </div>
+    </div>
+    {% else %}<div class="empty-inline">当前周期还没有发现分类或地点维度的明显供给缺口。</div>{% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Action queue</span><h2>运营建议</h2></div><span class="ops-panel-hint">由搜索行为自动生成</span></div>
     {% if insights %}<div class="search-insight-grid">{% for insight in insights %}<article class="search-insight-card"><div class="search-insight-icon"><i class="bi bi-lightbulb"></i></div><div><strong>{{ insight.query }}</strong><p>{{ insight.message }}</p><a href="{% url 'item_list' %}?q={{ insight.query|urlencode }}">查看相关商品 <i class="bi bi-arrow-right"></i></a></div></article>{% endfor %}</div>{% else %}<div class="empty-inline">暂无需要跟进的搜索需求。可以扩大统计周期，或等待新的搜索记录积累。</div>{% endif %}
 </section>

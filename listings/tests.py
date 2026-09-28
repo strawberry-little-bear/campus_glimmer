@@ -904,6 +904,35 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '台灯')
         self.assertContains(response, '供给缺口')
 
+    def test_search_insights_scores_category_and_location_supply_gaps(self):
+        SearchQuery.objects.create(
+            user=self.other_user, query='投影仪', category=self.category,
+            location=self.location, result_count=0,
+        )
+        SearchQuery.objects.create(
+            user=self.other_user, query='投影仪', category=self.category,
+            location=self.location, result_count=0,
+        )
+
+        dashboard = build_search_insights(30)
+        facet_gaps = dashboard['facet_supply_gaps']
+        self.assertEqual(facet_gaps['total_facets'], 2)
+        self.assertEqual(facet_gaps['gap_facets'], 2)
+        self.assertEqual(facet_gaps['categories'][0]['category__name'], self.category.name)
+        self.assertEqual(facet_gaps['categories'][0]['zero_result_rate'], 100.0)
+        self.assertEqual(facet_gaps['categories'][0]['available_count'], 1)
+        self.assertGreater(facet_gaps['categories'][0]['priority_score'], 0)
+        self.assertEqual(facet_gaps['locations'][0]['location__name'], self.location.name)
+
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('search_insights'))
+        self.assertContains(response, '分类与地点缺口')
+        self.assertContains(response, self.category.name)
+        self.assertContains(response, self.location.name)
+
+
     def test_search_insights_builds_hourly_and_weekday_rhythm(self):
         yesterday = timezone.localdate() - timedelta(days=1)
         records = []

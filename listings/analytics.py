@@ -155,6 +155,72 @@ def _build_search_period_comparison(current_period, previous_period):
     }
 
 
+
+def _build_facet_supply_gaps(search_period):
+    """Turn filtered search demand into category/location replenishment signals."""
+    def enrich(rows, available_counts, kind):
+        enriched = []
+        for row in rows:
+            search_count = row['search_count']
+            zero_result_count = row['zero_result_count']
+            zero_result_rate = round(zero_result_count / search_count * 100, 1) if search_count else 0
+            available_count = available_counts.get(row[f'{kind}_id'], 0)
+            # A higher score means repeated failed demand with little live supply.
+            priority_score = round(
+                zero_result_count * (1 + zero_result_rate / 100) / (available_count + 1), 2
+            )
+            enriched.append({
+                **row,
+                'zero_result_rate': zero_result_rate,
+                'available_count': available_count,
+                'priority_score': priority_score,
+                'has_gap': bool(zero_result_count),
+            })
+        return sorted(
+            (row for row in enriched if row['has_gap']),
+            key=lambda row: (-row['priority_score'], -row['zero_result_count'], row[f'{kind}__name']),
+        )[:8]
+
+    category_rows = list(
+        search_period.filter(category__isnull=False)
+        .values('category_id', 'category__name')
+        .annotate(
+            search_count=Count('id'),
+            zero_result_count=Count('id', filter=Q(result_count=0)),
+            average_results=Avg('result_count'),
+        )
+    )
+    location_rows = list(
+        search_period.filter(location__isnull=False)
+        .values('location_id', 'location__name')
+        .annotate(
+            search_count=Count('id'),
+            zero_result_count=Count('id', filter=Q(result_count=0)),
+            average_results=Avg('result_count'),
+        )
+    )
+    category_available = dict(
+        Item.objects.filter(status='available')
+        .values('category_id')
+        .annotate(count=Count('id'))
+        .values_list('category_id', 'count')
+    )
+    location_available = dict(
+        Item.objects.filter(status='available', location__isnull=False)
+        .values('location_id')
+        .annotate(count=Count('id'))
+        .values_list('location_id', 'count')
+    )
+    categories = enrich(category_rows, category_available, 'category')
+    locations = enrich(location_rows, location_available, 'location')
+    return {
+        'categories': categories,
+        'locations': locations,
+        'total_facets': len(categories) + len(locations),
+        'gap_facets': sum(row['has_gap'] for row in categories + locations),
+    }
+
+
 def build_search_insights(days=30, query=''):
     """Build an actionable view of search demand for staff operations work."""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
@@ -197,6 +263,7 @@ def build_search_insights(days=30, query=''):
         (row for row in term_rows if row['zero_result_count']),
         key=lambda row: (-row['zero_result_count'], -row['search_count'], row['query']),
     )[:12]
+    facet_supply_gaps = _build_facet_supply_gaps(search_period)
     insights = []
     for row in gap_terms[:6]:
         insights.append({
@@ -229,6 +296,7 @@ def build_search_insights(days=30, query=''):
         },
         'term_rows': term_rows[:30],
         'gap_terms': gap_terms,
+        'facet_supply_gaps': facet_supply_gaps,
         'insights': insights,
     }
 
