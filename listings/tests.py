@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -1501,3 +1501,57 @@ class ActivityCenterTests(TestCase):
         response = self.client.get(reverse('activity_center'))
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse('login'), response.url)
+
+
+
+class DemandPostTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='demand-alice', password='safe-password-123')
+        self.other_user = User.objects.create_user(username='demand-bob', password='safe-password-123')
+        self.category = Category.objects.create(name='求购数码', description='电子设备')
+        self.location = CampusLocation.objects.create(name='求购图书馆东门')
+        Item.objects.create(
+            title='便携键盘', description='适合宿舍使用', price='99.00',
+            category=self.category, location=self.location, condition='9成新', seller=self.user,
+        )
+
+    def test_user_can_publish_filter_and_close_demand_post(self):
+        self.client.login(username='demand-bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('new_demand'),
+            {
+                'title': '求一台便携键盘',
+                'description': '希望适合宿舍使用，成色良好。',
+                'category': self.category.id,
+                'location': self.location.id,
+                'min_price': '50',
+                'max_price': '120',
+                'expires_at': (timezone.now() + timedelta(days=10)).strftime('%Y-%m-%dT%H:%M'),
+            },
+        )
+        demand = DemandPost.objects.get(requester=self.other_user)
+        self.assertRedirects(response, reverse('demand_detail', args=[demand.id]))
+        response = self.client.get(reverse('demand_list'), {'q': '便携键盘', 'location': self.location.id})
+        self.assertContains(response, '求一台便携键盘')
+        response = self.client.get(reverse('demand_detail', args=[demand.id]))
+        self.assertContains(response, '可能符合需求的商品')
+        self.client.post(reverse('close_demand', args=[demand.id]), {'status': 'fulfilled'})
+        demand.refresh_from_db()
+        self.assertEqual(demand.status, 'fulfilled')
+
+    def test_demand_form_rejects_invalid_budget(self):
+        self.client.login(username='demand-bob', password='safe-password-123')
+        response = self.client.post(
+            reverse('new_demand'),
+            {
+                'title': '预算校验',
+                'description': '测试预算范围。',
+                'category': self.category.id,
+                'min_price': '200',
+                'max_price': '100',
+                'expires_at': (timezone.now() + timedelta(days=10)).strftime('%Y-%m-%dT%H:%M'),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '最高预算不能低于最低预算')
+        self.assertFalse(DemandPost.objects.filter(title='预算校验').exists())

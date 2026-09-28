@@ -28,8 +28,10 @@
                 <ul class="navbar-nav me-auto ms-lg-4 gap-lg-2">
                     <li class="nav-item"><a class="nav-link" href="{% url 'home' %}"><i class="bi bi-house-door me-1"></i>首页</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'item_list' %}"><i class="bi bi-grid me-1"></i>发现好物</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'demand_list' %}"><i class="bi bi-bullseye me-1"></i>求购广场</a></li>
                     {% if user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'new_item' %}"><i class="bi bi-plus-circle me-1"></i>发布闲置</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'new_demand' %}"><i class="bi bi-megaphone me-1"></i>发布求购</a></li>
                     {% if user.is_staff %}<li class="nav-item"><a class="nav-link" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>运营看板</a></li><li class="nav-item"><a class="nav-link" href="{% url 'moderation_queue' %}"><i class="bi bi-shield-check me-1"></i>内容审核</a></li>{% endif %}
                     {% endif %}
                 </ul>
@@ -50,7 +52,7 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm">
                             <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="bi bi-person me-2"></i>个人资料</a></li><li><a class="dropdown-item" href="{% url 'notification_preferences' %}"><i class="bi bi-sliders2 me-2"></i>通知偏好</a></li>
-                            <li><a class="dropdown-item" href="{% url 'my_items' %}"><i class="bi bi-box-seam me-2"></i>我的商品</a></li><li><a class="dropdown-item" href="{% url 'my_orders' %}"><i class="bi bi-receipt me-2"></i>我的交易</a></li><li><a class="dropdown-item" href="{% url 'browsing_history' %}"><i class="bi bi-clock-history me-2"></i>最近浏览</a></li>
+                            <li><a class="dropdown-item" href="{% url 'my_items' %}"><i class="bi bi-box-seam me-2"></i>我的商品</a></li><li><a class="dropdown-item" href="{% url 'my_demands' %}"><i class="bi bi-bullseye me-2"></i>我的求购</a></li><li><a class="dropdown-item" href="{% url 'my_orders' %}"><i class="bi bi-receipt me-2"></i>我的交易</a></li><li><a class="dropdown-item" href="{% url 'browsing_history' %}"><i class="bi bi-clock-history me-2"></i>最近浏览</a></li>
                             <li><a class="dropdown-item" href="{% url 'favorite_list' %}"><i class="bi bi-heart me-2"></i>我的心愿单</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-danger" href="{% url 'logout' %}"><i class="bi bi-box-arrow-right me-2"></i>退出登录</a></li>

@@ -629,3 +629,48 @@ class SavedSearch(models.Model):
 
     def __str__(self):
         return f'{self.user.username} · {self.name}'
+
+class DemandPost(models.Model):
+    """A reverse listing where a student describes what they are looking for."""
+
+    STATUS_CHOICES = (
+        ('active', '寻找中'),
+        ('fulfilled', '已找到'),
+        ('closed', '已关闭'),
+        ('expired', '已过期'),
+    )
+
+    requester = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='demand_posts', verbose_name='发布者',
+    )
+    title = models.CharField('求购标题', max_length=160)
+    description = models.TextField('需求描述')
+    category = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='demand_posts', verbose_name='分类',
+    )
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='demand_posts', verbose_name='期望地点',
+    )
+    min_price = models.DecimalField('最低预算', max_digits=10, decimal_places=2, null=True, blank=True)
+    max_price = models.DecimalField('最高预算', max_digits=10, decimal_places=2, null=True, blank=True)
+    expires_at = models.DateTimeField('需求截止时间', null=True, blank=True)
+    status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='active')
+    view_count = models.PositiveIntegerField('浏览次数', default=0)
+    created_at = models.DateTimeField('发布时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '求购信息'
+        verbose_name_plural = '求购信息'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['category', 'status']),
+            models.Index(fields=['location', 'status']),
+            models.Index(fields=['expires_at', 'status']),
+        ]
+
+    def __str__(self):
+        return self.title

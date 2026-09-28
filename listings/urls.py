@@ -3,6 +3,12 @@ from . import views
 
 urlpatterns = [
     path('', views.item_list, name='item_list'),
+    path('demands/', views.demand_list, name='demand_list'),
+    path('demands/mine/', views.demand_list, {'mine': '1'}, name='my_demands'),
+    path('demand/new/', views.new_demand, name='new_demand'),
+    path('demand/<int:demand_id>/', views.demand_detail, name='demand_detail'),
+    path('demand/<int:demand_id>/edit/', views.edit_demand, name='edit_demand'),
+    path('demand/<int:demand_id>/close/', views.close_demand, name='close_demand'),
     path('category/<int:category_id>/', views.item_list, name='item_list_by_category'),
     path('item/<int:item_id>/', views.item_detail, name='item_detail'),
     path('item/<int:item_id>/report/', views.report_item, name='report_item'),

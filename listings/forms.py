@@ -1,5 +1,5 @@
 from django import forms
-from .models import CampusLocation, Category, Item, ItemImage, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
+from .models import CampusLocation, Category, DemandPost, Item, ItemImage, NotificationPreference, Order, OrderDispute, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -206,3 +206,51 @@ class DisputeResolutionForm(StyledModelFormMixin, forms.ModelForm):
             if choice[0] in {'resolved', 'rejected'}
         ]
         self.fields['status'].widget.attrs['class'] = 'form-select'
+
+
+class DemandPostForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = DemandPost
+        fields = ['title', 'description', 'category', 'location', 'min_price', 'max_price', 'expires_at']
+        widgets = {
+            'title': forms.TextInput(attrs={'placeholder': '例如：求一台适合宿舍使用的显示器'}),
+            'description': forms.Textarea(attrs={'rows': 6, 'placeholder': '描述品牌、规格、新旧程度、预算和交易要求。'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'location': forms.Select(attrs={'class': 'form-select'}),
+            'min_price': forms.NumberInput(attrs={'min': '0', 'step': '0.01', 'placeholder': '可选'}),
+            'max_price': forms.NumberInput(attrs={'min': '0', 'step': '0.01', 'placeholder': '可选'}),
+            'expires_at': forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+        }
+        help_texts = {
+            'location': '填写方便见面的区域，卖家可以据此判断是否方便交付。',
+            'expires_at': '超过截止时间后，求购信息会自动从公开列表中隐藏。',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['category'].queryset = Category.objects.all()
+        self.fields['category'].empty_label = '请选择分类（可选）'
+        self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
+        self.fields['location'].empty_label = '请选择期望地点（可选）'
+        if not self.instance.pk and not self.initial.get('expires_at'):
+            from django.utils import timezone
+            self.initial['expires_at'] = (timezone.now() + timezone.timedelta(days=30)).replace(second=0, microsecond=0)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        min_price = cleaned_data.get('min_price')
+        max_price = cleaned_data.get('max_price')
+        if min_price is not None and max_price is not None and min_price > max_price:
+            self.add_error('max_price', '最高预算不能低于最低预算。')
+        expires_at = cleaned_data.get('expires_at')
+        if expires_at is not None:
+            from django.utils import timezone
+            if timezone.is_naive(expires_at):
+                expires_at = timezone.make_aware(expires_at)
+                cleaned_data['expires_at'] = expires_at
+            if expires_at <= timezone.now():
+                self.add_error('expires_at', '截止时间必须晚于当前时间。')
+            elif expires_at > timezone.now() + timezone.timedelta(days=90):
+                self.add_error('expires_at', '截止时间不能超过 90 天。')
+        return cleaned_data

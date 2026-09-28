@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, ItemImage, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -190,3 +190,23 @@ class SearchSynonymAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     search_fields = ('keyword', 'synonym')
     list_editable = ('is_active',)
+
+
+@admin.register(DemandPost)
+class DemandPostAdmin(admin.ModelAdmin):
+    list_display = ('title', 'requester', 'category', 'location', 'budget_display', 'status', 'view_count', 'expires_at', 'created_at')
+    list_filter = ('status', 'category', 'location', 'created_at')
+    search_fields = ('title', 'description', 'requester__username')
+    autocomplete_fields = ('requester', 'category', 'location')
+    readonly_fields = ('view_count', 'created_at', 'updated_at')
+    date_hierarchy = 'created_at'
+
+    @admin.display(description='预算')
+    def budget_display(self, obj):
+        if obj.min_price is not None and obj.max_price is not None:
+            return f'¥{obj.min_price} - ¥{obj.max_price}'
+        if obj.max_price is not None:
+            return f'不超过 ¥{obj.max_price}'
+        if obj.min_price is not None:
+            return f'不低于 ¥{obj.min_price}'
+        return '未填写'

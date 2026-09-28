@@ -18,8 +18,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
-from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .forms import DemandPostForm, DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSet, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .order_workflow import OrderTransitionError, transition_order
@@ -1256,6 +1256,167 @@ def delete_saved_search(request, saved_search_id):
         saved_search.delete()
         messages.success(request, f'已删除关注搜索“{name}”。')
     return redirect('saved_search_list')
+
+
+
+
+def _expire_demand_posts():
+    DemandPost.objects.filter(
+        status='active', expires_at__isnull=False, expires_at__lte=timezone.now(),
+    ).update(status='expired')
+
+
+def _demand_queryset():
+    _expire_demand_posts()
+    return DemandPost.objects.filter(status='active').select_related(
+        'requester', 'category', 'location',
+    )
+
+
+def _demand_match_items(demand):
+    items = Item.objects.filter(status='available').select_related(
+        'category', 'location', 'seller',
+    ).prefetch_related('images')
+    if demand.category_id:
+        items = items.filter(category_id=demand.category_id)
+    if demand.location_id:
+        items = items.filter(location_id=demand.location_id)
+    if demand.min_price is not None:
+        items = items.filter(price__gte=demand.min_price)
+    if demand.max_price is not None:
+        items = items.filter(price__lte=demand.max_price)
+
+    tokens = [token for token in demand.title.split() if len(token) >= 2]
+    if tokens:
+        keyword_query = Q()
+        for token in tokens[:5]:
+            keyword_query |= Q(title__icontains=token) | Q(description__icontains=token)
+        keyword_matches = items.filter(keyword_query)
+        if keyword_matches.exists():
+            items = keyword_matches
+    return items.annotate(
+        demand_match_score=Case(
+            When(category_id=demand.category_id, then=Value(3)),
+            default=Value(1), output_field=IntegerField(),
+        ),
+    ).order_by('-demand_match_score', '-created_at')[:6]
+
+
+def demand_list(request, mine=False):
+    mine = mine or request.GET.get('mine') == '1'
+    if mine and not request.user.is_authenticated:
+        return redirect('login')
+    demands = _demand_queryset()
+    if mine:
+        demands = demands.filter(requester=request.user)
+
+    search_query = request.GET.get('q', '').strip()[:120]
+    category_id = request.GET.get('category', '').strip()
+    location_id = request.GET.get('location', '').strip()
+    sort = request.GET.get('sort', 'latest').strip()
+    if search_query:
+        demands = demands.filter(Q(title__icontains=search_query) | Q(description__icontains=search_query))
+    if category_id.isdigit():
+        demands = demands.filter(category_id=category_id)
+    else:
+        category_id = ''
+    if location_id.isdigit():
+        demands = demands.filter(location_id=location_id)
+    else:
+        location_id = ''
+    if sort == 'ending':
+        demands = demands.order_by('expires_at', '-created_at')
+    elif sort == 'popular':
+        demands = demands.order_by('-view_count', '-created_at')
+    else:
+        sort = 'latest'
+        demands = demands.order_by('-created_at')
+
+    page = Paginator(demands, 12).get_page(request.GET.get('page'))
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
+    return render(request, 'listings/demand_list.html', {
+        'demands': page,
+        'page_obj': page,
+        'categories': Category.objects.all(),
+        'locations': CampusLocation.objects.filter(is_active=True),
+        'demand_search_query': search_query,
+        'demand_category_filter': category_id,
+        'demand_location_filter': location_id,
+        'demand_sort': sort,
+        'demand_filter_query': filter_params.urlencode(),
+        'is_mine': mine,
+    })
+
+
+@login_required
+def new_demand(request):
+    if request.method == 'POST':
+        form = DemandPostForm(request.POST)
+        if form.is_valid():
+            demand = form.save(commit=False)
+            demand.requester = request.user
+            demand.save()
+            messages.success(request, '求购信息已发布，等待合适的同学来响应。')
+            return redirect('demand_detail', demand_id=demand.id)
+    else:
+        form = DemandPostForm()
+    return render(request, 'listings/demand_form.html', {
+        'form': form,
+        'title': '发布求购',
+        'submit_label': '发布求购信息',
+    })
+
+
+@login_required
+def edit_demand(request, demand_id):
+    demand = get_object_or_404(DemandPost, id=demand_id, requester=request.user)
+    if demand.status not in {'active', 'expired'}:
+        messages.info(request, '只有寻找中的求购信息可以编辑。')
+        return redirect('demand_detail', demand_id=demand.id)
+    if request.method == 'POST':
+        form = DemandPostForm(request.POST, instance=demand)
+        if form.is_valid():
+            demand = form.save(commit=False)
+            demand.status = 'active'
+            demand.save()
+            messages.success(request, '求购信息已更新，并重新回到公开列表。')
+            return redirect('demand_detail', demand_id=demand.id)
+    else:
+        form = DemandPostForm(instance=demand)
+    return render(request, 'listings/demand_form.html', {
+        'form': form,
+        'demand': demand,
+        'title': '编辑求购',
+        'submit_label': '保存修改',
+    })
+
+
+@login_required
+def close_demand(request, demand_id):
+    demand = get_object_or_404(DemandPost, id=demand_id, requester=request.user)
+    if request.method == 'POST' and demand.status == 'active':
+        status = request.POST.get('status')
+        demand.status = status if status in {'fulfilled', 'closed'} else 'closed'
+        demand.save(update_fields=['status', 'updated_at'])
+        messages.success(request, '求购信息已从公开列表中撤下。')
+    return redirect('demand_detail', demand_id=demand.id)
+
+
+def demand_detail(request, demand_id):
+    demand = get_object_or_404(
+        DemandPost.objects.select_related('requester', 'category', 'location'), id=demand_id,
+    )
+    if demand.status == 'active' and demand.expires_at and demand.expires_at <= timezone.now():
+        demand.status = 'expired'
+        demand.save(update_fields=['status', 'updated_at'])
+    elif demand.status == 'active':
+        DemandPost.objects.filter(id=demand.id).update(view_count=F('view_count') + 1)
+        demand.view_count += 1
+    return render(request, 'listings/demand_detail.html', {
+        'demand': demand,
+        'recommended_items': _demand_match_items(demand) if demand.status == 'active' else [],
+    })
 
 
 @login_required
