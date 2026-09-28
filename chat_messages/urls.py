@@ -7,6 +7,7 @@ urlpatterns = [
     path('inbox/', views.inbox, name='inbox'),
     path('inbox/read-all/', views.mark_all_messages_read, name='mark_all_messages_read'),
     path('inbox/read-selected/', views.mark_selected_messages_read, name='mark_selected_messages_read'),
+    path('message/<int:message_id>/read/', views.mark_message_read, name='mark_message_read'),
     path('conversation/<int:user_id>/read/', views.mark_conversation_read, name='mark_conversation_read'),
     path('moderation/', views.moderation_queue, name='moderation_queue'),
     path('moderation/<int:event_id>/review/', views.review_moderation_event, name='review_moderation_event'),

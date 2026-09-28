@@ -1375,6 +1375,128 @@ def notification_list(request):
 
 
 @login_required
+def activity_center(request):
+    """Show notifications and incoming private messages in one chronological feed."""
+    activity_type = request.GET.get('type', 'all').strip()
+    if activity_type not in {'all', 'notifications', 'messages'}:
+        activity_type = 'all'
+    status_filter = request.GET.get('status', 'all').strip()
+    if status_filter not in {'all', 'unread', 'read'}:
+        status_filter = 'all'
+    search_query = request.GET.get('q', '').strip()[:120]
+
+    notification_queryset = Notification.objects.filter(recipient=request.user)
+    message_queryset = PrivateMessage.objects.filter(receiver=request.user)
+    if status_filter == 'unread':
+        notification_queryset = notification_queryset.filter(is_read=False)
+        message_queryset = message_queryset.filter(is_read=False)
+    elif status_filter == 'read':
+        notification_queryset = notification_queryset.filter(is_read=True)
+        message_queryset = message_queryset.filter(is_read=True)
+    if search_query:
+        notification_queryset = notification_queryset.filter(
+            Q(title__icontains=search_query)
+            | Q(message__icontains=search_query)
+            | Q(item__title__icontains=search_query)
+            | Q(order__item__title__icontains=search_query)
+        )
+        message_queryset = message_queryset.filter(
+            Q(content__icontains=search_query)
+            | Q(sender__username__icontains=search_query)
+        )
+
+    all_notification_queryset = Notification.objects.filter(recipient=request.user)
+    all_message_queryset = PrivateMessage.objects.filter(receiver=request.user)
+    filtered_notifications = notification_queryset if activity_type in {'all', 'notifications'} else Notification.objects.none()
+    filtered_messages = message_queryset if activity_type in {'all', 'messages'} else PrivateMessage.objects.none()
+    total_count = filtered_notifications.count() + filtered_messages.count()
+    page_size = 20
+    try:
+        page_number = max(1, int(request.GET.get('page', '1')))
+    except (TypeError, ValueError):
+        page_number = 1
+    row_limit = page_number * page_size
+
+    rows = []
+    for notification in filtered_notifications.select_related('actor', 'item', 'order__item').order_by('-created_at', '-id')[:row_limit]:
+        rows.append({
+            'source': 'notification',
+            'source_label': '通知',
+            'title': notification.title,
+            'message': notification.message,
+            'context': notification.item.title if notification.item else '',
+            'created_at': notification.created_at,
+            'is_read': notification.is_read,
+            'url': notification.target_url or reverse('notification_list'),
+            'read_url': reverse('mark_notification_read', args=[notification.id]),
+            'icon': 'bi-bell',
+            'icon_class': f'notification-icon-{notification.kind}',
+        })
+    for private_message in filtered_messages.select_related('sender', 'item').order_by('-created_at', '-id')[:row_limit]:
+        rows.append({
+            'source': 'message',
+            'source_label': '私信',
+            'title': f'{private_message.sender.username} 发来新私信',
+            'message': private_message.content,
+            'context': private_message.item.title if private_message.item else '',
+            'created_at': private_message.created_at,
+            'is_read': private_message.is_read,
+            'url': reverse('conversation', args=[private_message.sender_id]),
+            'read_url': reverse('mark_message_read', args=[private_message.id]),
+            'icon': 'bi-chat-dots',
+            'icon_class': 'notification-icon-message_received',
+        })
+    rows.sort(key=lambda row: (row['created_at'], row['source'], row['url']), reverse=True)
+    offset = (page_number - 1) * page_size
+    page_rows = rows[offset:offset + page_size]
+    filter_params = request.GET.copy()
+    filter_params.pop('page', None)
+
+    return render(request, 'listings/activity_center.html', {
+        'activity_rows': page_rows,
+        'activity_page_number': page_number,
+        'activity_page_size': page_size,
+        'activity_total': total_count,
+        'activity_has_previous': page_number > 1,
+        'activity_has_next': len(rows) > offset + page_size or total_count > offset + page_size,
+        'activity_filter_query': filter_params.urlencode(),
+        'activity_type_filter': activity_type,
+        'activity_status_filter': status_filter,
+        'activity_search_query': search_query,
+        'activity_unread_total': all_notification_queryset.filter(is_read=False).count() + all_message_queryset.filter(is_read=False).count(),
+        'activity_filtered_unread_count': filtered_notifications.filter(is_read=False).count() + filtered_messages.filter(is_read=False).count(),
+        'activity_notification_count': all_notification_queryset.count(),
+        'activity_message_count': all_message_queryset.count(),
+    })
+
+
+@login_required
+def mark_all_activity_read(request):
+    if request.method == 'POST':
+        with transaction.atomic():
+            notification_count = Notification.objects.filter(
+                recipient=request.user, is_read=False,
+            ).update(is_read=True)
+            message_count = PrivateMessage.objects.filter(
+                receiver=request.user, is_read=False,
+            ).update(is_read=True)
+        total_count = notification_count + message_count
+        if total_count:
+            messages.success(request, f'已将 {total_count} 条站内动态标记为已读。')
+        else:
+            messages.info(request, '当前没有未读站内动态。')
+
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('activity_center')
+    return redirect(next_url)
+
+
+@login_required
 def notification_preferences(request):
     preference, _ = NotificationPreference.objects.get_or_create(user=request.user)
     if request.method == 'POST':

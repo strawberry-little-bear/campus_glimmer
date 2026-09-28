@@ -12,6 +12,7 @@ from .order_workflow import OrderTransitionError, transition_order
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .availability import notify_item_available
+from chat_messages.models import PrivateMessage
 
 
 class ListingFlowTests(TestCase):
@@ -1432,3 +1433,71 @@ class SearchSuggestionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {'suggestions': []})
+
+
+class ActivityCenterTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='activity-reader', password='safe-password-123')
+        self.other_user = User.objects.create_user(username='activity-sender', password='safe-password-123')
+
+    def test_activity_center_merges_notifications_and_received_messages(self):
+        Notification.objects.create(
+            recipient=self.user, kind='order_status', title='订单状态更新',
+            message='你的订单已经确认。',
+        )
+        Notification.objects.create(
+            recipient=self.user, kind='comment_received', title='新的商品留言',
+            message='有人回复了你的商品。', is_read=True,
+        )
+        PrivateMessage.objects.create(
+            sender=self.other_user, receiver=self.user, content='可以今晚当面交易吗？',
+        )
+
+        self.client.login(username='activity-reader', password='safe-password-123')
+        response = self.client.get(reverse('activity_center'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['activity_total'], 3)
+        self.assertEqual(response.context['activity_unread_total'], 2)
+        self.assertEqual(response.context['activity_filtered_unread_count'], 2)
+        self.assertEqual(
+            {row['source'] for row in response.context['activity_rows']},
+            {'notification', 'message'},
+        )
+        self.assertContains(response, '站内动态')
+        self.assertContains(response, '可以今晚当面交易吗？')
+
+        filtered = self.client.get(reverse('activity_center'), {'type': 'messages', 'q': '今晚'})
+        self.assertEqual(filtered.context['activity_total'], 1)
+        self.assertEqual(filtered.context['activity_rows'][0]['source'], 'message')
+
+    def test_activity_center_marks_both_sources_read_and_single_message_read(self):
+        notification = Notification.objects.create(
+            recipient=self.user, kind='order_status', title='待处理通知', message='请处理。',
+        )
+        private_message = PrivateMessage.objects.create(
+            sender=self.other_user, receiver=self.user, content='请回复我。',
+        )
+        self.client.login(username='activity-reader', password='safe-password-123')
+
+        response = self.client.post(
+            reverse('mark_message_read', args=[private_message.id]),
+            {'next': reverse('activity_center')},
+        )
+        self.assertRedirects(response, reverse('activity_center'))
+        private_message.refresh_from_db()
+        self.assertTrue(private_message.is_read)
+        self.assertFalse(notification.is_read)
+
+        next_url = reverse('activity_center') + '?status=unread'
+        response = self.client.post(
+            reverse('mark_all_activity_read'), {'next': next_url},
+        )
+        self.assertRedirects(response, next_url)
+        notification.refresh_from_db()
+        self.assertTrue(notification.is_read)
+
+    def test_activity_center_requires_login(self):
+        response = self.client.get(reverse('activity_center'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response.url)

@@ -19,6 +19,7 @@
             <button type="submit" class="btn btn-sm btn-outline-success">筛选</button>
             {% if search_query or message_status_filter != 'all' %}<a href="{% url 'inbox' %}" class="btn btn-sm btn-light">重置</a>{% endif %}
         </form>
+        <a href="{% url 'activity_center' %}" class="btn btn-sm btn-light"><i class="bi bi-activity me-1"></i>站内动态</a>
         {% if unread_message_count %}
         <form method="post" action="{% url 'mark_all_messages_read' %}">
             {% csrf_token %}

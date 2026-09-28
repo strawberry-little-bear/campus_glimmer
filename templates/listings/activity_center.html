@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}站内动态 - 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-heading notification-heading">
+    <div>
+        <span class="eyebrow">把重要互动放在一起</span>
+        <h1 class="mt-2">站内动态</h1>
+        <p class="text-muted mb-0">通知和收到的私信按时间线统一整理，处理起来更顺手。</p>
+    </div>
+    {% if activity_unread_total %}
+    <form method="post" action="{% url 'mark_all_activity_read' %}">
+        {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="btn btn-outline-primary"><i class="bi bi-check2-all me-1"></i>全部标记为已读</button>
+    </form>
+    {% endif %}
+</div>
+
+<section class="content-card notification-panel activity-center-panel">
+    <div class="notification-toolbar">
+        <div><strong>{{ activity_total }}</strong> 条动态 <span class="notification-unread-summary">{{ activity_filtered_unread_count }} 条未读</span></div>
+        <span class="d-flex flex-wrap gap-3"><a class="text-decoration-none small" href="{% url 'inbox' %}"><i class="bi bi-chat-dots me-1"></i>消息中心</a><a class="text-decoration-none small" href="{% url 'notification_list' %}"><i class="bi bi-bell me-1"></i>通知中心</a></span>
+    </div>
+
+    <div class="notification-insight-grid" aria-label="动态概览">
+        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-bell"></i></span><span><small>通知</small><strong>{{ activity_notification_count }}</strong></span></div>
+        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-chat-dots"></i></span><span><small>收到的私信</small><strong>{{ activity_message_count }}</strong></span></div>
+        <div class="notification-insight-card is-highlighted"><span class="notification-insight-icon"><i class="bi bi-inbox"></i></span><span><small>全部未读</small><strong>{{ activity_unread_total }}</strong></span></div>
+    </div>
+
+    <form method="get" class="notification-filter-bar activity-filter-bar">
+        <div class="notification-search"><i class="bi bi-search"></i><input name="q" type="search" value="{{ activity_search_query }}" placeholder="搜索动态标题、内容或发件人" aria-label="搜索站内动态"></div>
+        <select class="form-select form-select-sm" name="type" aria-label="动态类型">
+            <option value="all" {% if activity_type_filter == 'all' %}selected{% endif %}>全部动态</option>
+            <option value="notifications" {% if activity_type_filter == 'notifications' %}selected{% endif %}>仅通知</option>
+            <option value="messages" {% if activity_type_filter == 'messages' %}selected{% endif %}>仅私信</option>
+        </select>
+        <select class="form-select form-select-sm" name="status" aria-label="动态状态">
+            <option value="all" {% if activity_status_filter == 'all' %}selected{% endif %}>全部状态</option>
+            <option value="unread" {% if activity_status_filter == 'unread' %}selected{% endif %}>仅看未读</option>
+            <option value="read" {% if activity_status_filter == 'read' %}selected{% endif %}>仅看已读</option>
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-funnel me-1"></i>筛选</button>
+        {% if activity_search_query or activity_type_filter != 'all' or activity_status_filter != 'all' %}<a class="btn btn-light btn-sm" href="{% url 'activity_center' %}">重置</a>{% endif %}
+    </form>
+
+    <div class="notification-filter-summary"><i class="bi bi-clock-history me-1"></i>按最新发生时间排序{% if activity_search_query or activity_type_filter != 'all' or activity_status_filter != 'all' %} · 已应用筛选条件{% endif %}</div>
+
+    <div class="activity-feed" aria-label="站内动态时间线">
+        {% for row in activity_rows %}
+        <article class="activity-entry {% if not row.is_read %}is-unread{% endif %}">
+            <div class="notification-entry">
+                <div class="notification-select-spacer"></div>
+                <span class="notification-icon {{ row.icon_class }}"><i class="bi {{ row.icon }}"></i></span>
+            </div>
+            <div class="activity-entry-body">
+                <div class="notification-title-row"><strong>{{ row.title }}</strong><time>{{ row.created_at|date:"m月d日 H:i" }}</time></div>
+                <p class="notification-message mb-1">{{ row.message }}</p>
+                {% if row.context %}<div class="notification-context"><i class="bi bi-link-45deg me-1"></i>{{ row.context }}</div>{% endif %}
+                <div class="activity-entry-meta"><span>{{ row.source_label }}</span>{% if not row.is_read %}<span class="notification-dot" aria-label="未读"></span><span class="text-danger">未读</span>{% else %}<span>已读</span>{% endif %}</div>
+            </div>
+            <div class="activity-entry-actions">
+                {% if not row.is_read %}
+                <form method="post" action="{{ row.read_url }}">
+                    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <button type="submit" class="btn btn-sm btn-outline-success">标为已读</button>
+                </form>
+                {% endif %}
+                <a class="btn btn-sm btn-light" href="{{ row.url }}">查看 <i class="bi bi-arrow-up-right"></i></a>
+            </div>
+        </article>
+        {% empty %}
+        <div class="empty-inline py-5 text-center"><i class="bi bi-inbox d-block mb-2 fs-3"></i>当前筛选条件下还没有站内动态。</div>
+        {% endfor %}
+    </div>
+
+    {% if activity_total > activity_page_size or activity_page_number > 1 %}
+    <nav class="mt-4" aria-label="站内动态分页"><ul class="pagination pagination-sm justify-content-center mb-0">
+        {% if activity_has_previous %}<li class="page-item"><a class="page-link" href="?{% if activity_filter_query %}{{ activity_filter_query }}&{% endif %}page={{ activity_page_number|add:'-1' }}">上一页</a></li>{% endif %}
+        <li class="page-item active"><span class="page-link">第 {{ activity_page_number }} 页</span></li>
+        {% if activity_has_next %}<li class="page-item"><a class="page-link" href="?{% if activity_filter_query %}{{ activity_filter_query }}&{% endif %}page={{ activity_page_number|add:'1' }}">下一页</a></li>{% endif %}
+    </ul></nav>
+    {% endif %}
+</section>
+{% endblock %}

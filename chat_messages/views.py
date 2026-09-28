@@ -185,6 +185,26 @@ def mark_all_messages_read(request):
 
 
 @login_required
+def mark_message_read(request, message_id):
+    """Mark one received message as read and return to the originating feed."""
+    private_message = get_object_or_404(
+        PrivateMessage, id=message_id, receiver=request.user,
+    )
+    if request.method == 'POST' and not private_message.is_read:
+        private_message.is_read = True
+        private_message.save(update_fields=['is_read'])
+
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('inbox')
+    return redirect(next_url)
+
+
+@login_required
 def mark_selected_messages_read(request):
     """Mark only the messages selected in the inbox as read."""
     if request.method == 'POST':

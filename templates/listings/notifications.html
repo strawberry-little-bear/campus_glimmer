@@ -9,14 +9,17 @@
         <h1 class="mt-2">通知中心</h1>
         <p class="text-muted mb-0">交易进展、留言、私信和评价都会在这里留下记录。</p>
     </div>
-    {% if unread_notification_count %}
-    <form method="post" action="{% url 'mark_all_notifications_read' %}">
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <a href="{% url 'activity_center' %}" class="btn btn-light"><i class="bi bi-activity me-1"></i>查看站内动态</a>
+        {% if unread_notification_count %}
+        <form method="post" action="{% url 'mark_all_notifications_read' %}">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline-primary">
             <i class="bi bi-check2-all me-1"></i>全部标记为已读
         </button>
-    </form>
-    {% endif %}
+        </form>
+        {% endif %}
+    </div>
 </div>
 
 <section class="content-card notification-panel">
