@@ -21,6 +21,7 @@ from .forms import DisputeForm, DisputeResolutionForm, ItemForm, ItemImageFormSe
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .recommendations import get_recommendations
 from .notifications import create_notification
+from .order_workflow import OrderTransitionError, transition_order
 from .saved_searches import notify_saved_search_matches
 from chat_messages.models import PrivateMessage
 
@@ -711,53 +712,16 @@ def update_order_status(request, order_id):
         messages.error(request, '你没有权限操作这笔订单。')
         return redirect('home')
     if request.method == 'POST':
-        target_status = request.POST.get('status')
-        transitions = {
-            'pending': {'confirmed', 'cancelled'},
-            'confirmed': {'meeting', 'cancelled'},
-            'meeting': {'cancelled'},
-            'completed': set(),
-            'cancelled': set(),
-        }
-        seller_can_update = request.user == order.seller and target_status in transitions.get(order.status, set())
-        buyer_can_update = request.user == order.buyer and target_status == 'cancelled' and order.status in {'pending', 'confirmed', 'meeting'}
-        if seller_can_update or buyer_can_update:
-            previous_status = order.status
-            order.status = target_status
-            order.save(update_fields=['status', 'updated_at'])
-            event_notes = {
-                'confirmed': '卖家确认了交易预约',
-                'meeting': '卖家将订单推进到当面交付',
-                'completed': '双方确认交易已完成',
-                'cancelled': '订单被取消，商品恢复为在售',
-            }
-            OrderEvent.objects.create(
-                order=order,
+        try:
+            order = transition_order(
+                order_id=order.id,
                 actor=request.user,
-                from_status=previous_status,
-                to_status=target_status,
-                note=event_notes.get(target_status, '订单状态已更新'),
+                target_status=request.POST.get('status'),
             )
-            other_party = order.buyer if request.user == order.seller else order.seller
-            create_notification(
-                other_party, actor=request.user, kind='order_status',
-                title='订单状态有更新',
-                message=f'商品“{order.item.title}”的订单已更新为“{order.get_status_display()}”。',
-                order=order, item=order.item,
-                target_url=reverse('order_detail', args=[order.id]),
-            )
-            if target_status == 'cancelled':
-                previous_item_status = order.item.status
-                order.item.status = 'available'
-                order.item.save(update_fields=['status', 'updated_at'])
-                if previous_item_status != 'available':
-                    notify_item_available(order.item, actor=request.user)
-            elif target_status == 'completed':
-                order.item.status = 'sold'
-                order.item.save(update_fields=['status', 'updated_at'])
-            messages.success(request, f'订单状态已更新为“{order.get_status_display()}”。')
+        except OrderTransitionError as exc:
+            messages.error(request, str(exc))
         else:
-            messages.error(request, '当前订单状态不允许执行这个操作。')
+            messages.success(request, f'订单状态已更新为“{order.get_status_display()}”。')
     return redirect('order_detail', order_id=order.id)
 
 

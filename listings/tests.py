@@ -8,6 +8,7 @@ from django.utils import timezone
 from .models import BrowsingHistory, CampusLocation, Category, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, Notification, NotificationPreference, Order, OrderDispute, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchQuery
 from .analytics import build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
+from .order_workflow import OrderTransitionError, transition_order
 from .recommendations import get_recommendations
 from .notifications import create_notification
 from .availability import notify_item_available
@@ -218,6 +219,43 @@ class ListingFlowTests(TestCase):
             recipient=self.other_user, kind='order_status', order=order,
         )
         self.assertIn('卖家已确认', buyer_notice.message)
+
+    def test_order_workflow_rejects_buyer_confirm_and_keeps_order_unchanged(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '等待确认'},
+        )
+        order = Order.objects.get(item=self.item)
+
+        with self.assertRaises(OrderTransitionError):
+            transition_order(order_id=order.id, actor=self.other_user, target_status='confirmed')
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'pending')
+        self.assertEqual(order.events.count(), 1)
+
+    def test_order_workflow_locks_transition_and_records_actor(self):
+        self.client.login(username='bob', password='safe-password-123')
+        self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {'meeting_location': self.location.id, 'buyer_note': '等待卖家确认'},
+        )
+        order = Order.objects.get(item=self.item)
+
+        updated_order = transition_order(
+            order_id=order.id,
+            actor=self.user,
+            target_status='confirmed',
+        )
+
+        self.assertEqual(updated_order.status, 'confirmed')
+        event = OrderEvent.objects.filter(order=order, to_status='confirmed').get()
+        self.assertEqual(event.actor, self.user)
+        self.assertEqual(event.from_status, 'pending')
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.other_user, order=order, kind='order_status',
+        ).exists())
 
     def test_rating_notifies_the_rated_user(self):
         order = self._complete_order()
