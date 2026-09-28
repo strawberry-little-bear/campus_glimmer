@@ -1003,6 +1003,8 @@ def operations_dashboard_export(request):
         ('searches', '搜索次数'),
         ('zero_result_searches', '无结果搜索'),
         ('zero_result_rate', '无结果占比（%）'),
+        ('search_quality_score', '搜索质量评分'),
+        ('search_click_through_rate', '搜索结果点击率（%）'),
         ('new_users', '新增用户'),
         ('active_users', '周期活跃用户'),
         ('retention_rate', '上一周期新用户回访率（%）'),

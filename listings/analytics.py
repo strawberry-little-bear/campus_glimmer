@@ -582,6 +582,24 @@ def build_operational_alerts(metrics, period_comparisons):
             'action_url_name': 'search_insights',
         })
 
+    searches_with_results = metrics.get('searches_with_results', 0)
+    search_click_through_rate = metrics.get('search_click_through_rate', 0)
+    if searches_with_results >= 5 and search_click_through_rate < 35:
+        alerts.append({
+            'key': 'search_engagement_drop',
+            'severity': 'critical' if search_click_through_rate < 20 else 'warning',
+            'severity_label': '优先关注' if search_click_through_rate < 20 else '需要关注',
+            'title': '搜索结果互动偏低',
+            'message': (
+                f'最近有结果的搜索共有 {searches_with_results} 次，但点击率只有 '
+                f'{search_click_through_rate}%，建议检查首屏排序、标题和图片质量。'
+            ),
+            'metric': f'{search_click_through_rate}%',
+            'metric_label': '结果点击率',
+            'action_label': '查看搜索质量',
+            'action_url_name': 'search_insights',
+        })
+
     pending_reports = metrics['pending_reports']
     if pending_reports >= 3:
         alerts.append({
@@ -822,6 +840,17 @@ def build_operations_dashboard(days=30):
     funnel_max = max((stage['count'] for stage in conversion_funnel), default=1) or 1
     search_count = search_period.count()
     zero_result_search_count = search_period.filter(result_count=0).count()
+    searches_with_results = search_period.filter(result_count__gt=0).count()
+    clicked_searches = SearchClick.objects.filter(
+        search_query__in=search_period,
+        search_query__result_count__gt=0,
+    ).values('search_query_id').distinct().count()
+    search_quality = _build_search_quality(
+        search_count,
+        zero_result_search_count,
+        searches_with_results,
+        clicked_searches,
+    )
 
     item_daily = _daily_counts(Item.objects, start, now)
     order_daily = _daily_counts(Order.objects, start, now)
@@ -956,6 +985,12 @@ def build_operations_dashboard(days=30):
         'searches': search_count,
         'zero_result_searches': zero_result_search_count,
         'zero_result_rate': round(zero_result_search_count / search_count * 100, 1) if search_count else 0,
+        'searches_with_results': searches_with_results,
+        'search_click_through_rate': round(
+            clicked_searches / searches_with_results * 100, 1,
+        ) if searches_with_results else 0,
+        'search_quality_score': search_quality['score'],
+        'search_quality_level': search_quality['level'],
         'new_users': user_period.count(),
         'active_users': active_user_count,
         'retention_rate': user_retention['rate'],
@@ -988,6 +1023,7 @@ def build_operations_dashboard(days=30):
         'order_health': order_health,
         'top_searches': top_searches,
         'zero_result_searches': zero_result_searches,
+        'search_quality': search_quality,
         'category_stats': category_stats,
         'location_stats': location_stats,
         'order_statuses': order_statuses,

@@ -79,6 +79,11 @@
         <strong>{{ metrics.searches }}</strong>
         <small>其中 {{ metrics.zero_result_searches }} 次无结果{% if metrics.zero_result_rate %}（{{ metrics.zero_result_rate }}%）{% endif %}</small>
     </div>
+    <div class="ops-metric-card ops-metric-green">
+        <span><i class="bi bi-speedometer2"></i>搜索质量</span>
+        <strong>{{ metrics.search_quality_score }}</strong>
+        <small>{{ metrics.search_quality_level }} · 点击率 {{ metrics.search_click_through_rate }}%</small>
+    </div>
 </div>
 
 <section class="content-card ops-panel mb-4">

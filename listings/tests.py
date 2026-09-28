@@ -656,6 +656,9 @@ class ListingFlowTests(TestCase):
         self.assertEqual(metrics['favorites'], 1)
         self.assertEqual(metrics['searches'], 3)
         self.assertEqual(metrics['zero_result_searches'], 1)
+        self.assertEqual(metrics['searches_with_results'], 2)
+        self.assertEqual(metrics['search_click_through_rate'], 0)
+        self.assertEqual(metrics['search_quality_score'], 37)
         self.assertEqual(metrics['orders'], 1)
         self.assertEqual(metrics['completed_orders'], 1)
         self.assertEqual(response.context['top_searches'][0]['query'], '键盘')
@@ -774,6 +777,19 @@ class ListingFlowTests(TestCase):
         export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
         self.assertContains(export, '运营提醒')
         self.assertContains(export, '搜索供给缺口')
+
+    def test_operational_alerts_detect_search_engagement_drop(self):
+        metrics = {
+            'searches': 12, 'zero_result_searches': 1, 'zero_result_rate': 8.3,
+            'searches_with_results': 6, 'search_click_through_rate': 16.7,
+            'pending_reports': 0,
+        }
+
+        alerts = build_operational_alerts(metrics, [])
+
+        self.assertEqual([alert['key'] for alert in alerts], ['search_engagement_drop'])
+        self.assertEqual(alerts[0]['metric'], '16.7%')
+        self.assertEqual(alerts[0]['severity'], 'critical')
 
     def test_operational_alerts_detect_completed_order_drop(self):
         metrics = {
