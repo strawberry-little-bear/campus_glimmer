@@ -354,6 +354,35 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>“需求紧张”表示有效求购相对于当前在售供给偏多，热力值综合周期新增、求购和预约，仅用于运营补给判断。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 demand-radar-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Demand radar</span><h2>校园需求机会</h2></div>
+        <span class="ops-panel-hint">把无结果搜索与有效求购合并成可执行建议</span>
+    </div>
+    <div class="demand-radar-summary">
+        <div><span>识别机会</span><strong>{{ demand_radar.summary.opportunity_count }}</strong><small>当前周期聚合主题</small></div>
+        <div class="demand-radar-warning"><span>优先处理</span><strong>{{ demand_radar.summary.critical_count }}</strong><small>高缺口或高意愿</small></div>
+        <div><span>有效求购信号</span><strong>{{ demand_radar.summary.active_demand_count }}</strong><small>进入雷达的求购</small></div>
+        <div><span>零供给主题</span><strong>{{ demand_radar.summary.no_supply_count }}</strong><small>当前暂无匹配在售</small></div>
+    </div>
+    {% if demand_radar.rows %}
+    <div class="demand-radar-list mt-3">
+        {% for row in demand_radar.rows %}
+        <article class="demand-radar-card demand-radar-{{ row.level }}">
+            <div class="demand-radar-main">
+                <div class="demand-radar-title"><strong>{{ row.label }}</strong><span class="demand-radar-level">{{ row.level_label }}</span></div>
+                <div class="demand-radar-meta">{% if row.category_name %}<span><i class="bi bi-grid"></i>{{ row.category_name }}</span>{% endif %}{% if row.location_name %}<span><i class="bi bi-geo-alt"></i>{{ row.location_name }}</span>{% endif %}<span><i class="bi bi-box-seam"></i>当前供给 {{ row.available_supply }}</span></div>
+                <div class="demand-radar-evidence">{% for evidence in row.evidence %}<span>{{ evidence }}</span>{% endfor %}</div>
+                <div class="demand-radar-actions"><i class="bi bi-lightbulb"></i>{% for recommendation in row.recommendations %}<span>{{ recommendation }}</span>{% endfor %}</div>
+            </div>
+            <div class="demand-radar-score"><strong>{{ row.opportunity_score }}</strong><small>机会分</small><div class="demand-radar-track"><span style="width: {{ row.score_percent }}%;"></span></div></div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有足够的需求信号，继续积累搜索和求购数据。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>机会分综合无结果搜索、独立用户、有效求购与当前供给计算；只展示聚合信号，不暴露用户身份，适合用于补给与专题运营决策。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 campaign-analytics-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Campaign performance</span><h2>校园专题表现</h2></div>

@@ -1956,6 +1956,15 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    writer.writerow(['需求主题', '优先级', '机会分', '无结果搜索', '有效求购', '当前供给', '证据信号', '建议动作'])
+    for row in dashboard['demand_radar']['rows']:
+        writer.writerow([
+            row['label'], row['level_label'], row['opportunity_score'],
+            row['search_count'], row['demand_count'], row['available_supply'],
+            '；'.join(row['evidence']), '；'.join(row['recommendations']),
+        ])
+
+    writer.writerow([])
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
     if dashboard['operational_alerts']:
         for alert in dashboard['operational_alerts']:

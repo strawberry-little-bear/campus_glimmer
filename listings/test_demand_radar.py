@@ -1,0 +1,82 @@
+from django.contrib.auth.models import User
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from .demand_radar import build_demand_radar
+from .models import CampusLocation, Category, DemandPost, Item, SearchQuery
+
+
+class DemandRadarTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='radar-user', password='safe-password-123')
+        self.other_user = User.objects.create_user(username='radar-other', password='safe-password-123')
+        self.category = Category.objects.create(name='数码设备')
+        self.location = CampusLocation.objects.create(name='图书馆东门')
+
+    def test_radar_combines_search_and_demand_signals(self):
+        for query_user in (self.user, self.user, self.other_user):
+            SearchQuery.objects.create(
+                user=query_user, query='充电宝', category=self.category,
+                location=self.location, result_count=0,
+            )
+        DemandPost.objects.create(
+            requester=self.user, title='充电宝', description='通勤临时使用',
+            category=self.category, location=self.location, status='active',
+        )
+        DemandPost.objects.create(
+            requester=self.other_user, title='充电宝', description='容量 10000mAh',
+            category=self.category, location=self.location, status='active',
+        )
+
+        radar = build_demand_radar(30)
+
+        self.assertEqual(radar['summary']['opportunity_count'], 1)
+        row = next(row for row in radar['rows'] if row['label'] == '充电宝')
+        self.assertEqual(row['search_count'], 3)
+        self.assertEqual(row['unique_searchers'], 2)
+        self.assertEqual(row['demand_count'], 2)
+        self.assertEqual(row['unique_requesters'], 2)
+        self.assertEqual(row['available_supply'], 0)
+        self.assertEqual(row['level'], 'critical')
+        self.assertIn('补充相关供给', row['recommendations'])
+        self.assertIn('完善搜索同义词', row['recommendations'])
+
+    def test_radar_only_counts_current_matching_supply(self):
+        SearchQuery.objects.create(
+            user=self.user, query='台灯', category=self.category,
+            location=self.location, result_count=0,
+        )
+        Item.objects.create(
+            title='宿舍台灯', description='暖光台灯', price='20.00',
+            category=self.category, location=self.location, condition='全新', seller=self.user,
+        )
+        Item.objects.create(
+            title='过期台灯', description='不应计入', price='10.00',
+            category=self.category, location=self.location, condition='八成新', seller=self.user,
+            expires_at=timezone.now(),
+        )
+
+        radar = build_demand_radar(30)
+
+        row = next(row for row in radar['rows'] if row['label'] == '台灯')
+        self.assertEqual(row['available_supply'], 1)
+        self.assertNotIn('补充相关供给', row['recommendations'])
+
+    def test_operations_dashboard_renders_demand_radar_and_export(self):
+        staff = User.objects.create_superuser(
+            username='radar-staff', email='radar@example.com', password='safe-password-123',
+        )
+        SearchQuery.objects.create(user=self.user, query='雨伞', result_count=0)
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '校园需求机会')
+        self.assertContains(response, '雨伞')
+
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+        self.assertEqual(export.status_code, 200)
+        self.assertContains(export, '需求主题')
+        self.assertContains(export, '雨伞')
+

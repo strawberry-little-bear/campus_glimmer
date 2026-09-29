@@ -175,6 +175,9 @@
 - “详情浏览 → 收藏 → 预约 → 完成交易”的去重转化漏斗；
 - 每日趋势、订单状态、分类供给和校园地点供给；
 - 校园供需热力：按配置地点展示供给、需求、预约和完成交易，并用“需求紧张 / 需求偏高 / 供需相对平衡 / 供给较充足”帮助运营人员定位补给机会；
+- 校园需求雷达：将周期内的无结果搜索与有效求购按关键词、分类和校园地点聚合，输出“优先处理 / 值得补给 / 持续观察”分级；
+- 需求雷达不会只显示一个无法解释的推荐分，而是同时展示无结果搜索次数、独立搜索用户、有效求购数、当前匹配供给和证据信号，并给出补充供给、关注地点、完善同义词或创建专题等建议；
+- 需求机会分采用可解释规则：无结果搜索代表显性缺口，有效求购代表更强的主动意愿，当前供给不足会提高缺口优先级；结果只保留聚合统计，不暴露具体用户身份；
 - 校园专题表现：按专题自身开始、结束时间与统计周期的重叠部分计算，避免把活动之外的行为错误归因给专题；
 - 专题分析同时保留汇总指标和逐专题漏斗，使用去重浏览记录和结构化订单记录，不暴露单个用户的行为明细。
 - 当前周期与上一段同长度周期的变化对比；
@@ -257,10 +260,12 @@ campus_glimmer/
 │   ├── price_insights.py      # 同类价格参考与需求热度分析
 │   ├── campus_pulse.py         # 按校园地点聚合供需热力与运营压力
 │   ├── campaign_analytics.py  # 校园专题周期、转化漏斗与运营提示
+│   ├── demand_radar.py        # 无结果搜索、求购与供给缺口的需求雷达
 │   ├── lost_found_matching.py # 失物招领规则匹配与可解释分数
 │   ├── test_campaigns.py        # 校园专题、时间窗口和专题商品测试
 │   ├── test_bulk_campaign.py     # 商品批量加入和移出专题测试
 │   ├── test_lost_found.py         # 失物招领、匹配和线索流转测试
+│   ├── test_demand_radar.py       # 需求雷达聚合、供给判断和看板导出测试
 │   ├── recommendations.py     # 推荐结果和推荐反馈
 │   ├── reputation.py          # 卖家交易信誉摘要与公开指标
 │   ├── transaction_safety.py  # 订单交易安全卡与可解释风险提示
@@ -291,11 +296,12 @@ campus_glimmer/
 | 校园活动 | `CampusCampaign` | 有起止时间的专题活动，以及专题与在售商品的可选关联 |
 | 互动 | `Favorite`、`ItemAvailabilityWatch`、`Comment`、`PrivateMessage` | 收藏、有货提醒、公开留言和私信 |
 | 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`DeliveryConfirmation`、`Rating` | 交易预约、交付时间协商、状态事件、双方确认和完成后的评价 |
-| 搜索 | `SearchQuery`、`SearchClick`、`SearchImpression`、`SavedSearch`、`SearchSynonym` | 搜索需求、点击、曝光、保存搜索和联想词 |
+| 搜索 | `SearchQuery`、`SearchClick`、`SearchImpression`、`SavedSearch`、`SearchSynonym` | 搜索需求、点击、曝光、保存搜索和联想词；无结果搜索会进入需求雷达 |
+| 需求撮合 | `DemandPost`、`DemandResponse` | 求购发布、商品响应、确认匹配和需求转化 |
 | 通知 | `Notification`、`NotificationPreference` | 站内提醒、未读状态、通知偏好、求购关联、到期提醒和幂等键 |
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、内容审核、交易争议、证据和复核记录 |
-| 运营 | 订单、浏览、搜索、收藏等行为记录的聚合 | 看板、漏斗、用户分层、回访率和运营告警 |
+| 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达和运营告警 |
 
 关键约束包括：
 

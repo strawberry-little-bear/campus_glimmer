@@ -927,3 +927,35 @@ a { color: inherit; text-decoration: none; }
 .lost-found-form-tip { display: flex; gap: 8px; margin: 18px 0; padding: 12px 14px; color: #697c70; border-radius: 11px; background: #f4f8f3; font-size: .76rem; line-height: 1.6; }
 .lost-found-form-tip i { color: #4d9868; }
 @media (max-width: 575.98px) { .lost-found-detail-card { padding: 20px; }.lost-found-explain { padding: 14px; }.lost-found-filter-card { padding: 14px; }.lost-found-card { padding: 17px; } }
+
+/* Campus demand radar */
+.demand-radar-panel { overflow: hidden; }
+.demand-radar-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.demand-radar-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.demand-radar-summary span, .demand-radar-summary small { color: #83938b; font-size: .71rem; }
+.demand-radar-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; }
+.demand-radar-summary .demand-radar-warning { border-color: #efd8d1; background: #fff8f6; }
+.demand-radar-warning strong { color: #b25548; }
+.demand-radar-list { display: grid; gap: 10px; }
+.demand-radar-card { display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 18px; align-items: center; padding: 15px 16px; border: 1px solid #e5eee8; border-radius: 15px; background: #fbfdfb; }
+.demand-radar-critical { border-color: #efd3ce; background: linear-gradient(135deg, #fff8f6, #fbfdfb); }
+.demand-radar-high { border-color: #f0dfc7; background: linear-gradient(135deg, #fffaf3, #fbfdfb); }
+.demand-radar-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: #315946; font-size: .88rem; }
+.demand-radar-level { padding: 3px 8px; border-radius: 999px; color: #7c946d; background: #eaf4eb; font-size: .65rem; font-weight: 700; }
+.demand-radar-critical .demand-radar-level { color: #a34f43; background: #ffe5e0; }
+.demand-radar-high .demand-radar-level { color: #9a6b32; background: #fff0d7; }
+.demand-radar-meta, .demand-radar-evidence, .demand-radar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 7px; color: #84948b; font-size: .7rem; }
+.demand-radar-meta span { display: inline-flex; align-items: center; gap: 4px; }
+.demand-radar-meta i { color: #75a681; }
+.demand-radar-evidence span { padding: 3px 7px; border-radius: 7px; color: #667b70; background: #eef5ef; }
+.demand-radar-actions { color: #9b7338; }
+.demand-radar-actions i { color: #c18a3c; }
+.demand-radar-actions span + span::before { content: '·'; margin-right: 8px; color: #d3b078; }
+.demand-radar-score { text-align: right; }
+.demand-radar-score strong { display: block; color: #315946; font-size: 1.7rem; line-height: 1; }
+.demand-radar-score small { display: block; margin-top: 5px; color: #92a199; font-size: .66rem; }
+.demand-radar-track { height: 5px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: #e8f0e9; }
+.demand-radar-track span { display: block; height: 100%; border-radius: inherit; background: #70aa7c; }
+.demand-radar-critical .demand-radar-track span { background: #cb7664; }
+.demand-radar-high .demand-radar-track span { background: #c8944f; }
+@media (max-width: 575px) { .demand-radar-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.demand-radar-summary > div { min-height: 72px; padding: 11px; }.demand-radar-card { grid-template-columns: minmax(0, 1fr) 64px; gap: 10px; padding: 13px; }.demand-radar-score strong { font-size: 1.4rem; } }
