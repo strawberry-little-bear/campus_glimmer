@@ -99,6 +99,24 @@ class OpportunityFeedTests(TestCase):
         self.assertContains(response, '暂时没有合适的互助机会')
         self.assertContains(response, reverse('opportunity_feed'))
 
+    def test_demand_opportunity_uses_post_form_for_direct_response(self):
+        demand = DemandPost.objects.create(
+            requester=self.other,
+            title='求购高等数学教材',
+            description='希望在测试地点附近找到一本',
+            category=self.category,
+            location=self.location,
+            max_price='50.00',
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('opportunity_feed'))
+
+        self.assertContains(
+            response,
+            f'action="{reverse("respond_to_demand", args=[demand.id, self.item.id])}"',
+        )
+        self.assertContains(response, 'method="post"')
+        self.assertContains(response, 'name="message"')
     def test_feed_ignores_expired_lost_found_posts_and_deduplicates_targets(self):
         first_lost = LostFoundPost.objects.create(
             reporter=self.user,
