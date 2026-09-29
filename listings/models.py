@@ -733,6 +733,8 @@ class Notification(models.Model):
         ('operations_digest', '运营告警日报'),
         ('demand_match', '求购匹配提醒'),
         ('demand_response', '求购响应更新'),
+        ('lost_found_match', '失物招领匹配提醒'),
+        ('lost_found_lead', '失物招领线索更新'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -832,6 +834,12 @@ class NotificationPreference(models.Model):
     )
     demand_response = models.BooleanField(
         '求购响应更新', default=True, help_text='有人响应你的求购，或你的响应状态发生变化时提醒。',
+    )
+    lost_found_match = models.BooleanField(
+        '失物招领匹配提醒', default=True, help_text='有记录与我发布的失物招领信息可能匹配时提醒。',
+    )
+    lost_found_lead = models.BooleanField(
+        '失物招领线索更新', default=True, help_text='有人提交、确认或拒绝失物招领线索时提醒。',
     )
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
@@ -1045,6 +1053,133 @@ class DemandPost(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class LostFoundPost(models.Model):
+    """A campus lost-and-found record with explainable cross-post matching."""
+
+    TYPE_CHOICES = (
+        ('lost', '我丢失了'),
+        ('found', '我捡到了'),
+    )
+    STATUS_CHOICES = (
+        ('active', '寻找中'),
+        ('matched', '已匹配'),
+        ('closed', '已关闭'),
+        ('expired', '已过期'),
+    )
+
+    reporter = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='lost_found_posts', verbose_name='发布者',
+    )
+    post_type = models.CharField('记录类型', max_length=10, choices=TYPE_CHOICES)
+    title = models.CharField('标题', max_length=160)
+    description = models.TextField('详细描述')
+    category = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='lost_found_posts', verbose_name='物品分类',
+    )
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='lost_found_posts', verbose_name='发生地点',
+    )
+    occurred_at = models.DateTimeField('发生时间')
+    expires_at = models.DateTimeField('信息截止时间', null=True, blank=True)
+    identifying_features = models.CharField(
+        '颜色与辨识特征', max_length=240, blank=True,
+        help_text='建议填写颜色、品牌、贴纸、挂件等不宜公开过度暴露的特征。',
+    )
+    status = models.CharField('状态', max_length=12, choices=STATUS_CHOICES, default='active')
+    matched_post = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='matched_by_posts', verbose_name='匹配记录',
+    )
+    view_count = models.PositiveIntegerField('浏览次数', default=0)
+    created_at = models.DateTimeField('发布时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '失物招领记录'
+        verbose_name_plural = '失物招领记录'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['status', 'post_type', '-created_at']),
+            models.Index(fields=['category', 'status']),
+            models.Index(fields=['location', 'status']),
+            models.Index(fields=['occurred_at', 'status']),
+            models.Index(fields=['expires_at', 'status']),
+        ]
+
+    def clean(self):
+        if self.matched_post_id and self.matched_post_id == self.pk:
+            raise ValidationError('不能将记录匹配到自身。')
+        if self.matched_post_id and self.matched_post:
+            if self.matched_post.post_type == self.post_type:
+                raise ValidationError('只有“丢失”和“拾到”记录可以互相匹配。')
+
+    @property
+    def is_active_now(self):
+        return self.status == 'active' and (
+            self.expires_at is None or self.expires_at > timezone.now()
+        )
+
+    def __str__(self):
+        return f'{self.get_post_type_display()} · {self.title}'
+
+
+class LostFoundLead(models.Model):
+    """A private lead sent in response to a lost-and-found post."""
+
+    STATUS_CHOICES = (
+        ('pending', '待确认'),
+        ('accepted', '已确认'),
+        ('rejected', '暂不匹配'),
+        ('withdrawn', '已撤回'),
+    )
+
+    post = models.ForeignKey(
+        LostFoundPost, on_delete=models.CASCADE, related_name='leads', verbose_name='失物招领记录',
+    )
+    respondent = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='lost_found_leads', verbose_name='线索提供者',
+    )
+    related_post = models.ForeignKey(
+        LostFoundPost, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='related_leads', verbose_name='关联记录',
+    )
+    message = models.TextField('线索说明')
+    status = models.CharField('处理状态', max_length=12, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField('提交时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '失物招领线索'
+        verbose_name_plural = '失物招领线索'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['post', 'respondent'], name='unique_lost_found_lead_by_user',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['post', 'status', '-created_at']),
+            models.Index(fields=['respondent', 'status', '-created_at']),
+        ]
+
+    def clean(self):
+        if self.post_id and self.respondent_id and self.post.reporter_id == self.respondent_id:
+            raise ValidationError('不能向自己发布的失物招领记录提交线索。')
+        if self.related_post_id and self.related_post_id == self.post_id:
+            raise ValidationError('关联记录不能与目标记录相同。')
+        if self.respondent_id and self.related_post_id and self.related_post:
+            if self.related_post.reporter_id != self.respondent_id:
+                raise ValidationError('关联记录必须是你自己发布的记录。')
+        if self.post_id and self.related_post_id and self.related_post:
+            if self.related_post.post_type == self.post.post_type:
+                raise ValidationError('关联记录必须与目标记录类型相反。')
+
+    def __str__(self):
+        return f'{self.post.title} · {self.respondent.username} · {self.get_status_display()}'
 
 
 class DemandResponse(models.Model):

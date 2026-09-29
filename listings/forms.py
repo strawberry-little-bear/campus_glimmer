@@ -5,7 +5,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, MeetingAppointment, MeetingIncident, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
+from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -23,6 +23,7 @@ class NotificationPreferenceForm(forms.ModelForm):
             'item_available', 'item_expired', 'order_dispute',
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
+            'lost_found_match', 'lost_found_lead',
         ]
 
     def __init__(self, *args, **kwargs):
@@ -402,6 +403,95 @@ class DisputeResolutionForm(StyledModelFormMixin, forms.ModelForm):
             if choice[0] in {'resolved', 'rejected'}
         ]
         self.fields['status'].widget.attrs['class'] = 'form-select'
+
+
+class LostFoundPostForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = LostFoundPost
+        fields = [
+            'post_type', 'title', 'description', 'category', 'location',
+            'occurred_at', 'expires_at', 'identifying_features',
+        ]
+        widgets = {
+            'post_type': forms.RadioSelect(),
+            'title': forms.TextInput(attrs={'placeholder': '例如：在图书馆三楼遗失黑色水杯'}),
+            'description': forms.Textarea(attrs={
+                'rows': 6,
+                'placeholder': '描述物品用途、发现经过和方便核验的信息。不要在公开描述中写出全部隐私特征。',
+            }),
+            'category': forms.Select(attrs={'class': 'form-select'}),
+            'location': forms.Select(attrs={'class': 'form-select'}),
+            'occurred_at': forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+            'expires_at': forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'),
+            'identifying_features': forms.TextInput(attrs={
+                'placeholder': '例如：杯身底部有蓝色贴纸（可选）',
+            }),
+        }
+        help_texts = {
+            'post_type': '“我丢失了”用于寻找失物，“我捡到了”用于寻找失主。',
+            'location': '地点只用于匹配和筛选，不代表公开联系方式。',
+            'identifying_features': '建议保留一部分特征用于核验，不要把全部细节公开。',
+            'expires_at': '超过截止时间后，记录会从公开列表隐藏。',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['post_type'].widget.attrs['class'] = 'form-check-input'
+        self.fields['category'].queryset = Category.objects.all()
+        self.fields['category'].empty_label = '请选择分类（可选）'
+        self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
+        self.fields['location'].empty_label = '请选择发生地点（可选）'
+        if not self.instance.pk:
+            now = timezone.now().replace(second=0, microsecond=0)
+            self.initial.setdefault('occurred_at', now)
+            self.initial.setdefault('expires_at', now + timezone.timedelta(days=30))
+
+    def clean(self):
+        cleaned_data = super().clean()
+        occurred_at = cleaned_data.get('occurred_at')
+        expires_at = cleaned_data.get('expires_at')
+        if occurred_at is not None:
+            if timezone.is_naive(occurred_at):
+                occurred_at = timezone.make_aware(occurred_at)
+                cleaned_data['occurred_at'] = occurred_at
+            if occurred_at > timezone.now() + timezone.timedelta(minutes=5):
+                self.add_error('occurred_at', '发生时间不能晚于当前时间。')
+        if expires_at is not None:
+            if timezone.is_naive(expires_at):
+                expires_at = timezone.make_aware(expires_at)
+                cleaned_data['expires_at'] = expires_at
+            if expires_at <= timezone.now():
+                self.add_error('expires_at', '截止时间必须晚于当前时间。')
+            elif expires_at > timezone.now() + timezone.timedelta(days=90):
+                self.add_error('expires_at', '截止时间不能超过 90 天。')
+        return cleaned_data
+
+
+class LostFoundLeadForm(StyledModelFormMixin, forms.ModelForm):
+    class Meta:
+        model = LostFoundLead
+        fields = ['related_post', 'message']
+        widgets = {
+            'related_post': forms.Select(attrs={'class': 'form-select'}),
+            'message': forms.Textarea(attrs={
+                'rows': 4,
+                'placeholder': '描述你掌握的线索、核验方式或方便联系的时间。不要在这里填写敏感联系方式。',
+            }),
+        }
+        help_texts = {
+            'related_post': '如果你也发布过对应记录，可以一并关联，方便双方核验。',
+            'message': '线索只会发送给原记录发布者，确认前不会公开展示。',
+        }
+
+    def __init__(self, *args, post=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        queryset = LostFoundPost.objects.filter(status='active').select_related('reporter')
+        if post is not None:
+            queryset = queryset.filter(post_type='found' if post.post_type == 'lost' else 'lost').exclude(pk=post.pk)
+        self.fields['related_post'].queryset = queryset
+        self.fields['related_post'].empty_label = '不关联其他记录（可选）'
 
 
 class DemandPostForm(StyledModelFormMixin, forms.ModelForm):

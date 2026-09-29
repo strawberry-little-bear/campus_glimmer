@@ -24,8 +24,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -2519,6 +2520,285 @@ def demand_detail(request, demand_id):
         'responded_item_ids': responded_item_ids,
         'demand_response_form': DemandResponseForm(),
     })
+
+
+
+def _notify_lost_found_matches(post):
+    """Notify owners of high-confidence opposite-type records once per pair."""
+    for match in find_lost_found_matches(post, minimum_score=45):
+        candidate = match['post']
+        create_notification(
+            candidate.reporter,
+            actor=post.reporter,
+            kind='lost_found_match',
+            title='发现可能匹配的失物招领记录',
+            message=f'“{post.title}”与“{candidate.title}”有 {match["score"]} 分的匹配度，建议核对地点、时间和物品特征。',
+            target_url=reverse('lost_found_detail', args=[post.id]),
+            dedupe_key=f'lost-found-match-{post.id}-{candidate.id}',
+            dedupe_forever=True,
+        )
+
+
+def _lost_found_queryset(*, mine=False):
+    expire_lost_found_posts()
+    queryset = LostFoundPost.objects.select_related(
+        'reporter', 'category', 'location', 'matched_post',
+    )
+    if not mine:
+        queryset = queryset.filter(status='active')
+    return queryset
+
+
+def lost_found_list(request, mine=False):
+    is_mine = bool(mine)
+    posts = _lost_found_queryset(mine=is_mine)
+    if is_mine:
+        if not request.user.is_authenticated:
+            return redirect('login')
+        posts = posts.filter(reporter=request.user)
+
+    query = request.GET.get('q', '').strip()
+    post_type = request.GET.get('type', '').strip()
+    category_id = request.GET.get('category', '').strip()
+    location_id = request.GET.get('location', '').strip()
+    sort = request.GET.get('sort', 'latest').strip()
+    if query:
+        posts = posts.filter(
+            Q(title__icontains=query)
+            | Q(description__icontains=query)
+            | Q(identifying_features__icontains=query)
+            | Q(category__name__icontains=query)
+            | Q(location__name__icontains=query)
+        )
+    if post_type in {'lost', 'found'}:
+        posts = posts.filter(post_type=post_type)
+    if category_id.isdigit():
+        posts = posts.filter(category_id=category_id)
+    if location_id.isdigit():
+        posts = posts.filter(location_id=location_id)
+    if sort == 'ending':
+        posts = posts.order_by('expires_at', '-created_at')
+    elif sort == 'popular':
+        posts = posts.order_by('-view_count', '-created_at')
+    else:
+        sort = 'latest'
+        posts = posts.order_by('-created_at')
+
+    paginator = Paginator(posts, 12)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    filter_query = urlencode({
+        key: value for key, value in {
+            'q': query, 'type': post_type, 'category': category_id,
+            'location': location_id, 'sort': sort,
+        }.items() if value
+    })
+    return render(request, 'listings/lost_found_list.html', {
+        'posts': page_obj.object_list,
+        'page_obj': page_obj,
+        'categories': Category.objects.all(),
+        'locations': CampusLocation.objects.filter(is_active=True),
+        'is_mine': is_mine,
+        'lost_found_query': query,
+        'lost_found_type': post_type,
+        'lost_found_category': category_id,
+        'lost_found_location': location_id,
+        'lost_found_sort': sort,
+        'lost_found_filter_query': filter_query,
+    })
+
+
+@login_required
+def new_lost_found(request):
+    if request.method == 'POST':
+        form = LostFoundPostForm(request.POST)
+        if form.is_valid():
+            post = form.save(commit=False)
+            post.reporter = request.user
+            post.save()
+            _notify_lost_found_matches(post)
+            messages.success(request, '失物招领记录已发布，系统会根据地点、时间和描述为你寻找可能匹配。')
+            return redirect('lost_found_detail', post.id)
+    else:
+        form = LostFoundPostForm()
+    return render(request, 'listings/lost_found_form.html', {
+        'form': form, 'title': '发布失物招领', 'submit_label': '发布记录',
+    })
+
+
+@login_required
+def edit_lost_found(request, post_id):
+    post = get_object_or_404(LostFoundPost, pk=post_id)
+    if post.reporter_id != request.user.id:
+        raise PermissionDenied
+    if request.method == 'POST':
+        form = LostFoundPostForm(request.POST, instance=post)
+        if form.is_valid():
+            post = form.save()
+            if post.status == 'expired':
+                post.status = 'active'
+                post.save(update_fields=['status', 'updated_at'])
+            _notify_lost_found_matches(post)
+            messages.success(request, '失物招领记录已更新。')
+            return redirect('lost_found_detail', post.id)
+    else:
+        form = LostFoundPostForm(instance=post)
+    return render(request, 'listings/lost_found_form.html', {
+        'form': form, 'title': '编辑失物招领', 'submit_label': '保存修改', 'post': post,
+    })
+
+
+@login_required
+def close_lost_found(request, post_id):
+    post = get_object_or_404(LostFoundPost, pk=post_id, reporter=request.user)
+    if request.method == 'POST' and post.status == 'active':
+        post.status = 'closed'
+        post.save(update_fields=['status', 'updated_at'])
+        messages.success(request, '这条失物招领记录已关闭。')
+    return redirect('lost_found_detail', post.id)
+
+
+def lost_found_detail(request, post_id):
+    post = get_object_or_404(
+        LostFoundPost.objects.select_related('reporter', 'category', 'location', 'matched_post'),
+        pk=post_id,
+    )
+    if post.status == 'active' and post.expires_at and post.expires_at <= timezone.now():
+        post.status = 'expired'
+        post.save(update_fields=['status', 'updated_at'])
+    elif post.status == 'active':
+        LostFoundPost.objects.filter(pk=post.pk).update(view_count=F('view_count') + 1)
+        post.view_count += 1
+
+    is_owner = request.user.is_authenticated and post.reporter_id == request.user.id
+    leads = []
+    my_lead = None
+    if is_owner:
+        leads = post.leads.select_related('respondent', 'related_post').all()
+    elif request.user.is_authenticated:
+        my_lead = post.leads.filter(respondent=request.user).select_related('related_post').first()
+    lead_form = LostFoundLeadForm(post=post) if request.user.is_authenticated and not is_owner and post.status == 'active' else None
+    return render(request, 'listings/lost_found_detail.html', {
+        'post': post,
+        'is_owner': is_owner,
+        'leads': leads,
+        'my_lead': my_lead,
+        'lead_form': lead_form,
+        'matches': find_lost_found_matches(post) if post.status == 'active' else [],
+    })
+
+
+@login_required
+def submit_lost_found_lead(request, post_id):
+    post = get_object_or_404(LostFoundPost, pk=post_id)
+    if post.reporter_id == request.user.id:
+        messages.info(request, '不能向自己发布的记录提交线索。')
+        return redirect('lost_found_detail', post.id)
+    if post.status != 'active':
+        messages.info(request, '这条记录目前不再接受新的线索。')
+        return redirect('lost_found_detail', post.id)
+
+    existing = LostFoundLead.objects.filter(post=post, respondent=request.user).first()
+    if existing and existing.status not in {'rejected', 'withdrawn'}:
+        messages.info(request, '你已经提交过这条记录的线索，请等待发布者处理。')
+        return redirect('lost_found_detail', post.id)
+    form = LostFoundLeadForm(request.POST, instance=existing, post=post)
+    form.instance.post = post
+    form.instance.respondent = request.user
+    if form.is_valid():
+        lead = form.save(commit=False)
+        lead.post = post
+        lead.respondent = request.user
+        lead.status = 'pending'
+        lead.full_clean()
+        lead.save()
+        create_notification(
+            post.reporter,
+            actor=request.user,
+            kind='lost_found_lead',
+            title='收到新的失物招领线索',
+            message=f'{request.user.username} 为“{post.title}”提交了一条待核验线索。',
+            target_url=reverse('lost_found_detail', args=[post.id]),
+            dedupe_key=f'lost-found-lead-{lead.id}',
+            dedupe_forever=True,
+        )
+        messages.success(request, '线索已提交，只有记录发布者可以看到。')
+        return redirect('lost_found_detail', post.id)
+    return render(request, 'listings/lost_found_detail.html', {
+        'post': post,
+        'is_owner': False,
+        'leads': [],
+        'my_lead': existing,
+        'lead_form': form,
+        'matches': find_lost_found_matches(post),
+    })
+
+
+@login_required
+def review_lost_found_lead(request, lead_id, action):
+    lead = get_object_or_404(
+        LostFoundLead.objects.select_related('post', 'post__reporter', 'respondent', 'related_post'),
+        pk=lead_id,
+    )
+    if lead.post.reporter_id != request.user.id:
+        raise PermissionDenied
+    if request.method != 'POST' or lead.status != 'pending':
+        return redirect('lost_found_detail', lead.post_id)
+    if action not in {'accept', 'reject'}:
+        messages.error(request, '无效的线索处理动作。')
+        return redirect('lost_found_detail', lead.post_id)
+
+    with transaction.atomic():
+        locked_lead = LostFoundLead.objects.select_for_update().select_related(
+            'post', 'respondent', 'related_post',
+        ).get(pk=lead.pk)
+        locked_post = LostFoundPost.objects.select_for_update().get(pk=locked_lead.post_id)
+        if locked_lead.status != 'pending':
+            messages.info(request, '这条线索已经被处理过了。')
+            return redirect('lost_found_detail', locked_post.id)
+        if action == 'accept':
+            if locked_post.status != 'active':
+                messages.info(request, '记录状态已经变化，暂时不能确认这条线索。')
+                return redirect('lost_found_detail', locked_post.id)
+            locked_lead.status = 'accepted'
+            locked_lead.save(update_fields=['status', 'updated_at'])
+            locked_post.status = 'matched'
+            if locked_lead.related_post_id:
+                related = LostFoundPost.objects.select_for_update().get(pk=locked_lead.related_post_id)
+                if related.status == 'active':
+                    related.status = 'matched'
+                    related.matched_post_id = locked_post.id
+                    related.save(update_fields=['status', 'matched_post', 'updated_at'])
+                locked_post.matched_post_id = related.id
+            locked_post.save(update_fields=['status', 'matched_post', 'updated_at'])
+            LostFoundLead.objects.filter(post=locked_post, status='pending').exclude(pk=locked_lead.pk).update(
+                status='rejected', updated_at=timezone.now(),
+            )
+            create_notification(
+                locked_lead.respondent,
+                actor=request.user,
+                kind='lost_found_lead',
+                title='失物招领线索已确认',
+                message=f'你提交的“{locked_post.title}”线索已被发布者确认，请通过站内消息继续核验。',
+                target_url=reverse('lost_found_detail', args=[locked_post.id]),
+                dedupe_key=f'lost-found-accepted-{locked_lead.id}',
+                dedupe_forever=True,
+            )
+            messages.success(request, '已确认这条线索，记录已标记为已匹配。')
+        else:
+            locked_lead.status = 'rejected'
+            locked_lead.save(update_fields=['status', 'updated_at'])
+            create_notification(
+                locked_lead.respondent,
+                actor=request.user,
+                kind='lost_found_lead',
+                title='失物招领线索暂未匹配',
+                message=f'你提交的“{locked_post.title}”线索暂未被确认，感谢你的帮助。',
+                target_url=reverse('lost_found_detail', args=[locked_post.id]),
+                dedupe_key=f'lost-found-rejected-{locked_lead.id}',
+                dedupe_forever=True,
+            )
+            messages.success(request, '已将这条线索标记为暂不匹配。')
+    return redirect('lost_found_detail', lead.post_id)
 
 
 @login_required

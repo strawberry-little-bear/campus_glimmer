@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -281,3 +281,21 @@ class DemandResponseAdmin(admin.ModelAdmin):
     search_fields = ('demand__title', 'item__title', 'responder__username', 'message')
     autocomplete_fields = ('demand', 'item', 'responder')
     readonly_fields = ('match_score', 'match_reason', 'created_at', 'updated_at')
+
+
+@admin.register(LostFoundPost)
+class LostFoundPostAdmin(admin.ModelAdmin):
+    list_display = ('title', 'post_type', 'category', 'location', 'reporter', 'status', 'occurred_at', 'view_count', 'created_at')
+    list_filter = ('post_type', 'status', 'category', 'location', 'created_at', 'occurred_at')
+    search_fields = ('title', 'description', 'identifying_features', 'reporter__username', 'location__name')
+    autocomplete_fields = ('reporter', 'category', 'location', 'matched_post')
+    readonly_fields = ('view_count', 'created_at', 'updated_at')
+
+
+@admin.register(LostFoundLead)
+class LostFoundLeadAdmin(admin.ModelAdmin):
+    list_display = ('post', 'respondent', 'related_post', 'status', 'created_at', 'updated_at')
+    list_filter = ('status', 'created_at', 'updated_at')
+    search_fields = ('post__title', 'respondent__username', 'message', 'related_post__title')
+    autocomplete_fields = ('post', 'respondent', 'related_post')
+    readonly_fields = ('created_at', 'updated_at')

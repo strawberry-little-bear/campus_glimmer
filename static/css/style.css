@@ -890,3 +890,40 @@ a { color: inherit; text-decoration: none; }
 .campaign-performance-muted, .campaign-performance-neutral { color: #718178; background: #eef3ef; }
 .campaign-analytics-table td { min-width: 76px; }
 @media (max-width: 575px) { .campaign-analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.campaign-analytics-summary > div { min-height: 72px; padding: 11px; }.campaign-analytics-panel .ops-table { min-width: 860px; } }
+
+
+/* Lost and found */
+.lost-found-intro { background: linear-gradient(125deg, #eef8f1, #fffaf2 72%); }
+.lost-found-explain { display: flex; align-items: flex-start; gap: 14px; padding: 16px 20px; border-color: #dcebe0; background: linear-gradient(120deg, #f6fcf7, #fff); }
+.lost-found-explain-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; color: #4d9868; background: #e3f3e6; border-radius: 12px; }
+.lost-found-explain strong { color: #315946; font-size: .88rem; }
+.lost-found-explain p { margin: 4px 0 0; color: #77897e; font-size: .76rem; line-height: 1.6; }
+.lost-found-filter-card { padding: 17px 20px; }
+.lost-found-card { display: flex; flex-direction: column; padding: 20px; border: 1px solid #e2ede5; border-radius: 18px; background: linear-gradient(145deg, #fff, #fbfefb); box-shadow: 0 8px 24px rgba(54, 91, 68, .04); }
+.lost-found-card-head, .lost-found-card-footer, .lost-found-detail-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.lost-found-card-head small, .lost-found-card-footer, .lost-found-detail-meta { color: #8b9b92; font-size: .71rem; }
+.lost-found-type { display: inline-flex; align-items: center; padding: 5px 9px; border-radius: 999px; font-size: .68rem; font-weight: 700; }
+.lost-found-type-lost { color: #a25648; background: #fff0eb; }
+.lost-found-type-found { color: #397b57; background: #e5f4e8; }
+.lost-found-card h2 { margin: 15px 0 8px; color: #2d5745; font-size: 1.12rem; }
+.lost-found-card h2 a, .lost-found-match-card h3 a { text-decoration: none; }
+.lost-found-card p { flex: 1; margin: 0 0 18px; color: #718178; font-size: .79rem; line-height: 1.7; }
+.lost-found-card-meta, .lost-found-detail-meta { display: flex; flex-wrap: wrap; gap: 10px 15px; }
+.lost-found-card-meta { margin-bottom: 16px; color: #799080; font-size: .72rem; }
+.lost-found-card-footer { padding-top: 13px; border-top: 1px solid #e8f0ea; }
+.lost-found-detail-card { padding: 28px; }
+.lost-found-detail-card h1 { margin: 15px 0 12px; color: #2d5745; }
+.lost-found-detail-meta { justify-content: flex-start; margin-bottom: 24px; }
+.lost-found-detail-meta i { color: #5e9d75; }
+.lost-found-status { color: #397b57; font-size: .75rem; font-weight: 700; }
+.lost-found-status.is-muted { color: #89988f; }
+.lost-found-description { color: #586d60; line-height: 1.85; }
+.lost-found-feature-note { display: flex; gap: 10px; margin-top: 22px; padding: 13px 15px; color: #6e6c56; border: 1px solid #f0e4c5; border-radius: 12px; background: #fffbef; font-size: .78rem; line-height: 1.6; }
+.lost-found-feature-note i { color: #bd8b48; }
+.lost-found-match-card { padding: 18px; border-color: #e4eee7; background: #fbfefb; }
+.lost-found-match-card strong { color: #4c9666; font-size: .8rem; }
+.lost-found-match-card h3 { margin: 14px 0 7px; color: #315946; font-size: 1rem; }
+.lost-found-lead-card { padding: 18px 20px; }
+.lost-found-form-tip { display: flex; gap: 8px; margin: 18px 0; padding: 12px 14px; color: #697c70; border-radius: 11px; background: #f4f8f3; font-size: .76rem; line-height: 1.6; }
+.lost-found-form-tip i { color: #4d9868; }
+@media (max-width: 575.98px) { .lost-found-detail-card { padding: 20px; }.lost-found-explain { padding: 14px; }.lost-found-filter-card { padding: 14px; }.lost-found-card { padding: 17px; } }
