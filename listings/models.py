@@ -773,6 +773,7 @@ class Notification(models.Model):
         ('demand_response', '求购响应更新'),
         ('lost_found_match', '失物招领匹配提醒'),
         ('lost_found_lead', '失物招领线索更新'),
+        ('opportunity_digest', '互助机会摘要'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -878,6 +879,9 @@ class NotificationPreference(models.Model):
     )
     lost_found_lead = models.BooleanField(
         '失物招领线索更新', default=True, help_text='有人提交、确认或拒绝失物招领线索时提醒。',
+    )
+    opportunity_digest = models.BooleanField(
+        '互助机会摘要', default=True, help_text='定期汇总可能适合你响应的求购和失物招领机会。',
     )
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 

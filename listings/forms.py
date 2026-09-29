@@ -23,7 +23,7 @@ class NotificationPreferenceForm(forms.ModelForm):
             'item_available', 'item_expired', 'order_dispute',
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
-            'lost_found_match', 'lost_found_lead',
+            'lost_found_match', 'lost_found_lead', 'opportunity_digest',
         ]
 
     def __init__(self, *args, **kwargs):
