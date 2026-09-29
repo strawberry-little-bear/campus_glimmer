@@ -19,6 +19,7 @@ from chat_messages.models import PrivateMessage
 
 from listings.models import Item, Rating
 from listings.reputation import build_user_reputation
+from listings.contributions import build_contribution_summary
 
 
 def register(request):
@@ -42,6 +43,7 @@ def profile(request):
     context = {
         'unread_messages_count': unread_messages_count,
         'campus_verification': CampusVerification.objects.filter(user=request.user).first(),
+        'contribution': build_contribution_summary(request.user),
     }
     return render(request, 'accounts/profile.html', context)
 
@@ -49,6 +51,7 @@ def profile(request):
 def public_profile(request, user_id):
     user = get_object_or_404(User.objects.select_related('profile'), id=user_id)
     reputation = build_user_reputation(user)
+    contribution = build_contribution_summary(user)
     active_items = list(
         Item.objects.available().filter(seller=user)
         .select_related('category', 'location')
@@ -61,6 +64,7 @@ def public_profile(request, user_id):
     return render(request, 'accounts/public_profile.html', {
         'profile_user': user,
         'reputation': reputation,
+        'contribution': contribution,
         'active_items': active_items,
         'ratings': ratings,
         'campus_verification': verification,

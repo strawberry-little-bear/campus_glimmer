@@ -23,6 +23,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
 from .demand_radar import build_demand_radar
+from .contributions import record_order_contribution
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
@@ -1273,6 +1274,8 @@ def confirm_delivery(request, order_id):
             locked_order.status = next_status
             locked_order.save(update_fields=['status', 'updated_at'])
             if not is_borrow:
+                record_order_contribution(locked_order, phase='trade_completed')
+            if not is_borrow:
                 locked_order.item.status = 'sold'
                 locked_order.item.save(update_fields=['status', 'updated_at'])
             OrderEvent.objects.create(
@@ -1352,6 +1355,7 @@ def confirm_return(request, order_id):
             locked_order.status = 'returned'
             locked_order.returned_at = now
             locked_order.save(update_fields=['status', 'returned_at', 'updated_at'])
+            record_order_contribution(locked_order, phase='borrow_returned')
             locked_order.item.status = 'available'
             locked_order.item.save(update_fields=['status', 'updated_at'])
             OrderEvent.objects.create(

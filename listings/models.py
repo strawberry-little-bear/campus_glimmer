@@ -680,6 +680,44 @@ class Rating(models.Model):
         return f'{self.rater.username}评价{self.ratee.username} · {self.score}星'
 
 
+class CommunityContribution(models.Model):
+    """An auditable, idempotent record of a user's positive campus contribution."""
+
+    KIND_CHOICES = (
+        ('trade_completed', '完成交易'),
+        ('borrow_returned', '完成借用归还'),
+        ('gift_completed', '完成免费赠送'),
+        ('lost_found_help', '协助失物招领'),
+        ('demand_helped', '响应校园求购'),
+    )
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='community_contributions', verbose_name='用户',
+    )
+    kind = models.CharField('贡献类型', max_length=30, choices=KIND_CHOICES)
+    points = models.PositiveIntegerField('贡献积分')
+    title = models.CharField('贡献标题', max_length=120)
+    description = models.CharField('贡献说明', max_length=255, blank=True)
+    source_key = models.CharField(
+        '来源幂等键', max_length=180, unique=True,
+        help_text='同一业务事件只能产生一次贡献记录，避免重复积分。',
+    )
+    occurred_at = models.DateTimeField('发生时间', default=timezone.now)
+    created_at = models.DateTimeField('记录时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '校园互助贡献'
+        verbose_name_plural = '校园互助贡献'
+        ordering = ['-occurred_at', '-id']
+        indexes = [
+            models.Index(fields=['user', '-occurred_at']),
+            models.Index(fields=['user', 'kind', '-occurred_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.title} · {self.points}分'
+
+
 class RecommendationFeedback(models.Model):
     ACTION_CHOICES = (
         ('interested', '想看看'),

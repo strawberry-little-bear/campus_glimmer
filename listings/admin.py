@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -315,3 +315,12 @@ class LostFoundLeadAdmin(admin.ModelAdmin):
     search_fields = ('post__title', 'respondent__username', 'message', 'related_post__title')
     autocomplete_fields = ('post', 'respondent', 'related_post')
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(CommunityContribution)
+class CommunityContributionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'kind', 'points', 'title', 'occurred_at', 'source_key')
+    list_filter = ('kind', 'occurred_at')
+    search_fields = ('user__username', 'title', 'description', 'source_key')
+    autocomplete_fields = ('user',)
+    readonly_fields = ('created_at',)
