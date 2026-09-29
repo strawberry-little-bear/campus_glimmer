@@ -970,3 +970,15 @@ a { color: inherit; text-decoration: none; }
 /* Explainable community contribution card */
 .contribution-card { overflow: hidden; }.contribution-summary { display: flex; align-items: center; gap: 24px; padding: 18px; margin-top: 16px; border: 1px solid #e0eee3; border-radius: 16px; background: linear-gradient(135deg, #f8fcf8, #f1f9f2); }.contribution-score, .contribution-event-count { min-width: 86px; text-align: center; }.contribution-score strong, .contribution-event-count strong { display: block; color: #2d7651; font-size: 1.65rem; line-height: 1; }.contribution-score span, .contribution-event-count span { display: block; margin-top: 7px; color: #789184; font-size: .7rem; }.contribution-progress { min-width: 0; }.contribution-progress .progress { height: 8px; background: #dcecdf; }.contribution-progress small { display: block; margin-top: 9px; color: #82958a; font-size: .68rem; }.contribution-events { display: grid; gap: 8px; margin-top: 16px; }.contribution-events > div { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #edf2ee; }.contribution-events > div:last-child { border-bottom: 0; }.contribution-events > div > i { font-size: .85rem; }.contribution-events span { min-width: 0; flex: 1; }.contribution-events strong, .contribution-events small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.contribution-events strong { color: #315746; font-size: .76rem; }.contribution-events small { margin-top: 3px; color: #87958d; font-size: .68rem; }.contribution-events b { color: #d07a51; font-size: .78rem; white-space: nowrap; }
 @media (max-width: 575px) { .contribution-summary { align-items: stretch; flex-wrap: wrap; gap: 16px; }.contribution-progress { order: 3; flex-basis: 100%; }.contribution-score, .contribution-event-count { flex: 1; } }
+
+
+/* Operations: community impact analytics */
+.ops-metric-gold { border-top: 3px solid #d6a14f; background: #fffaf1; border-color: #f1e3c6; }
+.ops-metric-gold span i { color: #ba8130; }
+.contribution-panel { overflow: hidden; }
+.contribution-change-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; color: #89988f; font-size: .72rem; }
+.contribution-change-row .ops-change { padding: 4px 8px; border-radius: 999px; background: #f5f8f5; }
+.contribution-ranking-table td { min-width: 90px; }
+.contribution-rank { display: inline-grid; width: 24px; height: 24px; place-items: center; color: #6c856f; background: #eef6ef; border-radius: 8px; font-size: .72rem; font-weight: 800; }
+.contribution-trend-chart .activity-row { grid-template-columns: 42px minmax(0,1fr) 38px 34px; }
+@media (max-width: 575px) { .contribution-trend-chart .activity-row { grid-template-columns: 42px minmax(0,1fr) 34px; }.contribution-trend-chart .activity-row small { display: none; } }

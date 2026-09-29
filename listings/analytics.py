@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DemandResponse, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
 from .campus_pulse import build_campus_pulse
 from .campaign_analytics import build_campaign_analytics
 from .demand_radar import build_demand_radar
@@ -896,6 +896,113 @@ def _build_demand_match_insights(notification_period, start, end):
     }
 
 
+
+def _build_contribution_insights(contribution_period, previous_contribution_period, dates):
+    """Summarize the auditable mutual-aid records for staff operations."""
+    aggregate = contribution_period.aggregate(
+        period_points=Sum('points'),
+        period_events=Count('id'),
+        period_users=Count('user_id', distinct=True),
+    )
+    previous_aggregate = previous_contribution_period.aggregate(
+        points=Sum('points'),
+        events=Count('id'),
+        users=Count('user_id', distinct=True),
+    )
+    period_points = aggregate['period_points'] or 0
+    period_events = aggregate['period_events'] or 0
+    period_users = aggregate['period_users'] or 0
+    previous_values = {
+        'points': previous_aggregate['points'] or 0,
+        'events': previous_aggregate['events'] or 0,
+        'users': previous_aggregate['users'] or 0,
+    }
+
+    def percent(value, total):
+        return round(value / total * 100, 1) if total else 0
+
+    def change(current, previous):
+        if current == previous:
+            return {'value': 0, 'display': '持平', 'direction': 'flat'}
+        if previous:
+            value = round((current - previous) / previous * 100, 1)
+            return {
+                'value': value,
+                'display': f'{value:+.1f}%',
+                'direction': 'up' if value > 0 else 'down',
+            }
+        return {
+            'value': None,
+            'display': '新增' if current else '—',
+            'direction': 'up' if current else 'flat',
+        }
+
+    kind_labels = dict(CommunityContribution.KIND_CHOICES)
+    kind_rows = []
+    for row in contribution_period.values('kind').annotate(
+        event_count=Count('id'),
+        points=Sum('points'),
+        user_count=Count('user_id', distinct=True),
+    ).order_by('-points', '-event_count', 'kind'):
+        points = row['points'] or 0
+        events = row['event_count'] or 0
+        kind_rows.append({
+            'kind': row['kind'],
+            'label': kind_labels.get(row['kind'], row['kind']),
+            'points': points,
+            'event_count': events,
+            'user_count': row['user_count'] or 0,
+            'point_share': percent(points, period_points),
+        })
+
+    daily_rows = contribution_period.annotate(day=TruncDate('occurred_at')).values('day').annotate(
+        points=Sum('points'),
+        event_count=Count('id'),
+        user_count=Count('user_id', distinct=True),
+    )
+    daily_map = {row['day']: row for row in daily_rows}
+    trend = []
+    for day in dates:
+        row = daily_map.get(day, {})
+        trend.append({
+            'date': day,
+            'points': row.get('points', 0) or 0,
+            'event_count': row.get('event_count', 0) or 0,
+            'user_count': row.get('user_count', 0) or 0,
+        })
+
+    top_users = []
+    for row in contribution_period.values('user_id', 'user__username').annotate(
+        points=Sum('points'),
+        event_count=Count('id'),
+    ).order_by('-points', '-event_count', 'user__username')[:8]:
+        top_users.append({
+            'user_id': row['user_id'],
+            'username': row['user__username'],
+            'points': row['points'] or 0,
+            'event_count': row['event_count'] or 0,
+        })
+
+    lifetime_points = CommunityContribution.objects.aggregate(total=Sum('points'))['total'] or 0
+    return {
+        'period_points': period_points,
+        'period_events': period_events,
+        'period_users': period_users,
+        'lifetime_points': lifetime_points,
+        'average_points_per_user': round(period_points / period_users, 1) if period_users else 0,
+        'kind_rows': kind_rows,
+        'trend': trend,
+        'trend_max': max((point['points'] for point in trend), default=1) or 1,
+        'top_users': top_users,
+        'period_changes': {
+            'points': change(period_points, previous_values['points']),
+            'events': change(period_events, previous_values['events']),
+            'users': change(period_users, previous_values['users']),
+        },
+        'has_data': bool(period_events),
+    }
+
+
 def build_operations_dashboard(days=30):
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
@@ -914,6 +1021,7 @@ def build_operations_dashboard(days=30):
     view_period = BrowsingHistory.objects.filter(last_viewed_at__gte=start, last_viewed_at__lte=now)
     favorite_period = Favorite.objects.filter(created_at__gte=start, created_at__lte=now)
     notification_period = Notification.objects.filter(created_at__gte=start, created_at__lte=now)
+    contribution_period = CommunityContribution.objects.filter(occurred_at__gte=start, occurred_at__lte=now)
     previous_start = start - timedelta(days=days)
     previous_item_period = Item.objects.filter(created_at__gte=previous_start, created_at__lt=start)
     previous_order_period = Order.objects.filter(created_at__gte=previous_start, created_at__lt=start)
@@ -922,6 +1030,9 @@ def build_operations_dashboard(days=30):
     previous_view_period = BrowsingHistory.objects.filter(last_viewed_at__gte=previous_start, last_viewed_at__lt=start)
     previous_favorite_period = Favorite.objects.filter(created_at__gte=previous_start, created_at__lt=start)
     previous_report_period = Report.objects.filter(created_at__gte=previous_start, created_at__lt=start)
+    previous_contribution_period = CommunityContribution.objects.filter(
+        occurred_at__gte=previous_start, occurred_at__lt=start,
+    )
 
     order_count = order_period.count()
     completed_order_count = order_period.filter(status='completed').count()
@@ -932,6 +1043,9 @@ def build_operations_dashboard(days=30):
     favorite_count = favorite_period.count()
     notification_insights = _build_notification_insights(notification_period, dates)
     demand_match_insights = _build_demand_match_insights(notification_period, start, now)
+    contribution_insights = _build_contribution_insights(
+        contribution_period, previous_contribution_period, dates,
+    )
 
     def conversion_rate(current, previous):
         return round(current / previous * 100, 1) if previous else 0
@@ -1143,6 +1257,9 @@ def build_operations_dashboard(days=30):
         'demand_response_acceptance_rate': demand_match_insights['response_acceptance_rate'],
         'demand_match_response_rate': demand_match_insights['match_response_rate'],
         'demand_response_acceptance_demand_rate': demand_match_insights['response_acceptance_demand_rate'],
+        'contribution_points': contribution_insights['period_points'],
+        'contribution_events': contribution_insights['period_events'],
+        'contribution_users': contribution_insights['period_users'],
     }
     demand_radar = build_demand_radar(days=days, now=now)
     operational_alerts = build_operational_alerts(metrics, period_comparisons, demand_radar)
@@ -1178,4 +1295,5 @@ def build_operations_dashboard(days=30):
         'order_statuses': order_statuses,
         'notification_insights': notification_insights,
         'demand_match_insights': demand_match_insights,
+        'contribution_insights': contribution_insights,
     }

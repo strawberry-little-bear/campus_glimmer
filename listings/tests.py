@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -698,6 +698,52 @@ class ListingFlowTests(TestCase):
         self.assertEqual(insights['read_rate'], 50.0)
         self.assertEqual(dashboard['metrics']['demand_matches'], 2)
         self.assertEqual(dashboard['metrics']['demand_match_demands'], 1)
+
+    def test_operations_dashboard_reports_community_contribution_impact(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        now = timezone.now()
+        CommunityContribution.objects.create(
+            user=self.user, kind='trade_completed', points=10,
+            title='完成一笔交易', source_key='analytics:trade:1',
+            occurred_at=now - timedelta(days=1),
+        )
+        CommunityContribution.objects.create(
+            user=self.other_user, kind='borrow_returned', points=12,
+            title='完成一次借用归还', source_key='analytics:borrow:1',
+            occurred_at=now - timedelta(days=2),
+        )
+        CommunityContribution.objects.create(
+            user=self.other_user, kind='trade_completed', points=10,
+            title='完成一笔交易', source_key='analytics:trade:previous',
+            occurred_at=now - timedelta(days=40),
+        )
+
+        dashboard = build_operations_dashboard(30)
+        metrics = dashboard['metrics']
+        insights = dashboard['contribution_insights']
+        self.assertEqual(metrics['contribution_points'], 22)
+        self.assertEqual(metrics['contribution_events'], 2)
+        self.assertEqual(metrics['contribution_users'], 2)
+        self.assertEqual(insights['lifetime_points'], 32)
+        self.assertEqual(insights['average_points_per_user'], 11.0)
+        self.assertEqual(insights['period_changes']['points']['display'], '+120.0%')
+        self.assertEqual(insights['kind_rows'][0]['label'], '完成借用归还')
+        self.assertEqual(insights['top_users'][0]['username'], self.other_user.username)
+        self.assertEqual(insights['top_users'][0]['points'], 12)
+        self.assertTrue(any(point['points'] == 10 for point in insights['trend']))
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '校园互助影响')
+        self.assertContains(response, '周期贡献积分')
+
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+        report = export.content.decode('utf-8-sig')
+        self.assertIn('校园互助影响,数值', report)
+        self.assertIn('周期贡献积分,22', report)
+        self.assertIn('贡献类型,贡献积分,贡献事件,参与用户,积分占比（%）', report)
 
     def test_operations_dashboard_reports_demand_response_conversion(self):
         self.user.is_staff = True

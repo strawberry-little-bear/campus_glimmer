@@ -89,6 +89,11 @@
         <strong>{{ metrics.demand_matches }}</strong>
         <small>{{ metrics.demand_match_demands }} 条求购被触达 · 阅读率 {{ metrics.demand_match_read_rate }}%</small>
     </div>
+    <div class="ops-metric-card ops-metric-gold">
+        <span><i class="bi bi-heart-pulse"></i>互助积分</span>
+        <strong>{{ metrics.contribution_points }}</strong>
+        <small>{{ metrics.contribution_users }} 位参与者 · {{ metrics.contribution_events }} 次贡献</small>
+    </div>
 </div>
 
 <section class="content-card ops-panel mb-4">
@@ -157,6 +162,51 @@
             <div class="ops-mini-summary h-100"><span>未采纳响应</span><strong>{{ demand_match_insights.rejected_response_count }}</strong><span>从响应到确认</span><strong>{{ demand_match_insights.response_acceptance_demand_rate }}%</strong><span>口径说明</span><small>响应按提交时间统计，确认按处理时间统计；同一条求购只计一次转化。</small></div>
         </div>
     </div>
+</section>
+
+<section class="content-card ops-panel mb-4 contribution-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Community impact</span><h2>校园互助影响</h2></div>
+        <span class="ops-panel-hint">把贡献记录转化为可观察的社区信号</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-heart-pulse me-1"></i>贡献积分来自可追溯的交易完成与借用归还等业务事件；同一事件使用幂等键只计一次，便于评估校园互助的真实参与度。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期贡献积分</span><strong>{{ contribution_insights.period_points }}</strong><small>最近 {{ period_days }} 天累计</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>贡献事件</span><strong>{{ contribution_insights.period_events }}</strong><small>可审计的互助记录</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>参与用户</span><strong>{{ contribution_insights.period_users }}</strong><small>至少完成一次贡献</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>人均积分</span><strong>{{ contribution_insights.average_points_per_user }}</strong><small>累计积分 {{ contribution_insights.lifetime_points }}</small></div></div>
+    </div>
+    <div class="contribution-change-row mb-4">
+        <span>与上一周期相比</span>
+        <span class="ops-change ops-change-{{ contribution_insights.period_changes.points.direction }}">积分 {{ contribution_insights.period_changes.points.display }}</span>
+        <span class="ops-change ops-change-{{ contribution_insights.period_changes.events.direction }}">事件 {{ contribution_insights.period_changes.events.display }}</span>
+        <span class="ops-change ops-change-{{ contribution_insights.period_changes.users.direction }}">参与者 {{ contribution_insights.period_changes.users.display }}</span>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">每日贡献趋势</h3>
+            {% if contribution_insights.has_data %}
+            <div class="activity-chart contribution-trend-chart" aria-label="每日校园互助贡献积分趋势">
+                {% for point in contribution_insights.trend %}{% if point.points %}<div class="activity-row"><time datetime="{{ point.date|date:'Y-m-d' }}">{{ point.date|date:'m-d' }}</time><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio point.points contribution_insights.trend_max 100 %}%" title="{{ point.points }} 分"></span></div><strong>{{ point.points }}</strong><small class="text-muted">{{ point.event_count }} 次</small></div>{% endif %}{% endfor %}
+            </div>
+            {% else %}<div class="empty-inline">当前周期还没有可统计的互助贡献。</div>{% endif %}
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">贡献类型</h3>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>类型</th><th>积分</th><th>事件</th><th>参与者</th></tr></thead><tbody>
+                {% for row in contribution_insights.kind_rows %}<tr><td><strong>{{ row.label }}</strong><small class="d-block text-muted">占积分 {{ row.point_share }}%</small></td><td>{{ row.points }}</td><td>{{ row.event_count }}</td><td>{{ row.user_count }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">当前周期还没有贡献类型数据。</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+    {% if contribution_insights.top_users %}
+    <div class="mt-4">
+        <h3 class="h6 mb-3">周期贡献排行</h3>
+        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 contribution-ranking-table"><thead><tr><th>排名</th><th>用户</th><th>贡献事件</th><th>贡献积分</th></tr></thead><tbody>
+            {% for row in contribution_insights.top_users %}<tr><td><span class="contribution-rank">{{ forloop.counter }}</span></td><td><strong>{{ row.username }}</strong></td><td>{{ row.event_count }}</td><td><strong>{{ row.points }}</strong></td></tr>{% endfor %}
+        </tbody></table></div>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>排行仅对管理员可见；积分用于观察社区参与，不等同于信用评级，也不替代交易安全审核。</div>
 </section>
 
 <section class="content-card ops-panel mb-4">

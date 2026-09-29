@@ -1997,6 +1997,9 @@ def operations_dashboard_export(request):
         ('demand_response_acceptance_rate', '响应确认率（%）'),
         ('demand_match_response_rate', '匹配到响应转化率（%）'),
         ('demand_response_acceptance_demand_rate', '响应到确认求购转化率（%）'),
+        ('contribution_points', '周期贡献积分'),
+        ('contribution_events', '周期贡献事件'),
+        ('contribution_users', '周期贡献用户'),
     )
     for key, label in metric_labels:
         value = metrics[key]
@@ -2020,6 +2023,31 @@ def operations_dashboard_export(request):
     writer.writerow(['通知类型', '触达事件', '通知记录', '未读记录', '压缩率（%）'])
     for row in dashboard['notification_insights']['kind_rows']:
         writer.writerow([row['label'], row['event_count'], row['row_count'], row['unread_count'], row['compression_rate']])
+
+    contribution_insights = dashboard['contribution_insights']
+    writer.writerow([])
+    writer.writerow(['校园互助影响', '数值'])
+    writer.writerow(['周期贡献积分', contribution_insights['period_points']])
+    writer.writerow(['周期贡献事件', contribution_insights['period_events']])
+    writer.writerow(['周期参与用户', contribution_insights['period_users']])
+    writer.writerow(['周期人均积分', contribution_insights['average_points_per_user']])
+    writer.writerow(['累计贡献积分', contribution_insights['lifetime_points']])
+
+    writer.writerow([])
+    writer.writerow(['贡献类型', '贡献积分', '贡献事件', '参与用户', '积分占比（%）'])
+    for row in contribution_insights['kind_rows']:
+        writer.writerow([row['label'], row['points'], row['event_count'], row['user_count'], row['point_share']])
+
+    writer.writerow([])
+    writer.writerow(['排名', '用户名', '贡献事件', '贡献积分'])
+    for rank, row in enumerate(contribution_insights['top_users'], start=1):
+        writer.writerow([rank, row['username'], row['event_count'], row['points']])
+
+    writer.writerow([])
+    writer.writerow(['每日互助趋势', '贡献积分', '贡献事件', '参与用户'])
+    for point in contribution_insights['trend']:
+        if point['points'] or point['event_count']:
+            writer.writerow([point['date'], point['points'], point['event_count'], point['user_count']])
 
     writer.writerow([])
     writer.writerow([
