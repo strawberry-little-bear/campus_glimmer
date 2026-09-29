@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from .demand_matching import _match_demand
 from .lost_found_matching import score_lost_found_posts
-from .models import DemandPost, Item, LostFoundPost
+from .models import DemandPost, Item, LostFoundPost, OpportunityDismissal
 
 
 def _active_demands():
@@ -44,7 +44,19 @@ def build_opportunity_feed(user, *, limit=12):
     available_items = list(
         Item.objects.available().filter(seller=user).select_related('category', 'location')[:80]
     )
-    demands = list(_active_demands().exclude(requester=user)[:300])
+    active_dismissals = OpportunityDismissal.objects.filter(
+        user=user, expires_at__gt=timezone.now(),
+    ).values_list('kind', 'demand_id', 'lost_found_post_id')
+    dismissed_demand_ids = {
+        target_id for kind, target_id, _ in active_dismissals
+        if kind == 'demand' and target_id
+    }
+    dismissed_lost_found_ids = {
+        target_id for kind, _, target_id in active_dismissals
+        if kind == 'lost_found' and target_id
+    }
+
+    demands = list(_active_demands().exclude(requester=user).exclude(pk__in=dismissed_demand_ids)[:300])
     best_demands = {}
     for item in available_items:
         for demand in demands:
@@ -72,7 +84,8 @@ def build_opportunity_feed(user, *, limit=12):
     candidate_types = {post.post_type for post in own_posts}
     opposite_types = {'found' if post_type == 'lost' else 'lost' for post_type in candidate_types}
     candidates = list(
-        _active_lost_found_posts().filter(post_type__in=opposite_types).exclude(reporter=user)[:300]
+        _active_lost_found_posts().filter(post_type__in=opposite_types)
+        .exclude(reporter=user).exclude(pk__in=dismissed_lost_found_ids)[:300]
     ) if opposite_types else []
     candidates_by_type = {}
     for candidate in candidates:

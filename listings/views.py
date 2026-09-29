@@ -31,7 +31,7 @@ from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -1709,6 +1709,32 @@ def opportunity_feed(request):
         'feed': build_opportunity_feed(request.user),
         'title': '校园互助机会',
     })
+
+
+@login_required
+def dismiss_opportunity(request):
+    if request.method == 'POST':
+        kind = request.POST.get('kind', '').strip()
+        target_id = request.POST.get('target_id', '').strip()
+        if kind == 'demand':
+            target = get_object_or_404(DemandPost, pk=target_id)
+            filters = {'demand': target, 'lost_found_post': None}
+        elif kind == 'lost_found':
+            target = get_object_or_404(LostFoundPost, pk=target_id)
+            filters = {'demand': None, 'lost_found_post': target}
+        else:
+            messages.error(request, '无法识别这条互助机会。')
+            return redirect('opportunity_feed')
+        OpportunityDismissal.objects.update_or_create(
+            user=request.user,
+            **filters,
+            defaults={
+                'kind': kind,
+                'expires_at': timezone.now() + timedelta(days=30),
+            },
+        )
+        messages.success(request, '这条机会将在 30 天内暂不展示，你仍可以通过原页面访问源记录。')
+    return redirect('opportunity_feed')
 
 
 @login_required

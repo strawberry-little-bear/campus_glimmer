@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -210,6 +210,15 @@ class OrderDisputeEvidenceAdmin(admin.ModelAdmin):
     @admin.display(description='文件')
     def attachment_name(self, obj):
         return obj.filename
+
+
+@admin.register(OpportunityDismissal)
+class OpportunityDismissalAdmin(admin.ModelAdmin):
+    list_display = ('user', 'kind', 'demand', 'lost_found_post', 'expires_at', 'created_at')
+    list_filter = ('kind', 'expires_at', 'created_at')
+    search_fields = ('user__username', 'demand__title', 'lost_found_post__title')
+    autocomplete_fields = ('user', 'demand', 'lost_found_post')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(RecommendationFeedback)

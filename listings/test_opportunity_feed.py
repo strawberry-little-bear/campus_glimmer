@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import CampusLocation, Category, DemandPost, Item, LostFoundPost
+from .models import CampusLocation, Category, DemandPost, Item, LostFoundPost, OpportunityDismissal
 from .opportunity_feed import build_opportunity_feed
 
 
@@ -173,3 +173,28 @@ class OpportunityFeedTests(TestCase):
         self.assertEqual(feed['opportunities'][0]['target'], active_found)
         self.assertIn(feed['opportunities'][0]['source'], {first_lost, second_lost})
         self.assertNotIn(expired_own_post, [row['source'] for row in feed['opportunities']])
+
+    def test_user_can_temporarily_dismiss_a_demand_opportunity(self):
+        demand = DemandPost.objects.create(
+            requester=self.other,
+            title='求购高等数学教材',
+            description='希望在测试地点附近找到一本',
+            category=self.category,
+            location=self.location,
+            max_price='50.00',
+        )
+        self.client.force_login(self.user)
+        response = self.client.post(reverse('dismiss_opportunity'), {
+            'kind': 'demand',
+            'target_id': demand.id,
+        })
+
+        self.assertRedirects(response, reverse('opportunity_feed'))
+        dismissal = OpportunityDismissal.objects.get(user=self.user, demand=demand)
+        self.assertEqual(dismissal.kind, 'demand')
+        self.assertGreater(dismissal.expires_at, timezone.now())
+        self.assertEqual(build_opportunity_feed(self.user)['demand_count'], 0)
+
+        dismissal.expires_at = timezone.now() - timedelta(minutes=1)
+        dismissal.save(update_fields=['expires_at'])
+        self.assertEqual(build_opportunity_feed(self.user)['demand_count'], 1)

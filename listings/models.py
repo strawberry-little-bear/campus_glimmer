@@ -1227,6 +1227,62 @@ class LostFoundPost(models.Model):
         return f'{self.get_post_type_display()} · {self.title}'
 
 
+class OpportunityDismissal(models.Model):
+    """Temporarily hide a recommendation without mutating its source record."""
+
+    KIND_CHOICES = (
+        ('demand', '校园求购'),
+        ('lost_found', '失物招领'),
+    )
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='opportunity_dismissals', verbose_name='用户',
+    )
+    kind = models.CharField('机会类型', max_length=20, choices=KIND_CHOICES)
+    demand = models.ForeignKey(
+        'DemandPost', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='opportunity_dismissals', verbose_name='求购信息',
+    )
+    lost_found_post = models.ForeignKey(
+        LostFoundPost, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='opportunity_dismissals', verbose_name='失物招领记录',
+    )
+    expires_at = models.DateTimeField('忽略截止时间')
+    created_at = models.DateTimeField('忽略时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '互助机会忽略记录'
+        verbose_name_plural = '互助机会忽略记录'
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind='demand', demand__isnull=False, lost_found_post__isnull=True)
+                    | models.Q(kind='lost_found', demand__isnull=True, lost_found_post__isnull=False)
+                ),
+                name='opportunity_dismissal_target_matches_kind',
+            ),
+            models.UniqueConstraint(
+                fields=['user', 'demand'],
+                condition=models.Q(demand__isnull=False),
+                name='unique_opportunity_dismissal_demand',
+            ),
+            models.UniqueConstraint(
+                fields=['user', 'lost_found_post'],
+                condition=models.Q(lost_found_post__isnull=False),
+                name='unique_opportunity_dismissal_lost_found',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'expires_at']),
+            models.Index(fields=['kind', 'expires_at']),
+        ]
+
+    def __str__(self):
+        target = self.demand or self.lost_found_post
+        return f'{self.user.username} · 暂不展示 · {target}'
+
+
 class LostFoundLead(models.Model):
     """A private lead sent in response to a lost-and-found post."""
 
