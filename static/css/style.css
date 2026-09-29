@@ -1137,3 +1137,8 @@ a { color: inherit; text-decoration: none; }
 .notification-quiet-hours-fields em, .notification-quiet-hours-error { color: #b14d45; font-size: .7rem; font-style: normal; }
 .notification-quiet-banner { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid #eee4c9; border-radius: 11px; color: #89704a; background: #fffaf0; font-size: .7rem; line-height: 1.6; }
 @media (max-width: 575.98px) { .notification-quiet-hours-heading { align-items: flex-start; }.notification-quiet-hours-fields { grid-template-columns: 1fr; }.notification-quiet-hours-fields .form-control { max-width: none; } }
+
+.mutual-aid-feedback-summary { padding: 10px 12px; border: 1px solid rgba(33, 76, 58, .14); border-radius: 12px; background: #f4faf6; color: #2f6049; }
+.mutual-aid-feedback-banner { border-left: 4px solid #4f9d78; background: linear-gradient(135deg, #f3fbf6, #fff); }
+.feedback-tag-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
+.feedback-tag-list li { padding: 8px 10px; border: 1px solid #dcebe1; border-radius: 10px; background: #fff; }

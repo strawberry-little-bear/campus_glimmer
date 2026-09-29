@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -142,6 +142,27 @@ class NotificationPreferenceAdmin(admin.ModelAdmin):
     list_filter = ('order_created', 'order_status', 'meeting_incident', 'message_received', 'saved_search_match', 'item_available', 'updated_at')
     search_fields = ('user__username',)
     readonly_fields = ('updated_at',)
+
+
+@admin.register(MutualAidFeedback)
+class MutualAidFeedbackAdmin(admin.ModelAdmin):
+    list_display = ('source_label', 'helper', 'submitted_by', 'outcome', 'created_at')
+    list_filter = ('outcome', 'created_at')
+    search_fields = (
+        'submitted_by__username', 'demand_response__responder__username',
+        'lost_found_lead__respondent__username', 'note',
+    )
+    autocomplete_fields = ('demand_response', 'lost_found_lead', 'submitted_by')
+    readonly_fields = ('created_at', 'updated_at')
+
+    @admin.display(description='互助来源')
+    def source_label(self, obj):
+        source = obj.source
+        return source.demand.title if obj.demand_response_id else source.post.title
+
+    @admin.display(description='帮助者')
+    def helper(self, obj):
+        return obj.helper.username
 
 
 @admin.register(Notification)

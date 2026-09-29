@@ -26,13 +26,14 @@ from .demand_radar import build_demand_radar
 from .circular_impact import build_circular_impact_report
 from .contributions import (
     build_contribution_summary, record_demand_response_contribution,
-    record_lost_found_lead_contribution, record_order_contribution,
+    record_lost_found_lead_contribution, record_mutual_aid_feedback_contribution,
+    record_order_contribution,
 )
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
@@ -2657,6 +2658,64 @@ def review_demand_response(request, response_id, action):
             messages.success(request, '已将这条响应标记为未采纳。')
     return redirect('demand_detail', demand_id=response.demand_id)
 
+@login_required
+def submit_demand_feedback(request, response_id):
+    response = get_object_or_404(
+        DemandResponse.objects.select_related('demand', 'demand__requester', 'item', 'responder'),
+        pk=response_id,
+    )
+    if response.demand.requester_id != request.user.id:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return redirect('demand_detail', demand_id=response.demand_id)
+    if response.status != 'accepted':
+        messages.info(request, '只有已确认的求购响应才能提交完成反馈。')
+        return redirect('demand_detail', demand_id=response.demand_id)
+    if MutualAidFeedback.objects.filter(demand_response=response).exists():
+        messages.info(request, '这次互助已经提交过结果反馈。')
+        return redirect('demand_detail', demand_id=response.demand_id)
+
+    form = MutualAidFeedbackForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, '反馈内容不符合要求，请检查后重试。')
+        return redirect('demand_detail', demand_id=response.demand_id)
+
+    with transaction.atomic():
+        locked_response = DemandResponse.objects.select_for_update().select_related(
+            'demand', 'demand__requester', 'item', 'responder',
+        ).get(pk=response.pk)
+        if locked_response.status != 'accepted':
+            messages.info(request, '这条求购响应状态已经变化，暂时不能提交反馈。')
+            return redirect('demand_detail', demand_id=locked_response.demand_id)
+        if MutualAidFeedback.objects.filter(demand_response=locked_response).exists():
+            messages.info(request, '这次互助已经提交过结果反馈。')
+            return redirect('demand_detail', demand_id=locked_response.demand_id)
+        feedback = MutualAidFeedback(
+            demand_response=locked_response,
+            submitted_by=request.user,
+            outcome=form.cleaned_data['outcome'],
+            tags=form.cleaned_data['tags'],
+            note=form.cleaned_data['note'],
+        )
+        feedback.full_clean()
+        feedback.save()
+        record_mutual_aid_feedback_contribution(feedback)
+        outcome_text = feedback.get_outcome_display()
+        create_notification(
+            locked_response.responder,
+            actor=request.user,
+            kind='mutual_aid_feedback',
+            title='收到求购互助结果反馈',
+            message=f'“{locked_response.demand.title}”已被发布者标记为{outcome_text}。',
+            demand=locked_response.demand,
+            target_url=reverse('demand_detail', args=[locked_response.demand_id]),
+            dedupe_key=f'mutual-aid-feedback-demand-{feedback.id}',
+            dedupe_forever=True,
+        )
+    messages.success(request, '已记录这次求购互助的结果。')
+    return redirect('demand_detail', demand_id=response.demand_id)
+
+
 def demand_detail(request, demand_id):
     demand = get_object_or_404(
         DemandPost.objects.select_related('requester', 'category', 'location'), id=demand_id,
@@ -2670,14 +2729,27 @@ def demand_detail(request, demand_id):
     demand_responses = []
     responded_item_ids = set()
     is_demand_owner = request.user.is_authenticated and demand.requester_id == request.user.id
+    accepted_response = None
+    my_demand_feedback = None
     if is_demand_owner:
         demand_responses = demand.responses.select_related(
-            'item', 'item__category', 'item__location', 'responder',
+            'item', 'item__category', 'item__location', 'responder', 'feedback',
         ).all()
+        accepted_response = next(
+            (response for response in demand_responses if response.status == 'accepted'),
+            None,
+        )
     elif request.user.is_authenticated:
         responded_item_ids = set(demand.responses.filter(
             responder=request.user,
         ).values_list('item_id', flat=True))
+        my_response = demand.responses.filter(
+            responder=request.user, status='accepted',
+        ).select_related('feedback').first()
+        if my_response:
+            my_demand_feedback = getattr(my_response, 'feedback', None)
+
+    demand_feedback = getattr(accepted_response, 'feedback', None) if accepted_response else None
     return render(request, 'listings/demand_detail.html', {
         'demand': demand,
         'recommended_items': _demand_match_items(demand) if demand.status == 'active' else [],
@@ -2685,6 +2757,12 @@ def demand_detail(request, demand_id):
         'is_demand_owner': is_demand_owner,
         'responded_item_ids': responded_item_ids,
         'demand_response_form': DemandResponseForm(),
+        'accepted_demand_response': accepted_response,
+        'demand_feedback': demand_feedback or my_demand_feedback,
+        'demand_feedback_form': (
+            MutualAidFeedbackForm()
+            if is_demand_owner and accepted_response and not demand_feedback else None
+        ),
     })
 
 
@@ -2838,10 +2916,18 @@ def lost_found_detail(request, post_id):
     is_owner = request.user.is_authenticated and post.reporter_id == request.user.id
     leads = []
     my_lead = None
+    accepted_lead = None
+    my_lost_found_feedback = None
     if is_owner:
-        leads = post.leads.select_related('respondent', 'related_post').all()
+        leads = post.leads.select_related('respondent', 'related_post', 'feedback').all()
+        accepted_lead = next((lead for lead in leads if lead.status == 'accepted'), None)
     elif request.user.is_authenticated:
-        my_lead = post.leads.filter(respondent=request.user).select_related('related_post').first()
+        my_lead = post.leads.filter(respondent=request.user).select_related(
+            'related_post', 'feedback',
+        ).first()
+        if my_lead and my_lead.status == 'accepted':
+            my_lost_found_feedback = getattr(my_lead, 'feedback', None)
+    lost_found_feedback = getattr(accepted_lead, 'feedback', None) if accepted_lead else None
     lead_form = LostFoundLeadForm(post=post) if request.user.is_authenticated and not is_owner and post.status == 'active' else None
     return render(request, 'listings/lost_found_detail.html', {
         'post': post,
@@ -2849,6 +2935,12 @@ def lost_found_detail(request, post_id):
         'leads': leads,
         'my_lead': my_lead,
         'lead_form': lead_form,
+        'accepted_lost_found_lead': accepted_lead,
+        'lost_found_feedback': lost_found_feedback or my_lost_found_feedback,
+        'lost_found_feedback_form': (
+            MutualAidFeedbackForm()
+            if is_owner and accepted_lead and not lost_found_feedback else None
+        ),
         'matches': find_lost_found_matches(post) if post.status == 'active' else [],
     })
 
@@ -2966,6 +3058,63 @@ def review_lost_found_lead(request, lead_id, action):
             )
             messages.success(request, '已将这条线索标记为暂不匹配。')
     return redirect('lost_found_detail', lead.post_id)
+
+
+@login_required
+def submit_lost_found_feedback(request, lead_id):
+    lead = get_object_or_404(
+        LostFoundLead.objects.select_related('post', 'post__reporter', 'respondent'),
+        pk=lead_id,
+    )
+    if lead.post.reporter_id != request.user.id:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return redirect('lost_found_detail', post_id=lead.post_id)
+    if lead.status != 'accepted':
+        messages.info(request, '只有已确认的失物招领线索才能提交完成反馈。')
+        return redirect('lost_found_detail', post_id=lead.post_id)
+    if MutualAidFeedback.objects.filter(lost_found_lead=lead).exists():
+        messages.info(request, '这次互助已经提交过结果反馈。')
+        return redirect('lost_found_detail', post_id=lead.post_id)
+
+    form = MutualAidFeedbackForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, '反馈内容不符合要求，请检查后重试。')
+        return redirect('lost_found_detail', post_id=lead.post_id)
+
+    with transaction.atomic():
+        locked_lead = LostFoundLead.objects.select_for_update().select_related(
+            'post', 'post__reporter', 'respondent',
+        ).get(pk=lead.pk)
+        if locked_lead.status != 'accepted':
+            messages.info(request, '这条线索状态已经变化，暂时不能提交反馈。')
+            return redirect('lost_found_detail', post_id=locked_lead.post_id)
+        if MutualAidFeedback.objects.filter(lost_found_lead=locked_lead).exists():
+            messages.info(request, '这次互助已经提交过结果反馈。')
+            return redirect('lost_found_detail', post_id=locked_lead.post_id)
+        feedback = MutualAidFeedback(
+            lost_found_lead=locked_lead,
+            submitted_by=request.user,
+            outcome=form.cleaned_data['outcome'],
+            tags=form.cleaned_data['tags'],
+            note=form.cleaned_data['note'],
+        )
+        feedback.full_clean()
+        feedback.save()
+        record_mutual_aid_feedback_contribution(feedback)
+        outcome_text = feedback.get_outcome_display()
+        create_notification(
+            locked_lead.respondent,
+            actor=request.user,
+            kind='mutual_aid_feedback',
+            title='收到失物招领互助结果反馈',
+            message=f'“{locked_lead.post.title}”已被发布者标记为{outcome_text}。',
+            target_url=reverse('lost_found_detail', args=[locked_lead.post_id]),
+            dedupe_key=f'mutual-aid-feedback-lost-found-{feedback.id}',
+            dedupe_forever=True,
+        )
+    messages.success(request, '已记录这次失物招领互助的结果。')
+    return redirect('lost_found_detail', post_id=lead.post_id)
 
 
 @login_required

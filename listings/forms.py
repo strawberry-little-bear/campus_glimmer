@@ -5,7 +5,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
+from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -23,7 +23,7 @@ class NotificationPreferenceForm(forms.ModelForm):
             'item_available', 'item_expired', 'order_dispute',
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
-            'lost_found_match', 'lost_found_lead', 'opportunity_digest',
+            'lost_found_match', 'lost_found_lead', 'opportunity_digest', 'mutual_aid_feedback',
             'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
         ]
 
@@ -66,6 +66,39 @@ class DemandResponseForm(StyledModelFormMixin, forms.ModelForm):
                 'placeholder': '说明商品成色、可交付时间或你希望补充的信息（可选）。',
             }),
         }
+
+
+class MutualAidFeedbackForm(StyledModelFormMixin, forms.Form):
+    outcome = forms.ChoiceField(
+        label='互助结果',
+        choices=MutualAidFeedback.OUTCOME_CHOICES,
+        widget=forms.RadioSelect,
+        help_text='结果只记录互助是否形成闭环，不会替代交易评价。',
+    )
+    tags = forms.MultipleChoiceField(
+        label='可以勾选的反馈标签',
+        choices=MutualAidFeedback.TAG_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text='选择最符合这次互助过程的标签。',
+    )
+    note = forms.CharField(
+        label='补充说明',
+        required=False,
+        max_length=500,
+        widget=forms.Textarea(attrs={
+            'rows': 3,
+            'placeholder': '补充一句可帮助后续跟进的说明（可选）。',
+        }),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        self.fields['tags'].widget.attrs.update({'class': 'feedback-tag-list'})
+
+    def clean_tags(self):
+        return list(self.cleaned_data.get('tags') or [])
 
 
 class ItemForm(StyledModelFormMixin, forms.ModelForm):

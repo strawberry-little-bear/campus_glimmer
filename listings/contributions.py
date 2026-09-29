@@ -72,6 +72,15 @@ CONTRIBUTION_BADGE_RULES = (
         'kind': 'lost_found_help',
     },
     {
+        'code': 'closure_builder',
+        'title': '互助有始有终',
+        'description': '至少一次互助被发布者确认已经完成。',
+        'icon': 'bi-check2-all',
+        'threshold': 1,
+        'metric': 'kind',
+        'kind': 'mutual_aid_completed',
+    },
+    {
         'code': 'community_builder',
         'title': '社区循环倡导者',
         'description': '累计完成 5 次可验证校园互助。',
@@ -142,6 +151,21 @@ def record_lost_found_lead_contribution(lead):
         description=f'你提交的“{lead.post.title}”线索已被发布者确认。',
         source_key=f'lost-found-lead:{lead.pk}:accepted',
         occurred_at=lead.updated_at,
+    )
+
+
+def record_mutual_aid_feedback_contribution(feedback):
+    """Award a small, idempotent bonus only when an interaction is completed."""
+    if feedback.outcome != 'completed':
+        return None, False
+    return record_contribution(
+        user=feedback.helper,
+        kind='mutual_aid_completed',
+        points=10,
+        title='完成一次校园互助',
+        description='互助发布者确认这次响应已经形成闭环。',
+        source_key=f'mutual-aid-feedback:{feedback.pk}:completed',
+        occurred_at=feedback.updated_at,
     )
 
 

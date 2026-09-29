@@ -60,12 +60,13 @@
                 <form method="post" action="{% url 'review_demand_response' response.id 'accept' %}">{% csrf_token %}<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2 me-1"></i>确认匹配</button></form>
                 <form method="post" action="{% url 'review_demand_response' response.id 'reject' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" type="submit">暂不采纳</button></form>
             </div>
-            {% elif response.status == 'accepted' %}<div class="small text-success mt-2">已确认匹配，请进入商品详情继续完成预约或领取申请。</div>{% endif %}
+            {% elif response.status == 'accepted' %}<div class="small text-success mt-2">已确认匹配，请进入商品详情继续完成预约或领取申请。</div>{% if response.feedback %}<div class="mutual-aid-feedback-summary mt-3"><strong><i class="bi bi-check2-all me-1"></i>互助结果：{{ response.feedback.get_outcome_display }}</strong>{% if response.feedback.tags %}<div class="small text-muted mt-1">{% for tag in response.feedback.tags %}{% for value, label in response.feedback.TAG_CHOICES %}{% if tag == value %}<span class="badge rounded-pill text-bg-light me-1">{{ label }}</span>{% endif %}{% endfor %}{% endfor %}</div>{% endif %}</div>{% elif is_demand_owner and demand_feedback_form %}<div class="content-card mt-3 p-3 bg-light-subtle"><div class="small fw-semibold mb-2">这次互助后来怎么样了？</div><form method="post" action="{% url 'submit_demand_feedback' response.id %}">{% csrf_token %}{% for field in demand_feedback_form %}<div class="mb-2"><label class="form-label small">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}<button class="btn btn-sm btn-success" type="submit">记录互助结果</button></form></div>{% endif %}{% endif %}
         </article>
         {% endfor %}
     </div>
 </section>
 {% endif %}
+{% if not is_demand_owner and demand_feedback %}<section class="mt-5"><div class="content-card mutual-aid-feedback-banner"><div class="small text-muted">互助结果反馈</div><strong><i class="bi bi-check2-all me-1"></i>{{ demand_feedback.get_outcome_display }}</strong>{% if demand_feedback.tags %}<div class="small mt-2">{% for tag in demand_feedback.tags %}{% for value, label in demand_feedback.TAG_CHOICES %}{% if tag == value %}<span class="badge rounded-pill text-bg-light me-1">{{ label }}</span>{% endif %}{% endfor %}{% endfor %}</div>{% endif %}</div></section>{% endif %}
 
 {% if recommended_items %}
 <section class="mt-5">

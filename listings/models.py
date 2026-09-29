@@ -689,6 +689,7 @@ class CommunityContribution(models.Model):
         ('gift_completed', '完成免费赠送'),
         ('lost_found_help', '协助失物招领'),
         ('demand_helped', '响应校园求购'),
+        ('mutual_aid_completed', '完成一次校园互助'),
     )
 
     user = models.ForeignKey(
@@ -716,6 +717,91 @@ class CommunityContribution(models.Model):
 
     def __str__(self):
         return f'{self.user.username} · {self.title} · {self.points}分'
+
+
+class MutualAidFeedback(models.Model):
+    """A lightweight, owner-confirmed outcome for a non-order interaction."""
+
+    OUTCOME_CHOICES = (
+        ('completed', '已完成'),
+        ('unresolved', '暂未解决'),
+    )
+    TAG_CHOICES = (
+        ('on_time', '按约完成'),
+        ('smooth', '沟通顺畅'),
+        ('helpful', '信息有帮助'),
+        ('needs_follow_up', '还需要后续跟进'),
+    )
+
+    demand_response = models.OneToOneField(
+        'DemandResponse', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='feedback', verbose_name='求购响应',
+    )
+    lost_found_lead = models.OneToOneField(
+        'LostFoundLead', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='feedback', verbose_name='失物招领线索',
+    )
+    submitted_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='submitted_mutual_aid_feedback',
+        verbose_name='确认人',
+    )
+    outcome = models.CharField('互助结果', max_length=20, choices=OUTCOME_CHOICES)
+    tags = models.JSONField('反馈标签', default=list, blank=True)
+    note = models.CharField('补充说明', max_length=500, blank=True)
+    created_at = models.DateTimeField('反馈时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '互助完成反馈'
+        verbose_name_plural = '互助完成反馈'
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(demand_response__isnull=False, lost_found_lead__isnull=True)
+                    | models.Q(demand_response__isnull=True, lost_found_lead__isnull=False)
+                ),
+                name='mutual_aid_feedback_exactly_one_source',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['submitted_by', '-created_at']),
+            models.Index(fields=['outcome', '-created_at']),
+        ]
+
+    @property
+    def source(self):
+        return self.demand_response or self.lost_found_lead
+
+    @property
+    def helper(self):
+        source = self.source
+        return source.responder if hasattr(source, 'responder') else source.respondent
+
+    def clean(self):
+        if bool(self.demand_response_id) == bool(self.lost_found_lead_id):
+            raise ValidationError('互助反馈必须且只能关联一条求购响应或失物招领线索。')
+        if not isinstance(self.tags, list):
+            raise ValidationError('反馈标签格式不正确。')
+        valid_tags = {key for key, _ in self.TAG_CHOICES}
+        if any(tag not in valid_tags for tag in self.tags):
+            raise ValidationError('反馈标签包含不支持的选项。')
+
+        source = self.source
+        if source is None:
+            return
+        if source.status != 'accepted':
+            raise ValidationError('只有已确认的互助响应才能提交完成反馈。')
+        owner_id = (
+            source.demand.requester_id
+            if self.demand_response_id
+            else source.post.reporter_id
+        )
+        if self.submitted_by_id != owner_id:
+            raise ValidationError('只有互助发布者可以确认反馈结果。')
+
+    def __str__(self):
+        return f'{self.get_outcome_display()} · {self.helper.username}'
 
 
 class RecommendationFeedback(models.Model):
@@ -774,6 +860,7 @@ class Notification(models.Model):
         ('lost_found_match', '失物招领匹配提醒'),
         ('lost_found_lead', '失物招领线索更新'),
         ('opportunity_digest', '互助机会摘要'),
+        ('mutual_aid_feedback', '互助完成反馈'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -895,6 +982,9 @@ class NotificationPreference(models.Model):
     )
     opportunity_digest = models.BooleanField(
         '互助机会摘要', default=True, help_text='定期汇总可能适合你响应的求购和失物招领机会。',
+    )
+    mutual_aid_feedback = models.BooleanField(
+        '互助完成反馈', default=True, help_text='互助发布者确认响应结果后提醒参与者。',
     )
     quiet_hours_enabled = models.BooleanField(
         '启用免打扰时段', default=False,
