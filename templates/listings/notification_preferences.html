@@ -26,6 +26,7 @@
         {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
         <div class="notification-preference-list">
             {% for field in form.visible_fields %}
+            {% if field.name != 'quiet_hours_enabled' and field.name != 'quiet_hours_start' and field.name != 'quiet_hours_end' %}
             <label class="notification-preference-row" for="{{ field.id_for_label }}">
                 <span class="notification-preference-copy">
                     <strong>{{ field.label }}</strong>
@@ -37,8 +38,27 @@
                     <span class="notification-switch-track" aria-hidden="true"><span></span></span>
                 </span>
             </label>
+            {% endif %}
             {% endfor %}
         </div>
+
+        <section class="notification-quiet-hours" aria-labelledby="quiet-hours-title">
+            <div class="notification-quiet-hours-heading">
+                <div>
+                    <strong id="quiet-hours-title"><i class="bi bi-moon-stars me-1"></i>{{ form.quiet_hours_enabled.label }}</strong>
+                    <small>{{ form.quiet_hours_enabled.help_text }}</small>
+                </div>
+                <span class="notification-switch">
+                    {{ form.quiet_hours_enabled }}
+                    <span class="notification-switch-track" aria-hidden="true"><span></span></span>
+                </span>
+            </div>
+            <div class="notification-quiet-hours-fields">
+                <label for="{{ form.quiet_hours_start.id_for_label }}"><span>{{ form.quiet_hours_start.label }}</span>{{ form.quiet_hours_start }}{% for error in form.quiet_hours_start.errors %}<em>{{ error }}</em>{% endfor %}</label>
+                <label for="{{ form.quiet_hours_end.id_for_label }}"><span>{{ form.quiet_hours_end.label }}</span>{{ form.quiet_hours_end }}{% for error in form.quiet_hours_end.errors %}<em>{{ error }}</em>{% endfor %}</label>
+            </div>
+            {% for error in form.non_field_errors %}<p class="notification-quiet-hours-error">{{ error }}</p>{% endfor %}
+        </section>
         <div class="notification-preference-actions">
             <a href="{% url 'notification_list' %}" class="btn btn-light">取消</a>
             <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>保存设置</button>

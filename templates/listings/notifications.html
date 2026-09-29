@@ -23,6 +23,7 @@
 </div>
 
 <section class="content-card notification-panel">
+    {% if notification_quiet_hours_active %}<div class="notification-quiet-banner"><i class="bi bi-moon-stars me-1"></i>当前处于免打扰时段，顶部未读提醒暂时静默；通知仍会保留在这里，随时可以主动查看。</div>{% endif %}
     <div class="notification-toolbar">
         <div>
             <strong>{{ notification_total }}</strong>{% if notification_total != notification_total_all %} / {{ notification_total_all }}{% endif %} 条通知

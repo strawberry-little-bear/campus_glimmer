@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import time, timedelta
 from pathlib import Path
 
 from django.core.exceptions import ValidationError
@@ -895,6 +895,16 @@ class NotificationPreference(models.Model):
     )
     opportunity_digest = models.BooleanField(
         '互助机会摘要', default=True, help_text='定期汇总可能适合你响应的求购和失物招领机会。',
+    )
+    quiet_hours_enabled = models.BooleanField(
+        '启用免打扰时段', default=False,
+        help_text='启用后，指定时段内不会显示顶部未读提醒，但通知仍会保留在通知中心。',
+    )
+    quiet_hours_start = models.TimeField(
+        '免打扰开始时间', default=time(22, 0),
+    )
+    quiet_hours_end = models.TimeField(
+        '免打扰结束时间', default=time(8, 0),
     )
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 

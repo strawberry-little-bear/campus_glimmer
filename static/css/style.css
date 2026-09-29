@@ -1124,3 +1124,16 @@ a { color: inherit; text-decoration: none; }
 .impact-note { margin: 13px 0 0; color: #99a49e; font-size: .68rem; line-height: 1.6; }
 @media (max-width: 767px) { .impact-heading { align-items: flex-start; flex-direction: column; }.impact-heading .btn { align-self: flex-start; }.impact-hero { align-items: flex-start; flex-direction: column; padding: 22px; }.impact-score { align-self: stretch; }.impact-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.impact-month-chart { gap: 7px; padding-left: 0; padding-right: 0; }.impact-month-track { max-width: 27px; } }
 @media (max-width: 450px) { .impact-stat-grid { grid-template-columns: 1fr; }.impact-stat { min-height: 76px; }.impact-month-chart { gap: 4px; }.impact-month-column { font-size: .56rem; }.impact-month-track { max-width: 22px; } }
+
+/* Notification quiet-hours settings */
+.notification-quiet-hours { margin-top: 18px; padding: 18px 4px 4px; border-top: 1px solid #edf2ee; }
+.notification-quiet-hours-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.notification-quiet-hours-heading > div { display: grid; gap: 5px; }
+.notification-quiet-hours-heading strong { color: #315946; font-size: .86rem; }
+.notification-quiet-hours-heading small { color: #8a9991; font-size: .72rem; line-height: 1.5; }
+.notification-quiet-hours-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 480px; margin-top: 14px; }
+.notification-quiet-hours-fields label { display: grid; gap: 6px; color: #718278; font-size: .7rem; font-weight: 700; }
+.notification-quiet-hours-fields .form-control { max-width: 190px; border-color: #dfeae1; color: #49655a; font-size: .78rem; }
+.notification-quiet-hours-fields em, .notification-quiet-hours-error { color: #b14d45; font-size: .7rem; font-style: normal; }
+.notification-quiet-banner { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 14px; padding: 10px 12px; border: 1px solid #eee4c9; border-radius: 11px; color: #89704a; background: #fffaf0; font-size: .7rem; line-height: 1.6; }
+@media (max-width: 575.98px) { .notification-quiet-hours-heading { align-items: flex-start; }.notification-quiet-hours-fields { grid-template-columns: 1fr; }.notification-quiet-hours-fields .form-control { max-width: none; } }

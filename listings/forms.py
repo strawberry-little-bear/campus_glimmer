@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import time, timedelta
 from decimal import Decimal
 
 from django import forms
@@ -24,12 +24,36 @@ class NotificationPreferenceForm(forms.ModelForm):
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
             'lost_found_match', 'lost_found_lead', 'opportunity_digest',
+            'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget = forms.CheckboxInput(attrs={'class': 'form-check-input'})
+        for field_name, field in self.fields.items():
+            if field_name == 'quiet_hours_enabled':
+                field.widget = forms.CheckboxInput(attrs={'class': 'form-check-input'})
+            elif field_name in {'quiet_hours_start', 'quiet_hours_end'}:
+                field.required = False
+                field.widget = forms.TimeInput(
+                    format='%H:%M', attrs={'type': 'time', 'class': 'form-control'},
+                )
+            else:
+                field.widget = forms.CheckboxInput(attrs={'class': 'form-check-input'})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        defaults = {'quiet_hours_start': time(22, 0), 'quiet_hours_end': time(8, 0)}
+        for field_name, default in defaults.items():
+            if not cleaned_data.get(field_name):
+                cleaned_data[field_name] = getattr(self.instance, field_name, None) or default
+        if (
+            cleaned_data.get('quiet_hours_enabled')
+            and cleaned_data.get('quiet_hours_start')
+            and cleaned_data.get('quiet_hours_end')
+            and cleaned_data['quiet_hours_start'] == cleaned_data['quiet_hours_end']
+        ):
+            raise forms.ValidationError('免打扰开始时间和结束时间不能相同，请至少保留一个小时的可用时段。')
+        return cleaned_data
 
 
 class DemandResponseForm(StyledModelFormMixin, forms.ModelForm):

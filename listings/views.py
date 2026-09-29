@@ -35,7 +35,7 @@ from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, Disput
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
-from .notifications import actionable_unread_q, create_notification
+from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .meeting_scheduling import (
@@ -2970,11 +2970,11 @@ def review_lost_found_lead(request, lead_id, action):
 
 @login_required
 def unread_summary(request):
-    unread_notifications = Notification.objects.filter(
-        recipient=request.user,
-    ).filter(actionable_unread_q())
-    unread_messages = PrivateMessage.objects.filter(
-        receiver=request.user, is_read=False,
+    quiet = quiet_hours_active(request.user)
+    unread_notifications = active_unread_notifications(request.user)
+    unread_messages = (
+        PrivateMessage.objects.none() if quiet else
+        PrivateMessage.objects.filter(receiver=request.user, is_read=False)
     )
     latest_entries = [
         {
@@ -3024,6 +3024,7 @@ def notification_list(request):
     all_notifications = Notification.objects.filter(recipient=request.user)
     notifications = all_notifications
     now = timezone.now()
+    quiet = quiet_hours_active(request.user, now=now)
     if status_filter == 'unread':
         notifications = notifications.filter(actionable_unread_q(now))
     elif status_filter == 'snoozed':
@@ -3050,8 +3051,9 @@ def notification_list(request):
     kind_counts = dict(
         all_notifications.values('kind').annotate(count=Count('id')).values_list('kind', 'count')
     )
+    badge_notifications = active_unread_notifications(request.user, now=now)
     unread_kind_counts = dict(
-        all_notifications.filter(actionable_unread_q(now))
+        badge_notifications
         .values('kind')
         .annotate(count=Count('id'))
         .values_list('kind', 'count')
@@ -3072,7 +3074,7 @@ def notification_list(request):
         ('read', '仅看已读'),
     )
     notification_total_all = all_notifications.count()
-    notification_unread_total = all_notifications.filter(actionable_unread_q(now)).count()
+    notification_unread_total = badge_notifications.count()
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
     return render(request, 'listings/notifications.html', {
@@ -3081,13 +3083,16 @@ def notification_list(request):
         'notification_total': paginator.count,
         'notification_total_all': notification_total_all,
         'notification_unread_total': notification_unread_total,
-        'notification_filtered_unread_count': notifications.filter(actionable_unread_q(now)).count(),
+        'notification_filtered_unread_count': (
+            0 if quiet else notifications.filter(actionable_unread_q(now)).count()
+        ),
         'notification_kind_options': notification_kind_options,
         'notification_status_options': notification_status_options,
         'notification_status_filter': status_filter,
         'notification_kind_filter': kind_filter,
         'notification_search_query': search_query,
         'notification_filter_query': filter_params.urlencode(),
+        'notification_quiet_hours_active': quiet,
         'notification_snooze_options': (
             ('2h', '2 小时'),
             ('24h', '24 小时'),
@@ -3107,6 +3112,7 @@ def activity_center(request):
         status_filter = 'all'
     search_query = request.GET.get('q', '').strip()[:120]
     now = timezone.now()
+    quiet = quiet_hours_active(request.user, now=now)
 
     notification_queryset = Notification.objects.filter(recipient=request.user)
     message_queryset = PrivateMessage.objects.filter(receiver=request.user)
@@ -3191,8 +3197,13 @@ def activity_center(request):
         'activity_type_filter': activity_type,
         'activity_status_filter': status_filter,
         'activity_search_query': search_query,
-        'activity_unread_total': all_notification_queryset.filter(actionable_unread_q(now)).count() + all_message_queryset.filter(is_read=False).count(),
-        'activity_filtered_unread_count': filtered_notifications.filter(actionable_unread_q(now)).count() + filtered_messages.filter(is_read=False).count(),
+        'activity_unread_total': (
+            0 if quiet else active_unread_notifications(request.user, now=now).count()
+        ) + (0 if quiet else all_message_queryset.filter(is_read=False).count()),
+        'activity_filtered_unread_count': (
+            0 if quiet else filtered_notifications.filter(actionable_unread_q(now)).count()
+        ) + (0 if quiet else filtered_messages.filter(is_read=False).count()),
+        'notification_quiet_hours_active': quiet,
         'activity_notification_count': all_notification_queryset.count(),
         'activity_message_count': all_message_queryset.count(),
     })

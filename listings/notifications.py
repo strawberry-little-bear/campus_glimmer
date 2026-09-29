@@ -15,8 +15,31 @@ def actionable_unread_q(now=None):
     )
 
 
+def quiet_hours_active(recipient, *, now=None):
+    """Whether the recipient is currently inside their local quiet-hours window.
+
+    Windows that cross midnight are supported, for example 22:00–08:00.
+    Quiet hours only suppress badge-style reminders; notifications remain stored
+    and can still be opened deliberately from the notification center.
+    """
+    now = now or timezone.now()
+    preference = NotificationPreference.objects.filter(user=recipient).first()
+    if not preference or not preference.quiet_hours_enabled:
+        return False
+
+    current = timezone.localtime(now).time().replace(tzinfo=None)
+    start = preference.quiet_hours_start
+    end = preference.quiet_hours_end
+    if start < end:
+        return start <= current < end
+    return current >= start or current < end
+
+
 def active_unread_notifications(recipient, *, now=None):
     """Return unread notifications that should currently affect the inbox badge."""
+    now = now or timezone.now()
+    if quiet_hours_active(recipient, now=now):
+        return Notification.objects.none()
     return Notification.objects.filter(
         recipient=recipient,
     ).filter(actionable_unread_q(now))
