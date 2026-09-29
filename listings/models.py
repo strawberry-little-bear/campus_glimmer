@@ -175,9 +175,36 @@ class ItemImage(models.Model):
         return f'{self.item.title}的图片'
 
 
+class FavoriteCollection(models.Model):
+    """A user-owned group for organizing saved campus items."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorite_collections', verbose_name='用户')
+    name = models.CharField('分组名称', max_length=40)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '心愿单分组'
+        verbose_name_plural = '心愿单分组'
+        ordering = ['name', '-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'name'], name='unique_user_favorite_collection_name'),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'name']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.name}'
+
+
 class Favorite(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='favorites')
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='favorites')
+    collection = models.ForeignKey(
+        FavoriteCollection, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='favorites', verbose_name='所属分组',
+    )
     created_at = models.DateTimeField('收藏时间', auto_now_add=True)
 
     class Meta:

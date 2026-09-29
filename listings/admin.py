@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -47,10 +47,21 @@ class ItemAdmin(admin.ModelAdmin):
         return obj.reports.count()
 
 
+@admin.register(FavoriteCollection)
+class FavoriteCollectionAdmin(admin.ModelAdmin):
+    list_display = ('name', 'user', 'favorite_count', 'created_at', 'updated_at')
+    search_fields = ('name', 'user__username')
+    list_filter = ('created_at', 'updated_at')
+
+    @admin.display(description='收藏数')
+    def favorite_count(self, obj):
+        return obj.favorites.count()
+
+
 @admin.register(Favorite)
 class FavoriteAdmin(admin.ModelAdmin):
-    list_display = ('user', 'item', 'created_at')
-    list_filter = ('created_at',)
+    list_display = ('user', 'item', 'collection', 'created_at')
+    list_filter = ('collection', 'created_at')
     search_fields = ('user__username', 'item__title')
 
 

@@ -32,8 +32,8 @@ from .contributions import (
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
@@ -1763,13 +1763,69 @@ def my_orders(request):
 
 @login_required
 def favorite_list(request):
-    favorites = Favorite.objects.filter(user=request.user).select_related('item__category', 'item__seller', 'item__location').prefetch_related('item__images')
+    collections = FavoriteCollection.objects.filter(user=request.user).annotate(
+        favorite_count=Count('favorites'),
+    )
+    selected_collection = None
+    collection_id = request.GET.get('collection', '').strip()
+    if collection_id:
+        try:
+            selected_collection = collections.get(pk=int(collection_id))
+        except (TypeError, ValueError, FavoriteCollection.DoesNotExist):
+            selected_collection = None
+
+    all_favorites = Favorite.objects.filter(user=request.user)
+    favorites = all_favorites.select_related(
+        'item__category', 'item__seller', 'item__location', 'collection',
+    ).prefetch_related('item__images')
+    if selected_collection:
+        favorites = favorites.filter(collection=selected_collection)
     context = {
         'favorites': favorites,
-        'favorite_ids': set(favorites.values_list('item_id', flat=True)),
+        'favorite_ids': set(all_favorites.values_list('item_id', flat=True)),
+        'collections': collections,
+        'selected_collection': selected_collection,
+        'collection_form': FavoriteCollectionForm(),
         'title': '我的心愿单',
     }
     return render(request, 'listings/favorite_list.html', context)
+
+
+@login_required
+def create_favorite_collection(request):
+    if request.method != 'POST':
+        return redirect('favorite_list')
+    form = FavoriteCollectionForm(request.POST)
+    if form.is_valid():
+        collection, created = FavoriteCollection.objects.get_or_create(
+            user=request.user, name=form.cleaned_data['name'],
+        )
+        if created:
+            messages.success(request, f'已创建“{collection.name}”分组。')
+        else:
+            messages.info(request, f'“{collection.name}”分组已经存在。')
+    else:
+        messages.error(request, '分组名称不能为空，且不能超过 40 个字。')
+    return redirect('favorite_list')
+
+
+@login_required
+def update_favorite_collection(request, favorite_id):
+    favorite = get_object_or_404(Favorite, pk=favorite_id, user=request.user)
+    if request.method == 'POST':
+        collection_id = request.POST.get('collection_id', '').strip()
+        collection = None
+        if collection_id:
+            collection = get_object_or_404(
+                FavoriteCollection, pk=collection_id, user=request.user,
+            )
+        favorite.collection = collection
+        favorite.save(update_fields=['collection'])
+        messages.success(request, '已更新心愿单分组。')
+    next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or ''
+    if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = ''
+    return redirect(next_url or 'favorite_list')
 
 
 @login_required

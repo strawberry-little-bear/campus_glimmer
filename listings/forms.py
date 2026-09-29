@@ -14,6 +14,22 @@ class StyledModelFormMixin:
             field.widget.attrs.setdefault('class', 'form-control')
 
 
+class FavoriteCollectionForm(forms.Form):
+    name = forms.CharField(
+        label='分组名称', max_length=40,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': '例如：教材、宿舍、想买',
+        }),
+    )
+
+    def clean_name(self):
+        name = self.cleaned_data['name'].strip()
+        if not name:
+            raise forms.ValidationError('请填写分组名称。')
+        return name
+
+
 class NotificationPreferenceForm(forms.ModelForm):
     class Meta:
         model = NotificationPreference

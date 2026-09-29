@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -80,6 +80,44 @@ class ListingFlowTests(TestCase):
         self.assertTrue(Favorite.objects.filter(user=self.user, item=self.item).exists())
         self.client.post(url, {'next': reverse('item_detail', args=[self.item.id])})
         self.assertFalse(Favorite.objects.filter(user=self.user, item=self.item).exists())
+
+    def test_user_can_group_favorites_and_filter_collection(self):
+        self.client.login(username='alice', password='safe-password-123')
+        self.client.post(reverse('toggle_favorite', args=[self.item.id]))
+        favorite = Favorite.objects.get(user=self.user, item=self.item)
+
+        response = self.client.post(
+            reverse('create_favorite_collection'), {'name': '宿舍用品'},
+        )
+        self.assertRedirects(response, reverse('favorite_list'))
+        collection = FavoriteCollection.objects.get(user=self.user, name='宿舍用品')
+
+        response = self.client.post(
+            reverse('update_favorite_collection', args=[favorite.id]),
+            {'collection_id': collection.id, 'next': reverse('favorite_list')},
+        )
+        self.assertRedirects(response, reverse('favorite_list'))
+        favorite.refresh_from_db()
+        self.assertEqual(favorite.collection, collection)
+
+        response = self.client.get(
+            reverse('favorite_list'), {'collection': collection.id},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '便携键盘')
+        self.assertContains(response, '宿舍用品')
+
+    def test_user_cannot_move_another_users_favorite(self):
+        favorite = Favorite.objects.create(user=self.other_user, item=self.item)
+        collection = FavoriteCollection.objects.create(user=self.other_user, name='对方分组')
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.post(
+            reverse('update_favorite_collection', args=[favorite.id]),
+            {'collection_id': collection.id},
+        )
+        self.assertEqual(response.status_code, 404)
+        favorite.refresh_from_db()
+        self.assertIsNone(favorite.collection)
 
     def test_user_can_submit_one_report_and_cannot_report_again(self):
         self.client.login(username='bob', password='safe-password-123')
