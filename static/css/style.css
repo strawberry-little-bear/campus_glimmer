@@ -656,6 +656,14 @@ a { color: inherit; text-decoration: none; }
 .notification-select:has(input:focus-visible) { box-shadow: 0 0 0 4px rgba(46, 139, 103, .12); }
 .notification-select-spacer { width: 28px; flex: 0 0 28px; }
 .notification-entry .notification-form { min-width: 0; flex: 1; }
+.notification-snooze-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding-left: 4px; white-space: nowrap; }
+.notification-snooze-actions .btn-link { color: #2e8b67; font-size: .74rem; text-decoration: none; }
+.notification-snooze-actions .btn-link:hover { color: #1f664d; text-decoration: underline; }
+.notification-snooze-state { flex: 0 0 auto; color: #8b9b92; font-size: .72rem; white-space: nowrap; }
+@media (max-width: 767.98px) {
+    .notification-snooze-actions, .notification-snooze-state { flex-basis: 100%; margin-left: 36px; padding: 0 0 10px; }
+    .notification-snooze-actions { flex-wrap: wrap; }
+}
 @media (max-width: 575.98px) {
     .notification-bulk-toolbar { align-items: stretch; flex-wrap: wrap; }
     .notification-selection-count { flex-basis: 100%; order: 3; }

@@ -78,6 +78,7 @@ urlpatterns = [
     path('notifications/activity/read-all/', views.mark_all_activity_read, name='mark_all_activity_read'),
     path('notifications/unread-summary/', views.unread_summary, name='unread_summary'),
     path('notifications/preferences/', views.notification_preferences, name='notification_preferences'),
+    path('notifications/<int:notification_id>/snooze/', views.snooze_notification, name='snooze_notification'),
     path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
     path('notifications/read-all/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
     path('notifications/read-selected/', views.mark_selected_notifications_read, name='mark_selected_notifications_read'),

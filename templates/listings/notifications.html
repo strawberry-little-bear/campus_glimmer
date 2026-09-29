@@ -114,6 +114,7 @@
                         {% elif notification.kind == 'order_expiring' %}<i class="bi bi-hourglass-split"></i>
                         {% elif notification.kind == 'order_expired' %}<i class="bi bi-x-circle"></i>
                         {% elif notification.kind == 'report_update' %}<i class="bi bi-flag"></i>
+                        {% elif notification.kind == 'opportunity_digest' %}<i class="bi bi-stars"></i>
                         {% else %}<i class="bi bi-chat-square-text"></i>{% endif %}
                     </span>
                     <span class="notification-body">
@@ -128,12 +129,27 @@
                     <i class="bi bi-chevron-right notification-arrow" aria-hidden="true"></i>
                 </button>
             </form>
+            {% if notification.is_snoozed %}
+            <span class="notification-snooze-state"><i class="bi bi-clock-history me-1"></i>已延后至 {{ notification.snoozed_until|date:'Y-m-d H:i' }}</span>
+            {% elif not notification.is_read %}
+            <div class="notification-snooze-actions" aria-label="延后处理">
+                <span class="small text-muted"><i class="bi bi-clock me-1"></i>延后处理</span>
+                {% for duration, label in notification_snooze_options %}
+                <form method="post" action="{% url 'snooze_notification' notification.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="duration" value="{{ duration }}">
+                    <input type="hidden" name="next" value="{% if notification_filter_query %}{% url 'notification_list' %}?{{ notification_filter_query }}{% else %}{% url 'notification_list' %}{% endif %}">
+                    <button type="submit" class="btn btn-link btn-sm p-0">{{ label }}</button>
+                </form>
+                {% endfor %}
+            </div>
+            {% endif %}
         </div>
         {% empty %}
         <div class="empty-state notification-empty">
             <i class="bi bi-bell-slash"></i>
             <h2>暂时没有通知</h2>
-            <p>当有人预约商品、给你留言或推进订单时，提醒会出现在这里。</p>
+            <p>当有人预约商品、给你留言或推进订单时，提醒会出现在这里；暂时不方便处理的事项可以先延后。</p>
             <a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a>
         </div>
         {% endfor %}

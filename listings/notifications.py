@@ -1,9 +1,35 @@
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import Notification, NotificationPreference
+
+
+def actionable_unread_q(now=None):
+    """Return the query condition for unread notifications that are due now."""
+    now = now or timezone.now()
+    return Q(is_read=False) & (
+        Q(snoozed_until__isnull=True) | Q(snoozed_until__lte=now)
+    )
+
+
+def active_unread_notifications(recipient, *, now=None):
+    """Return unread notifications that should currently affect the inbox badge."""
+    return Notification.objects.filter(
+        recipient=recipient,
+    ).filter(actionable_unread_q(now))
+
+
+def snoozed_notifications(recipient, *, now=None):
+    """Return unread notifications deliberately hidden until a future time."""
+    now = now or timezone.now()
+    return Notification.objects.filter(
+        recipient=recipient,
+        is_read=False,
+        snoozed_until__gt=now,
+    )
 
 
 def create_notification(

@@ -792,6 +792,10 @@ class Notification(models.Model):
     message = models.CharField('通知内容', max_length=255)
     target_url = models.CharField('跳转地址', max_length=255, blank=True)
     is_read = models.BooleanField('已读', default=False)
+    snoozed_until = models.DateTimeField(
+        '延后至', null=True, blank=True,
+        help_text='在这个时间之前不计入未读提醒，适合暂时不方便处理的事项。',
+    )
     dedupe_key = models.CharField('聚合键', max_length=120, blank=True, default='')
     occurrence_count = models.PositiveIntegerField('聚合次数', default=1)
     last_occurred_at = models.DateTimeField('最近发生时间', null=True, blank=True)
@@ -805,7 +809,16 @@ class Notification(models.Model):
             models.Index(fields=['recipient', 'is_read', '-created_at']),
             models.Index(fields=['recipient', '-created_at']),
             models.Index(fields=['recipient', 'kind', 'dedupe_key', 'is_read']),
+            models.Index(fields=['recipient', 'is_read', 'snoozed_until', '-created_at']),
         ]
+
+    @property
+    def is_snoozed(self):
+        return bool(
+            not self.is_read
+            and self.snoozed_until
+            and self.snoozed_until > timezone.now()
+        )
 
     def __str__(self):
         return f'{self.recipient.username} · {self.title}'

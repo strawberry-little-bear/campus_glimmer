@@ -58,7 +58,7 @@
                 <div class="notification-title-row"><strong>{{ row.title }}</strong><time>{{ row.created_at|date:"m月d日 H:i" }}</time></div>
                 <p class="notification-message mb-1">{{ row.message }}</p>
                 {% if row.context %}<div class="notification-context"><i class="bi bi-link-45deg me-1"></i>{{ row.context }}</div>{% endif %}
-                <div class="activity-entry-meta"><span>{{ row.source_label }}</span>{% if not row.is_read %}<span class="notification-dot" aria-label="未读"></span><span class="text-danger">未读</span>{% else %}<span>已读</span>{% endif %}</div>
+                <div class="activity-entry-meta"><span>{{ row.source_label }}</span>{% if row.is_snoozed %}<span class="text-muted"><i class="bi bi-clock-history me-1"></i>已延后</span>{% elif not row.is_read %}<span class="notification-dot" aria-label="未读"></span><span class="text-danger">未读</span>{% else %}<span>已读</span>{% endif %}</div>
             </div>
             <div class="activity-entry-actions">
                 {% if not row.is_read %}

@@ -34,7 +34,7 @@ from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, Disput
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
-from .notifications import create_notification
+from .notifications import actionable_unread_q, create_notification
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .meeting_scheduling import (
@@ -2962,8 +2962,8 @@ def review_lost_found_lead(request, lead_id, action):
 @login_required
 def unread_summary(request):
     unread_notifications = Notification.objects.filter(
-        recipient=request.user, is_read=False,
-    )
+        recipient=request.user,
+    ).filter(actionable_unread_q())
     unread_messages = PrivateMessage.objects.filter(
         receiver=request.user, is_read=False,
     )
@@ -3004,7 +3004,7 @@ def unread_summary(request):
 @login_required
 def notification_list(request):
     status_filter = request.GET.get('status', 'all').strip()
-    if status_filter not in {'all', 'unread', 'read'}:
+    if status_filter not in {'all', 'unread', 'snoozed', 'read'}:
         status_filter = 'all'
     kind_filter = request.GET.get('kind', '').strip()
     allowed_kinds = {value for value, _ in Notification.KIND_CHOICES}
@@ -3014,8 +3014,13 @@ def notification_list(request):
 
     all_notifications = Notification.objects.filter(recipient=request.user)
     notifications = all_notifications
+    now = timezone.now()
     if status_filter == 'unread':
-        notifications = notifications.filter(is_read=False)
+        notifications = notifications.filter(actionable_unread_q(now))
+    elif status_filter == 'snoozed':
+        notifications = notifications.filter(
+            is_read=False, snoozed_until__gt=now,
+        )
     elif status_filter == 'read':
         notifications = notifications.filter(is_read=True)
     if kind_filter:
@@ -3037,7 +3042,7 @@ def notification_list(request):
         all_notifications.values('kind').annotate(count=Count('id')).values_list('kind', 'count')
     )
     unread_kind_counts = dict(
-        all_notifications.filter(is_read=False)
+        all_notifications.filter(actionable_unread_q(now))
         .values('kind')
         .annotate(count=Count('id'))
         .values_list('kind', 'count')
@@ -3053,11 +3058,12 @@ def notification_list(request):
     ]
     notification_status_options = (
         ('all', '全部状态'),
-        ('unread', '仅看未读'),
+        ('unread', '仅看待处理未读'),
+        ('snoozed', '仅看已延后'),
         ('read', '仅看已读'),
     )
     notification_total_all = all_notifications.count()
-    notification_unread_total = all_notifications.filter(is_read=False).count()
+    notification_unread_total = all_notifications.filter(actionable_unread_q(now)).count()
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
     return render(request, 'listings/notifications.html', {
@@ -3066,13 +3072,18 @@ def notification_list(request):
         'notification_total': paginator.count,
         'notification_total_all': notification_total_all,
         'notification_unread_total': notification_unread_total,
-        'notification_filtered_unread_count': notifications.filter(is_read=False).count(),
+        'notification_filtered_unread_count': notifications.filter(actionable_unread_q(now)).count(),
         'notification_kind_options': notification_kind_options,
         'notification_status_options': notification_status_options,
         'notification_status_filter': status_filter,
         'notification_kind_filter': kind_filter,
         'notification_search_query': search_query,
         'notification_filter_query': filter_params.urlencode(),
+        'notification_snooze_options': (
+            ('2h', '2 小时'),
+            ('24h', '24 小时'),
+            ('3d', '3 天'),
+        ),
     })
 
 
@@ -3086,11 +3097,12 @@ def activity_center(request):
     if status_filter not in {'all', 'unread', 'read'}:
         status_filter = 'all'
     search_query = request.GET.get('q', '').strip()[:120]
+    now = timezone.now()
 
     notification_queryset = Notification.objects.filter(recipient=request.user)
     message_queryset = PrivateMessage.objects.filter(receiver=request.user)
     if status_filter == 'unread':
-        notification_queryset = notification_queryset.filter(is_read=False)
+        notification_queryset = notification_queryset.filter(actionable_unread_q(now))
         message_queryset = message_queryset.filter(is_read=False)
     elif status_filter == 'read':
         notification_queryset = notification_queryset.filter(is_read=True)
@@ -3133,6 +3145,7 @@ def activity_center(request):
             ),
             'created_at': notification.created_at,
             'is_read': notification.is_read,
+            'is_snoozed': notification.is_snoozed,
             'url': notification.target_url or reverse('notification_list'),
             'read_url': reverse('mark_notification_read', args=[notification.id]),
             'icon': 'bi-bell',
@@ -3169,8 +3182,8 @@ def activity_center(request):
         'activity_type_filter': activity_type,
         'activity_status_filter': status_filter,
         'activity_search_query': search_query,
-        'activity_unread_total': all_notification_queryset.filter(is_read=False).count() + all_message_queryset.filter(is_read=False).count(),
-        'activity_filtered_unread_count': filtered_notifications.filter(is_read=False).count() + filtered_messages.filter(is_read=False).count(),
+        'activity_unread_total': all_notification_queryset.filter(actionable_unread_q(now)).count() + all_message_queryset.filter(is_read=False).count(),
+        'activity_filtered_unread_count': filtered_notifications.filter(actionable_unread_q(now)).count() + filtered_messages.filter(is_read=False).count(),
         'activity_notification_count': all_notification_queryset.count(),
         'activity_message_count': all_message_queryset.count(),
     })
@@ -3221,6 +3234,36 @@ def notification_preferences(request):
         ),
         'notification_kind_count': len(form.fields),
     })
+
+
+@login_required
+def snooze_notification(request, notification_id):
+    """Temporarily remove an unread notification from the actionable inbox."""
+    notification = get_object_or_404(
+        Notification,
+        id=notification_id,
+        recipient=request.user,
+    )
+    if request.method == 'POST' and not notification.is_read:
+        duration_key = request.POST.get('duration', '24h').strip()
+        durations = {
+            '2h': (timedelta(hours=2), '2 小时'),
+            '24h': (timedelta(hours=24), '24 小时'),
+            '3d': (timedelta(days=3), '3 天'),
+        }
+        duration, label = durations.get(duration_key, durations['24h'])
+        notification.snoozed_until = timezone.now() + duration
+        notification.save(update_fields=['snoozed_until'])
+        messages.success(request, f'这条通知已延后 {label}，到期后会重新计入未读提醒。')
+
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('notification_list')
+    return redirect(next_url)
 
 
 @login_required
