@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import CampusDomain, CampusVerification
-from listings.models import Category, CampusLocation, Item, Order, Rating
+from listings.models import Category, CampusLocation, DemandPost, DemandResponse, Item, MutualAidFeedback, Order, Rating
 from listings.reputation import build_user_reputation
 
 
@@ -144,6 +144,42 @@ class PublicProfileTests(TestCase):
         self.assertContains(response, '完成交易')
         self.assertContains(response, '沟通顺利')
         self.assertNotContains(response, 'seller@example.com')
+
+    def test_public_profile_includes_privacy_safe_mutual_aid_summary(self):
+        demand = DemandPost.objects.create(
+            requester=self.other_user,
+            title='公开互助摘要求购',
+            description='测试公开互助结果摘要。',
+            category=self.category,
+            location=self.location,
+        )
+        item = Item.objects.create(
+            seller=self.user,
+            title='公开互助摘要商品',
+            description='测试描述',
+            price='20',
+            category=self.category,
+            location=self.location,
+            condition='9成新',
+        )
+        response = DemandResponse.objects.create(
+            demand=demand, item=item, responder=self.user, status='accepted',
+        )
+        MutualAidFeedback.objects.create(
+            demand_response=response,
+            submitted_by=self.other_user,
+            outcome='completed',
+            tags=['on_time', 'helpful'],
+            note='不应在公开档案展示。',
+        )
+
+        profile = self.client.get(reverse('public_profile', args=[self.user.id]))
+
+        self.assertEqual(profile.status_code, 200)
+        self.assertContains(profile, '校园互助反馈')
+        self.assertContains(profile, '完成互助')
+        self.assertContains(profile, '100.0%')
+        self.assertNotContains(profile, '不应在公开档案展示')
 
     def test_user_reputation_combines_buyer_and_seller_history(self):
         sold_item = Item.objects.create(

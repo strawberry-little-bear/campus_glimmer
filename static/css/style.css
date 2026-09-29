@@ -1142,3 +1142,6 @@ a { color: inherit; text-decoration: none; }
 .mutual-aid-feedback-banner { border-left: 4px solid #4f9d78; background: linear-gradient(135deg, #f3fbf6, #fff); }
 .feedback-tag-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
 .feedback-tag-list li { padding: 8px 10px; border: 1px solid #dcebe1; border-radius: 10px; background: #fff; }
+
+.mutual-aid-profile-card { border-top: 3px solid #70af8e; }
+.mutual-aid-profile-stats { margin-top: 16px; }

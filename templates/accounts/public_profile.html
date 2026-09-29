@@ -51,6 +51,21 @@
 
     <div class="row g-4 mt-1">
         <div class="col-12">
+            <section class="content-card public-profile-card mutual-aid-profile-card">
+                <div class="card-section-heading"><h2><i class="bi bi-hand-thumbs-up me-2"></i>校园互助反馈</h2><span>隐私安全的结果摘要</span></div>
+                <div class="public-profile-stats mutual-aid-profile-stats">
+                    <div><strong>{{ reputation.mutual_aid_completed_count }}</strong><span>完成互助</span></div>
+                    <div><strong>{{ reputation.mutual_aid_feedback_count }}</strong><span>收到结果反馈</span></div>
+                    <div><strong>{% if reputation.mutual_aid_completion_rate is not None %}{{ reputation.mutual_aid_completion_rate }}%{% else %}—{% endif %}</strong><span>互助完成率</span></div>
+                    <div><strong>{{ reputation.mutual_aid_positive_tag_count }}</strong><span>积极过程标签</span></div>
+                </div>
+                <p class="public-profile-note mb-0"><i class="bi bi-shield-check me-1"></i>只统计被互助发布者确认过的结果，不展示具体对象、私信内容或反馈原文；完成率不代表对未来互助结果的保证。</p>
+            </section>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-12">
             <section class="content-card public-profile-card contribution-card">
                 <div class="card-section-heading"><h2><i class="bi bi-stars me-2"></i>校园互助贡献</h2><span>{{ contribution.total_points }} 分 · {{ contribution.level }}</span></div>
                 <div class="contribution-summary">

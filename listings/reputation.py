@@ -2,7 +2,7 @@
 
 from django.db.models import Avg, Count, Q
 
-from .models import Item, MeetingIncident, Order, Rating
+from .models import Item, MeetingIncident, MutualAidFeedback, Order, Rating
 
 
 def build_seller_reputation(seller):
@@ -81,6 +81,22 @@ def build_user_reputation(user):
     ).count()
     active_listings = Item.objects.available().filter(seller=user).count()
 
+    mutual_aid_feedbacks = MutualAidFeedback.objects.filter(
+        Q(demand_response__responder=user) | Q(lost_found_lead__respondent=user),
+    ).values('outcome', 'tags')
+    mutual_aid_feedback_count = 0
+    mutual_aid_completed_count = 0
+    positive_tag_count = 0
+    for feedback in mutual_aid_feedbacks:
+        mutual_aid_feedback_count += 1
+        if feedback['outcome'] == 'completed':
+            mutual_aid_completed_count += 1
+        positive_tag_count += len(set(feedback['tags'] or []) & {'on_time', 'smooth', 'helpful'})
+    mutual_aid_completion_rate = (
+        round(mutual_aid_completed_count * 100 / mutual_aid_feedback_count, 1)
+        if mutual_aid_feedback_count else None
+    )
+
     badges = []
     if completed_orders:
         badges.append('有完成交易记录')
@@ -90,6 +106,10 @@ def build_user_reputation(user):
         badges.append('评价表现良好')
     if closed_orders >= 3 and confirmed_incidents == 0:
         badges.append('暂无已确认交付异常')
+    if mutual_aid_completed_count:
+        badges.append('有校园互助记录')
+    if mutual_aid_feedback_count >= 3 and mutual_aid_completion_rate >= 80:
+        badges.append('互助反馈稳定')
 
     if completed_orders >= 3 and completion_rate is not None and completion_rate >= 90:
         label = '可信交易伙伴'
@@ -110,4 +130,8 @@ def build_user_reputation(user):
         'rating_count': rating_count,
         'confirmed_incidents': confirmed_incidents,
         'active_listings': active_listings,
+        'mutual_aid_feedback_count': mutual_aid_feedback_count,
+        'mutual_aid_completed_count': mutual_aid_completed_count,
+        'mutual_aid_completion_rate': mutual_aid_completion_rate,
+        'mutual_aid_positive_tag_count': positive_tag_count,
     }
