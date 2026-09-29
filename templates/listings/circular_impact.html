@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}校园循环影响力 · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="impact-page">
+    <div class="page-heading impact-heading">
+        <div>
+            <span class="eyebrow eyebrow-soft">Campus circulation report</span>
+            <h1 class="mt-2">校园循环影响力</h1>
+            <p class="text-muted mb-0">只统计已经完成或完成归还的订单，把一次次真实流转整理成可解释的影响力记录。</p>
+        </div>
+        <a href="{% url 'contribution_center' %}" class="btn btn-outline-primary"><i class="bi bi-arrow-left me-1"></i>返回互助贡献</a>
+    </div>
+
+    <section class="impact-hero content-card">
+        <div class="impact-hero-copy">
+            <span class="eyebrow">{{ report.period_label }}</span>
+            <h2>让闲置物品继续发挥作用</h2>
+            <p>这份报告不展示交易对象和金额，只保留你可以复盘的流转结果、参与范围和校园场景。</p>
+        </div>
+        <div class="impact-score"><strong>{{ report.impact_score }}</strong><span>循环影响分</span><small>完成交易、赠送和归还按不同贡献权重计算</small></div>
+    </section>
+
+    <div class="impact-stat-grid">
+        <div class="impact-stat"><span class="impact-stat-icon"><i class="bi bi-arrow-repeat"></i></span><span><small>完成流转</small><strong>{{ report.total_orders }}</strong><em>次</em></span></div>
+        <div class="impact-stat"><span class="impact-stat-icon"><i class="bi bi-box-seam"></i></span><span><small>不同物品</small><strong>{{ report.unique_items }}</strong><em>件</em></span></div>
+        <div class="impact-stat"><span class="impact-stat-icon"><i class="bi bi-people"></i></span><span><small>协作同学</small><strong>{{ report.participant_count }}</strong><em>位</em></span></div>
+        <div class="impact-stat"><span class="impact-stat-icon"><i class="bi bi-gift"></i></span><span><small>免费流转</small><strong>{{ report.gift_count }}</strong><em>次</em></span></div>
+    </div>
+
+    <div class="row g-4 align-items-start mt-1">
+        <div class="col-lg-7">
+            <section class="content-card impact-card h-100">
+                <div class="card-section-heading"><h2><i class="bi bi-bar-chart-line me-2"></i>月度流转趋势</h2><span>{{ report.period_label }}</span></div>
+                {% if report.has_activity %}
+                <div class="impact-month-chart" aria-label="月度流转趋势">
+                    {% for point in report.monthly %}
+                    <div class="impact-month-column"><div class="impact-month-value">{{ point.count }}</div><div class="impact-month-track"><div class="impact-month-bar" style="height: {{ point.percent }}%"></div></div><span>{{ point.label }}</span></div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="impact-empty"><i class="bi bi-recycle"></i><h3>还没有可统计的流转记录</h3><p>完成一次交易、免费赠送或借用归还后，这里会自动生成你的循环报告。</p><a href="{% url 'item_list' %}" class="btn btn-outline-success btn-sm">去发现校园好物</a></div>
+                {% endif %}
+                <div class="impact-breakdown"><span><i class="bi bi-cart-check me-1"></i>完成出售 {{ report.sale_count }} 次</span><span><i class="bi bi-arrow-counterclockwise me-1"></i>完成归还 {{ report.borrow_return_count }} 次</span></div>
+            </section>
+        </div>
+        <div class="col-lg-5">
+            <section class="content-card impact-card h-100">
+                <div class="card-section-heading"><h2><i class="bi bi-compass me-2"></i>流转场景</h2><span>按完成记录统计</span></div>
+                <div class="impact-list-block"><h3>常见分类</h3>{% for row in report.categories %}<div class="impact-list-row"><span>{{ row.name }}</span><b>{{ row.count }} 次</b></div>{% empty %}<p class="text-muted small">暂时没有分类数据。</p>{% endfor %}</div>
+                <div class="impact-list-block"><h3>常见地点</h3>{% for row in report.locations %}<div class="impact-list-row"><span>{{ row.name }}</span><b>{{ row.count }} 次</b></div>{% empty %}<p class="text-muted small">暂时没有地点数据。</p>{% endfor %}</div>
+            </section>
+        </div>
+    </div>
+    <p class="impact-note"><i class="bi bi-shield-check me-1"></i>影响力分是平台内的可解释展示指标，不代表环保认证或金钱价值；取消、未确认和仍在进行中的订单不会计入。</p>
+</div>
+{% endblock %}

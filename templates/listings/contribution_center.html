@@ -10,7 +10,7 @@
             <h1>我的互助贡献</h1>
             <p>把每一次完成交付、响应需求和协助找回失物，沉淀成可回看的校园互助记录。</p>
         </div>
-        <div class="contribution-level-mark"><i class="bi bi-trophy-fill"></i><span>{{ summary.level }}</span></div>
+        <div class="d-flex flex-column align-items-end gap-3"><div class="contribution-level-mark"><i class="bi bi-trophy-fill"></i><span>{{ summary.level }}</span></div><a href="{% url 'circular_impact_report' %}" class="btn btn-sm btn-light"><i class="bi bi-recycle me-1"></i>查看循环影响力</a></div>
     </div>
 
     <div class="contribution-overview mb-4">

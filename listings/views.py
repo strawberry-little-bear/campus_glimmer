@@ -23,6 +23,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
 from .demand_radar import build_demand_radar
+from .circular_impact import build_circular_impact_report
 from .contributions import (
     build_contribution_summary, record_demand_response_contribution,
     record_lost_found_lead_contribution, record_order_contribution,
@@ -1708,6 +1709,14 @@ def contribution_center(request):
     return render(request, 'listings/contribution_center.html', {
         'summary': build_contribution_summary(request.user),
         'title': '我的互助贡献',
+    })
+
+
+@login_required
+def circular_impact_report(request):
+    return render(request, 'listings/circular_impact.html', {
+        'report': build_circular_impact_report(request.user),
+        'title': '校园循环影响力',
     })
 
 

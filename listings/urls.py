@@ -38,6 +38,7 @@ urlpatterns = [
     path('item/<int:item_id>/recommendation-feedback/', views.recommendation_feedback, name='recommendation_feedback'),
     path('favorites/', views.favorite_list, name='favorite_list'),
     path('contributions/', views.contribution_center, name='contribution_center'),
+    path('contributions/impact/', views.circular_impact_report, name='circular_impact_report'),
     path('opportunities/', views.opportunity_feed, name='opportunity_feed'),
     path('opportunities/dismiss/', views.dismiss_opportunity, name='dismiss_opportunity'),
     path('orders/', views.my_orders, name='my_orders'),

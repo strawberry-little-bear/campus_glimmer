@@ -1081,3 +1081,46 @@ a { color: inherit; text-decoration: none; }
 .contribution-empty p { margin: 0 auto 14px; color: #89968f; font-size: .7rem; line-height: 1.7; }
 .contribution-note { margin-top: 13px; color: #99a49e; font-size: .68rem; }
 @media (max-width: 767px) { .contribution-hero { align-items: flex-start; flex-direction: column; }.contribution-level-mark { align-self: flex-start; }.contribution-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }.contribution-progress-stat { grid-column: 1 / -1; }.contribution-badge-grid { grid-template-columns: 1fr; } }
+
+/* Circular impact report */
+.impact-heading { align-items: center; }
+.impact-heading h1 { color: #315746; font-size: clamp(1.7rem, 3vw, 2.35rem); letter-spacing: -.045em; }
+.impact-heading p { max-width: 720px; margin-top: 8px; font-size: .82rem; line-height: 1.7; }
+.impact-hero { display: flex; align-items: center; justify-content: space-between; gap: 28px; padding: 28px; overflow: hidden; border-color: #dcecdf; background: radial-gradient(circle at 100% 0, rgba(210, 236, 213, .65), transparent 42%), linear-gradient(135deg, #f7fcf7, #fff); }
+.impact-hero-copy { max-width: 680px; }
+.impact-hero-copy h2 { margin: 8px 0 8px; color: #315746; font-size: clamp(1.35rem, 3vw, 2rem); letter-spacing: -.04em; }
+.impact-hero-copy p { margin: 0; color: #718278; font-size: .78rem; line-height: 1.8; }
+.impact-score { display: flex; min-width: 176px; flex-direction: column; align-items: center; padding: 20px 22px; border: 1px solid #e7d8b9; border-radius: 22px; color: #9c713c; background: rgba(255, 251, 239, .9); text-align: center; }
+.impact-score strong { color: #b27d3f; font-size: clamp(2.4rem, 6vw, 3.8rem); line-height: .95; letter-spacing: -.06em; }
+.impact-score span { margin-top: 8px; font-size: .75rem; font-weight: 800; }
+.impact-score small { max-width: 140px; margin-top: 7px; color: #a99a7e; font-size: .6rem; line-height: 1.5; }
+.impact-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.impact-stat { display: flex; align-items: center; gap: 12px; min-height: 88px; padding: 16px; border: 1px solid #e5eee6; border-radius: 16px; background: #fff; box-shadow: 0 7px 18px rgba(60, 95, 68, .04); }
+.impact-stat-icon { display: grid; width: 39px; height: 39px; flex: 0 0 auto; place-items: center; border-radius: 13px; color: #5e9467; background: #edf7ee; font-size: 1.05rem; }
+.impact-stat > span:last-child { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 5px; }
+.impact-stat small { display: block; flex-basis: 100%; color: #84948a; font-size: .67rem; font-weight: 700; }
+.impact-stat strong { color: #3f6b4d; font-size: 1.55rem; line-height: 1.2; }
+.impact-stat em { color: #9ba8a0; font-size: .65rem; font-style: normal; }
+.impact-card { padding: 21px; }
+.impact-card .card-section-heading { align-items: center; }
+.impact-card .card-section-heading h2 { margin: 0; color: #456a50; font-size: 1rem; }
+.impact-card .card-section-heading > span { color: #9ba69f; font-size: .65rem; }
+.impact-month-chart { display: flex; align-items: flex-end; gap: 12px; height: 220px; padding: 22px 4px 0; }
+.impact-month-column { display: flex; min-width: 0; height: 100%; flex: 1; flex-direction: column; align-items: center; justify-content: flex-end; gap: 7px; color: #8b9a90; font-size: .63rem; }
+.impact-month-value { min-height: 14px; color: #5e8967; font-size: .67rem; font-weight: 800; }
+.impact-month-track { display: flex; width: 100%; max-width: 34px; height: 155px; align-items: flex-end; overflow: hidden; border-radius: 9px 9px 4px 4px; background: #eef5ef; }
+.impact-month-bar { width: 100%; min-height: 3px; border-radius: 9px 9px 4px 4px; background: linear-gradient(180deg, #83b78a, #4f8b5e); transition: height .3s ease; }
+.impact-breakdown { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; padding-top: 13px; border-top: 1px solid #edf2ed; color: #7f9185; font-size: .68rem; }
+.impact-breakdown i { color: #77a57d; }
+.impact-list-block + .impact-list-block { margin-top: 23px; padding-top: 19px; border-top: 1px solid #edf2ed; }
+.impact-list-block h3 { margin: 0 0 9px; color: #789080; font-size: .7rem; letter-spacing: .04em; }
+.impact-list-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; color: #5f7566; font-size: .75rem; }
+.impact-list-row + .impact-list-row { border-top: 1px dashed #edf2ed; }
+.impact-list-row b { color: #5d9167; font-size: .69rem; white-space: nowrap; }
+.impact-empty { padding: 28px 12px 24px; color: #87968d; text-align: center; }
+.impact-empty > i { color: #8bb491; font-size: 2rem; }
+.impact-empty h3 { margin: 10px 0 6px; color: #4d6f55; font-size: .95rem; }
+.impact-empty p { max-width: 420px; margin: 0 auto 14px; font-size: .72rem; line-height: 1.7; }
+.impact-note { margin: 13px 0 0; color: #99a49e; font-size: .68rem; line-height: 1.6; }
+@media (max-width: 767px) { .impact-heading { align-items: flex-start; flex-direction: column; }.impact-heading .btn { align-self: flex-start; }.impact-hero { align-items: flex-start; flex-direction: column; padding: 22px; }.impact-score { align-self: stretch; }.impact-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.impact-month-chart { gap: 7px; padding-left: 0; padding-right: 0; }.impact-month-track { max-width: 27px; } }
+@media (max-width: 450px) { .impact-stat-grid { grid-template-columns: 1fr; }.impact-stat { min-height: 76px; }.impact-month-chart { gap: 4px; }.impact-month-column { font-size: .56rem; }.impact-month-track { max-width: 22px; } }
