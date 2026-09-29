@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 
-from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, Favorite, Item, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
+from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, Favorite, Item, LostFoundLead, MutualAidFeedback, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
 from .campus_pulse import build_campus_pulse
 from .campaign_analytics import build_campaign_analytics
 from .demand_radar import build_demand_radar
@@ -662,6 +662,24 @@ def build_operational_alerts(metrics, period_comparisons, demand_radar=None):
                 'action_url_name': 'operations_dashboard',
             })
 
+    mutual_aid_feedbacks = metrics.get('mutual_aid_feedbacks', 0)
+    mutual_aid_completion_rate = metrics.get('mutual_aid_completion_rate', 0)
+    if mutual_aid_feedbacks >= 3 and mutual_aid_completion_rate < 50:
+        alerts.append({
+            'key': 'mutual_aid_completion_drop',
+            'severity': 'warning',
+            'severity_label': '需要关注',
+            'title': '互助完成反馈偏低',
+            'message': (
+                f'最近 {mutual_aid_feedbacks} 次结果反馈中，只有 {mutual_aid_completion_rate}% 被确认完成，'
+                '建议检查匹配质量、沟通提醒和后续跟进。'
+            ),
+            'metric': f'{mutual_aid_completion_rate}%',
+            'metric_label': '互助完成率',
+            'action_label': '查看互助闭环',
+            'action_url_name': 'operations_dashboard',
+        })
+
     severity_order = {'critical': 0, 'warning': 1, 'info': 2}
     return sorted(alerts, key=lambda alert: severity_order.get(alert['severity'], 9))
 
@@ -897,6 +915,145 @@ def _build_demand_match_insights(notification_period, start, end):
 
 
 
+
+def _build_mutual_aid_feedback_insights(
+    feedback_period,
+    previous_feedback_period,
+    accepted_interaction_count,
+    previous_accepted_interaction_count,
+    dates,
+):
+    """Summarize owner-confirmed outcomes for non-order mutual-aid interactions."""
+    feedback_count = feedback_period.count()
+    completed_count = feedback_period.filter(outcome='completed').count()
+    unresolved_count = feedback_period.filter(outcome='unresolved').count()
+    previous_feedback_count = previous_feedback_period.count()
+    previous_completed_count = previous_feedback_period.filter(outcome='completed').count()
+
+    def percent(value, total):
+        return round(value / total * 100, 1) if total else 0
+
+    def change(current, previous, percentage_points=False):
+        if current == previous:
+            return {'value': 0, 'display': '持平', 'direction': 'flat'}
+        if percentage_points:
+            value = round(current - previous, 1)
+            return {
+                'value': value,
+                'display': f'{value:+.1f} 个百分点',
+                'direction': 'up' if value > 0 else 'down',
+            }
+        if previous:
+            value = round((current - previous) / previous * 100, 1)
+            return {
+                'value': value,
+                'display': f'{value:+.1f}%',
+                'direction': 'up' if value > 0 else 'down',
+            }
+        return {
+            'value': None,
+            'display': '新增' if current else '—',
+            'direction': 'up' if current else 'flat',
+        }
+
+    source_rows = []
+    source_definitions = (
+        ('demand_response', '求购响应', feedback_period.filter(demand_response__isnull=False)),
+        ('lost_found_lead', '失物招领线索', feedback_period.filter(lost_found_lead__isnull=False)),
+    )
+    for key, label, source_period in source_definitions:
+        source_feedback_count = source_period.count()
+        source_completed_count = source_period.filter(outcome='completed').count()
+        source_rows.append({
+            'key': key,
+            'label': label,
+            'feedback_count': source_feedback_count,
+            'completed_count': source_completed_count,
+            'unresolved_count': source_period.filter(outcome='unresolved').count(),
+            'completion_rate': percent(source_completed_count, source_feedback_count),
+        })
+
+    tag_labels = dict(MutualAidFeedback.TAG_CHOICES)
+    tag_counts = {key: 0 for key in tag_labels}
+    for tags in feedback_period.values_list('tags', flat=True):
+        for tag in tags or []:
+            if tag in tag_counts:
+                tag_counts[tag] += 1
+    tag_rows = [
+        {
+            'key': key,
+            'label': tag_labels[key],
+            'count': count,
+            'share': percent(count, feedback_count),
+        }
+        for key, count in sorted(tag_counts.items(), key=lambda pair: (-pair[1], pair[0]))
+        if count
+    ]
+
+    daily_rows = feedback_period.annotate(day=TruncDate('created_at')).values('day').annotate(
+        feedback_count=Count('id'),
+        completed_count=Count('id', filter=Q(outcome='completed')),
+        unresolved_count=Count('id', filter=Q(outcome='unresolved')),
+    )
+    daily_map = {row['day']: row for row in daily_rows}
+    trend = []
+    for day in dates:
+        row = daily_map.get(day, {})
+        trend.append({
+            'date': day,
+            'feedback_count': row.get('feedback_count', 0),
+            'completed_count': row.get('completed_count', 0),
+            'unresolved_count': row.get('unresolved_count', 0),
+        })
+
+    completion_rate = percent(completed_count, feedback_count)
+    previous_completion_rate = percent(previous_completed_count, previous_feedback_count)
+    funnel = [
+        {
+            'key': 'accepted',
+            'label': '已确认互助',
+            'count': accepted_interaction_count,
+            'rate': 100,
+            'note': '按响应 / 线索确认时间统计',
+        },
+        {
+            'key': 'feedback',
+            'label': '提交结果反馈',
+            'count': feedback_count,
+            'rate': percent(feedback_count, accepted_interaction_count),
+            'note': '按反馈提交时间统计',
+        },
+        {
+            'key': 'completed',
+            'label': '确认互助完成',
+            'count': completed_count,
+            'rate': percent(completed_count, feedback_count),
+            'note': '反馈结果为“已完成”',
+        },
+    ]
+    return {
+        'feedback_count': feedback_count,
+        'completed_count': completed_count,
+        'unresolved_count': unresolved_count,
+        'completion_rate': completion_rate,
+        'unresolved_rate': percent(unresolved_count, feedback_count),
+        'accepted_interaction_count': accepted_interaction_count,
+        'source_rows': source_rows,
+        'tag_rows': tag_rows,
+        'trend': trend,
+        'trend_max': max((point['feedback_count'] for point in trend), default=1) or 1,
+        'funnel': funnel,
+        'funnel_max': max((stage['count'] for stage in funnel), default=1) or 1,
+        'period_changes': {
+            'feedbacks': change(feedback_count, previous_feedback_count),
+            'completed': change(completed_count, previous_completed_count),
+            'completion_rate': change(completion_rate, previous_completion_rate, percentage_points=True),
+        },
+        'previous_accepted_interaction_count': previous_accepted_interaction_count,
+        'has_data': bool(feedback_count or accepted_interaction_count),
+    }
+
+
 def _build_contribution_insights(contribution_period, previous_contribution_period, dates):
     """Summarize the auditable mutual-aid records for staff operations."""
     aggregate = contribution_period.aggregate(
@@ -1022,6 +1179,13 @@ def build_operations_dashboard(days=30):
     favorite_period = Favorite.objects.filter(created_at__gte=start, created_at__lte=now)
     notification_period = Notification.objects.filter(created_at__gte=start, created_at__lte=now)
     contribution_period = CommunityContribution.objects.filter(occurred_at__gte=start, occurred_at__lte=now)
+    feedback_period = MutualAidFeedback.objects.filter(created_at__gte=start, created_at__lte=now)
+    accepted_demand_period = DemandResponse.objects.filter(
+        status='accepted', updated_at__gte=start, updated_at__lte=now,
+    )
+    accepted_lost_found_period = LostFoundLead.objects.filter(
+        status='accepted', updated_at__gte=start, updated_at__lte=now,
+    )
     previous_start = start - timedelta(days=days)
     previous_item_period = Item.objects.filter(created_at__gte=previous_start, created_at__lt=start)
     previous_order_period = Order.objects.filter(created_at__gte=previous_start, created_at__lt=start)
@@ -1032,6 +1196,15 @@ def build_operations_dashboard(days=30):
     previous_report_period = Report.objects.filter(created_at__gte=previous_start, created_at__lt=start)
     previous_contribution_period = CommunityContribution.objects.filter(
         occurred_at__gte=previous_start, occurred_at__lt=start,
+    )
+    previous_feedback_period = MutualAidFeedback.objects.filter(
+        created_at__gte=previous_start, created_at__lt=start,
+    )
+    previous_accepted_demand_period = DemandResponse.objects.filter(
+        status='accepted', updated_at__gte=previous_start, updated_at__lt=start,
+    )
+    previous_accepted_lost_found_period = LostFoundLead.objects.filter(
+        status='accepted', updated_at__gte=previous_start, updated_at__lt=start,
     )
 
     order_count = order_period.count()
@@ -1045,6 +1218,13 @@ def build_operations_dashboard(days=30):
     demand_match_insights = _build_demand_match_insights(notification_period, start, now)
     contribution_insights = _build_contribution_insights(
         contribution_period, previous_contribution_period, dates,
+    )
+    mutual_aid_feedback_insights = _build_mutual_aid_feedback_insights(
+        feedback_period,
+        previous_feedback_period,
+        accepted_demand_period.count() + accepted_lost_found_period.count(),
+        previous_accepted_demand_period.count() + previous_accepted_lost_found_period.count(),
+        dates,
     )
 
     def conversion_rate(current, previous):
@@ -1172,6 +1352,8 @@ def build_operations_dashboard(days=30):
         'searches': search_count,
         'new_users': user_period.count(),
         'new_reports': report_period.count(),
+        'mutual_aid_feedbacks': mutual_aid_feedback_insights['feedback_count'],
+        'mutual_aid_completed': mutual_aid_feedback_insights['completed_count'],
     }
     previous_comparison_values = {
         'new_items': previous_item_period.count(),
@@ -1182,6 +1364,8 @@ def build_operations_dashboard(days=30):
         'searches': previous_search_period.count(),
         'new_users': previous_user_period.count(),
         'new_reports': previous_report_period.count(),
+        'mutual_aid_feedbacks': previous_feedback_period.count(),
+        'mutual_aid_completed': previous_feedback_period.filter(outcome='completed').count(),
     }
     comparison_labels = {
         'new_items': '新增商品',
@@ -1192,6 +1376,8 @@ def build_operations_dashboard(days=30):
         'searches': '搜索次数',
         'new_users': '新增用户',
         'new_reports': '新增举报',
+        'mutual_aid_feedbacks': '互助结果反馈',
+        'mutual_aid_completed': '确认互助完成',
     }
     period_comparisons = []
     for key, label in comparison_labels.items():
@@ -1260,6 +1446,10 @@ def build_operations_dashboard(days=30):
         'contribution_points': contribution_insights['period_points'],
         'contribution_events': contribution_insights['period_events'],
         'contribution_users': contribution_insights['period_users'],
+        'mutual_aid_feedbacks': mutual_aid_feedback_insights['feedback_count'],
+        'mutual_aid_completed': mutual_aid_feedback_insights['completed_count'],
+        'mutual_aid_completion_rate': mutual_aid_feedback_insights['completion_rate'],
+        'mutual_aid_accepted_interactions': mutual_aid_feedback_insights['accepted_interaction_count'],
     }
     demand_radar = build_demand_radar(days=days, now=now)
     operational_alerts = build_operational_alerts(metrics, period_comparisons, demand_radar)
@@ -1296,4 +1486,5 @@ def build_operations_dashboard(days=30):
         'notification_insights': notification_insights,
         'demand_match_insights': demand_match_insights,
         'contribution_insights': contribution_insights,
+        'mutual_aid_feedback_insights': mutual_aid_feedback_insights,
     }

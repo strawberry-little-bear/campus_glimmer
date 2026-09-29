@@ -2057,6 +2057,10 @@ def operations_dashboard_export(request):
         ('contribution_points', '周期贡献积分'),
         ('contribution_events', '周期贡献事件'),
         ('contribution_users', '周期贡献用户'),
+        ('mutual_aid_accepted_interactions', '已确认互助'),
+        ('mutual_aid_feedbacks', '互助结果反馈'),
+        ('mutual_aid_completed', '确认互助完成'),
+        ('mutual_aid_completion_rate', '互助完成率（%）'),
     )
     for key, label in metric_labels:
         value = metrics[key]
@@ -2105,6 +2109,30 @@ def operations_dashboard_export(request):
     for point in contribution_insights['trend']:
         if point['points'] or point['event_count']:
             writer.writerow([point['date'], point['points'], point['event_count'], point['user_count']])
+
+    feedback_insights = dashboard['mutual_aid_feedback_insights']
+    writer.writerow([])
+    writer.writerow(['互助反馈闭环', '数值'])
+    writer.writerow(['已确认互助', feedback_insights['accepted_interaction_count']])
+    writer.writerow(['结果反馈', feedback_insights['feedback_count']])
+    writer.writerow(['确认完成', feedback_insights['completed_count']])
+    writer.writerow(['暂未解决', feedback_insights['unresolved_count']])
+    writer.writerow(['互助完成率（%）', feedback_insights['completion_rate']])
+
+    writer.writerow([])
+    writer.writerow(['互助反馈来源', '反馈数', '完成数', '暂未解决数', '完成率（%）'])
+    for row in feedback_insights['source_rows']:
+        writer.writerow([row['label'], row['feedback_count'], row['completed_count'], row['unresolved_count'], row['completion_rate']])
+
+    writer.writerow([])
+    writer.writerow(['反馈标签', '次数', '占反馈（%）'])
+    for row in feedback_insights['tag_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['互助闭环漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
+    for stage in feedback_insights['funnel']:
+        writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
 
     writer.writerow([])
     writer.writerow([

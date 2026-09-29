@@ -164,6 +164,68 @@
     </div>
 </section>
 
+<section class="content-card ops-panel mb-4 mutual-aid-feedback-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Mutual-aid loop</span><h2>互助反馈闭环</h2></div>
+        <span class="ops-panel-hint">从确认响应到结果反馈的可解释转化</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-check2-square me-1"></i>只统计互助发布者提交的结果反馈；响应 / 线索按确认时间统计，反馈按提交时间统计，用于观察校园互助的履约和跟进质量。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>结果反馈</span><strong>{{ mutual_aid_feedback_insights.feedback_count }}</strong><small>最近 {{ period_days }} 天提交</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>确认完成</span><strong>{{ mutual_aid_feedback_insights.completed_count }}</strong><small>暂未解决 {{ mutual_aid_feedback_insights.unresolved_count }} 次</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>互助完成率</span><strong>{{ mutual_aid_feedback_insights.completion_rate }}%</strong><small>基于已提交反馈</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已确认互助</span><strong>{{ mutual_aid_feedback_insights.accepted_interaction_count }}</strong><small>求购响应 + 失物线索</small></div></div>
+    </div>
+    <div class="contribution-change-row mb-4">
+        <span>与上一周期相比</span>
+        <span class="ops-change ops-change-{{ mutual_aid_feedback_insights.period_changes.feedbacks.direction }}">反馈 {{ mutual_aid_feedback_insights.period_changes.feedbacks.display }}</span>
+        <span class="ops-change ops-change-{{ mutual_aid_feedback_insights.period_changes.completed.direction }}">完成 {{ mutual_aid_feedback_insights.period_changes.completed.display }}</span>
+        <span class="ops-change ops-change-{{ mutual_aid_feedback_insights.period_changes.completion_rate.direction }}">完成率 {{ mutual_aid_feedback_insights.period_changes.completion_rate.display }}</span>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">互助闭环漏斗</h3>
+            <div class="conversion-funnel" aria-label="已确认互助到完成反馈的转化漏斗">
+                {% for stage in mutual_aid_feedback_insights.funnel %}
+                <div class="conversion-stage conversion-stage-{{ stage.key }}">
+                    <div class="conversion-stage-head">
+                        <div class="conversion-stage-title"><span class="conversion-stage-index">0{{ forloop.counter }}</span><span><strong>{{ stage.label }}</strong><small>{{ stage.note }}</small></span></div>
+                        <strong class="conversion-stage-count">{{ stage.count }}</strong>
+                    </div>
+                    <div class="conversion-track"><span style="width: {% widthratio stage.count mutual_aid_feedback_insights.funnel_max 100 %}%"></span></div>
+                    <small class="conversion-stage-rate">{% if forloop.first %}起始样本{% else %}较上一步 {{ stage.rate }}%{% endif %}</small>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">反馈来源</h3>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>来源</th><th>反馈</th><th>完成</th><th>完成率</th></tr></thead><tbody>
+                {% for row in mutual_aid_feedback_insights.source_rows %}<tr><td><strong>{{ row.label }}</strong></td><td>{{ row.feedback_count }}</td><td>{{ row.completed_count }}</td><td>{{ row.completion_rate }}%</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">当前周期还没有互助反馈。</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">反馈标签分布</h3>
+            {% if mutual_aid_feedback_insights.tag_rows %}
+            <div class="activity-chart">
+                {% for row in mutual_aid_feedback_insights.tag_rows %}<div class="activity-row"><span class="text-muted" style="min-width: 7rem">{{ row.label }}</span><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio row.count mutual_aid_feedback_insights.feedback_count 100 %}%" title="{{ row.count }} 次"></span></div><strong>{{ row.count }}</strong><small class="text-muted">{{ row.share }}%</small></div>{% endfor %}
+            </div>
+            {% else %}<div class="empty-inline">反馈标签会在结果提交后显示。</div>{% endif %}
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">每日反馈趋势</h3>
+            {% if mutual_aid_feedback_insights.feedback_count %}
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>日期</th><th>反馈</th><th>完成</th></tr></thead><tbody>
+                {% for point in mutual_aid_feedback_insights.trend %}{% if point.feedback_count %}<tr><td>{{ point.date|date:'m-d' }}</td><td>{{ point.feedback_count }}</td><td>{{ point.completed_count }}</td></tr>{% endif %}{% endfor %}
+            </tbody></table></div>
+            {% else %}<div class="empty-inline">当前周期还没有反馈趋势数据。</div>{% endif %}
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>反馈只用于运营观察和公开信誉摘要的聚合统计，不公开反馈原文、互助对象或私信内容。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 contribution-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Community impact</span><h2>校园互助影响</h2></div>

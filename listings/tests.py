@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, Item, ItemAvailabilityWatch, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .analytics import build_operations_dashboard, build_operational_alerts, build_search_insights
 from .order_maintenance import process_order_timeouts
 from .order_workflow import OrderTransitionError, transition_order
@@ -744,6 +744,73 @@ class ListingFlowTests(TestCase):
         self.assertIn('校园互助影响,数值', report)
         self.assertIn('周期贡献积分,22', report)
         self.assertIn('贡献类型,贡献积分,贡献事件,参与用户,积分占比（%）', report)
+
+    def test_operations_dashboard_reports_mutual_aid_feedback_loop(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        now = timezone.now()
+
+        demand = DemandPost.objects.create(
+            requester=self.other_user, title='运营互助求购', description='测试互助反馈闭环',
+            category=self.category, location=self.location,
+        )
+        response = DemandResponse.objects.create(
+            demand=demand, item=self.item, responder=self.user, status='accepted',
+        )
+        MutualAidFeedback.objects.create(
+            demand_response=response, submitted_by=self.other_user, outcome='completed',
+            tags=['smooth', 'helpful'],
+        )
+
+        previous_demand = DemandPost.objects.create(
+            requester=self.other_user, title='历史互助求购', description='测试上一周期反馈',
+            category=self.category, location=self.location,
+        )
+        previous_item = Item.objects.create(
+            title='历史互助商品', description='上一周期测试商品', price='19.00',
+            category=self.category, location=self.location, condition='8成新', seller=self.user,
+        )
+        previous_response = DemandResponse.objects.create(
+            demand=previous_demand, item=previous_item, responder=self.user, status='accepted',
+        )
+        previous_feedback = MutualAidFeedback.objects.create(
+            demand_response=previous_response, submitted_by=self.other_user, outcome='unresolved',
+            tags=['needs_follow_up'],
+        )
+        DemandResponse.objects.filter(pk=previous_response.pk).update(
+            updated_at=now - timedelta(days=40),
+        )
+        MutualAidFeedback.objects.filter(pk=previous_feedback.pk).update(
+            created_at=now - timedelta(days=40),
+        )
+
+        dashboard = build_operations_dashboard(30)
+        metrics = dashboard['metrics']
+        insights = dashboard['mutual_aid_feedback_insights']
+        self.assertEqual(metrics['mutual_aid_feedbacks'], 1)
+        self.assertEqual(metrics['mutual_aid_completed'], 1)
+        self.assertEqual(metrics['mutual_aid_completion_rate'], 100.0)
+        self.assertEqual(insights['accepted_interaction_count'], 1)
+        self.assertEqual(insights['unresolved_count'], 0)
+        self.assertEqual(insights['source_rows'][0]['label'], '求购响应')
+        self.assertEqual(
+            {row['label'] for row in insights['tag_rows']},
+            {'沟通顺畅', '信息有帮助'},
+        )
+        self.assertEqual(insights['period_changes']['feedbacks']['display'], '持平')
+        self.assertEqual(insights['funnel'][1]['rate'], 100.0)
+
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '互助反馈闭环')
+        self.assertContains(response, '互助闭环漏斗')
+
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+        report = export.content.decode('utf-8-sig')
+        self.assertIn('互助反馈闭环,数值', report)
+        self.assertIn('互助完成率（%）,100.0', report)
+        self.assertIn('反馈标签,次数,占反馈（%）', report)
 
     def test_operations_dashboard_reports_demand_response_conversion(self):
         self.user.is_staff = True
