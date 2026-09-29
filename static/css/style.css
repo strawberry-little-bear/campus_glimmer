@@ -982,3 +982,23 @@ a { color: inherit; text-decoration: none; }
 .contribution-rank { display: inline-grid; width: 24px; height: 24px; place-items: center; color: #6c856f; background: #eef6ef; border-radius: 8px; font-size: .72rem; font-weight: 800; }
 .contribution-trend-chart .activity-row { grid-template-columns: 42px minmax(0,1fr) 38px 34px; }
 @media (max-width: 575px) { .contribution-trend-chart .activity-row { grid-template-columns: 42px minmax(0,1fr) 34px; }.contribution-trend-chart .activity-row small { display: none; } }
+
+
+/* Community contribution badges */
+.contribution-badge-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 20px; color: #52715f; font-size: .75rem; font-weight: 800; }
+.contribution-badge-heading small { color: #94a49a; font-size: .66rem; font-weight: 500; }
+.contribution-badges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 10px; }
+.contribution-badge { display: flex; align-items: flex-start; gap: 9px; min-width: 0; padding: 11px; border: 1px solid #dcece0; border-radius: 13px; background: #f8fcf8; }
+.contribution-badge > i { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #fff; background: #70a27a; font-size: .8rem; }
+.contribution-badge span { min-width: 0; }
+.contribution-badge strong, .contribution-badge small, .contribution-badge em { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contribution-badge strong { color: #315746; font-size: .72rem; }
+.contribution-badge small { margin-top: 3px; color: #87988d; font-size: .62rem; }
+.contribution-badge em { margin-top: 5px; color: #6f9a77; font-size: .61rem; font-style: normal; font-weight: 700; }
+.contribution-badge.is-locked { border-style: dashed; background: #fbfcfb; opacity: .68; }
+.contribution-badge.is-locked > i { color: #8ca097; background: #e7eee8; }
+.contribution-badge.is-locked em { color: #a58b5c; }
+.profile-contribution-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.profile-contribution-badges span { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 999px; color: #5d8066; background: #eef7ef; font-size: .64rem; font-weight: 700; }
+@media (max-width: 767px) { .contribution-badges { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575px) { .contribution-badges { grid-template-columns: 1fr; } }

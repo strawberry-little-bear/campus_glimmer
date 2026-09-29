@@ -63,6 +63,8 @@
                     <div class="contribution-event-count"><strong>{{ contribution.total_events }}</strong><span>次贡献</span></div>
                 </div>
                 {% if contribution.recent_events %}<div class="contribution-events">{% for event in contribution.recent_events %}<div><i class="bi bi-check-circle-fill text-success"></i><span><strong>{{ event.title }}</strong><small>{{ event.description }}</small></span><b>+{{ event.points }}</b></div>{% endfor %}</div>{% else %}<p class="empty-inline mb-0">完成交易、按时归还借用品等行为会逐步形成你的校园互助档案。</p>{% endif %}
+                <div class="contribution-badge-heading"><span><i class="bi bi-award me-1"></i>互助徽章</span><small>按可验证事件逐步解锁</small></div>
+                <div class="contribution-badges">{% for badge in contribution.badges %}<div class="contribution-badge {% if not badge.earned %}is-locked{% endif %}"><i class="bi {{ badge.icon }}"></i><span><strong>{{ badge.title }}</strong><small>{{ badge.description }}</small>{% if badge.earned %}<em>已解锁</em>{% else %}<em>还需 {{ badge.remaining }} 次</em>{% endif %}</span></div>{% endfor %}</div>
             </section>
         </div>
     </div>

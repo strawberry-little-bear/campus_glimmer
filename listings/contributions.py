@@ -26,6 +26,61 @@ CONTRIBUTION_LEVELS = (
     (160, '循环倡导者'),
 )
 
+CONTRIBUTION_BADGE_RULES = (
+    {
+        'code': 'first_contribution',
+        'title': '迈出第一步',
+        'description': '完成一次可验证的校园互助。',
+        'icon': 'bi-footprints',
+        'threshold': 1,
+        'metric': 'events',
+    },
+    {
+        'code': 'gift_giver',
+        'title': '分享闲置',
+        'description': '完成一次免费赠送，让物品继续流转。',
+        'icon': 'bi-gift',
+        'threshold': 1,
+        'metric': 'kind',
+        'kind': 'gift_completed',
+    },
+    {
+        'code': 'borrow_keeper',
+        'title': '借用有始有终',
+        'description': '完成一次借用归还确认。',
+        'icon': 'bi-arrow-repeat',
+        'threshold': 1,
+        'metric': 'kind',
+        'kind': 'borrow_returned',
+    },
+    {
+        'code': 'demand_helper',
+        'title': '需求响应者',
+        'description': '提供的商品响应被求购发布者确认。',
+        'icon': 'bi-hand-thumbs-up',
+        'threshold': 1,
+        'metric': 'kind',
+        'kind': 'demand_helped',
+    },
+    {
+        'code': 'lost_found_helper',
+        'title': '失物线索员',
+        'description': '提交的失物招领线索被确认。',
+        'icon': 'bi-search-heart',
+        'threshold': 1,
+        'metric': 'kind',
+        'kind': 'lost_found_help',
+    },
+    {
+        'code': 'community_builder',
+        'title': '社区循环倡导者',
+        'description': '累计完成 5 次可验证校园互助。',
+        'icon': 'bi-stars',
+        'threshold': 5,
+        'metric': 'events',
+    },
+)
+
 
 def record_contribution(*, user, kind, points, title, description='', source_key, occurred_at=None):
     'Create one contribution record; source_key makes the award idempotent.'
@@ -90,6 +145,27 @@ def record_lost_found_lead_contribution(lead):
     )
 
 
+def build_contribution_badges(queryset):
+    'Return earned and next-step badge progress without exposing source records.'
+    total_events = queryset.count()
+    kind_counts = {
+        row['kind']: row['count']
+        for row in queryset.values('kind').annotate(count=Count('id'))
+    }
+    badges = []
+    for rule in CONTRIBUTION_BADGE_RULES:
+        current = kind_counts.get(rule['kind'], 0) if rule['metric'] == 'kind' else total_events
+        threshold = rule['threshold']
+        badges.append({
+            **rule,
+            'current': current,
+            'remaining': max(threshold - current, 0),
+            'earned': current >= threshold,
+            'progress_percent': min(round(current * 100 / threshold), 100),
+        })
+    return badges
+
+
 def _level_for_points(points):
     current = CONTRIBUTION_LEVELS[0]
     next_level = None
@@ -134,5 +210,6 @@ def build_contribution_summary(user):
         'remaining_points': remaining_points,
         'progress_percent': progress,
         'kind_counts': kind_counts,
+        'badges': build_contribution_badges(queryset),
         'recent_events': list(queryset[:5]),
     }

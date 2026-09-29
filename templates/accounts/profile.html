@@ -83,6 +83,7 @@
                 <p class="mb-2"><strong>{{ contribution.level }}</strong><span class="text-muted ms-2">{{ contribution.total_events }} 次可验证贡献</span></p>
                 <div class="progress mb-2" role="progressbar" aria-label="贡献等级进度" aria-valuenow="{{ contribution.progress_percent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ contribution.progress_percent }}%"></div></div>
                 {% if contribution.next_level %}<small class="text-muted">距离“{{ contribution.next_level }}”还差 {{ contribution.remaining_points }} 分</small>{% else %}<small class="text-muted">已达到当前贡献等级上限。</small>{% endif %}
+                <div class="profile-contribution-badges">{% for badge in contribution.badges %}{% if badge.earned %}<span title="{{ badge.description }}"><i class="bi {{ badge.icon }}"></i>{{ badge.title }}</span>{% endif %}{% endfor %}</div>
                 <a href="{% url 'public_profile' user.id %}" class="btn btn-sm btn-outline-success mt-3">查看公开交易档案</a>
             </div>
         </div>

@@ -32,6 +32,10 @@ class CommunityContributionTests(TestCase):
         self.assertEqual(seller_summary['next_level'], '可靠交易伙伴')
         self.assertEqual(seller_summary['remaining_points'], 20)
         self.assertEqual(seller_summary['recent_events'][0].title, '完成一笔交易')
+        badge_map = {badge['code']: badge for badge in seller_summary['badges']}
+        self.assertTrue(badge_map['first_contribution']['earned'])
+        self.assertFalse(badge_map['gift_giver']['earned'])
+        self.assertEqual(badge_map['community_builder']['remaining'], 4)
 
     def test_delivery_completion_awards_both_parties_once(self):
         self.order.status = 'meeting'
@@ -66,6 +70,8 @@ class CommunityContributionTests(TestCase):
         self.assertContains(response, '校园互助贡献')
         self.assertContains(response, '30 分')
         self.assertContains(response, '协助找回失物')
+        self.assertContains(response, '失物线索员')
+        self.assertContains(response, '已解锁')
 
     def test_profile_summary_has_progress_for_next_level(self):
         record_contribution(
