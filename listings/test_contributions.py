@@ -89,3 +89,28 @@ class CommunityContributionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '校园互助贡献')
         self.assertContains(response, '距离“可靠交易伙伴”还差 20 分')
+
+    def test_contribution_center_requires_login(self):
+        response = self.client.get(reverse('contribution_center'))
+        self.assertRedirects(response, reverse('login') + '?next=' + reverse('contribution_center'))
+
+    def test_contribution_center_renders_level_badges_and_recent_events(self):
+        record_contribution(
+            user=self.seller,
+            kind='demand_helped',
+            points=10,
+            title='响应校园求购',
+            description='帮助同学找到需要的教材。',
+            source_key='demand:center-test',
+        )
+        self.client.force_login(self.seller)
+        response = self.client.get(reverse('contribution_center'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '我的互助贡献')
+        self.assertContains(response, '热心参与者')
+        self.assertContains(response, '迈出第一步')
+        self.assertContains(response, '已解锁')
+        self.assertContains(response, '响应校园求购')
+        self.assertContains(response, '距离“可靠交易伙伴”还差 20 分')
+

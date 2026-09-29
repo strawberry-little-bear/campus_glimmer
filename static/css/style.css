@@ -1035,3 +1035,41 @@ a { color: inherit; text-decoration: none; }
 .opportunity-empty .btn + .btn { margin-left: 6px; }
 .opportunity-note { margin-top: 12px; color: #96a39a; font-size: .68rem; }
 @media (max-width: 767px) { .opportunity-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.opportunity-row { padding: 12px; }.opportunity-actions span { flex-basis: 100%; }.opportunity-response-form { width: 100%; }.opportunity-response-form input { flex: 1; width: auto; } }
+.contribution-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; }
+.contribution-hero h1 { margin: 7px 0 8px; color: #315746; font-size: clamp(1.65rem, 3vw, 2.25rem); }
+.contribution-hero p { max-width: 680px; margin: 0; color: #74847a; font-size: .82rem; line-height: 1.75; }
+.contribution-level-mark { display: inline-flex; align-items: center; gap: 8px; padding: 10px 13px; border: 1px solid #eadfc5; border-radius: 13px; color: #ad7b3d; background: #fffaf0; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+.contribution-level-mark i { font-size: 1.15rem; }
+.contribution-overview { display: grid; grid-template-columns: 1fr 1fr 1.8fr; gap: 12px; }
+.contribution-stat { min-height: 125px; padding: 18px; border: 1px solid #e5eee6; border-radius: 16px; background: #fff; box-shadow: 0 7px 18px rgba(60, 95, 68, .04); }
+.contribution-stat > span { display: block; color: #809087; font-size: .7rem; font-weight: 700; }
+.contribution-stat strong { display: inline-block; margin-top: 10px; color: #3f6b4d; font-size: 1.7rem; }
+.contribution-stat > small { margin-left: 5px; color: #9eaaa1; font-size: .7rem; }
+.contribution-progress-stat strong { font-size: 1.05rem; }
+.contribution-progress-stat .progress { height: 7px; margin: 17px 0 8px; background: #edf3ed; }
+.contribution-progress-stat .progress-bar { border-radius: 99px; background: linear-gradient(90deg, #76a87c, #d4a35b); }
+.contribution-progress-stat small { margin: 0; }
+.contribution-card { padding: 21px; }
+.contribution-badge-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.contribution-badge { display: flex; gap: 10px; padding: 12px; border: 1px solid #edf1ed; border-radius: 13px; opacity: .62; background: #fbfcfb; }
+.contribution-badge.is-earned { border-color: #dbead9; opacity: 1; background: #f8fcf8; }
+.contribution-badge-icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 10px; color: #aab5ae; background: #eef2ef; }
+.contribution-badge.is-earned .contribution-badge-icon { color: #fff; background: #76a77d; }
+.contribution-badge h3 { margin: 0; color: #4c6c55; font-size: .8rem; }
+.contribution-badge p { margin: 4px 0 7px; color: #86938b; font-size: .65rem; line-height: 1.55; }
+.contribution-badge-state, .contribution-badge-progress { color: #6d9b72; font-size: .62rem; font-weight: 700; }
+.contribution-badge-progress { color: #a1aaa4; }
+.contribution-timeline { display: flex; flex-direction: column; }
+.contribution-event { display: flex; gap: 12px; position: relative; padding: 2px 0 18px 3px; }
+.contribution-event:not(:last-child)::after { position: absolute; top: 13px; bottom: 0; left: 7px; width: 1px; background: #dce9dd; content: ''; }
+.contribution-event-dot { z-index: 1; width: 10px; height: 10px; flex: 0 0 auto; margin-top: 3px; border: 2px solid #fff; border-radius: 50%; background: #82ad87; box-shadow: 0 0 0 1px #b5d3b8; }
+.contribution-event strong { color: #4b6d54; font-size: .78rem; }
+.contribution-event b { color: #bb874b; font-size: .72rem; }
+.contribution-event p { margin: 5px 0 3px; color: #829087; font-size: .68rem; line-height: 1.55; }
+.contribution-event time { color: #adb6b0; font-size: .6rem; }
+.contribution-empty { padding: 28px 8px; text-align: center; }
+.contribution-empty > i { color: #8bb491; font-size: 2rem; }
+.contribution-empty h3 { margin: 10px 0 5px; color: #4d6f55; font-size: .95rem; }
+.contribution-empty p { margin: 0 auto 14px; color: #89968f; font-size: .7rem; line-height: 1.7; }
+.contribution-note { margin-top: 13px; color: #99a49e; font-size: .68rem; }
+@media (max-width: 767px) { .contribution-hero { align-items: flex-start; flex-direction: column; }.contribution-level-mark { align-self: flex-start; }.contribution-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }.contribution-progress-stat { grid-column: 1 / -1; }.contribution-badge-grid { grid-template-columns: 1fr; } }

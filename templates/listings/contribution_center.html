@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}我的互助贡献 · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="contribution-page">
+    <div class="contribution-hero mb-4">
+        <div>
+            <span class="eyebrow eyebrow-soft">Campus impact</span>
+            <h1>我的互助贡献</h1>
+            <p>把每一次完成交付、响应需求和协助找回失物，沉淀成可回看的校园互助记录。</p>
+        </div>
+        <div class="contribution-level-mark"><i class="bi bi-trophy-fill"></i><span>{{ summary.level }}</span></div>
+    </div>
+
+    <div class="contribution-overview mb-4">
+        <div class="contribution-stat"><span>累计积分</span><strong>{{ summary.total_points }}</strong><small>分</small></div>
+        <div class="contribution-stat"><span>完成事件</span><strong>{{ summary.total_events }}</strong><small>次</small></div>
+        <div class="contribution-stat contribution-progress-stat"><span>当前等级</span><strong>{{ summary.level }}</strong><div class="progress" role="progressbar" aria-label="等级进度" aria-valuenow="{{ summary.progress_percent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: {{ summary.progress_percent }}%"></div></div>{% if summary.next_level %}<small>距离“{{ summary.next_level }}”还差 {{ summary.remaining_points }} 分</small>{% else %}<small>已达到当前最高等级</small>{% endif %}</div>
+    </div>
+
+    <div class="row g-4 align-items-start">
+        <div class="col-lg-7">
+            <section class="content-card contribution-card h-100">
+                <div class="card-section-heading"><h2><i class="bi bi-award me-2"></i>我的徽章</h2><span>基于可审计贡献自动解锁</span></div>
+                <div class="contribution-badge-grid">
+                    {% for badge in summary.badges %}
+                    <article class="contribution-badge {% if badge.earned %}is-earned{% endif %}">
+                        <div class="contribution-badge-icon"><i class="bi {{ badge.icon }}"></i></div>
+                        <div><h3>{{ badge.title }}</h3><p>{{ badge.description }}</p>{% if badge.earned %}<span class="contribution-badge-state"><i class="bi bi-check-circle me-1"></i>已解锁</span>{% else %}<span class="contribution-badge-progress">还需 {{ badge.remaining }} 次</span>{% endif %}</div>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+        <div class="col-lg-5">
+            <section class="content-card contribution-card h-100">
+                <div class="card-section-heading"><h2><i class="bi bi-clock-history me-2"></i>最近贡献</h2><span>仅自己可见</span></div>
+                {% if summary.recent_events %}
+                <div class="contribution-timeline">
+                    {% for event in summary.recent_events %}
+                    <article class="contribution-event"><span class="contribution-event-dot"></span><div><div class="d-flex justify-content-between gap-2"><strong>{{ event.title }}</strong><b>+{{ event.points }} 分</b></div><p>{{ event.description|default:'完成了一次可验证的校园互助。' }}</p><time>{{ event.occurred_at|date:'Y年m月d日 H:i' }}</time></div></article>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="contribution-empty"><i class="bi bi-seedling"></i><h3>还没有贡献记录</h3><p>完成一次交易、免费赠送、借用归还或互助响应后，这里会留下可回看的记录。</p><a href="{% url 'opportunity_feed' %}" class="btn btn-outline-success btn-sm">去看看互助机会</a></div>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+    <p class="contribution-note"><i class="bi bi-shield-check me-1"></i>积分只由已完成并可核验的业务事件产生，同一事件不会重复计入；平台不根据积分自动限制正常交易。</p>
+</div>
+{% endblock %}

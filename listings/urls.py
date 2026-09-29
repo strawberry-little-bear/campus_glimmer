@@ -37,6 +37,7 @@ urlpatterns = [
     path('item/<int:item_id>/availability-watch/', views.toggle_availability_watch, name='toggle_availability_watch'),
     path('item/<int:item_id>/recommendation-feedback/', views.recommendation_feedback, name='recommendation_feedback'),
     path('favorites/', views.favorite_list, name='favorite_list'),
+    path('contributions/', views.contribution_center, name='contribution_center'),
     path('opportunities/', views.opportunity_feed, name='opportunity_feed'),
     path('opportunities/dismiss/', views.dismiss_opportunity, name='dismiss_opportunity'),
     path('orders/', views.my_orders, name='my_orders'),

@@ -24,8 +24,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import build_operations_dashboard, build_search_insights
 from .demand_radar import build_demand_radar
 from .contributions import (
-    record_demand_response_contribution, record_lost_found_lead_contribution,
-    record_order_contribution,
+    build_contribution_summary, record_demand_response_contribution,
+    record_lost_found_lead_contribution, record_order_contribution,
 )
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
@@ -1701,6 +1701,14 @@ def update_order_status(request, order_id):
         else:
             messages.success(request, f'订单状态已更新为“{order.get_status_display()}”。')
     return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def contribution_center(request):
+    return render(request, 'listings/contribution_center.html', {
+        'summary': build_contribution_summary(request.user),
+        'title': '我的互助贡献',
+    })
 
 
 @login_required
