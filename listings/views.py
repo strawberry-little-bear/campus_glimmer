@@ -22,11 +22,12 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
+from .demand_radar import build_demand_radar
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
@@ -1867,7 +1868,74 @@ def operations_dashboard(request):
     dashboard['pending_high_moderation_count'] = ModerationEvent.objects.filter(
         status='pending', risk_level='high',
     ).count()
+    active_tasks = DemandOpportunityTask.objects.filter(
+        status__in=['todo', 'in_progress'],
+    ).select_related('assigned_to')
+    tasks_by_key = {task.radar_key: task for task in active_tasks}
+    for row in dashboard['demand_radar']['rows']:
+        row['active_task'] = tasks_by_key.get(row['radar_key'])
+    dashboard['demand_radar_tasks'] = active_tasks[:20]
     return render(request, 'listings/operations_dashboard.html', dashboard)
+
+
+@login_required
+def create_demand_opportunity_task(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return redirect('operations_dashboard')
+    try:
+        days = int(request.POST.get('days', 30))
+    except (TypeError, ValueError):
+        days = 30
+    radar_key = request.POST.get('radar_key', '').strip()
+    radar = build_demand_radar(days=days)
+    row = next((item for item in radar['rows'] if item['radar_key'] == radar_key), None)
+    if not row:
+        messages.error(request, '这个需求机会已经变化或不在当前统计周期内，请刷新运营看板后重试。')
+        return redirect(f'{reverse("operations_dashboard")}?days={days}')
+    task, created = DemandOpportunityTask.objects.get_or_create(
+        radar_key=row['radar_key'],
+        status__in=['todo', 'in_progress'],
+        defaults={
+            'title': row['label'],
+            'category_id': row.get('category_id'),
+            'location_id': row.get('location_id'),
+            'level': row['level'],
+            'opportunity_score': row['opportunity_score'],
+            'search_count': row['search_count'],
+            'demand_count': row['demand_count'],
+            'available_supply': row['available_supply'],
+            'evidence': row['evidence'],
+            'recommendations': row['recommendations'],
+            'created_by': request.user,
+        },
+    )
+    if created:
+        messages.success(request, f'已建立“{task.title}”的需求跟进任务。')
+    else:
+        messages.info(request, f'“{task.title}”已经有进行中的跟进任务。')
+    return redirect(f'{reverse("operations_dashboard")}?days={days}')
+
+
+@login_required
+def update_demand_opportunity_task(request, task_id):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    task = get_object_or_404(DemandOpportunityTask, pk=task_id)
+    if request.method == 'POST':
+        status = request.POST.get('status', '')
+        if status in dict(DemandOpportunityTask.STATUS_CHOICES):
+            task.status = status
+            if not task.assigned_to_id and status == 'in_progress':
+                task.assigned_to = request.user
+            task.save(update_fields=['status', 'assigned_to', 'updated_at'])
+            messages.success(request, f'任务“{task.title}”已更新为{task.get_status_display()}。')
+    try:
+        days = int(request.POST.get('days', 30))
+    except (TypeError, ValueError):
+        days = 30
+    return redirect(f'{reverse("operations_dashboard")}?days={days}')
 
 
 @login_required

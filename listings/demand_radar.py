@@ -10,6 +10,13 @@ def _normalize_term(value):
     return ' '.join((value or '').strip().lower().split())[:120]
 
 
+def _radar_key(signal):
+    return (
+        f'{signal["term"]}|category:{signal["category_id"] or 0}'
+        f'|location:{signal["location_id"] or 0}'
+    )
+
+
 def _display_label(term, category_name, location_name):
     if term:
         return term
@@ -102,9 +109,12 @@ def _build_row(signal, now):
     evidence.append(f'当前匹配供给 {available_supply} 件')
 
     return {
+        'radar_key': _radar_key(signal),
         'label': _display_label(signal['term'], signal['category_name'], signal['location_name']),
         'term': signal['term'],
+        'category_id': signal['category_id'],
         'category_name': signal['category_name'],
+        'location_id': signal['location_id'],
         'location_name': signal['location_name'],
         'search_count': signal['search_count'],
         'unique_searchers': search_users,

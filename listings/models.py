@@ -1055,6 +1055,68 @@ class DemandPost(models.Model):
         return self.title
 
 
+class DemandOpportunityTask(models.Model):
+    """A durable staff follow-up task created from a demand-radar snapshot."""
+
+    STATUS_CHOICES = (
+        ('todo', '待跟进'),
+        ('in_progress', '跟进中'),
+        ('completed', '已完成'),
+        ('ignored', '已忽略'),
+    )
+
+    radar_key = models.CharField('雷达主题标识', max_length=260)
+    title = models.CharField('机会主题', max_length=160)
+    category = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='demand_opportunity_tasks', verbose_name='分类',
+    )
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='demand_opportunity_tasks', verbose_name='地点',
+    )
+    level = models.CharField('优先级', max_length=20, default='medium')
+    opportunity_score = models.PositiveIntegerField('机会分', default=0)
+    search_count = models.PositiveIntegerField('无结果搜索次数', default=0)
+    demand_count = models.PositiveIntegerField('有效求购数', default=0)
+    available_supply = models.PositiveIntegerField('创建任务时供给数', default=0)
+    evidence = models.JSONField('证据信号', default=list, blank=True)
+    recommendations = models.JSONField('建议动作', default=list, blank=True)
+    status = models.CharField('任务状态', max_length=20, choices=STATUS_CHOICES, default='todo')
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='created_demand_opportunity_tasks', verbose_name='创建人',
+    )
+    assigned_to = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='assigned_demand_opportunity_tasks', verbose_name='负责人',
+    )
+    due_at = models.DateTimeField('跟进截止时间', null=True, blank=True)
+    note = models.TextField('跟进备注', blank=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '需求机会跟进任务'
+        verbose_name_plural = '需求机会跟进任务'
+        ordering = ['status', '-opportunity_score', '-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['radar_key'],
+                condition=models.Q(status__in=['todo', 'in_progress']),
+                name='unique_open_demand_opportunity_task',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['status', '-opportunity_score']),
+            models.Index(fields=['radar_key', 'status']),
+            models.Index(fields=['assigned_to', 'status']),
+        ]
+
+    def __str__(self):
+        return f'{self.title} · {self.get_status_display()}'
+
+
 class LostFoundPost(models.Model):
     """A campus lost-and-found record with explainable cross-post matching."""
 

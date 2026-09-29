@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from .analytics import build_operational_alerts
 from .demand_radar import build_demand_radar
-from .models import CampusLocation, Category, DemandPost, Item, SearchQuery
+from .models import CampusLocation, Category, DemandOpportunityTask, DemandPost, Item, SearchQuery
 
 
 class DemandRadarTests(TestCase):
@@ -105,3 +105,51 @@ class DemandRadarTests(TestCase):
         self.assertEqual(alert['metric'], '15')
         self.assertIn('补充相关供给', alert['message'])
         self.assertEqual(alert['action_url_name'], 'operations_dashboard')
+
+    def test_staff_can_create_and_complete_demand_follow_up_task(self):
+        staff = User.objects.create_superuser(
+            username='task-staff', email='task@example.com', password='safe-password-123',
+        )
+        SearchQuery.objects.create(
+            user=self.user, query='折叠伞', category=self.category,
+            location=self.location, result_count=0,
+        )
+        radar = build_demand_radar(30)
+        row = radar['rows'][0]
+
+        self.client.force_login(self.user)
+        forbidden = self.client.post(reverse('create_demand_opportunity_task'), {
+            'radar_key': row['radar_key'], 'days': 30,
+        })
+        self.assertEqual(forbidden.status_code, 403)
+
+        self.client.force_login(staff)
+        created = self.client.post(reverse('create_demand_opportunity_task'), {
+            'radar_key': row['radar_key'], 'days': 30,
+        })
+        self.assertEqual(created.status_code, 302)
+        task = DemandOpportunityTask.objects.get()
+        self.assertEqual(task.title, '折叠伞')
+        self.assertEqual(task.created_by, staff)
+        self.assertEqual(task.search_count, 1)
+
+        self.client.post(reverse('create_demand_opportunity_task'), {
+            'radar_key': row['radar_key'], 'days': 30,
+        })
+        self.assertEqual(DemandOpportunityTask.objects.count(), 1)
+
+        started = self.client.post(
+            reverse('update_demand_opportunity_task', args=[task.id]),
+            {'status': 'in_progress', 'days': 30},
+        )
+        self.assertEqual(started.status_code, 302)
+        task.refresh_from_db()
+        self.assertEqual(task.status, 'in_progress')
+        self.assertEqual(task.assigned_to, staff)
+
+        self.client.post(
+            reverse('update_demand_opportunity_task', args=[task.id]),
+            {'status': 'completed', 'days': 30},
+        )
+        task.refresh_from_db()
+        self.assertEqual(task.status, 'completed')

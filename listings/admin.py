@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -252,6 +252,22 @@ class SearchSynonymAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     search_fields = ('keyword', 'synonym')
     list_editable = ('is_active',)
+
+
+@admin.register(DemandOpportunityTask)
+class DemandOpportunityTaskAdmin(admin.ModelAdmin):
+    list_display = (
+        'title', 'level', 'opportunity_score', 'status', 'assigned_to',
+        'available_supply', 'created_at', 'updated_at',
+    )
+    list_filter = ('status', 'level', 'category', 'location')
+    search_fields = ('title', 'radar_key', 'note')
+    autocomplete_fields = ('category', 'location', 'created_by', 'assigned_to')
+    readonly_fields = (
+        'radar_key', 'opportunity_score', 'search_count', 'demand_count',
+        'available_supply', 'evidence', 'recommendations', 'created_by',
+        'created_at', 'updated_at',
+    )
 
 
 @admin.register(DemandPost)

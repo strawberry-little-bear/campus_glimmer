@@ -374,6 +374,18 @@
                 <div class="demand-radar-meta">{% if row.category_name %}<span><i class="bi bi-grid"></i>{{ row.category_name }}</span>{% endif %}{% if row.location_name %}<span><i class="bi bi-geo-alt"></i>{{ row.location_name }}</span>{% endif %}<span><i class="bi bi-box-seam"></i>当前供给 {{ row.available_supply }}</span></div>
                 <div class="demand-radar-evidence">{% for evidence in row.evidence %}<span>{{ evidence }}</span>{% endfor %}</div>
                 <div class="demand-radar-actions"><i class="bi bi-lightbulb"></i>{% for recommendation in row.recommendations %}<span>{{ recommendation }}</span>{% endfor %}</div>
+                <div class="demand-radar-task">
+                    {% if row.active_task %}
+                    <span class="demand-radar-task-status"><i class="bi bi-check2-circle me-1"></i>{{ row.active_task.get_status_display }}{% if row.active_task.assigned_to %} · {{ row.active_task.assigned_to.username }}{% endif %}</span>
+                    {% if row.active_task.status == 'todo' %}
+                    <form method="post" action="{% url 'update_demand_opportunity_task' row.active_task.id %}">{% csrf_token %}<input type="hidden" name="status" value="in_progress"><input type="hidden" name="days" value="{{ period_days }}"><button class="btn btn-sm btn-outline-secondary" type="submit">开始跟进</button></form>
+                    {% else %}
+                    <form method="post" action="{% url 'update_demand_opportunity_task' row.active_task.id %}">{% csrf_token %}<input type="hidden" name="status" value="completed"><input type="hidden" name="days" value="{{ period_days }}"><button class="btn btn-sm btn-outline-success" type="submit">标记完成</button></form>
+                    {% endif %}
+                    {% else %}
+                    <form method="post" action="{% url 'create_demand_opportunity_task' %}">{% csrf_token %}<input type="hidden" name="radar_key" value="{{ row.radar_key }}"><input type="hidden" name="days" value="{{ period_days }}"><button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus-circle me-1"></i>建立跟进任务</button></form>
+                    {% endif %}
+                </div>
             </div>
             <div class="demand-radar-score"><strong>{{ row.opportunity_score }}</strong><small>机会分</small><div class="demand-radar-track"><span style="width: {{ row.score_percent }}%;"></span></div></div>
         </article>

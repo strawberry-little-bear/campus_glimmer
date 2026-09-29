@@ -959,3 +959,9 @@ a { color: inherit; text-decoration: none; }
 .demand-radar-critical .demand-radar-track span { background: #cb7664; }
 .demand-radar-high .demand-radar-track span { background: #c8944f; }
 @media (max-width: 575px) { .demand-radar-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.demand-radar-summary > div { min-height: 72px; padding: 11px; }.demand-radar-card { grid-template-columns: minmax(0, 1fr) 64px; gap: 10px; padding: 13px; }.demand-radar-score strong { font-size: 1.4rem; } }
+
+.demand-radar-task { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-top: 9px; }
+.demand-radar-task form { margin: 0; }
+.demand-radar-task-status { display: inline-flex; align-items: center; color: #62806d; font-size: .69rem; font-weight: 700; }
+.demand-radar-task-status i { color: #5c9b76; }
+.demand-radar-task .btn { padding: 4px 9px; border-radius: 8px; font-size: .67rem; }
