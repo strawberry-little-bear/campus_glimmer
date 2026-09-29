@@ -35,6 +35,7 @@ from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, D
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import create_notification
+from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .meeting_scheduling import (
     find_appointment_conflicts,
@@ -1700,6 +1701,14 @@ def update_order_status(request, order_id):
         else:
             messages.success(request, f'订单状态已更新为“{order.get_status_display()}”。')
     return redirect('order_detail', order_id=order.id)
+
+
+@login_required
+def opportunity_feed(request):
+    return render(request, 'listings/opportunity_feed.html', {
+        'feed': build_opportunity_feed(request.user),
+        'title': '校园互助机会',
+    })
 
 
 @login_required

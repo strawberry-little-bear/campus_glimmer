@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}校园互助机会 · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="opportunity-page">
+    <div class="page-intro mb-4">
+        <div>
+            <span class="eyebrow eyebrow-soft">Community opportunities</span>
+            <h1>校园互助机会</h1>
+            <p>把你手边的闲置、线索和经验，连接到正在等待帮助的同学。每条推荐都会说明匹配依据。</p>
+        </div>
+        <a href="{% url 'new_item' %}" class="btn btn-success btn-sm"><i class="bi bi-plus-lg me-1"></i>发布闲置</a>
+    </div>
+
+    <div class="opportunity-summary mb-4">
+        <div><strong>{{ feed.opportunities|length }}</strong><span>当前推荐</span></div>
+        <div><strong>{{ feed.demand_count }}</strong><span>可响应求购</span></div>
+        <div><strong>{{ feed.lost_found_count }}</strong><span>失物线索</span></div>
+        <div><strong>{{ feed.available_item_count }}</strong><span>你的在售物品</span></div>
+    </div>
+
+    <section class="content-card opportunity-card">
+        <div class="card-section-heading"><h2><i class="bi bi-compass me-2"></i>推荐给你的帮助动作</h2><span>按匹配度排序</span></div>
+        {% if feed.opportunities %}
+        <div class="opportunity-list">
+            {% for opportunity in feed.opportunities %}
+            <article class="opportunity-row">
+                <div class="opportunity-icon {% if opportunity.kind == 'demand' %}is-demand{% else %}is-lost-found{% endif %}"><i class="bi {% if opportunity.kind == 'demand' %}bi-bullseye{% else %}bi-search-heart{% endif %}"></i></div>
+                <div class="opportunity-main">
+                    <div class="d-flex align-items-start justify-content-between gap-3"><div><span class="opportunity-type">{% if opportunity.kind == 'demand' %}响应求购{% else %}协助失物招领{% endif %}</span><h3>{{ opportunity.title }}</h3></div><b class="opportunity-score">{{ opportunity.score }}<small>匹配分</small></b></div>
+                    <p>{{ opportunity.description|truncatechars:130 }}</p>
+                    <div class="opportunity-reasons"><i class="bi bi-check2-circle"></i>{{ opportunity.reason_text }}</div>
+                    <div class="opportunity-actions">
+                        {% if opportunity.kind == 'demand' %}<span>可用商品：{{ opportunity.item.title }}</span><a href="{% url 'demand_detail' opportunity.target.id %}" class="btn btn-sm btn-outline-success">查看求购</a><a href="{% url 'respond_to_demand' opportunity.target.id opportunity.item.id %}" class="btn btn-sm btn-success">去响应</a>{% else %}<span>你的记录：{{ opportunity.source.title }}</span><a href="{% url 'lost_found_detail' opportunity.target.id %}" class="btn btn-sm btn-outline-success">查看匹配</a>{% endif %}
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="opportunity-empty"><i class="bi bi-sunrise"></i><h3>暂时没有合适的互助机会</h3><p>发布可交易商品或失物招领记录后，系统会根据分类、地点、关键词和时间继续为你寻找可帮助的同学。</p><div><a href="{% url 'new_item' %}" class="btn btn-outline-success btn-sm">发布闲置</a><a href="{% url 'new_lost_found' %}" class="btn btn-light btn-sm">发布失物线索</a></div></div>
+        {% endif %}
+    </section>
+
+    <p class="opportunity-note"><i class="bi bi-shield-check me-1"></i>推荐只基于你已公开的商品和失物招领记录，不读取实时位置，也不会公开其他用户的联系方式。</p>
+</div>
+{% endblock %}

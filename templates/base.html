@@ -30,6 +30,7 @@
                     <li class="nav-item"><a class="nav-link" href="{% url 'item_list' %}"><i class="bi bi-grid me-1"></i>发现好物</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'demand_list' %}"><i class="bi bi-bullseye me-1"></i>求购广场</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'lost_found_list' %}"><i class="bi bi-search-heart me-1"></i>失物招领</a></li>
+                    {% if user.is_authenticated %}<li class="nav-item"><a class="nav-link" href="{% url 'opportunity_feed' %}"><i class="bi bi-stars me-1"></i>互助机会</a></li>{% endif %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'campaign_list' %}"><i class="bi bi-stars me-1"></i>校园专题</a></li>
                     {% if user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'new_item' %}"><i class="bi bi-plus-circle me-1"></i>发布闲置</a></li>
