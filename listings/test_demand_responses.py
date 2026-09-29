@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CampusLocation, Category, DemandPost, DemandResponse, Item, Notification
+from .models import CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, Item, Notification
 
 
 class DemandResponseFlowTests(TestCase):
@@ -76,6 +76,29 @@ class DemandResponseFlowTests(TestCase):
             recipient=self.seller, kind='demand_response', item=self.item,
             title='你的求购响应已被确认',
         ).exists())
+        self.assertEqual(
+            CommunityContribution.objects.filter(
+                user=self.seller, kind='demand_helped',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            CommunityContribution.objects.get(
+                user=self.seller, kind='demand_helped',
+            ).points,
+            8,
+        )
+
+        duplicate = self.client.post(
+            reverse('review_demand_response', args=[demand_response.id, 'accept']),
+        )
+        self.assertRedirects(duplicate, reverse('demand_detail', args=[self.demand.id]))
+        self.assertEqual(
+            CommunityContribution.objects.filter(
+                user=self.seller, kind='demand_helped',
+            ).count(),
+            1,
+        )
 
     def test_accepting_one_response_rejects_other_pending_responses(self):
         other_item = Item.objects.create(

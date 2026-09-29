@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .forms import ItemForm
-from .models import Category, CampusLocation, GiftApplication, Item, Notification, Order
+from .models import Category, CampusLocation, CommunityContribution, GiftApplication, Item, Notification, Order
 
 
 class FreeGiftingTests(TestCase):
@@ -87,6 +87,25 @@ class FreeGiftingTests(TestCase):
         self.assertTrue(Notification.objects.filter(
             recipient=second_buyer, kind='gift_application_status', title='领取申请结果更新', item=item,
         ).exists())
+
+        order.status = 'meeting'
+        order.save(update_fields=['status', 'updated_at'])
+        self.client.force_login(self.seller)
+        self.client.post(reverse('confirm_delivery', args=[order.pk]))
+        self.client.force_login(self.buyer)
+        self.client.post(reverse('confirm_delivery', args=[order.pk]))
+
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'completed')
+        self.assertEqual(CommunityContribution.objects.filter(kind='gift_completed').count(), 2)
+        self.assertEqual(
+            CommunityContribution.objects.filter(user=self.seller, kind='gift_completed').values_list('points', flat=True).get(),
+            8,
+        )
+        self.assertEqual(
+            CommunityContribution.objects.filter(user=self.buyer, kind='gift_completed').values_list('points', flat=True).get(),
+            8,
+        )
 
     def test_same_user_cannot_submit_two_pending_applications(self):
         item = Item.objects.create(

@@ -12,6 +12,10 @@ CONTRIBUTION_DEFAULTS = {
         'seller': (12, '完成一次借用归还', '借用品已由双方完成归还确认。'),
         'buyer': (10, '完成一次借用归还', '按流程完成借用品归还确认。'),
     },
+    'gift_completed': {
+        'seller': (8, '完成一次免费赠送', '将闲置物品交给有需要的同学，并完成双方交付确认。'),
+        'buyer': (8, '完成一次免费领取', '按约完成免费物品领取，并完成双方交付确认。'),
+    },
 }
 
 CONTRIBUTION_LEVELS = (
@@ -42,7 +46,7 @@ def record_contribution(*, user, kind, points, title, description='', source_key
 
 
 def record_order_contribution(order, *, phase):
-    'Award both parties once when a sale completes or a borrowing cycle returns.'
+    'Award both parties once when a sale, gift, or borrowing cycle completes.'
     if phase not in CONTRIBUTION_DEFAULTS:
         raise ValueError(f'不支持的贡献阶段：{phase}')
 
@@ -58,6 +62,32 @@ def record_order_contribution(order, *, phase):
             source_key=f'order:{order.pk}:{phase}:{role}',
             occurred_at=order.updated_at,
         )
+
+
+def record_demand_response_contribution(response):
+    'Award the responder once when a campus demand response is accepted.'
+    return record_contribution(
+        user=response.responder,
+        kind='demand_helped',
+        points=8,
+        title='响应校园求购',
+        description=f'你提供的“{response.item.title}”已被求购发布者确认。',
+        source_key=f'demand-response:{response.pk}:accepted',
+        occurred_at=response.updated_at,
+    )
+
+
+def record_lost_found_lead_contribution(lead):
+    'Award the lead author once when a lost-and-found clue is accepted.'
+    return record_contribution(
+        user=lead.respondent,
+        kind='lost_found_help',
+        points=12,
+        title='协助确认失物线索',
+        description=f'你提交的“{lead.post.title}”线索已被发布者确认。',
+        source_key=f'lost-found-lead:{lead.pk}:accepted',
+        occurred_at=lead.updated_at,
+    )
 
 
 def _level_for_points(points):

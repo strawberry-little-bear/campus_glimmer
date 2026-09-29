@@ -23,7 +23,10 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import build_operations_dashboard, build_search_insights
 from .demand_radar import build_demand_radar
-from .contributions import record_order_contribution
+from .contributions import (
+    record_demand_response_contribution, record_lost_found_lead_contribution,
+    record_order_contribution,
+)
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
@@ -1274,7 +1277,8 @@ def confirm_delivery(request, order_id):
             locked_order.status = next_status
             locked_order.save(update_fields=['status', 'updated_at'])
             if not is_borrow:
-                record_order_contribution(locked_order, phase='trade_completed')
+                contribution_phase = 'gift_completed' if locked_order.item.trade_mode == 'free' else 'trade_completed'
+                record_order_contribution(locked_order, phase=contribution_phase)
             if not is_borrow:
                 locked_order.item.status = 'sold'
                 locked_order.item.save(update_fields=['status', 'updated_at'])
@@ -2555,6 +2559,7 @@ def review_demand_response(request, response_id, action):
             locked_response.status = 'accepted'
             locked_response.match_score, locked_response.match_reason = match
             locked_response.save(update_fields=['status', 'match_score', 'match_reason', 'updated_at'])
+            record_demand_response_contribution(locked_response)
             locked_demand.status = 'fulfilled'
             locked_demand.save(update_fields=['status', 'updated_at'])
             other_responses = DemandResponse.objects.select_for_update().filter(
@@ -2870,6 +2875,7 @@ def review_lost_found_lead(request, lead_id, action):
                 return redirect('lost_found_detail', locked_post.id)
             locked_lead.status = 'accepted'
             locked_lead.save(update_fields=['status', 'updated_at'])
+            record_lost_found_lead_contribution(locked_lead)
             locked_post.status = 'matched'
             if locked_lead.related_post_id:
                 related = LostFoundPost.objects.select_for_update().get(pk=locked_lead.related_post_id)

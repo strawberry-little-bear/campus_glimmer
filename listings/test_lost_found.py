@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .lost_found_matching import find_lost_found_matches, score_lost_found_posts
-from .models import CampusLocation, Category, LostFoundLead, LostFoundPost, Notification
+from .models import CampusLocation, Category, CommunityContribution, LostFoundLead, LostFoundPost, Notification
 
 
 class LostFoundFlowTests(TestCase):
@@ -127,6 +127,27 @@ class LostFoundFlowTests(TestCase):
             kind='lost_found_lead',
             title='失物招领线索已确认',
         ).exists())
+        self.assertEqual(
+            CommunityContribution.objects.filter(
+                user=self.finder, kind='lost_found_help',
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            CommunityContribution.objects.get(
+                user=self.finder, kind='lost_found_help',
+            ).points,
+            12,
+        )
+
+        duplicate = self.client.post(reverse('review_lost_found_lead', args=[lead.id, 'accept']))
+        self.assertRedirects(duplicate, reverse('lost_found_detail', args=[lost.id]))
+        self.assertEqual(
+            CommunityContribution.objects.filter(
+                user=self.finder, kind='lost_found_help',
+            ).count(),
+            1,
+        )
 
     def test_form_and_detail_pages_render_for_authenticated_user(self):
         self.client.login(username=self.owner.username, password='safe-password-123')
