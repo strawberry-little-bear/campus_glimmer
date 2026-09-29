@@ -563,7 +563,7 @@ def _build_user_retention(start, previous_start, end):
 
 
 
-def build_operational_alerts(metrics, period_comparisons):
+def build_operational_alerts(metrics, period_comparisons, demand_radar=None):
     """Turn dashboard signals into a short, actionable operations queue."""
     alerts = []
     search_count = metrics['searches']
@@ -615,6 +615,27 @@ def build_operational_alerts(metrics, period_comparisons):
             'metric_label': '待处理举报',
             'action_label': '进入举报审核',
             'action_url_name': 'report_list',
+        })
+
+    radar_rows = (demand_radar or {}).get('rows', [])
+    radar_row = next(
+        (row for row in radar_rows if row.get('level') == 'critical'),
+        next((row for row in radar_rows if row.get('level') == 'high' and row.get('available_supply') == 0), None),
+    )
+    if radar_row:
+        severity = 'critical' if radar_row.get('level') == 'critical' else 'warning'
+        evidence = '、'.join(radar_row.get('evidence', [])[:3])
+        recommendations = '、'.join(radar_row.get('recommendations', [])[:2])
+        alerts.append({
+            'key': 'demand_radar_opportunity',
+            'severity': severity,
+            'severity_label': '优先处理' if severity == 'critical' else '需要关注',
+            'title': f'需求雷达发现高缺口：{radar_row["label"]}',
+            'message': f'{evidence}。建议{recommendations}。',
+            'metric': str(radar_row.get('opportunity_score', 0)),
+            'metric_label': '机会分',
+            'action_label': '查看需求雷达',
+            'action_url_name': 'operations_dashboard',
         })
 
     completed_comparison = next(
@@ -1123,10 +1144,10 @@ def build_operations_dashboard(days=30):
         'demand_match_response_rate': demand_match_insights['match_response_rate'],
         'demand_response_acceptance_demand_rate': demand_match_insights['response_acceptance_demand_rate'],
     }
-    operational_alerts = build_operational_alerts(metrics, period_comparisons)
+    demand_radar = build_demand_radar(days=days, now=now)
+    operational_alerts = build_operational_alerts(metrics, period_comparisons, demand_radar)
     campus_pulse = build_campus_pulse(days=days, now=now)
     campaign_analytics = build_campaign_analytics(days=days, now=now)
-    demand_radar = build_demand_radar(days=days, now=now)
 
 
     return {

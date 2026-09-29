@@ -3,6 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from .analytics import build_operational_alerts
 from .demand_radar import build_demand_radar
 from .models import CampusLocation, Category, DemandPost, Item, SearchQuery
 
@@ -80,3 +81,27 @@ class DemandRadarTests(TestCase):
         self.assertContains(export, '需求主题')
         self.assertContains(export, '雨伞')
 
+
+    def test_critical_radar_opportunity_enters_operations_alerts(self):
+        alerts = build_operational_alerts(
+            {
+                'searches': 1, 'zero_result_searches': 1, 'zero_result_rate': 100,
+                'searches_with_results': 0, 'search_click_through_rate': 0,
+                'pending_reports': 0,
+            },
+            [],
+            {
+                'rows': [{
+                    'label': '充电宝', 'level': 'critical', 'opportunity_score': 15,
+                    'available_supply': 0,
+                    'evidence': ['无结果搜索 3 次', '有效求购 2 条'],
+                    'recommendations': ['补充相关供给', '关注“图书馆东门”附近'],
+                }],
+            },
+        )
+
+        alert = next(alert for alert in alerts if alert['key'] == 'demand_radar_opportunity')
+        self.assertEqual(alert['severity'], 'critical')
+        self.assertEqual(alert['metric'], '15')
+        self.assertIn('补充相关供给', alert['message'])
+        self.assertEqual(alert['action_url_name'], 'operations_dashboard')
