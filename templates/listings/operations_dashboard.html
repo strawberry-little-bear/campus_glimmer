@@ -507,6 +507,46 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>机会分综合无结果搜索、独立用户、有效求购与当前供给计算；只展示聚合信号，不暴露用户身份，适合用于补给与专题运营决策。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 demand-outcome-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Demand follow-up</span><h2>需求跟进闭环效果</h2></div>
+        <span class="ops-panel-hint">按任务创建时间前后 {{ demand_radar_outcomes.window_days }} 天对比无结果搜索率</span>
+    </div>
+    <form class="ops-inline-filter" method="get">
+        <input type="hidden" name="days" value="{{ period_days }}">
+        <label for="outcome-task-status">任务状态</label>
+        <select id="outcome-task-status" name="task_status" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="all"{% if not demand_outcome_status_filter %} selected{% endif %}>全部状态</option>
+            <option value="todo"{% if demand_outcome_status_filter == 'todo' %} selected{% endif %}>待跟进</option>
+            <option value="in_progress"{% if demand_outcome_status_filter == 'in_progress' %} selected{% endif %}>跟进中</option>
+            <option value="completed"{% if demand_outcome_status_filter == 'completed' %} selected{% endif %}>已完成</option>
+            <option value="ignored"{% if demand_outcome_status_filter == 'ignored' %} selected{% endif %}>已忽略</option>
+        </select>
+    </form>
+    <div class="demand-radar-summary">
+        <div><span>纳入统计任务</span><strong>{{ demand_radar_outcomes.summary.task_count }}</strong><small>当前周期创建</small></div>
+        <div class="demand-radar-warning"><span>缺口收敛</span><strong>{{ demand_radar_outcomes.summary.converged_count }}</strong><small>无结果搜索下降</small></div>
+        <div{% if demand_radar_outcomes.summary.diverged_count %} class="demand-radar-warning"{% endif %}><span>缺口扩大</span><strong>{{ demand_radar_outcomes.summary.diverged_count }}</strong><small>需要复核动作</small></div>
+        <div><span>闭环命中率</span><strong>{% if demand_radar_outcomes.summary.hit_rate != None %}{{ demand_radar_outcomes.summary.hit_rate|floatformat }}%{% else %}—{% endif %}</strong><small>仅统计有完整证据的任务</small></div>
+    </div>
+    {% if demand_radar_outcomes.rows %}
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 demand-outcome-table"><thead><tr><th>跟进主题</th><th>任务状态</th><th>基线无结果率</th><th>观察期无结果率</th><th>变化</th><th>可用供给</th><th>判定</th></tr></thead><tbody>
+        {% for row in demand_radar_outcomes.rows %}
+        <tr>
+            <td><strong>{{ row.title }}</strong><small class="d-block text-muted">{{ row.created_at|date:"Y-m-d" }} 建立 · 信号 {{ row.signal_total }} 次</small></td>
+            <td>{{ row.status_label }}</td>
+            <td>{% if row.baseline_zero_rate != None %}{{ row.baseline_zero_rate|floatformat }}%<small class="d-block text-muted">{{ row.baseline_searches }} 次搜索</small>{% else %}—{% endif %}</td>
+            <td>{% if row.observation_zero_rate != None %}{{ row.observation_zero_rate|floatformat }}%<small class="d-block text-muted">{{ row.observation_searches }} 次搜索</small>{% else %}—{% endif %}</td>
+            <td>{% if row.delta_points != None %}<strong class="{% if row.delta_points >= 10 %}text-success{% elif row.delta_points <= -10 %}text-danger{% endif %}">{% if row.delta_points > 0 %}+{% endif %}{{ row.delta_points|floatformat }}</strong><small class="d-block text-muted">百分点</small>{% else %}—{% endif %}</td>
+            <td>{{ row.supply_now }}<small class="d-block text-muted">建任务时 {{ row.supply_at_creation }}</small></td>
+            <td><span class="demand-outcome-tag demand-outcome-{{ row.outcome }}">{{ row.outcome_label }}</span><small class="d-block text-muted mt-1">{{ row.verdict }}</small></td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有建立需求跟进任务，可先从上方需求雷达创建。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>以任务创建时间为分界，对比同一主题在前后两个窗口的无结果搜索率；搜索量不足或观察期未结束的任务单独标注，不计入命中率，避免用偶然数据评价供给动作。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 campaign-analytics-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Campaign performance</span><h2>校园专题表现</h2></div>

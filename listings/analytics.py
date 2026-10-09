@@ -11,6 +11,7 @@ from .models import BrowsingHistory, CampusLocation, Category, CommunityContribu
 from .campus_pulse import build_campus_pulse
 from .campaign_analytics import build_campaign_analytics
 from .demand_radar import build_demand_radar
+from .demand_radar_outcome import build_demand_radar_outcomes
 from .academic_calendar import build_academic_calendar
 from .notification_response import build_notification_response_insights
 from .order_stage_flow import build_order_stage_flow
@@ -570,7 +571,10 @@ def _build_user_retention(start, previous_start, end):
 
 
 
-def build_operational_alerts(metrics, period_comparisons, demand_radar=None, governance_sla=None):
+def build_operational_alerts(
+    metrics, period_comparisons, demand_radar=None, governance_sla=None,
+    demand_radar_outcomes=None,
+):
     """Turn dashboard signals into a short, actionable operations queue."""
     alerts = []
     search_count = metrics['searches']
@@ -705,6 +709,28 @@ def build_operational_alerts(metrics, period_comparisons, demand_radar=None, gov
             'metric': f'{mutual_aid_completion_rate}%',
             'metric_label': '互助完成率',
             'action_label': '查看互助闭环',
+            'action_url_name': 'operations_dashboard',
+        })
+
+    # 闭环命中率是唯一能回答"这个雷达值不值得信"的指标。低命中率意味着
+    # 运营按告警去补供给，但需求侧没有任何回应，此时该修的是雷达口径而不是
+    # 继续加供给；样本太少时不出这条告警，避免一次偶然就否定整套机制。
+    outcomes = (demand_radar_outcomes or {}).get('summary', {})
+    judged = outcomes.get('judged_count', 0)
+    hit_rate = outcomes.get('hit_rate')
+    if judged >= 3 and hit_rate is not None and hit_rate < 40:
+        alerts.append({
+            'key': 'demand_radar_hit_rate',
+            'severity': 'warning',
+            'severity_label': '需要关注',
+            'title': '需求跟进闭环命中率偏低',
+            'message': (
+                f'最近 {judged} 个有完整证据的跟进任务中，只有 {hit_rate}% 让无结果搜索真正下降。'
+                '建议核对机会分口径，或确认补供给的动作是否对准了真实需求。'
+            ),
+            'metric': f'{hit_rate}%',
+            'metric_label': '闭环命中率',
+            'action_label': '查看需求闭环',
             'action_url_name': 'operations_dashboard',
         })
 
@@ -1480,9 +1506,10 @@ def build_operations_dashboard(days=30):
         'mutual_aid_accepted_interactions': mutual_aid_feedback_insights['accepted_interaction_count'],
     }
     demand_radar = build_demand_radar(days=days, now=now)
+    demand_radar_outcomes = build_demand_radar_outcomes(days=days, now=now)
     governance_sla = build_governance_sla(days=days, now=now)
     operational_alerts = build_operational_alerts(
-        metrics, period_comparisons, demand_radar, governance_sla,
+        metrics, period_comparisons, demand_radar, governance_sla, demand_radar_outcomes,
     )
     campus_pulse = build_campus_pulse(days=days, now=now)
     campaign_analytics = build_campaign_analytics(days=days, now=now)
@@ -1521,6 +1548,7 @@ def build_operations_dashboard(days=30):
         'task_run_health': build_task_run_health(days=days, now=now),
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),
         'demand_radar': demand_radar,
+        'demand_radar_outcomes': demand_radar_outcomes,
         'order_statuses': order_statuses,
         'notification_insights': notification_insights,
         'demand_match_insights': demand_match_insights,

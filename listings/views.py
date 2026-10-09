@@ -24,6 +24,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
+from .demand_radar_outcome import build_demand_radar_outcomes
 from .circular_impact import build_circular_impact_report
 from .contributions import (
     build_contribution_summary, record_demand_response_contribution,
@@ -2138,11 +2139,19 @@ def _operations_period_days(request):
         return 30
 
 
+def _demand_outcome_status_filter(request):
+    """Validate the outcome task-status filter coming from the dashboard URL."""
+    status_filter = request.GET.get('task_status', 'all')
+    allowed = {'all', 'todo', 'in_progress', 'completed', 'ignored'}
+    return None if status_filter == 'all' or status_filter not in allowed else status_filter
+
+
 @login_required
 def operations_dashboard(request):
     if not request.user.is_staff:
         raise PermissionDenied
-    dashboard = build_operations_dashboard(_operations_period_days(request))
+    days = _operations_period_days(request)
+    dashboard = build_operations_dashboard(days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2157,6 +2166,10 @@ def operations_dashboard(request):
     for row in dashboard['demand_radar']['rows']:
         row['active_task'] = tasks_by_key.get(row['radar_key'])
     dashboard['demand_radar_tasks'] = active_tasks[:20]
+    dashboard['demand_radar_outcomes'] = build_demand_radar_outcomes(
+        days=days, statuses=_demand_outcome_status_filter(request),
+    )
+    dashboard['demand_outcome_status_filter'] = _demand_outcome_status_filter(request)
     return render(request, 'listings/operations_dashboard.html', dashboard)
 
 
@@ -2368,6 +2381,30 @@ def operations_dashboard_export(request):
             row['label'], row['level_label'], row['opportunity_score'],
             row['search_count'], row['demand_count'], row['available_supply'],
             '；'.join(row['evidence']), '；'.join(row['recommendations']),
+        ])
+
+    writer.writerow([])
+    writer.writerow(['需求跟进闭环效果', '数值'])
+    outcome_summary = dashboard['demand_radar_outcomes']['summary']
+    writer.writerow(['纳入统计任务数', outcome_summary['task_count']])
+    writer.writerow(['缺口收敛任务数', outcome_summary['converged_count']])
+    writer.writerow(['缺口扩大任务数', outcome_summary['diverged_count']])
+    writer.writerow(['基本持平任务数', outcome_summary['flat_count']])
+    writer.writerow(['样本不足任务数', outcome_summary['insufficient_count']])
+    writer.writerow(['闭环命中率（%）', '' if outcome_summary['hit_rate'] is None else outcome_summary['hit_rate']])
+    writer.writerow(['无结果率变化中位数（百分点）', '' if outcome_summary['median_delta_points'] is None else outcome_summary['median_delta_points']])
+    writer.writerow(['净增可用供给', outcome_summary['supply_added_total']])
+
+    writer.writerow([])
+    writer.writerow(['跟进主题', '任务状态', '基线无结果率（%）', '观察期无结果率（%）', '变化（百分点）', '可用供给', '建任务时供给', '判定', '说明'])
+    for row in dashboard['demand_radar_outcomes']['rows']:
+        writer.writerow([
+            row['title'], row['status_label'],
+            '' if row['baseline_zero_rate'] is None else row['baseline_zero_rate'],
+            '' if row['observation_zero_rate'] is None else row['observation_zero_rate'],
+            '' if row['delta_points'] is None else row['delta_points'],
+            row['supply_now'], row['supply_at_creation'],
+            row['outcome_label'], row['verdict'],
         ])
 
     writer.writerow([])
