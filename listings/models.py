@@ -1600,3 +1600,155 @@ class DemandResponse(models.Model):
 
     def __str__(self):
         return f'{self.demand.title} · {self.item.title} · {self.get_status_display()}'
+
+
+class AcademicTerm(models.Model):
+    """A dated teaching term, used to segment campus supply and demand."""
+
+    TERM_KIND_CHOICES = (
+        ('spring', '春季学期'),
+        ('autumn', '秋季学期'),
+        ('summer', '夏学期'),
+        ('winter', '冬学期'),
+    )
+
+    name = models.CharField('学期名称', max_length=80)
+    slug = models.SlugField('学期标识', max_length=120, unique=True)
+    kind = models.CharField(
+        '学期类型', max_length=10, choices=TERM_KIND_CHOICES, default='autumn',
+    )
+    starts_on = models.DateField('开始日期')
+    ends_on = models.DateField('结束日期')
+    is_active = models.BooleanField(
+        '启用', default=True,
+        help_text='停用后该学期不再参与阶段计算，但历史数据保留。',
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '学期日历'
+        verbose_name_plural = '学期日历'
+        ordering = ['-starts_on']
+        indexes = [
+            models.Index(fields=['is_active', 'starts_on']),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    def clean(self):
+        super().clean()
+        if self.ends_on and self.starts_on and self.ends_on < self.starts_on:
+            raise ValidationError({'ends_on': '结束日期不能早于开始日期。'})
+
+    def contains(self, day):
+        """Whether the given date falls inside this term."""
+        return self.starts_on <= day <= self.ends_on
+
+    def day_offset(self, day):
+        """Days since the term started, or None when the day is outside."""
+        if not self.contains(day):
+            return None
+        return (day - self.starts_on).days
+
+
+class AcademicPhase(models.Model):
+    """A named stage inside a term, derived from configurable day offsets."""
+
+    PHASE_CHOICES = (
+        ('registration', '开学周'),
+        ('regular', '常规教学周'),
+        ('exam', '考试周'),
+        ('graduation', '毕业季'),
+        ('holiday', '假期'),
+    )
+
+    term = models.ForeignKey(
+        AcademicTerm, on_delete=models.CASCADE, related_name='phases',
+        verbose_name='所属学期',
+    )
+    phase = models.CharField(
+        '阶段', max_length=20, choices=PHASE_CHOICES, default='regular',
+    )
+    start_offset = models.PositiveSmallIntegerField(
+        '开始偏移（天）', default=0,
+        help_text='以学期开始日期为第 0 天计算。',
+    )
+    end_offset = models.PositiveSmallIntegerField(
+        '结束偏移（天）', default=0,
+        help_text='含末尾日期；超出学期长度时会被截断。',
+    )
+    note = models.CharField('阶段说明', max_length=120, blank=True)
+
+    class Meta:
+        verbose_name = '学期阶段'
+        verbose_name_plural = '学期阶段'
+        ordering = ['term', 'start_offset']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['term', 'start_offset'], name='unique_term_phase_start_offset',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.term.name} · {self.get_phase_display()}'
+
+    def clean(self):
+        super().clean()
+        if self.end_offset and self.end_offset < self.start_offset:
+            raise ValidationError({'end_offset': '结束偏移不能小于开始偏移。'})
+
+    @property
+    def start_date(self):
+        return self.term.starts_on + timedelta(days=self.start_offset)
+
+    @property
+    def end_date(self):
+        capped = min(self.end_offset, (self.term.ends_on - self.term.starts_on).days)
+        return self.term.starts_on + timedelta(days=capped)
+
+    def contains(self, day):
+        return self.start_date <= day <= self.end_date
+
+    def progress_percent(self, day):
+        """How far the given day sits inside this phase, 0-100."""
+        if not self.contains(day):
+            return 0
+        span = (self.end_date - self.start_date).days
+        if span <= 0:
+            return 100
+        return round((day - self.start_date).days / span * 100)
+
+
+class AcademicTermSnapshot(models.Model):
+    """Aggregated counters for one term phase, refreshed by a command."""
+
+    term = models.ForeignKey(
+        AcademicTerm, on_delete=models.CASCADE, related_name='snapshots',
+        verbose_name='所属学期',
+    )
+    phase_key = models.CharField('阶段', max_length=20)
+    phase_label = models.CharField('阶段名称', max_length=40, blank=True)
+    start_date = models.DateField('开始日期')
+    end_date = models.DateField('结束日期')
+    day_count = models.PositiveSmallIntegerField('天数', default=0)
+    new_items = models.PositiveIntegerField('新增商品', default=0)
+    new_demands = models.PositiveIntegerField('新增求购', default=0)
+    new_orders = models.PositiveIntegerField('新增预约', default=0)
+    completed_orders = models.PositiveIntegerField('完成交易', default=0)
+    new_searches = models.PositiveIntegerField('搜索次数', default=0)
+    zero_result_searches = models.PositiveIntegerField('无结果搜索', default=0)
+    refreshed_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '学期阶段统计'
+        verbose_name_plural = '学期阶段统计'
+        ordering = ['term', 'start_date']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['term', 'phase_key', 'start_date'], name='unique_term_phase_snapshot',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.term.name} · {self.phase_label or self.phase_key}'

@@ -11,6 +11,7 @@ from .models import BrowsingHistory, CampusLocation, Category, CommunityContribu
 from .campus_pulse import build_campus_pulse
 from .campaign_analytics import build_campaign_analytics
 from .demand_radar import build_demand_radar
+from .academic_calendar import build_academic_calendar
 
 
 PERIOD_CHOICES = (
@@ -1455,6 +1456,7 @@ def build_operations_dashboard(days=30):
     operational_alerts = build_operational_alerts(metrics, period_comparisons, demand_radar)
     campus_pulse = build_campus_pulse(days=days, now=now)
     campaign_analytics = build_campaign_analytics(days=days, now=now)
+    academic_calendar = build_academic_calendar(day=today)
 
 
     return {
@@ -1481,6 +1483,7 @@ def build_operations_dashboard(days=30):
         'location_stats': location_stats,
         'campus_pulse': campus_pulse,
         'campaign_analytics': campaign_analytics,
+        'academic_calendar': academic_calendar,
         'demand_radar': demand_radar,
         'order_statuses': order_statuses,
         'notification_insights': notification_insights,

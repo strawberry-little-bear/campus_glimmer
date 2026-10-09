@@ -8,6 +8,7 @@ from django.utils import timezone
 from .models import Item, LostFoundPost, Notification, NotificationPreference
 from .notifications import create_notification
 from .opportunity_feed import build_opportunity_feed
+from .academic_calendar import academic_phase_summary_line
 
 
 def _candidate_user_ids():
@@ -59,6 +60,9 @@ def send_opportunity_digest(*, digest_date=None, user_ids=None):
             f'为你找到 {demand_count} 条可响应求购和 {lost_found_count} 条失物招领线索，'
             '打开互助机会页面查看匹配依据。'
         )
+        phase_line = academic_phase_summary_line()
+        if phase_line:
+            message += phase_line
         notification = create_notification(
             user,
             kind='opportunity_digest',

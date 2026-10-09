@@ -1161,3 +1161,28 @@ a { color: inherit; text-decoration: none; }
 .saved-search-cadence-fields input:focus { border-color: #79b694; outline: none; box-shadow: 0 0 0 3px rgba(121, 182, 148, .18); }
 .saved-search-cadence-hint { margin: 10px 0 12px; color: #8a9b92; font-size: .71rem; }
 @media (max-width: 767px) { .saved-search-cadence-fields { grid-template-columns: 1fr; } }
+
+.academic-calendar-panel .academic-calendar-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.academic-calendar-panel .academic-calendar-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.academic-calendar-panel .academic-calendar-summary span { color: #83938b; font-size: .71rem; }
+.academic-calendar-panel .academic-calendar-summary small { color: #9aa8a0; font-size: .69rem; }
+.academic-calendar-panel .academic-calendar-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; }
+.academic-calendar-panel .academic-calendar-summary .academic-calendar-warning { border-color: #efd8d1; background: #fff8f6; }
+.academic-calendar-note { padding: 11px 14px; border: 1px dashed #cfe0d4; border-radius: 12px; background: #f6faf7; color: #4c6b5c; font-size: .83rem; }
+.academic-term-block { padding: 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fcfdfc; }
+.academic-term-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-bottom: 10px; }
+.academic-term-heading strong { color: #2f5344; font-size: .95rem; }
+.academic-term-heading span { color: #8b9a91; font-size: .76rem; }
+.academic-term-badge { padding: 2px 9px; border-radius: 999px; background: #e6f2ea; color: #2f6a4f; font-size: .7rem; font-weight: 600; }
+.academic-calendar-panel .academic-calendar-table { min-width: 820px; }
+.academic-calendar-panel .academic-calendar-current { background: #f4faf6; }
+.academic-trend { display: inline-block; padding: 3px 10px; border-radius: 999px; background: #eef3f0; color: #5d7168; font-size: .73rem; font-weight: 600; }
+.academic-trend-rising { background: #e7f3ec; color: #2c6b4c; }
+.academic-trend-falling { background: #fdeeea; color: #a9543f; }
+.academic-trend-baseline { background: #eef1f7; color: #55688c; }
+@media (max-width: 575px) {
+  .academic-calendar-panel .academic-calendar-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .academic-calendar-panel .academic-calendar-summary > div { min-height: 72px; padding: 11px; }
+  .academic-calendar-panel .academic-calendar-table { min-width: 720px; }
+  .academic-term-block { padding: 11px; }
+}

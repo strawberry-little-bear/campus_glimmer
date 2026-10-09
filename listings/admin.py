@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -374,3 +374,35 @@ class CommunityContributionAdmin(admin.ModelAdmin):
     search_fields = ('user__username', 'title', 'description', 'source_key')
     autocomplete_fields = ('user',)
     readonly_fields = ('created_at',)
+
+
+class AcademicPhaseInline(admin.TabularInline):
+    model = AcademicPhase
+    extra = 3
+    fields = ('phase', 'start_offset', 'end_offset', 'note')
+
+
+@admin.register(AcademicTerm)
+class AcademicTermAdmin(admin.ModelAdmin):
+    list_display = ('name', 'slug', 'kind', 'starts_on', 'ends_on', 'is_active', 'phase_count')
+    list_filter = ('kind', 'is_active', 'starts_on')
+    search_fields = ('name', 'slug')
+    prepopulated_fields = {'slug': ('name',)}
+    inlines = [AcademicPhaseInline]
+
+    @admin.display(description='阶段数')
+    def phase_count(self, obj):
+        return obj.phases.count()
+
+
+@admin.register(AcademicTermSnapshot)
+class AcademicTermSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        'term', 'phase_label', 'start_date', 'end_date', 'day_count',
+        'new_items', 'new_demands', 'new_orders', 'completed_orders',
+        'new_searches', 'zero_result_searches', 'refreshed_at',
+    )
+    list_filter = ('phase_key', 'term')
+    search_fields = ('term__name', 'phase_label')
+    readonly_fields = ('refreshed_at',)
+    date_hierarchy = 'start_date'

@@ -543,5 +543,45 @@
     {% else %}<div class="empty-inline mt-3">当前统计周期还没有专题行为数据。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>曝光、收藏和预约按业务记录统计；转化率用于比较专题表现，不代表单个用户的完整行为路径。运营人员仍需结合商品质量和活动内容人工判断。</div>
 </section>
+<section class="content-card ops-panel mb-4 academic-calendar-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Academic rhythm</span><h2>学期节律与交易高峰</h2></div>
+        <span class="ops-panel-hint">把统计口径从「平均值」换成「当前处于学期的哪个阶段」</span>
+    </div>
+    {% if academic_calendar.has_terms %}
+    <div class="academic-calendar-summary">
+        <div><span>当前学期</span><strong>{{ academic_calendar.context.term_name|default:'未配置' }}</strong><small>{% if academic_calendar.context.phase_label %}{{ academic_calendar.context.phase_label }}{% else %}未划分阶段{% endif %}</small></div>
+        <div><span>阶段进度</span><strong>{{ academic_calendar.context.progress_percent }}%</strong><small>{% if academic_calendar.context.days_left is not None %}剩余 {{ academic_calendar.context.days_left }} 天{% else %}学期未配置{% endif %}</small></div>
+        <div><span>当前阶段商品</span><strong>{% for term in academic_calendar.terms %}{% if term.is_current %}{% for row in term.phases %}{% if row.is_current %}{{ row.new_items }}{% endif %}{% endfor %}{% endif %}{% endfor %}</strong><small>阶段内新增</small></div>
+        <div class="academic-calendar-warning"><span>当前阶段完成交易</span><strong>{% for term in academic_calendar.terms %}{% if term.is_current %}{% for row in term.phases %}{% if row.is_current %}{{ row.completed_orders }}{% endif %}{% endfor %}{% endif %}{% endfor %}</strong><small>阶段内累计</small></div>
+    </div>
+    {% if academic_calendar.context.phase_note %}
+    <div class="academic-calendar-note mt-3"><i class="bi bi-calendar3 me-1"></i>{{ academic_calendar.context.term_name }}{{ academic_calendar.context.phase_label }}：{{ academic_calendar.context.phase_note }}。</div>
+    {% endif %}
+    {% for term in academic_calendar.terms %}
+    <div class="academic-term-block mt-3">
+        <div class="academic-term-heading">
+            <strong>{{ term.term_name }}</strong>
+            <span>{{ term.kind_label }} · {{ term.starts_on|date:'Y-m-d' }} 至 {{ term.ends_on|date:'Y-m-d' }}</span>
+            {% if term.is_current %}<span class="academic-term-badge">当前学期</span>{% endif %}
+        </div>
+        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 academic-calendar-table"><thead><tr><th>阶段</th><th>区间</th><th>新增商品</th><th>新增求购</th><th>完成交易</th><th>搜索质量</th><th>供给趋势</th></tr></thead><tbody>
+            {% for row in term.phases %}
+            <tr class="{% if row.is_current %}academic-calendar-current{% endif %}">
+                <td><strong>{{ row.phase_label }}</strong>{% if row.is_current %}<small class="d-block text-muted">进行中 · 进度 {{ academic_calendar.context.progress_percent }}%</small>{% else %}<small class="d-block text-muted">{{ row.day_count }} 天</small>{% endif %}</td>
+                <td>{{ row.start_date|date:'m-d' }} 至 {{ row.end_date|date:'m-d' }}</td>
+                <td><strong>{{ row.new_items }}</strong>{% if row.previous_phase_label %}<small class="d-block text-muted">较{{ row.previous_phase_label }} {% if row.delta_new_items > 0 %}+{% endif %}{{ row.delta_new_items }}</small>{% else %}<small class="d-block text-muted">学期首阶段</small>{% endif %}</td>
+                <td>{{ row.new_demands }}<small class="d-block text-muted">{% if row.previous_phase_label %}{% if row.delta_new_demands > 0 %}+{% endif %}{{ row.delta_new_demands }}{% else %}—{% endif %}</small></td>
+                <td>{{ row.completed_orders }}<small class="d-block text-muted">共 {{ row.new_orders }} 次预约</small></td>
+                <td>{{ row.new_searches }} 次<small class="d-block text-muted">无结果 {{ row.zero_result_searches }} · {{ row.zero_result_rate }}%</small></td>
+                <td><span class="academic-trend academic-trend-{{ row.supply_trend }}">{{ row.supply_trend_label }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody></table></div>
+    </div>
+    {% endfor %}
+    {% else %}<div class="empty-inline mt-3">还没有配置学期日历。在后台「学期日历」中录入起止日期后，这里会按阶段展示交易高峰。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>阶段按「开学两周 / 常规教学 / 考试周 / 毕业季」等偏移天数划分，偏移量可在后台调整；阶段之间的对比说明的是供给节律，不代表单个用户的因果结论。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

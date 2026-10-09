@@ -14,6 +14,7 @@ from django.utils import timezone
 from .models import Notification, NotificationPreference, SavedSearch, SavedSearchMatch
 from .notifications import create_notification
 from .saved_searches import describe_saved_search_match
+from .academic_calendar import academic_phase_summary_line
 
 # Punctuation used by the notice copy, kept as constants so the message
 # builders below stay readable instead of hiding quotes inside f-strings.
@@ -153,6 +154,9 @@ def send_saved_search_digest(*, frequency=None, today=None, user_ids=None):
                     f'共有 {total} 条新命中{PERIOD}{sections}'
                 )
             message += '打开关注搜索查看详情' + PERIOD
+            phase_line = academic_phase_summary_line()
+            if phase_line:
+                message += phase_line
             dedupe_key = f'saved-search-digest:{cadence}:{period}:{user_id}'
 
             with transaction.atomic():
