@@ -14,6 +14,7 @@ from .demand_radar import build_demand_radar
 from .academic_calendar import build_academic_calendar
 from .notification_response import build_notification_response_insights
 from .order_stage_flow import build_order_stage_flow
+from .governance_sla import build_governance_sla
 from .supply_lifecycle import build_supply_lifecycle
 from .task_run_health import build_task_run_health
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
@@ -569,7 +570,7 @@ def _build_user_retention(start, previous_start, end):
 
 
 
-def build_operational_alerts(metrics, period_comparisons, demand_radar=None):
+def build_operational_alerts(metrics, period_comparisons, demand_radar=None, governance_sla=None):
     """Turn dashboard signals into a short, actionable operations queue."""
     alerts = []
     search_count = metrics['searches']
@@ -621,6 +622,27 @@ def build_operational_alerts(metrics, period_comparisons, demand_radar=None):
             'metric_label': '待处理举报',
             'action_label': '进入举报审核',
             'action_url_name': 'report_list',
+        })
+
+    # 治理超期：绝对队列长度只说明"有多少"，超期才说明"有多久没人管"。
+    # 交付预约异常会阻塞一次线下交付，因此单独作为最高优先级处理。
+    for queue in (governance_sla or {}).get('queues', []):
+        if not queue['overdue']:
+            continue
+        severity = 'critical' if queue['kind'] == 'incident' or queue['overdue'] >= 3 else 'warning'
+        alerts.append({
+            'key': f"governance_overdue_{queue['kind']}",
+            'severity': severity,
+            'severity_label': '优先处理' if severity == 'critical' else '需要关注',
+            'title': f"{queue['label']}处理超期",
+            'message': (
+                f"{queue['label']}队列有 {queue['overdue']} 件已超过 {queue['sla_label']}处理时限，"
+                f"周期内处理时长中位数为 {queue['median_label']}。"
+            ),
+            'metric': str(queue['overdue']),
+            'metric_label': '超期事项',
+            'action_label': '进入治理工作台',
+            'action_url_name': 'governance_workbench',
         })
 
     radar_rows = (demand_radar or {}).get('rows', [])
@@ -1458,7 +1480,10 @@ def build_operations_dashboard(days=30):
         'mutual_aid_accepted_interactions': mutual_aid_feedback_insights['accepted_interaction_count'],
     }
     demand_radar = build_demand_radar(days=days, now=now)
-    operational_alerts = build_operational_alerts(metrics, period_comparisons, demand_radar)
+    governance_sla = build_governance_sla(days=days, now=now)
+    operational_alerts = build_operational_alerts(
+        metrics, period_comparisons, demand_radar, governance_sla,
+    )
     campus_pulse = build_campus_pulse(days=days, now=now)
     campaign_analytics = build_campaign_analytics(days=days, now=now)
     academic_calendar = build_academic_calendar(day=today)
@@ -1491,6 +1516,7 @@ def build_operations_dashboard(days=30):
         'academic_calendar': academic_calendar,
         'notification_response': build_notification_response_insights(days=days),
         'order_stage_flow': build_order_stage_flow(days=days, now=now),
+        'governance_sla': governance_sla,
         'supply_lifecycle': build_supply_lifecycle(days=days, now=now),
         'task_run_health': build_task_run_health(days=days, now=now),
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),

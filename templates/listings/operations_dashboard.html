@@ -976,5 +976,55 @@
     {% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>静默天数按最近一次<i>成功</i>运行计算：一直失败的命令同样每天都在跑，若按任意运行计算就会把自己伪装成健康的。--dry-run 只统计发送范围、不写入任何通知，默认不计入成功率。失败记录写在独立短事务里，业务事务回滚也不会带走失败证据，异常仍会原样抛出，不会因为接了台账就被吞掉。</div>
 </section>
+<section class="content-card ops-panel mb-4 governance-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'governance_workbench' %}?days={{ period_days }}"><i class="bi bi-shield-check me-1"></i>进入治理工作台</a>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>待处理</span><strong>{{ governance_sla.total_open }}</strong><small>三类队列合计</small></div>
+        <div{% if governance_sla.total_overdue %} class="supply-lifecycle-summary-warning"{% endif %}><span>已超期</span><strong>{{ governance_sla.total_overdue }}</strong><small>超过各自处理时限</small></div>
+        <div><span>时限内完成率</span><strong>{% if governance_sla.within_sla_rate %}{{ governance_sla.within_sla_rate|floatformat }}%{% else %}—{% endif %}</strong><small>周期内已处理事项</small></div>
+        <div><span>周期处理量</span><strong>{{ governance_sla.total_closed }}</strong><small>最近 {{ governance_sla.days }} 天</small></div>
+    </div>
+
+    {% if governance_sla.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各队列处理情况</strong><span>时限不同：预约异常阻塞一次线下交付，举报只是离线复核</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>队列</th><th>周期内</th><th>已处理</th><th>待处理</th><th>超期</th><th>中位耗时</th><th>P90 耗时</th><th>处理时限</th></tr></thead>
+                <tbody>
+                    {% for queue in governance_sla.queues %}
+                    <tr>
+                        <td data-label="队列">{{ queue.label }}</td>
+                        <td data-label="周期内">{{ queue.total }}</td>
+                        <td data-label="已处理">{{ queue.closed }}</td>
+                        <td data-label="待处理">{{ queue.open }}</td>
+                        <td data-label="超期">{% if queue.overdue %}<span class="supply-lifecycle-flag">{{ queue.overdue }}</span>{% else %}0{% endif %}</td>
+                        <td data-label="中位耗时">{{ queue.median_label }}</td>
+                        <td data-label="P90 耗时">{{ queue.p90_label }}</td>
+                        <td data-label="处理时限">{{ queue.sla_label }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if governance_sla.recommendations %}
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>治理建议</strong><span>仅在越过时限或接近上限时给出</span></div>
+        <ul>
+            {% for recommendation in governance_sla.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。待处理清单不按统计周期过滤：周期开始前就超期的事项，恰恰是最不该被藏起来的那一件。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

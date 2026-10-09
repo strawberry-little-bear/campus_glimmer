@@ -35,7 +35,7 @@
                     {% if user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'new_item' %}"><i class="bi bi-plus-circle me-1"></i>发布闲置</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'new_demand' %}"><i class="bi bi-megaphone me-1"></i>发布求购</a></li>
-                    {% if user.is_staff %}<li class="nav-item"><a class="nav-link" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>运营看板</a></li><li class="nav-item"><a class="nav-link" href="{% url 'moderation_queue' %}"><i class="bi bi-shield-check me-1"></i>内容审核</a></li>{% endif %}
+                    {% if user.is_staff %}<li class="nav-item"><a class="nav-link" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>运营看板</a></li><li class="nav-item"><a class="nav-link" href="{% url 'governance_workbench' %}"><i class="bi bi-shield-check me-1"></i>治理工作台</a></li><li class="nav-item"><a class="nav-link" href="{% url 'moderation_queue' %}"><i class="bi bi-shield-check me-1"></i>内容审核</a></li>{% endif %}
                     {% endif %}
                 </ul>
                 <form class="nav-search my-3 my-lg-0 me-lg-3" action="{% url 'search_items' %}" method="get" data-search-suggest-endpoint="{% url 'search_suggestions' %}">

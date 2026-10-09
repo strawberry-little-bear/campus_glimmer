@@ -1519,3 +1519,251 @@ a { color: inherit; text-decoration: none; }
 .task-run-health-panel .supply-lifecycle-summary strong {
     font-variant-numeric: tabular-nums;
 }
+
+
+/* 治理工作台：三类队列共用一套卡片语言，超期用颜色而不是单独文案强调 */
+.governance-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.governance-summary-item {
+    padding: 14px 16px;
+    border: 1px solid #e6efe9;
+    border-radius: 12px;
+    background: #fff;
+}
+
+.governance-summary-item span {
+    display: block;
+    font-size: .72rem;
+    color: #7d8d83;
+}
+
+.governance-summary-item strong {
+    display: block;
+    margin: 4px 0 2px;
+    font-size: 1.5rem;
+    line-height: 1.1;
+    color: #2f4a3a;
+    font-variant-numeric: tabular-nums;
+}
+
+.governance-summary-item small {
+    font-size: .68rem;
+    color: #93a29a;
+}
+
+.governance-summary-item.is-alert {
+    border-color: #f0cdbe;
+    background: #fff7f3;
+}
+
+.governance-summary-item.is-alert strong {
+    color: #b4553a;
+}
+
+.governance-note {
+    padding: 11px 14px;
+    border-radius: 10px;
+    background: #f6faf7;
+    color: #5d6f65;
+    font-size: .78rem;
+}
+
+.governance-filter-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.governance-queue-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+}
+
+.governance-queue-card.is-alert {
+    border-color: #f0cdbe;
+}
+
+.governance-queue-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eef3ef;
+}
+
+.governance-queue-heading strong {
+    font-size: .95rem;
+    color: #2f4a3a;
+}
+
+.governance-queue-heading span {
+    font-size: .7rem;
+    color: #93a29a;
+}
+
+.governance-queue-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-top: 12px;
+    text-align: center;
+}
+
+.governance-queue-stats span {
+    display: block;
+    font-size: .66rem;
+    color: #8b9a92;
+}
+
+.governance-queue-stats strong {
+    display: block;
+    font-size: 1.1rem;
+    color: #2f4a3a;
+    font-variant-numeric: tabular-nums;
+}
+
+.governance-queue-stats .is-alert strong {
+    color: #b4553a;
+}
+
+.governance-queue-latency {
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px dashed #e6efe9;
+}
+
+.governance-queue-latency div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: .72rem;
+}
+
+.governance-queue-latency dt {
+    color: #8b9a92;
+}
+
+.governance-queue-latency dd {
+    margin: 0;
+    color: #4a5f53;
+    font-variant-numeric: tabular-nums;
+}
+
+.governance-case-list {
+    display: grid;
+    gap: 12px;
+}
+
+.governance-case {
+    border-left: 3px solid #dcead f;
+    border-left-color: #dceadf;
+}
+
+.governance-case.is-warning {
+    border-left-color: #e3bf72;
+}
+
+.governance-case.is-overdue {
+    border-left-color: #d98a6b;
+}
+
+.governance-case-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.governance-case-head h2 {
+    margin: 6px 0 4px;
+    font-size: 1rem;
+    color: #2f4a3a;
+}
+
+.governance-case-kind {
+    display: inline-flex;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 700;
+}
+
+.governance-case-kind-report { color: #6b5aa8; background: #f2f0fd; }
+.governance-case-kind-dispute { color: #a1543e; background: #fff0eb; }
+.governance-case-kind-incident { color: #9b762e; background: #fff8e8; }
+
+.governance-case-sla {
+    text-align: right;
+}
+
+.governance-sla-flag {
+    display: inline-flex;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: .7rem;
+    font-weight: 700;
+    color: #4a5f53;
+    background: #eef5f0;
+    white-space: nowrap;
+}
+
+.governance-sla-flag.is-warning {
+    color: #8a6520;
+    background: #fff6e2;
+}
+
+.governance-sla-flag.is-overdue {
+    color: #a8482c;
+    background: #fdeee7;
+}
+
+.governance-sla-flag.is-closed {
+    color: #7f8b84;
+    background: #f0f3f1;
+}
+
+.governance-case-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #e6efe9;
+}
+
+.governance-case-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.dispute-review-checklist {
+    margin: 0;
+    padding-left: 18px;
+    color: #5d6f65;
+    font-size: .78rem;
+}
+
+.dispute-review-checklist li {
+    margin-bottom: 6px;
+}
+
+/* 治理看板面板沿用供给侧卡片的数字语言，超期数字单独着色 */
+.governance-panel .ops-panel-heading .btn {
+    white-space: nowrap;
+}
+
+.governance-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}

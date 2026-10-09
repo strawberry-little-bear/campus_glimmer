@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}治理工作台 - 拾光校园{% endblock %}
+{% block content %}
+<div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h1 class="mt-2">治理工作台</h1><p class="text-muted mb-0">把举报、交易争议和交付预约异常放进同一个队列，用「等待了多久」而不是「有多少」来决定先处理哪一件。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
+
+<div class="governance-summary mb-4">
+    <div class="governance-summary-item"><span>待处理</span><strong>{{ governance.total_open }}</strong><small>三类队列合计</small></div>
+    <div class="governance-summary-item{% if governance.total_overdue %} is-alert{% endif %}"><span>已超期</span><strong>{{ governance.total_overdue }}</strong><small>超过各自处理时限</small></div>
+    <div class="governance-summary-item"><span>时限内完成率</span><strong>{% if governance.within_sla_rate %}{{ governance.within_sla_rate }}%{% else %}—{% endif %}</strong><small>周期内已处理事项</small></div>
+    <div class="governance-summary-item"><span>周期处理量</span><strong>{{ governance.total_closed }}</strong><small>最近 {{ governance.days }} 天</small></div>
+</div>
+
+<p class="governance-note mb-4"><i class="bi bi-info-circle me-1"></i>{{ governance.summary }}</p>
+
+<div class="governance-filter-bar mb-4">
+    <span class="small text-muted">队列</span>
+    {% for value, label in kind_choices %}<a class="report-filter {% if kind_filter == value %}is-active{% endif %}" href="?kind={{ value }}&status={{ status_filter }}&days={{ days }}">{{ label }}</a>{% endfor %}
+    <span class="small text-muted ms-2">状态</span>
+    {% for value, label in status_choices %}<a class="report-filter {% if status_filter == value %}is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ value }}&days={{ days }}">{{ label }}</a>{% endfor %}
+    <span class="small text-muted ms-2">周期</span>
+    {% for value, label in period_choices %}<a class="report-filter {% if days == value %}is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ status_filter }}&days={{ value }}">{{ label }}</a>{% endfor %}
+</div>
+
+<div class="governance-queue-grid mb-4">
+{% for queue in governance.queues %}
+    <div class="content-card governance-queue-card{% if queue.overdue %} is-alert{% endif %}">
+        <div class="governance-queue-heading"><strong>{{ queue.label }}</strong><span>处理时限 {{ queue.sla_label }}</span></div>
+        <div class="governance-queue-stats">
+            <div><span>周期内</span><strong>{{ queue.total }}</strong></div>
+            <div><span>已处理</span><strong>{{ queue.closed }}</strong></div>
+            <div><span>待处理</span><strong>{{ queue.open }}</strong></div>
+            <div{% if queue.overdue %} class="is-alert"{% endif %}><span>超期</span><strong>{{ queue.overdue }}</strong></div>
+        </div>
+        <dl class="governance-queue-latency">
+            <div><dt>中位耗时</dt><dd>{{ queue.median_label }}</dd></div>
+            <div><dt>P90 耗时</dt><dd>{{ queue.p90_label }}</dd></div>
+            <div><dt>最快 / 最慢</dt><dd>{{ queue.fastest_label }} / {{ queue.slowest_label }}</dd></div>
+        </dl>
+    </div>
+{% endfor %}
+</div>
+
+<section class="governance-case-list">
+{% for case in cases %}
+    <article class="content-card governance-case{% if case.is_overdue %} is-overdue{% elif case.sla_level == 'warning' %} is-warning{% endif %}">
+        <div class="governance-case-head">
+            <div>
+                <span class="governance-case-kind governance-case-kind-{{ case.kind }}">{{ case.kind_label }}</span>
+                <h2>{{ case.subject }}</h2>
+                <p class="mb-0 small text-muted">{{ case.reason_label }} · {{ case.reporter }} 提交 · {{ case.created_at|date:'Y-m-d H:i' }}</p>
+            </div>
+            <div class="governance-case-sla">
+                {% if case.is_open %}
+                    {% if case.is_overdue %}<span class="governance-sla-flag is-overdue">已超期 {{ case.age_label }}</span>
+                    {% elif case.sla_level == 'warning' %}<span class="governance-sla-flag is-warning">即将超期 · 剩 {{ case.remaining_label }}</span>
+                    {% else %}<span class="governance-sla-flag">剩 {{ case.remaining_label }}</span>{% endif %}
+                {% else %}<span class="governance-sla-flag is-closed">已处理</span>{% endif %}
+            </div>
+        </div>
+        <div class="governance-case-body">
+            <span class="small text-muted">涉及对方：{{ case.counterparty }}</span>
+            <span class="small text-muted">已等待 {{ case.age_label }}（时限 {{ case.sla_label }}）</span>
+            {% if case.reviewer_id %}<span class="small text-muted">已分配处理人</span>{% else %}<span class="small text-muted">尚未分配处理人</span>{% endif %}
+        </div>
+        <div class="governance-case-footer">
+            <span class="small text-muted">{% if case.is_open %}需要在本队列时限内给出结论{% else %}处理时间已记入时效统计{% endif %}</span>
+            {% if case.is_open %}<a class="btn btn-sm btn-primary" href="{{ case.url }}"><i class="bi bi-check2-circle me-1"></i>处理</a>
+            {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ case.url }}">查看记录</a>{% endif %}
+        </div>
+    </article>
+{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-shield-check"></i><h2>当前筛选下没有治理事项</h2><p>三类队列都清空了，或者换个筛选条件看看。</p></div>{% endfor %}
+</section>
+
+<div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>三类队列的处理时限不同：交付预约异常会阻塞一次线下交付，因此时限最短；交易争议涉及双方举证，时限最长。响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。</div>
+{% endblock %}

@@ -364,6 +364,37 @@ class MeetingIncidentForm(StyledModelFormMixin, forms.ModelForm):
 
 
 
+class MeetingIncidentReviewForm(StyledModelFormMixin, forms.ModelForm):
+    """The first staff-facing form for a meeting incident.
+
+    Incidents could be reported by users from day one, but only ever reviewed
+    through the Django admin. This form brings them onto the same footing as
+    reports and disputes, so one workbench can cover all three queues.
+    """
+
+    class Meta:
+        model = MeetingIncident
+        fields = ['status', 'resolution_note']
+        widgets = {
+            'status': forms.Select(attrs={'class': 'form-select'}),
+            'resolution_note': forms.Textarea(attrs={
+                'rows': 5,
+                'placeholder': '记录到场登记、时间线核实结果和处理意见。',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._style_fields()
+        # 与争议处理保持一致：前台只做结论，不提供"转处理中"这种中间态，
+        # 避免同一个事项在不同队列出现不同的状态流转规则。
+        self.fields['status'].choices = [
+            choice for choice in self.fields['status'].choices
+            if choice[0] in {'resolved', 'dismissed'}
+        ]
+        self.fields['status'].widget.attrs['class'] = 'form-select'
+
+
 class RatingForm(StyledModelFormMixin, forms.ModelForm):
     class Meta:
         model = Rating

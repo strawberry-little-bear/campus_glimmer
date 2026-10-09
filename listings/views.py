@@ -21,7 +21,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .analytics import build_operations_dashboard, build_search_insights
+from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
+from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
 from .circular_impact import build_circular_impact_report
 from .contributions import (
@@ -32,7 +33,7 @@ from .contributions import (
 from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
@@ -1578,6 +1579,126 @@ def review_report(request, report_id):
         'form': form,
         'report': report,
         'title': '审核商品举报',
+    })
+
+
+@login_required
+def governance_workbench(request):
+    """One workbench for the three moderation queues.
+
+    Reports, disputes and incidents used to live on three separate pages with
+    three different vocabularies, and incidents had no staff page at all. The
+    workbench normalises them onto one shape and adds the dimension none of
+    them had: how long each case has been waiting against its own deadline.
+
+    The statistics window follows the dashboard's period selector, but the open
+    backlog is deliberately not filtered by it - overdue work opened before the
+    period is exactly what an operator must not miss.
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+
+    days = _operations_period_days(request)
+    kind_filter = request.GET.get('kind', 'all')
+    status_filter = request.GET.get('status', 'open')
+    if kind_filter not in {'all', 'report', 'dispute', 'incident'}:
+        kind_filter = 'all'
+    if status_filter not in {'all', 'open', 'closed'}:
+        status_filter = 'open'
+
+    sla = build_governance_sla(days=days)
+    rows = []
+    for queue in sla['queues']:
+        if kind_filter != 'all' and queue['kind'] != kind_filter:
+            continue
+        for case in queue['cases']:
+            if status_filter == 'open' and not case['is_open']:
+                continue
+            if status_filter == 'closed' and case['is_open']:
+                continue
+            rows.append(case)
+    rows.sort(key=lambda case: (0 if case['is_overdue'] else 1, case['created_at']))
+
+    return render(request, 'listings/governance.html', {
+        'governance': sla,
+        'cases': rows,
+        'kind_filter': kind_filter,
+        'status_filter': status_filter,
+        'days': days,
+        'period_choices': PERIOD_CHOICES,
+        'kind_choices': (
+            ('all', '全部队列'),
+            ('report', '商品举报'),
+            ('dispute', '交易争议'),
+            ('incident', '交付预约异常'),
+        ),
+        'status_choices': (
+            ('open', '待处理'),
+            ('closed', '已处理'),
+            ('all', '全部状态'),
+        ),
+        'title': '治理工作台',
+    })
+
+
+@login_required
+def review_meeting_incident(request, incident_id):
+    """Handle a delivery incident from the workbench instead of the admin.
+
+    The resolution mirrors dispute handling: the reviewer and the closing
+    timestamp are written together, both sides are notified, and an OrderEvent
+    records the outcome on the order timeline so the case stays auditable.
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+    incident = get_object_or_404(
+        MeetingIncident.objects.select_related(
+            'appointment__order__item', 'appointment__order__buyer',
+            'appointment__order__seller', 'reported_by', 'accused',
+        ),
+        id=incident_id,
+    )
+    if incident.status in {'resolved', 'dismissed'}:
+        messages.info(request, '这条预约异常已经处理完成。')
+        return redirect('governance_workbench')
+    if request.method == 'POST':
+        form = MeetingIncidentReviewForm(request.POST, instance=incident)
+        if form.is_valid():
+            with transaction.atomic():
+                incident = MeetingIncident.objects.select_for_update().select_related(
+                    'appointment__order__item',
+                ).get(pk=incident.id)
+                incident.status = form.cleaned_data['status']
+                incident.resolution_note = form.cleaned_data['resolution_note']
+                incident.reviewer = request.user
+                incident.reviewed_at = timezone.now()
+                incident.save(update_fields=[
+                    'status', 'resolution_note', 'reviewer', 'reviewed_at', 'updated_at',
+                ])
+                order = incident.appointment.order
+                OrderEvent.objects.create(
+                    order=order,
+                    actor=request.user,
+                    from_status=order.status,
+                    to_status=order.status,
+                    note=f'平台已将交付预约异常标记为“{incident.get_status_display()}”',
+                )
+                for recipient in {incident.reported_by, incident.accused}:
+                    create_notification(
+                        recipient, kind='meeting_incident',
+                        title='交付预约异常处理结果已更新',
+                        message=f'预约异常已{incident.get_status_display()}，可在订单时间线查看处理意见。',
+                        order=order, item=order.item,
+                        target_url=reverse('order_detail', args=[order.id]),
+                    )
+            messages.success(request, '预约异常处理结果已保存，双方会收到通知。')
+            return redirect('governance_workbench')
+    else:
+        form = MeetingIncidentReviewForm(instance=incident, initial={'status': 'resolved'})
+    return render(request, 'listings/incident_review.html', {
+        'form': form,
+        'incident': incident,
+        'title': '处理交付预约异常',
     })
 
 
