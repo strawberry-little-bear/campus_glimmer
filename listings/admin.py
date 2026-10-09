@@ -36,8 +36,8 @@ class CampusCampaignAdmin(admin.ModelAdmin):
 
 @admin.register(Item)
 class ItemAdmin(admin.ModelAdmin):
-    list_display = ('title', 'trade_mode', 'price', 'category', 'location', 'campaign', 'seller', 'status', 'expires_at', 'report_count', 'created_at')
-    list_filter = ('trade_mode', 'status', 'category', 'location', 'campaign', 'created_at', 'expires_at')
+    list_display = ('title', 'trade_mode', 'price', 'category', 'location', 'campaign', 'seller', 'status', 'expires_at', 'report_count', 'last_refreshed_at', 'refresh_count', 'created_at')
+    list_filter = ('trade_mode', 'status', 'category', 'location', 'campaign', 'created_at', 'expires_at', 'last_refreshed_at')
     search_fields = ('title', 'description', 'seller__username', 'location__name')
     date_hierarchy = 'created_at'
     inlines = [ItemImageInline]

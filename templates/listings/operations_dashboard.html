@@ -767,5 +767,75 @@
     {% else %}<div class="empty-inline mt-3">当前周期还没有交易订单，产生第一笔预约后这里会开始拆分阶段耗时。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>阶段耗时按相邻两个状态流转时间相减得到；周期结束时仍未走完所属流程的订单不计入耗时，只计入「进行中」，避免把在途订单误判为超时。若某条流转记录的时间早于上一阶段，会按异常数据剔除并在建议中提示。</div>
 </section>
+<section class="content-card ops-panel mb-4 supply-lifecycle-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Supply lifecycle</span><h2>供给侧生命周期健康</h2></div>
+        <span class="ops-panel-hint">在售商品有多少真的被维护，而不只是被发布过</span>
+    </div>
+    {% if supply_lifecycle.summary.available_items %}
+    <div class="supply-lifecycle-summary">
+        <div><span>当前在售</span><strong>{{ supply_lifecycle.summary.available_items }}</strong><small>不含已下架与已成交</small></div>
+        <div{% if supply_lifecycle.summary.attention_items %} class="supply-lifecycle-summary-warning"{% endif %}><span>需要卖家决策</span><strong>{{ supply_lifecycle.summary.attention_items }}</strong><small>占在售 {{ supply_lifecycle.summary.attention_share }}%</small></div>
+        <div><span>发布超 45 天无互动</span><strong>{{ supply_lifecycle.summary.stale_unengaged }}</strong><small>近两周无浏览、收藏或预约</small></div>
+        <div><span>周期内刷新</span><strong>{{ supply_lifecycle.summary.period_refreshes }}</strong><small>{{ supply_lifecycle.summary.period_refreshed_sellers }} 位卖家操作过</small></div>
+        <div><span>卖家维护覆盖率</span><strong>{{ supply_lifecycle.summary.seller_coverage }}%</strong><small>{{ supply_lifecycle.summary.sellers_keeping_up }} / {{ supply_lifecycle.summary.sellers_with_listings }} 位卖家无待处理商品</small></div>
+        <div{% if supply_lifecycle.summary.exhausted_sellers %} class="supply-lifecycle-summary-warning"{% endif %}><span>刷新额度已用尽</span><strong>{{ supply_lifecycle.summary.exhausted_sellers }}</strong><small>另有 {{ supply_lifecycle.summary.neglected_sellers }} 位卖家名下商品全部待处理</small></div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-5">
+            <div class="supply-lifecycle-block">
+                <div class="supply-lifecycle-block-heading"><strong>在售商品生命周期分布</strong><span>与卖家端诊断规则一致</span></div>
+                <ul class="supply-lifecycle-levels">
+                    {% for row in supply_lifecycle.level_rows %}
+                    <li class="supply-lifecycle-level supply-lifecycle-level-{{ row.key }}">
+                        <span class="supply-lifecycle-level-label"><i></i>{{ row.label }}</span>
+                        <span class="supply-lifecycle-level-track"><span style="width: {% widthratio row.count supply_lifecycle.summary.available_items 100 %}%;"></span></span>
+                        <strong>{{ row.count }}</strong>
+                        <small>{{ row.share }}%</small>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-7">
+            <div class="supply-lifecycle-block">
+                <div class="supply-lifecycle-block-heading"><strong>按卖家在管商品数分组</strong><span>只看还有在售商品的卖家</span></div>
+                {% if supply_lifecycle.seller_load_rows %}
+                <div class="ops-table-wrap">
+                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                        <thead><tr><th>在管规模</th><th>卖家数</th><th>在售商品</th><th>待处理商品</th><th>无互动商品</th><th>额度用尽</th></tr></thead>
+                        <tbody>
+                            {% for row in supply_lifecycle.seller_load_rows %}
+                            <tr>
+                                <td data-label="在管规模">{{ row.label }}</td>
+                                <td data-label="卖家数">{{ row.seller_count }}</td>
+                                <td data-label="在售商品">{{ row.active_count }}</td>
+                                <td data-label="待处理商品">{% if row.attention_count %}<span class="supply-lifecycle-flag">{{ row.attention_count }}</span>{% else %}0{% endif %}</td>
+                                <td data-label="无互动商品">{{ row.unengaged_count }}</td>
+                                <td data-label="额度用尽">{% if row.exhausted_seller_count %}<span class="supply-lifecycle-flag">{{ row.exhausted_seller_count }}</span>{% else %}0{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<div class="empty-inline">当前没有带在售商品的卖家。</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if supply_lifecycle.recommendations %}
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>运营建议</strong><span>仅在越过阈值时给出</span></div>
+        <ul>
+            {% for recommendation in supply_lifecycle.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% else %}<div class="empty-inline mt-3">当前没有在售商品，产生第一条上架后这里会开始统计供给侧健康度。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>等级划分与卖家端完全一致：7 天内为新鲜期、21 天后关注放缓、45 天后视为沉底，展示截止前 3 天提醒延期。「无互动」指近 14 天没有浏览、收藏或预约记录；覆盖率只统计有在售商品的卖家，未发布过的用户不计入。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

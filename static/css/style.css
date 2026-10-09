@@ -1302,3 +1302,186 @@ a { color: inherit; text-decoration: none; }
 .lifecycle-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .lifecycle-refresh-form { display: inline; }
 @media (max-width: 575.98px) { .lifecycle-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .lifecycle-panel { padding: 14px; } }
+
+/* ===== 供给侧生命周期健康面板 ===== */
+.supply-lifecycle-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.supply-lifecycle-summary > div {
+    border: 1px solid #e7efe9;
+    border-radius: 14px;
+    background: #fbfdfb;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.supply-lifecycle-summary > div span {
+    font-size: 0.78rem;
+    color: #6c7a72;
+}
+
+.supply-lifecycle-summary > div strong {
+    font-size: 1.35rem;
+    line-height: 1.2;
+    color: #23453a;
+}
+
+.supply-lifecycle-summary > div small {
+    font-size: 0.72rem;
+    color: #8a978f;
+}
+
+.supply-lifecycle-summary-warning {
+    border-color: #efd8d1 !important;
+    background: #fff8f6 !important;
+}
+
+.supply-lifecycle-summary-warning strong {
+    color: #a4502c !important;
+}
+
+.supply-lifecycle-block {
+    border: 1px solid #e7efe9;
+    border-radius: 14px;
+    background: #fbfdfb;
+    padding: 14px 16px;
+    height: 100%;
+}
+
+.supply-lifecycle-block-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.supply-lifecycle-block-heading strong {
+    font-size: 0.95rem;
+    color: #23453a;
+}
+
+.supply-lifecycle-block-heading span {
+    font-size: 0.75rem;
+    color: #8a978f;
+}
+
+.supply-lifecycle-levels {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.supply-lifecycle-level {
+    display: grid;
+    grid-template-columns: 5.6rem 1fr 2.4rem 3rem;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+}
+
+.supply-lifecycle-level-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #4a5a52;
+}
+
+.supply-lifecycle-level-label i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #b9c9c0;
+    flex: none;
+}
+
+.supply-lifecycle-level-track {
+    height: 7px;
+    border-radius: 999px;
+    background: #e9f0ec;
+    overflow: hidden;
+    display: block;
+}
+
+.supply-lifecycle-level-track span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: #7aa892;
+}
+
+.supply-lifecycle-level strong {
+    text-align: right;
+    color: #23453a;
+}
+
+.supply-lifecycle-level small {
+    text-align: right;
+    color: #8a978f;
+}
+
+.supply-lifecycle-level-fresh .supply-lifecycle-level-label i,
+.supply-lifecycle-level-active .supply-lifecycle-level-label i {
+    background: #6fae8d;
+}
+
+.supply-lifecycle-level-slowing .supply-lifecycle-level-label i {
+    background: #d7a94f;
+}
+
+.supply-lifecycle-level-slowing .supply-lifecycle-level-track span {
+    background: #d7a94f;
+}
+
+.supply-lifecycle-level-stale .supply-lifecycle-level-label i {
+    background: #cd7f52;
+}
+
+.supply-lifecycle-level-stale .supply-lifecycle-level-track span {
+    background: #cd7f52;
+}
+
+.supply-lifecycle-level-expiring .supply-lifecycle-level-label i {
+    background: #c2603f;
+}
+
+.supply-lifecycle-level-expiring .supply-lifecycle-level-track span {
+    background: #c2603f;
+}
+
+.supply-lifecycle-flag {
+    display: inline-block;
+    min-width: 1.6rem;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #fdece5;
+    color: #a4502c;
+    font-weight: 600;
+    text-align: center;
+}
+
+.supply-lifecycle-recommendations ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    color: #4a5a52;
+    font-size: 0.86rem;
+    line-height: 1.7;
+}
+
+@media (max-width: 575px) {
+    .supply-lifecycle-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .supply-lifecycle-level {
+        grid-template-columns: 4.6rem 1fr 2.2rem 2.6rem;
+    }
+}

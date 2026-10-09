@@ -2357,6 +2357,39 @@ def operations_dashboard_export(request):
     writer.writerow(['地点供给与交易', '周期内新增商品', '周期内交易预约'])
     for row in dashboard['location_stats']:
         writer.writerow([row.name, row.new_count, row.order_count])
+
+    supply = dashboard['supply_lifecycle']
+    writer.writerow([])
+    writer.writerow(['供给侧生命周期健康', '数值'])
+    writer.writerow(['当前在售商品', supply['summary']['available_items']])
+    writer.writerow(['需要卖家决策', supply['summary']['attention_items']])
+    writer.writerow(['待处理占比（%）', supply['summary']['attention_share']])
+    writer.writerow(['发布超 45 天无互动', supply['summary']['stale_unengaged']])
+    writer.writerow(['周期内刷新次数', supply['summary']['period_refreshes']])
+    writer.writerow(['周期内刷新卖家数', supply['summary']['period_refreshed_sellers']])
+    writer.writerow(['有在售商品的卖家', supply['summary']['sellers_with_listings']])
+    writer.writerow(['无待处理商品的卖家', supply['summary']['sellers_keeping_up']])
+    writer.writerow(['卖家维护覆盖率（%）', supply['summary']['seller_coverage']])
+    writer.writerow(['刷新额度已用尽卖家', supply['summary']['exhausted_sellers']])
+    writer.writerow(['名下商品全部待处理卖家', supply['summary']['neglected_sellers']])
+
+    writer.writerow([])
+    writer.writerow(['生命周期等级', '商品数', '占在售（%）'])
+    for row in supply['level_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['在管规模', '卖家数', '在售商品', '待处理商品', '无互动商品', '额度用尽卖家'])
+    for row in supply['seller_load_rows']:
+        writer.writerow([row['label'], row['seller_count'], row['active_count'],
+                         row['attention_count'], row['unengaged_count'], row['exhausted_seller_count']])
+
+    if supply['recommendations']:
+        writer.writerow([])
+        writer.writerow(['供给侧运营建议'])
+        for recommendation in supply['recommendations']:
+            writer.writerow([recommendation])
+
     return response
 
 def search_items(request):
