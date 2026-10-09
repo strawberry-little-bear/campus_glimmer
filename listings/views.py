@@ -24,6 +24,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
+from .search_rewrites import build_search_rewrite_candidates
 from .demand_radar_outcome import build_demand_radar_outcomes
 from .circular_impact import build_circular_impact_report
 from .contributions import (
@@ -2563,6 +2564,7 @@ def search_insights(request):
     except (TypeError, ValueError):
         period_days = 30
     dashboard = build_search_insights(period_days, request.GET.get('q', ''))
+    dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
     return render(request, 'listings/search_insights.html', dashboard)
 
 
@@ -2575,6 +2577,7 @@ def search_insights_export(request):
     except (TypeError, ValueError):
         period_days = 30
     dashboard = build_search_insights(period_days, request.GET.get('q', ''))
+    dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2607,6 +2610,14 @@ def search_insights_export(request):
             row['query'], row['search_count'], row['click_count'], row['click_rate'],
             row['zero_result_count'], row['zero_result_rate'], row['average_results'],
             row['unique_users'], row['last_searched'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['同义词候选', '出现次数', '涉及用户数', '置信提示', '最近出现', '处理方式'])
+    for row in dashboard['rewrite_candidates']['rows']:
+        writer.writerow([
+            f"{row['source']} → {row['target']}", row['occurrences'], row['user_count'],
+            row['confidence'], f"{row['last_seen']:%Y-%m-%d %H:%M}", '需人工确认后启用',
         ])
 
     writer.writerow([])

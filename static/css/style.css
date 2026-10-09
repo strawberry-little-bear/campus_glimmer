@@ -615,6 +615,25 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 991px) { .search-quality-panel { grid-template-columns: 1fr 1fr; }.search-quality-actions { grid-column: 1 / -1; padding: 13px 0 0; border-top: 1px solid #e8efe9; border-left: 0; } }
 @media (max-width: 575px) { .search-quality-panel { grid-template-columns: 1fr; gap: 18px; }.search-quality-actions { grid-column: auto; } }
 
+
+/* 搜索同义词候选：复用运营看板的汇总与表格语言，只补“改口方向”这一列的
+   视觉表达——箭头本身就是这条数据唯一想说明的事情。 */
+.rewrite-candidate-panel { overflow: hidden; }
+.rewrite-candidate-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.rewrite-candidate-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.rewrite-candidate-summary span, .rewrite-candidate-summary small { color: #83938b; font-size: .71rem; }
+.rewrite-candidate-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; letter-spacing: -.03em; }
+.rewrite-candidate-summary .rewrite-candidate-warning { border-color: #f0dfc7; background: #fffaf3; }
+.rewrite-candidate-warning strong { color: #b97828; }
+.rewrite-candidate-table td { vertical-align: middle; white-space: nowrap; }
+.rewrite-candidate-table td:first-child strong::after { content: '\2192'; margin-left: 8px; color: #8fae9b; font-weight: 400; }
+.rewrite-candidate-confidence { display: inline-grid; min-width: 30px; height: 24px; padding: 0 8px; place-items: center; border-radius: 999px; color: #57766a; background: #eef6f0; font-size: .72rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.rewrite-candidate-confidence[data-level="strong"] { color: #3f7a52; background: #e2f2e8; }
+.rewrite-candidate-confidence[data-level="weak"] { color: #7b6a3c; background: #f6f1e2; }
+.rewrite-candidate-footnote { margin: 13px 0 0; color: #8b9a92; font-size: .69rem; line-height: 1.6; }
+.rewrite-candidate-footnote i { color: #79ad88; }
+@media (max-width: 575px) { .rewrite-candidate-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.rewrite-candidate-summary > div { min-height: 72px; padding: 11px; }.rewrite-candidate-table td { white-space: normal; } }
+
 .message-center-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }.message-center-toolbar h1 { color: #315746; font-size: 1.7rem; font-weight: 800; }.message-search-form { position: relative; display: flex; align-items: center; gap: 7px; }.message-search-form i { position: absolute; left: 12px; color: #8da098; }.message-search-form input { width: min(250px, 52vw); padding: 8px 10px 8px 32px; border: 1px solid var(--line); border-radius: 10px; outline: none; font-size: .78rem; }.message-search-form input:focus { border-color: #9ed4bc; box-shadow: 0 0 0 4px rgba(29, 138, 104, .08); }
 @media (max-width: 767px) { .message-center-toolbar { align-items: stretch; flex-direction: column; }.message-search-form { width: 100%; }.message-search-form input { flex: 1; width: auto; } }
 

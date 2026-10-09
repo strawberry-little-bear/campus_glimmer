@@ -166,6 +166,32 @@
 </section>
 
 <section class="content-card ops-panel mb-4">
+<section class="content-card ops-panel mb-4 rewrite-candidate-panel">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Query rewrites</span><h2>搜索同义词候选</h2></div><span class="ops-panel-hint">来自同一用户 30 分钟内的相邻搜索</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-arrow-left-right me-1"></i>学生在搜不到结果后会本能地换个说法再试一次。把同一用户"先搜 A 无结果、紧接着搜 B 有结果"的相邻记录聚合起来，就能看出大家默认把哪些词当成一回事——这些候选需要人工确认后才会成为同义词。</p>
+    <div class="rewrite-candidate-summary">
+        <div><span>候选词对</span><strong>{{ rewrite_candidates.summary.candidate_count }}</strong><small>出现次数达到阈值</small></div>
+        <div class="rewrite-candidate-warning"><span>较强证据</span><strong>{{ rewrite_candidates.summary.strong_count }}</strong><small>出现 3 次以上</small></div>
+        <div><span>累计改口</span><strong>{{ rewrite_candidates.summary.occurrence_total }}</strong><small>候选背后的搜索次数</small></div>
+        <div><span>符合条件词对</span><strong>{{ rewrite_candidates.summary.total_pair_count }}</strong><small>含暂未展示的候选</small></div>
+    </div>
+    {% if rewrite_candidates.rows %}
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><thead><tr><th>用户先搜</th><th>随后改搜</th><th>出现次数</th><th>涉及用户</th><th>置信提示</th><th>最近出现</th><th>操作</th></tr></thead><tbody>
+        {% for row in rewrite_candidates.rows %}
+        <tr>
+            <td><strong>{{ row.source }}</strong><small class="d-block text-muted">无结果搜索</small></td>
+            <td><strong>{{ row.target }}</strong><small class="d-block text-muted">有结果搜索</small></td>
+            <td><strong>{{ row.occurrences }}</strong><small class="d-block text-muted">次</small></td>
+            <td>{{ row.user_count }}<small class="d-block text-muted">人</small></td>
+            <td><span class="rewrite-candidate-confidence" data-level="{% if row.occurrences >= 3 %}strong{% else %}weak{% endif %}">{{ row.confidence }}</span></td>
+            <td>{{ row.last_seen|date:"Y-m-d H:i" }}</td>
+            <td><a class="btn btn-outline-success btn-sm" href="{% url 'admin:listings_searchsynonym_add' %}?keyword={{ row.source|urlencode }}&amp;synonym={{ row.target|urlencode }}"><i class="bi bi-check2 me-1"></i>确认并启用</a></td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>候选只提议、不自动生效：同义词会改变此后每一次搜索的结果范围，配错会让搜索悄悄变差，所以每一条都由运营在后台确认后写入。</p>
+    {% else %}<div class="empty-inline">当前周期内没有出现重复的改口行为。等更多学生用起来，或把统计周期放长一些再看看。</div>{% endif %}
+</section>
+
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Action queue</span><h2>运营建议</h2></div><span class="ops-panel-hint">由搜索行为自动生成</span></div>
     {% if insights %}<div class="search-insight-grid">{% for insight in insights %}<article class="search-insight-card"><div class="search-insight-icon"><i class="bi bi-lightbulb"></i></div><div><strong>{{ insight.query }}</strong><p>{{ insight.message }}</p><a href="{% url 'item_list' %}?q={{ insight.query|urlencode }}">查看相关商品 <i class="bi bi-arrow-right"></i></a></div></article>{% endfor %}</div>{% else %}<div class="empty-inline">暂无需要跟进的搜索需求。可以扩大统计周期，或等待新的搜索记录积累。</div>{% endif %}
 </section>
