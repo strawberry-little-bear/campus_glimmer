@@ -2267,6 +2267,46 @@ def operations_dashboard_export(request):
     writer.writerow(['风险等级', health['risk_label']])
     writer.writerow(['风险说明', health['risk_message']])
 
+    stage_flow = dashboard['order_stage_flow']
+    writer.writerow([])
+    writer.writerow(['订单阶段耗时', '数值'])
+    writer.writerow(['周期订单数', stage_flow['summary']['total_orders']])
+    writer.writerow(['可测量订单数', stage_flow['summary']['measured_orders']])
+    writer.writerow(['可测量占比（%）', stage_flow['summary']['measured_share']])
+    writer.writerow(['仍在流程中', stage_flow['summary']['censored_orders']])
+    writer.writerow(['未确认订单', stage_flow['summary']['unconfirmed_orders']])
+    writer.writerow(['异常剔除样本', stage_flow['summary']['dropped_samples']])
+    writer.writerow(['端到端中位耗时', stage_flow['summary']['end_to_end_median_label']])
+    writer.writerow(['端到端 P90', stage_flow['summary']['end_to_end_p90_label']])
+    if stage_flow['bottleneck']:
+        writer.writerow(['瓶颈阶段', stage_flow['bottleneck']['label']])
+        writer.writerow(['瓶颈阶段中位耗时', stage_flow['bottleneck']['median_label']])
+        writer.writerow(['瓶颈阶段样本', stage_flow['bottleneck']['sample_size']])
+        writer.writerow(['瓶颈占可测量总耗时（%）', stage_flow['bottleneck']['share_of_measured_total']])
+
+    writer.writerow([])
+    writer.writerow(['阶段', '中位耗时', 'P90', '平均耗时', '最快', '最慢', '样本数', '进行中', '是否为瓶颈'])
+    for row in stage_flow['stage_rows']:
+        writer.writerow([
+            row['label'], row['median_label'], row['p90_label'], row['average_label'],
+            row['fastest_label'], row['slowest_label'], row['sample_size'],
+            row['still_in_stage'], '是' if row['is_bottleneck'] else '',
+        ])
+
+    for facet in stage_flow['facet_rows']:
+        writer.writerow([])
+        writer.writerow([f"按{facet['label']}拆分阶段耗时", '订单数', '可测量订单', '最慢阶段', '该阶段中位耗时', '端到端中位耗时', '异常剔除样本'])
+        for row in facet['rows']:
+            writer.writerow([
+                row['name'], row['order_count'], row['measured_orders'], row['worst_stage_label'],
+                row['worst_stage_median_label'], row['end_to_end_median_label'], row['dropped_samples'],
+            ])
+
+    if stage_flow['recommendations']:
+        writer.writerow([])
+        writer.writerow(['运营建议'])
+        for recommendation in stage_flow['recommendations']:
+            writer.writerow([recommendation])
     writer.writerow([])
     writer.writerow(['分类供给', '周期内新增', '当前在售'])
     for row in dashboard['category_stats']:

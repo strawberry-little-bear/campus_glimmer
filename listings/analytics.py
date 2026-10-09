@@ -13,6 +13,7 @@ from .campaign_analytics import build_campaign_analytics
 from .demand_radar import build_demand_radar
 from .academic_calendar import build_academic_calendar
 from .notification_response import build_notification_response_insights
+from .order_stage_flow import build_order_stage_flow
 
 
 PERIOD_CHOICES = (
@@ -1486,6 +1487,7 @@ def build_operations_dashboard(days=30):
         'campaign_analytics': campaign_analytics,
         'academic_calendar': academic_calendar,
         'notification_response': build_notification_response_insights(days=days),
+        'order_stage_flow': build_order_stage_flow(days=days, now=now),
         'demand_radar': demand_radar,
         'order_statuses': order_statuses,
         'notification_insights': notification_insights,

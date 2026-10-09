@@ -681,5 +681,91 @@
     {% else %}<div class="empty-inline mt-3">当前周期还没有通知数据，发送第一条提醒后这里会开始统计处理时效。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>处理时长按「标记已读时间 − 通知创建时间」计算，反映的是用户查看并处理提醒的快慢，不代表交易本身是否完成；超一周未处理视为已忽略。</div>
 </section>
+
+<section class="content-card ops-panel mb-4 order-stage-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Stage flow</span><h2>订单全链路阶段时长</h2></div>
+        <span class="ops-panel-hint">把等待时间拆到每个阶段，定位真正拖慢成交的那一段</span>
+    </div>
+    {% if order_stage_flow.has_data %}
+    <div class="order-stage-summary">
+        <div><span>周期订单</span><strong>{{ order_stage_flow.summary.total_orders }}</strong><small>本周期内创建</small></div>
+        <div><span>走完流程</span><strong>{{ order_stage_flow.summary.measured_orders }}</strong><small>占比 {{ order_stage_flow.summary.measured_share }}%</small></div>
+        <div><span>端到端中位</span><strong>{{ order_stage_flow.summary.end_to_end_median_label }}</strong><small>P90 {{ order_stage_flow.summary.end_to_end_p90_label }}</small></div>
+        <div class="order-stage-warning"><span>仍在流程中</span><strong>{{ order_stage_flow.summary.censored_orders }}</strong><small>其中 {{ order_stage_flow.summary.unconfirmed_orders }} 笔未确认</small></div>
+    </div>
+
+    {% if order_stage_flow.bottleneck %}
+    <div class="order-stage-bottleneck mt-3">
+        <div class="order-stage-bottleneck-heading">
+            <i class="bi bi-signpost-split me-1"></i>
+            <strong>当前瓶颈：{{ order_stage_flow.bottleneck.label }}</strong>
+            <span>中位耗时 {{ order_stage_flow.bottleneck.median_label }} · 样本 {{ order_stage_flow.bottleneck.sample_size }} 笔</span>
+        </div>
+        <p class="mb-0">该阶段约占可测量阶段中位总耗时的 <strong>{{ order_stage_flow.bottleneck.share_of_measured_total }}%</strong>，是端到端时长的主要来源。</p>
+    </div>
+    {% endif %}
+
+    <div class="ops-table-wrap mt-3">
+        <table class="table ops-table align-middle mb-0 order-stage-table">
+            <thead><tr><th>阶段</th><th>中位耗时</th><th>耗时占比</th><th>P90</th><th>平均</th><th>最快 / 最慢</th><th>样本</th><th>进行中</th></tr></thead>
+            <tbody>
+                {% for row in order_stage_flow.stage_rows %}
+                <tr{% if row.is_bottleneck %} class="order-stage-row-flagged"{% endif %}>
+                    <td>
+                        <strong>{{ row.label }}</strong>
+                        {% if row.is_bottleneck %}<span class="order-stage-badge">瓶颈</span>{% endif %}
+                        <small class="d-block text-muted">{{ row.note }}</small>
+                    </td>
+                    <td data-label="中位耗时">{{ row.median_label }}</td>
+                    <td data-label="耗时占比"><span class="order-stage-track"><span style="width: {% widthratio row.median_seconds order_stage_flow.stage_max 100 %}%;"></span></span></td>
+                    <td data-label="P90">{{ row.p90_label }}</td>
+                    <td data-label="平均">{{ row.average_label }}</td>
+                    <td data-label="最快 / 最慢">{{ row.fastest_label }}<small class="d-block text-muted">最长 {{ row.slowest_label }}</small></td>
+                    <td data-label="样本">{{ row.sample_size }}</td>
+                    <td data-label="进行中">{{ row.still_in_stage }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="row g-3 mt-1">
+        {% for facet in order_stage_flow.facet_rows %}
+        <div class="col-lg-6">
+            <div class="order-stage-block">
+                <div class="order-stage-block-heading"><strong>按{{ facet.label }}拆分</strong><span>仅显示有可测量阶段的{{ facet.label }}</span></div>
+                {% if facet.rows %}
+                <table class="table ops-table align-middle mb-0 order-stage-facet-table">
+                    <thead><tr><th>{{ facet.label }}</th><th>订单</th><th>最慢阶段</th><th>该阶段中位</th><th>端到端中位</th></tr></thead>
+                    <tbody>
+                        {% for row in facet.rows %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.order_count }}</td>
+                            <td data-label="最慢阶段"><small>{{ row.worst_stage_label }}</small></td>
+                            <td data-label="该阶段中位">{{ row.worst_stage_median_label }}</td>
+                            <td data-label="端到端中位">{{ row.end_to_end_median_label }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}<div class="empty-inline">当前周期还没有走完流程的订单按{{ facet.label }}分布。</div>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="order-stage-recommendations mt-3">
+        <div class="order-stage-block-heading"><strong>运营建议</strong><span>基于本周期实测阶段耗时生成</span></div>
+        <ul>
+            {% for recommendation in order_stage_flow.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有交易订单，产生第一笔预约后这里会开始拆分阶段耗时。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>阶段耗时按相邻两个状态流转时间相减得到；周期结束时仍未走完所属流程的订单不计入耗时，只计入「进行中」，避免把在途订单误判为超时。若某条流转记录的时间早于上一阶段，会按异常数据剔除并在建议中提示。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}
