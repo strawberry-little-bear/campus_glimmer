@@ -40,7 +40,7 @@ class NotificationPreferenceForm(forms.ModelForm):
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
             'lost_found_match', 'lost_found_lead', 'opportunity_digest', 'mutual_aid_feedback',
-            'saved_search_digest',
+            'saved_search_digest', 'lifecycle_reminder',
             'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
         ]
 

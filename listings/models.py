@@ -916,6 +916,7 @@ class Notification(models.Model):
         ('lost_found_lead', '失物招领线索更新'),
         ('opportunity_digest', '互助机会摘要'),
         ('saved_search_digest', '关注搜索汇总提醒'),
+        ('lifecycle_reminder', '商品生命周期提醒'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -1089,6 +1090,10 @@ class NotificationPreference(models.Model):
     saved_search_digest = models.BooleanField(
         '关注搜索汇总提醒', default=True,
         help_text='选择每日或每周汇总的关注搜索，会在对应周期发送一条合并提醒。',
+    )
+    lifecycle_reminder = models.BooleanField(
+        '商品生命周期提醒', default=True,
+        help_text='商品久未处理或价格高于同类常见区间时，定期合并提醒一次。',
     )
     quiet_hours_enabled = models.BooleanField(
         '启用免打扰时段', default=False,

@@ -394,6 +394,7 @@ a { color: inherit; text-decoration: none; }
 .notification-icon-message_received { color: #4d6e9b; background: #e9f1ff; }
 .notification-icon-comment_received { color: #8b5d83; background: #f7eafa; }
 .notification-icon-item_available { color: #237a63; background: #e3f7ee; }
+.notification-icon-lifecycle_reminder { color: #8a6d1f; background: #fdf3d8; }
 .notification-body { display: grid; min-width: 0; flex: 1; gap: 5px; }
 .notification-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .notification-title-row strong { overflow: hidden; color: #29463a; text-overflow: ellipsis; white-space: nowrap; }
