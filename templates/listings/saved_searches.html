@@ -7,7 +7,7 @@
     <div>
         <span class="eyebrow">让搜索替你留意校园供给</span>
         <h1 class="mt-2">关注的搜索</h1>
-        <p class="text-muted mb-0">保存常用条件，新商品出现时会收到一条站内提醒。</p>
+        <p class="text-muted mb-0">保存常用条件，新商品出现时收到提醒。可以选择即时提醒，也可以合并成每日或每周一条。</p>
     </div>
     <a class="btn btn-outline-primary" href="{% url 'item_list' %}"><i class="bi bi-search me-1"></i>继续找商品</a>
 </div>
@@ -29,6 +29,38 @@
             {% if saved_search.condition %}<span><i class="bi bi-stars"></i>{{ saved_search.condition }}</span>{% endif %}
             {% if saved_search.min_price or saved_search.max_price %}<span><i class="bi bi-cash-coin"></i>{% if saved_search.min_price %}¥{{ saved_search.min_price }}{% else %}不限{% endif %} — {% if saved_search.max_price %}¥{{ saved_search.max_price }}{% else %}不限{% endif %}</span>{% endif %}
         </div>
+
+        <div class="saved-search-metrics">
+            <span class="saved-search-metric"><i class="bi bi-lightning-charge-fill"></i>{{ saved_search.frequency_label }}</span>
+            <span class="saved-search-metric"><i class="bi bi-collection"></i>待提醒 {{ saved_search.pending_match_count }} 条</span>
+            <span class="saved-search-metric"><i class="bi bi-bullseye"></i>当前命中 {{ saved_search.live_match_count }} 来源</span>
+            {% if saved_search.is_quiet %}<span class="saved-search-metric is-quiet"><i class="bi bi-moon-stars-fill"></i>静默至 {{ saved_search.quiet_until|date:'m-d H:i' }}</span>{% endif %}
+        </div>
+
+        <form class="saved-search-cadence" method="post" action="{% url 'update_saved_search_cadence' saved_search.id %}">
+            {% csrf_token %}
+            <div class="saved-search-cadence-fields">
+                <label for="cadence-frequency-{{ saved_search.id }}">
+                    <span>提醒节奏</span>
+                    <select id="cadence-frequency-{{ saved_search.id }}" name="notify_frequency">
+                        {% for value, label in frequency_choices %}
+                        <option value="{{ value }}" {% if saved_search.notify_frequency == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label for="cadence-limit-{{ saved_search.id }}">
+                    <span>单条最多列出</span>
+                    <input id="cadence-limit-{{ saved_search.id }}" type="number" name="max_matches_per_notice" min="1" max="9" value="{{ saved_search.max_matches_per_notice }}">
+                </label>
+                <label for="cadence-quiet-{{ saved_search.id }}">
+                    <span>临时静默至</span>
+                    <input id="cadence-quiet-{{ saved_search.id }}" type="datetime-local" name="quiet_until" value="{% if saved_search.quiet_until %}{{ saved_search.quiet_until|date:'Y-m-d\TH:i' }}{% endif %}">
+                </label>
+            </div>
+            <p class="saved-search-cadence-hint">切回“即时提醒”时，等待中的命中会立即补送一条。</p>
+            <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-save me-1"></i>保存节奏</button>
+        </form>
+
         <div class="saved-search-actions">
             <form method="post" action="{% url 'toggle_saved_search' saved_search.id %}">
                 {% csrf_token %}

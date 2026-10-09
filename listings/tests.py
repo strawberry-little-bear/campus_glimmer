@@ -1167,6 +1167,7 @@ class ListingFlowTests(TestCase):
         response = self.client.post(reverse('save_search'), {
             'name': '图书馆附近的键盘', 'query': '键盘', 'condition': '9成新',
             'location': self.location.id, 'min_price': '50', 'max_price': '120',
+            'notify_frequency': 'instant', 'max_matches_per_notice': '3',
             'next': reverse('item_list'),
         })
         self.assertRedirects(response, reverse('item_list'))
@@ -1188,9 +1189,13 @@ class ListingFlowTests(TestCase):
         notifications = Notification.objects.filter(
             recipient=self.other_user, kind='saved_search_match',
         )
-        self.assertEqual(notifications.count(), 1)
-        self.assertIn('宿舍键盘', notifications.first().message)
-        self.assertIn('2 个关注条件', notifications.first().message)
+        # Each active saved search notifies on its own so the user can tell
+        # which condition fired; the digest cadence is what merges them.
+        self.assertEqual(notifications.count(), 2)
+        messages = [notification.message for notification in notifications]
+        self.assertTrue(any('宿舍键盘' in message for message in messages))
+        self.assertTrue(any('键盘提醒' in message for message in messages))
+        self.assertTrue(any('数码提醒' in message for message in messages))
         self.assertFalse(Notification.objects.filter(recipient=self.user, kind='saved_search_match').exists())
 
     def test_saved_search_can_be_paused_and_deleted(self):

@@ -887,7 +887,7 @@ class Notification(models.Model):
         ('lost_found_match', '失物招领匹配提醒'),
         ('lost_found_lead', '失物招领线索更新'),
         ('opportunity_digest', '互助机会摘要'),
-        ('mutual_aid_feedback', '互助完成反馈'),
+        ('saved_search_digest', '关注搜索汇总提醒'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -1012,6 +1012,10 @@ class NotificationPreference(models.Model):
     )
     mutual_aid_feedback = models.BooleanField(
         '互助完成反馈', default=True, help_text='互助发布者确认响应结果后提醒参与者。',
+    )
+    saved_search_digest = models.BooleanField(
+        '关注搜索汇总提醒', default=True,
+        help_text='选择每日或每周汇总的关注搜索，会在对应周期发送一条合并提醒。',
     )
     quiet_hours_enabled = models.BooleanField(
         '启用免打扰时段', default=False,
@@ -1173,6 +1177,23 @@ class SavedSearch(models.Model):
     min_price = models.DecimalField('最低价格', max_digits=10, decimal_places=2, null=True, blank=True)
     max_price = models.DecimalField('最高价格', max_digits=10, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField('启用提醒', default=True)
+    FREQUENCY_CHOICES = (
+        ('instant', '即时提醒'),
+        ('daily', '每日汇总'),
+        ('weekly', '每周汇总'),
+    )
+    notify_frequency = models.CharField(
+        '提醒频率', max_length=10, choices=FREQUENCY_CHOICES, default='instant',
+        help_text='即时提醒在商品发布时马上通知；汇总方式按日或按周合并成一条提醒。',
+    )
+    max_matches_per_notice = models.PositiveSmallIntegerField(
+        '单次最多提醒条数', default=3,
+        help_text='一条通知里最多列出几条命中商品，避免一次刷屏。',
+    )
+    quiet_until = models.DateTimeField(
+        '临时静默至', null=True, blank=True,
+        help_text='在这个时间之前不发送这条关注的提醒，适合考试周或假期。',
+    )
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
@@ -1186,10 +1207,59 @@ class SavedSearch(models.Model):
         indexes = [
             models.Index(fields=['user', 'is_active', '-created_at']),
             models.Index(fields=['category', 'location', 'is_active']),
+            models.Index(fields=['notify_frequency', 'is_active']),
         ]
 
     def __str__(self):
         return f'{self.user.username} · {self.name}'
+
+    @property
+    def is_quiet(self):
+        """Whether this saved search is inside a user-declared silent window."""
+        return bool(self.quiet_until and self.quiet_until > timezone.now())
+
+    def deliverable_now(self, *, now=None):
+        """Whether a newly matched item may trigger a notification right now."""
+        now = now or timezone.now()
+        if not self.is_active:
+            return False
+        if self.quiet_until and self.quiet_until > now:
+            return False
+        return self.notify_frequency == 'instant'
+
+    @property
+    def frequency_label(self):
+        return dict(self.FREQUENCY_CHOICES).get(self.notify_frequency, self.notify_frequency)
+
+
+class SavedSearchMatch(models.Model):
+    """Buffer for saved-search hits delivered as a digest instead of instantly."""
+    saved_search = models.ForeignKey(
+        SavedSearch, on_delete=models.CASCADE, related_name='buffered_matches',
+        verbose_name='关注的搜索',
+    )
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE, related_name='saved_search_matches', verbose_name='命中商品',
+    )
+    matched_at = models.DateTimeField('命中时间', auto_now_add=True)
+    notified_at = models.DateTimeField('已通知时间', null=True, blank=True)
+
+    class Meta:
+        verbose_name = '关注搜索命中缓冲'
+        verbose_name_plural = '关注搜索命中缓冲'
+        ordering = ['-matched_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['saved_search', 'item'], name='unique_saved_search_item_match',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['saved_search', 'notified_at', '-matched_at']),
+            models.Index(fields=['item']),
+        ]
+
+    def __str__(self):
+        return f'{self.saved_search.name} · {self.item.title}'
 
 class DemandPost(models.Model):
     """A reverse listing where a student describes what they are looking for."""

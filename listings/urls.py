@@ -78,6 +78,7 @@ urlpatterns = [
     path('saved-searches/save/', views.save_search, name='save_search'),
     path('saved-searches/<int:saved_search_id>/toggle/', views.toggle_saved_search, name='toggle_saved_search'),
     path('saved-searches/<int:saved_search_id>/delete/', views.delete_saved_search, name='delete_saved_search'),
+    path('saved-searches/<int:saved_search_id>/cadence/', views.update_saved_search_cadence, name='update_saved_search_cadence'),
     path('notifications/', views.notification_list, name='notification_list'),
     path('notifications/activity/', views.activity_center, name='activity_center'),
     path('notifications/activity/read-all/', views.mark_all_activity_read, name='mark_all_activity_read'),

@@ -1145,3 +1145,19 @@ a { color: inherit; text-decoration: none; }
 
 .mutual-aid-profile-card { border-top: 3px solid #70af8e; }
 .mutual-aid-profile-stats { margin-top: 16px; }
+
+.saved-search-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.saved-search-metric { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid #dcece0; border-radius: 999px; color: #46705b; background: #f7fbf8; font-size: .72rem; font-weight: 600; }
+.saved-search-metric i { color: #4f9a72; }
+.saved-search-metric.is-quiet { color: #8a6a35; border-color: #efe0bd; background: #fdf8ec; }
+.saved-search-metric.is-quiet i { color: #c69a3f; }
+.saved-search-cadence { padding: 14px 0 0; border-top: 1px solid #edf2ee; }
+.saved-search-cadence-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.saved-search-cadence-fields label { display: grid; gap: 5px; min-width: 0; }
+.saved-search-cadence-fields label > span { color: #6d8579; font-size: .71rem; font-weight: 600; }
+.saved-search-cadence-fields select,
+.saved-search-cadence-fields input { width: 100%; padding: 7px 9px; border: 1px solid #dde7e0; border-radius: 10px; color: #33513f; background: #fff; font-size: .78rem; }
+.saved-search-cadence-fields select:focus,
+.saved-search-cadence-fields input:focus { border-color: #79b694; outline: none; box-shadow: 0 0 0 3px rgba(121, 182, 148, .18); }
+.saved-search-cadence-hint { margin: 10px 0 12px; color: #8a9b92; font-size: .71rem; }
+@media (max-width: 767px) { .saved-search-cadence-fields { grid-template-columns: 1fr; } }

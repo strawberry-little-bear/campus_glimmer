@@ -40,6 +40,7 @@ class NotificationPreferenceForm(forms.ModelForm):
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
             'lost_found_match', 'lost_found_lead', 'opportunity_digest', 'mutual_aid_feedback',
+            'saved_search_digest',
             'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
         ]
 
@@ -379,9 +380,24 @@ class RatingForm(StyledModelFormMixin, forms.ModelForm):
 
 
 class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):
+    notify_frequency = forms.ChoiceField(
+        label='提醒频率', choices=SavedSearch.FREQUENCY_CHOICES, initial='instant',
+    )
+    max_matches_per_notice = forms.IntegerField(
+        label='单次最多提醒条数', min_value=1, max_value=9, initial=3, required=False,
+    )
+    quiet_until = forms.DateTimeField(
+        label='临时静默至', required=False,
+        widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}),
+        help_text='留空表示不静默；到时间后自动恢复提醒。',
+    )
+
     class Meta:
         model = SavedSearch
-        fields = ['name', 'query', 'condition', 'category', 'location', 'min_price', 'max_price']
+        fields = [
+            'name', 'query', 'condition', 'category', 'location', 'min_price', 'max_price',
+            'notify_frequency', 'max_matches_per_notice', 'quiet_until',
+        ]
         widgets = {
             'name': forms.TextInput(attrs={'placeholder': '例如：图书馆附近的考研资料'}),
             'query': forms.HiddenInput(),

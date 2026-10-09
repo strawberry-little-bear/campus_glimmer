@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -196,11 +196,20 @@ class SearchQueryAdmin(admin.ModelAdmin):
 
 @admin.register(SavedSearch)
 class SavedSearchAdmin(admin.ModelAdmin):
-    list_display = ('name', 'user', 'query', 'category', 'location', 'min_price', 'max_price', 'is_active', 'created_at')
-    list_filter = ('is_active', 'category', 'location', 'created_at')
+    list_display = ('name', 'user', 'notify_frequency', 'max_matches_per_notice', 'quiet_until', 'is_active', 'created_at')
+    list_filter = ('is_active', 'notify_frequency', 'category', 'location', 'created_at')
     search_fields = ('name', 'query', 'condition', 'user__username')
     autocomplete_fields = ('user', 'category', 'location')
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(SavedSearchMatch)
+class SavedSearchMatchAdmin(admin.ModelAdmin):
+    list_display = ('saved_search', 'item', 'matched_at', 'notified_at')
+    list_filter = ('notified_at', 'matched_at')
+    search_fields = ('saved_search__name', 'item__title')
+    autocomplete_fields = ('saved_search', 'item')
+    readonly_fields = ('matched_at', 'notified_at')
 
 
 @admin.register(DeliveryConfirmation)

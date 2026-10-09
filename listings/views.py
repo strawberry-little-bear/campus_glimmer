@@ -33,7 +33,7 @@ from .availability import notify_item_available
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
@@ -45,7 +45,10 @@ from .meeting_scheduling import (
     recommend_meeting_times,
 )
 from .order_workflow import OrderTransitionError, transition_order
-from .saved_searches import notify_saved_search_matches
+from .saved_searches import (
+    matches_saved_search, notify_saved_search_matches,
+)
+from .saved_search_digest import deliver_buffered_saved_search_matches
 from .transaction_safety import build_transaction_safety
 from chat_messages.models import ModerationEvent, PrivateMessage
 from accounts.models import CampusVerification
@@ -2405,11 +2408,36 @@ def save_search(request):
     return redirect(next_url)
 
 
+def _attach_saved_search_stats(saved_searches, *, user):
+    """Attach buffered and live match counts to each saved search."""
+    pending_by_search = dict(
+        SavedSearchMatch.objects.filter(
+            saved_search__in=saved_searches, notified_at__isnull=True,
+        ).values_list('saved_search_id').annotate(
+            count=Count('saved_search_id'),
+        ).values_list('saved_search_id', 'count')
+    )
+    available_items = Item.objects.available().select_related('category', 'location')
+    if user.is_authenticated:
+        available_items = available_items.exclude(seller=user)
+    live_by_search = {}
+    for saved_search in saved_searches:
+        live_by_search[saved_search.pk] = sum(
+            1 for item in available_items if matches_saved_search(saved_search, item)
+        )
+    for saved_search in saved_searches:
+        saved_search.pending_match_count = pending_by_search.get(saved_search.pk, 0)
+        saved_search.live_match_count = live_by_search.get(saved_search.pk, 0)
+    return saved_searches
+
+
 @login_required
 def saved_search_list(request):
     saved_searches = SavedSearch.objects.filter(user=request.user).select_related('category', 'location')
+    _attach_saved_search_stats(saved_searches, user=request.user)
     return render(request, 'listings/saved_searches.html', {
         'saved_searches': saved_searches,
+        'frequency_choices': SavedSearch.FREQUENCY_CHOICES,
         'title': '关注的搜索',
     })
 
@@ -2425,12 +2453,67 @@ def toggle_saved_search(request, saved_search_id):
 
 
 @login_required
+def update_saved_search_cadence(request, saved_search_id):
+    """Change the reminder cadence of a saved search without recreating it."""
+    saved_search = get_object_or_404(SavedSearch, id=saved_search_id, user=request.user)
+    if request.method != 'POST':
+        return redirect('saved_search_list')
+
+    frequency = request.POST.get('notify_frequency', '')
+    valid = dict(SavedSearch.FREQUENCY_CHOICES)
+    if frequency not in valid:
+        messages.error(request, '提醒频率无效，请重新选择。')
+        return redirect('saved_search_list')
+
+    saved_search.notify_frequency = frequency
+    raw_limit = (request.POST.get('max_matches_per_notice') or '').strip()
+    if raw_limit:
+        try:
+            limit = int(raw_limit)
+        except ValueError:
+            messages.error(request, '单次最多提醒条数需要是 1 到 9 之间的整数。')
+            return redirect('saved_search_list')
+        if not 1 <= limit <= 9:
+            messages.error(request, '单次最多提醒条数需要是 1 到 9 之间的整数。')
+            return redirect('saved_search_list')
+        saved_search.max_matches_per_notice = limit
+
+    raw_quiet = (request.POST.get('quiet_until') or '').strip()
+    if raw_quiet:
+        parsed = parse_datetime(raw_quiet)
+        if parsed is None:
+            messages.error(request, '临时静默时间格式不正确。')
+            return redirect('saved_search_list')
+        if timezone.is_naive(parsed):
+            parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+        saved_search.quiet_until = parsed
+    else:
+        saved_search.quiet_until = None
+
+    saved_search.save(update_fields=[
+        'notify_frequency', 'max_matches_per_notice', 'quiet_until', 'updated_at',
+    ])
+
+    if frequency == 'instant':
+        delivered = deliver_buffered_saved_search_matches(saved_search=saved_search)
+        if delivered:
+            messages.success(
+                request,
+                f'“{saved_search.name}”已切换为即时提醒，补送了 {delivered} 条 待提醒命中。'
+            )
+            return redirect('saved_search_list')
+
+    messages.success(request, f'“{saved_search.name}”的提醒节奏已更新为{valid[frequency]}。')
+    return redirect('saved_search_list')
+
+
+@login_required
 def delete_saved_search(request, saved_search_id):
     saved_search = get_object_or_404(SavedSearch, id=saved_search_id, user=request.user)
     if request.method == 'POST':
         name = saved_search.name
         saved_search.delete()
-        messages.success(request, f'已删除关注搜索“{name}”。')
+        messages.success(request, f'“已删除关注搜索”{name}”。')
     return redirect('saved_search_list')
 
 
