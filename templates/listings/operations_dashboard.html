@@ -837,5 +837,96 @@
     {% else %}<div class="empty-inline mt-3">当前没有在售商品，产生第一条上架后这里会开始统计供给侧健康度。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>等级划分与卖家端完全一致：7 天内为新鲜期、21 天后关注放缓、45 天后视为沉底，展示截止前 3 天提醒延期。「无互动」指近 14 天没有浏览、收藏或预约记录；覆盖率只统计有在售商品的卖家，未发布过的用户不计入。</div>
 </section>
+<section class="content-card ops-panel mb-4 lifecycle-reminder-effect-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Reminder effect</span><h2>生命周期提醒触达与行动</h2></div>
+        <span class="ops-panel-hint">提醒发出去之后，卖家到底动没动手</span>
+    </div>
+    {% if lifecycle_reminder_effect.has_data %}
+    <div class="supply-lifecycle-summary">
+        <div><span>周期内提醒商品</span><strong>{{ lifecycle_reminder_effect.summary.reminded_items }}</strong><small>覆盖 {{ lifecycle_reminder_effect.summary.reminded_sellers }} 位卖家</small></div>
+        <div{% if lifecycle_reminder_effect.summary.read_items %} class="supply-lifecycle-summary-warning"{% endif %}><span>通知被打开</span><strong>{{ lifecycle_reminder_effect.summary.read_items }}</strong><small>占已提醒商品 {{ lifecycle_reminder_effect.summary.read_rate }}%</small></div>
+        <div><span>提醒后有动作</span><strong>{{ lifecycle_reminder_effect.summary.acted_after }}</strong><small>行动率 {{ lifecycle_reminder_effect.summary.action_rate }}%</small></div>
+        <div><span>其中刷新上架</span><strong>{{ lifecycle_reminder_effect.summary.refreshed_after }}</strong><small>卖家主动维护的信号</small></div>
+        <div><span>其中完成交易</span><strong>{{ lifecycle_reminder_effect.summary.completed_after }}</strong><small>订单走到终态</small></div>
+        <div{% if lifecycle_reminder_effect.summary.read_but_inactive %} class="supply-lifecycle-summary-warning"{% endif %}><span>看了但没动</span><strong>{{ lifecycle_reminder_effect.summary.read_but_inactive }}</strong><small>另有 {{ lifecycle_reminder_effect.summary.untouched }} 件完全没动作</small></div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-7">
+            <div class="supply-lifecycle-block">
+                <div class="supply-lifecycle-block-heading"><strong>按提醒类型看行动率</strong><span>三个桶互斥，避免把同一件商品重复归因</span></div>
+                {% if lifecycle_reminder_effect.kind_rows %}
+                <div class="ops-table-wrap">
+                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                        <thead><tr><th>提醒类型</th><th>商品数</th><th>被打开</th><th>打开率</th><th>有动作</th><th>行动率</th></tr></thead>
+                        <tbody>
+                            {% for row in lifecycle_reminder_effect.kind_rows %}
+                            <tr>
+                                <td data-label="提醒类型"><span title="{{ row.note }}">{{ row.label }}</span></td>
+                                <td data-label="商品数">{{ row.items }}</td>
+                                <td data-label="被打开">{{ row.read }}</td>
+                                <td data-label="打开率">{{ row.read_rate }}%</td>
+                                <td data-label="有动作">{{ row.acted }}</td>
+                                <td data-label="行动率">{% if row.action_rate %}<span class="supply-lifecycle-flag">{{ row.action_rate }}%</span>{% else %}{{ row.action_rate }}%{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<div class="empty-inline">周期内没有可归类的提醒。</div>{% endif %}
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="supply-lifecycle-block">
+                <div class="supply-lifecycle-block-heading"><strong>当前仍未真正收到的卖家</strong><span>按当前偏好与免打扰重算</span></div>
+                {% if lifecycle_reminder_effect.blocked_rows %}
+                <ul class="supply-lifecycle-levels">
+                    {% for row in lifecycle_reminder_effect.blocked_rows %}
+                    <li class="supply-lifecycle-level"><span class="supply-lifecycle-level-label"><i></i>{{ row.label }}</span><strong>{{ row.items }}</strong><small>件</small></li>
+                    {% endfor %}
+                </ul>
+                {% else %}<div class="empty-inline">没有被偏好或免打扰挡住的卖家。</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if lifecycle_reminder_effect.untouched_rows %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>提醒之后仍无动作的商品</strong><span>展示前 {{ lifecycle_reminder_effect.untouched_rows|length }} 条，共 {{ lifecycle_reminder_effect.untouched_total }} 件</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>商品</th><th>卖家</th><th>提醒类型</th><th>等级</th><th>发布/刷新天数</th><th>距提醒</th><th>是否看过</th></tr></thead>
+                <tbody>
+                    {% for row in lifecycle_reminder_effect.untouched_rows %}
+                    <tr>
+                        <td data-label="商品">{{ row.item.title }}</td>
+                        <td data-label="卖家">{{ row.seller.username }}</td>
+                        <td data-label="提醒类型">{% for kind in row.kinds %}{% if kind == "price" %}价格参考{% else %}待处理{% endif %}{% if not forloop.last %}、{% endif %}{% endfor %}</td>
+                        <td data-label="等级">{{ row.level_label }}</td>
+                        <td data-label="发布/刷新天数">{{ row.age_days }} 天</td>
+                        <td data-label="距提醒">{{ row.days_since_reminder }} 天</td>
+                        <td data-label="是否看过">{% if row.read %}<span class="supply-lifecycle-flag">看过</span>{% else %}未读{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if lifecycle_reminder_effect.recommendations %}
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>运营建议</strong><span>仅在越过阈值时给出</span></div>
+        <ul>
+            {% for recommendation in lifecycle_reminder_effect.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    {% else %}<div class="empty-inline mt-3">周期内还没有发送过生命周期提醒，调度任务执行后这里会开始统计触达与行动情况。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这里只统计「提醒之后发生」的动作，不区分是否由提醒引起：卖家完全可能在提醒前就已决定整理商品。刷新看主动刷新时间，成交看订单走到终态；编辑商品不算动作，因为任何保存都会改写更新时间。「当前仍未真正收到」用当前偏好与免打扰时段重算，不是发送当天的历史快照。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}
