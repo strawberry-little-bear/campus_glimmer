@@ -1830,3 +1830,45 @@ class AcademicTermSnapshot(models.Model):
 
     def __str__(self):
         return f'{self.term.name} · {self.phase_label or self.phase_key}'
+
+
+class TaskRun(models.Model):
+    """One execution of a scheduled management command.
+
+    The seven scheduled commands used to leave no trace at all: each printed a
+    summary line and exited. A run that failed told the scheduler via its exit
+    code and told nobody else, and the dashboard could not answer whether a
+    reminder had actually gone out. This table is that missing record.
+
+    Three boundaries are deliberate. Metrics are a fixed set of comparable
+    scalars rather than arbitrary JSON, because the commands return unrelated
+    shapes and a panel must be able to line them up. A failed row is written in
+    its own short transaction inside a finally block, so a crashed business
+    transaction cannot roll away the evidence of its own failure. A dry run is
+    marked instead of counted, since sending nothing is not a healthy run.
+    """
+
+    STATUS_CHOICES = [
+        ('succeeded', '成功'),
+        ('failed', '失败'),
+    ]
+
+    name = models.CharField('命令名称', max_length=64, db_index=True)
+    status = models.CharField('运行状态', max_length=16, choices=STATUS_CHOICES)
+    started_at = models.DateTimeField('开始时间')
+    finished_at = models.DateTimeField('结束时间')
+    duration_ms = models.PositiveIntegerField('耗时(毫秒)', default=0)
+    metrics = models.JSONField('运行指标', default=dict, blank=True)
+    note = models.CharField('备注', max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = '定时任务运行记录'
+        verbose_name_plural = '定时任务运行记录'
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['name', '-started_at'], name='task_run_name_started_idx'),
+            models.Index(fields=['-started_at'], name='task_run_started_idx'),
+        ]
+
+    def __str__(self):
+        return f'{self.name} · {self.get_status_display()}'

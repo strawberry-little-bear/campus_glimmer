@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from listings.lifecycle_reminders import send_lifecycle_reminders
+from listings.task_runs import normalise_metrics, record_task_run
 
 
 class Command(BaseCommand):
@@ -17,10 +18,14 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        result = send_lifecycle_reminders(
-            seller_ids=options.get('seller_ids'),
-            dry_run=options.get('dry_run', False),
-        )
+        with record_task_run(
+            'send_lifecycle_reminders', dry_run=options.get('dry_run', False),
+        ) as run:
+            result = send_lifecycle_reminders(
+                seller_ids=options.get('seller_ids'),
+                dry_run=options.get('dry_run', False),
+            )
+            run.metrics = normalise_metrics(result)
         prefix = '预演' if options.get('dry_run') else '执行'
         self.stdout.write(self.style.SUCCESS(
             f"{prefix}完成：发送 {result['sent']} 条提醒，"

@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from listings.saved_search_digest import send_saved_search_digest
+from listings.task_runs import normalise_metrics, record_task_run
 
 
 class Command(BaseCommand):
@@ -13,7 +14,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        result = send_saved_search_digest(frequency=options.get('frequency'))
+        with record_task_run('send_saved_search_digest') as run:
+            result = send_saved_search_digest(frequency=options.get('frequency'))
+            run.metrics = normalise_metrics(result)
         self.stdout.write(self.style.SUCCESS(
             f"已发送 {result['sent']} 条关注搜索汇总提醒，"
             f"跳过 {result['skipped']} 条，"

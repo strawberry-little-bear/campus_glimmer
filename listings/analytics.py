@@ -15,6 +15,7 @@ from .academic_calendar import build_academic_calendar
 from .notification_response import build_notification_response_insights
 from .order_stage_flow import build_order_stage_flow
 from .supply_lifecycle import build_supply_lifecycle
+from .task_run_health import build_task_run_health
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
 
 
@@ -1491,6 +1492,7 @@ def build_operations_dashboard(days=30):
         'notification_response': build_notification_response_insights(days=days),
         'order_stage_flow': build_order_stage_flow(days=days, now=now),
         'supply_lifecycle': build_supply_lifecycle(days=days, now=now),
+        'task_run_health': build_task_run_health(days=days, now=now),
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),
         'demand_radar': demand_radar,
         'order_statuses': order_statuses,

@@ -928,5 +928,53 @@
     {% else %}<div class="empty-inline mt-3">周期内还没有发送过生命周期提醒，调度任务执行后这里会开始统计触达与行动情况。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这里只统计「提醒之后发生」的动作，不区分是否由提醒引起：卖家完全可能在提醒前就已决定整理商品。刷新看主动刷新时间，成交看订单走到终态；编辑商品不算动作，因为任何保存都会改写更新时间。「当前仍未真正收到」用当前偏好与免打扰时段重算，不是发送当天的历史快照。</div>
 </section>
+<section class="content-card ops-panel mb-4 task-run-health-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Schedule health</span><h2>定时任务运行台账与健康统计</h2></div>
+        <span class="ops-panel-hint">调度命令过去只是跑完就走，现在每次运行都会留下记录</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>周期内运行</span><strong>{{ task_run_health.total_runs }}</strong><small>已排除预演</small></div>
+        <div{% if task_run_health.total_failed %} class="supply-lifecycle-summary-warning"{% endif %}><span>失败</span><strong>{{ task_run_health.total_failed }}</strong><small>成功率 {% if task_run_health.success_rate %}{{ task_run_health.success_rate|floatformat }}%{% else %}—{% endif %}</small></div>
+        <div{% if task_run_health.stale_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>超过 {{ task_run_health.stale_after_days }} 天没成功</span><strong>{{ task_run_health.stale_count }}</strong><small>个命令</small></div>
+        <div{% if task_run_health.failing_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>正在连续失败</span><strong>{{ task_run_health.failing_count }}</strong><small>个命令</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各命令运行情况</strong><span>按最近一次运行排序，静默天数从上次成功算起</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>命令</th><th>周期内运行</th><th>失败</th><th>最近状态</th><th>最近运行</th><th>静默</th><th>连续失败</th><th>平均耗时</th><th>累计处理</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_health.commands %}
+                    <tr>
+                        <td data-label="命令">{{ row.name }}</td>
+                        <td data-label="周期内运行">{{ row.run_count }}</td>
+                        <td data-label="失败">{{ row.failed_count }}</td>
+                        <td data-label="最近状态">{% if row.last_status == 'failed' %}<span class="supply-lifecycle-flag">失败</span>{% elif row.last_status == 'succeeded' %}成功{% else %}<span class="text-muted">无记录</span>{% endif %}</td>
+                        <td data-label="最近运行">{% if row.last_run_at %}{{ row.last_run_at|date:'m-d H:i' }}{% else %}—{% endif %}</td>
+                        <td data-label="静默">{% if row.is_stale %}<span class="supply-lifecycle-flag">{{ row.silence_label }}</span>{% else %}{{ row.silence_label }}{% endif %}</td>
+                        <td data-label="连续失败">{% if row.consecutive_failures %}<span class="supply-lifecycle-flag">{{ row.consecutive_failures }} 次</span>{% else %}0{% endif %}</td>
+                        <td data-label="平均耗时">{% if row.avg_duration_ms %}{{ row.avg_duration_ms }} 毫秒{% else %}—{% endif %}</td>
+                        <td data-label="累计处理">{% for key, value in row.metrics_total.items %}{{ key }} {{ value }}{% if not forloop.last %}、{% endif %}{% empty %}—{% endfor %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if task_run_health.recommendations %}
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>调度建议</strong><span>仅在越过阈值时给出</span></div>
+        <ul>
+            {% for recommendation in task_run_health.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>静默天数按最近一次<i>成功</i>运行计算：一直失败的命令同样每天都在跑，若按任意运行计算就会把自己伪装成健康的。--dry-run 只统计发送范围、不写入任何通知，默认不计入成功率。失败记录写在独立短事务里，业务事务回滚也不会带走失败证据，异常仍会原样抛出，不会因为接了台账就被吞掉。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

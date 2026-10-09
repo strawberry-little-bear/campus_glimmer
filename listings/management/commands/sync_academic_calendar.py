@@ -5,6 +5,7 @@ from listings.academic_calendar import (
     refresh_academic_term_snapshots,
 )
 from listings.models import AcademicTerm
+from listings.task_runs import normalise_metrics, record_task_run
 
 
 class Command(BaseCommand):
@@ -25,34 +26,38 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        ensure_phases = options.get('ensure_phases')
-        refresh_snapshots = options.get('refresh_snapshots')
-        if not ensure_phases and not refresh_snapshots:
-            ensure_phases = True
-            refresh_snapshots = True
+        with record_task_run('sync_academic_calendar') as run:
+            ensure_phases = options.get('ensure_phases')
+            refresh_snapshots = options.get('refresh_snapshots')
+            if not ensure_phases and not refresh_snapshots:
+                ensure_phases = True
+                refresh_snapshots = True
 
-        slug = options.get('term_slug')
-        terms = AcademicTerm.objects.filter(is_active=True).order_by('-starts_on')
-        if slug:
-            terms = terms.filter(slug=slug)
-        terms = list(terms)
+            slug = options.get('term_slug')
+            terms = AcademicTerm.objects.filter(is_active=True).order_by('-starts_on')
+            if slug:
+                terms = terms.filter(slug=slug)
+            terms = list(terms)
 
-        if not terms:
-            self.stdout.write(self.style.WARNING('没有找到启用中的学期，未做任何处理。'))
-            return
+            if not terms:
+                self.stdout.write(self.style.WARNING('没有找到启用中的学期，未做任何处理。'))
+                return
 
-        created_phases = 0
-        if ensure_phases:
-            for term in terms:
-                created_phases += ensure_default_phases(term)
+            created_phases = 0
+            if ensure_phases:
+                for term in terms:
+                    created_phases += ensure_default_phases(term)
 
-        snapshots = 0
-        if refresh_snapshots:
-            snapshots = refresh_academic_term_snapshots()
+            snapshots = 0
+            if refresh_snapshots:
+                snapshots = refresh_academic_term_snapshots()
 
-        parts = [f'处理学期 {len(terms)} 个']
-        if ensure_phases:
-            parts.append(f'新增阶段 {created_phases} 条')
-        if refresh_snapshots:
-            parts.append(f'刷新阶段快照 {snapshots} 条')
-        self.stdout.write(self.style.SUCCESS('，'.join(parts) + '。'))
+            # 台账只认可比较的标量，这里把新增阶段与刷新快照合成一个处理量。
+            run.metrics = normalise_metrics({'marked': created_phases + snapshots})
+
+            parts = [f'处理学期 {len(terms)} 个']
+            if ensure_phases:
+                parts.append(f'新增阶段 {created_phases} 条')
+            if refresh_snapshots:
+                parts.append(f'刷新阶段快照 {snapshots} 条')
+            self.stdout.write(self.style.SUCCESS('，'.join(parts) + '。'))
