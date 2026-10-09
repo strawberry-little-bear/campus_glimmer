@@ -3531,7 +3531,7 @@ def mark_all_activity_read(request):
         with transaction.atomic():
             notification_count = Notification.objects.filter(
                 recipient=request.user, is_read=False,
-            ).update(is_read=True)
+            ).update(is_read=True, read_at=timezone.now())
             message_count = PrivateMessage.objects.filter(
                 receiver=request.user, is_read=False,
             ).update(is_read=True)
@@ -3610,8 +3610,7 @@ def mark_notification_read(request, notification_id):
         recipient=request.user,
     )
     if request.method == 'POST' and not notification.is_read:
-        notification.is_read = True
-        notification.save(update_fields=['is_read'])
+        notification.mark_read()
 
     next_url = request.POST.get('next', '').strip()
     if not next_url or not url_has_allowed_host_and_scheme(
@@ -3629,7 +3628,7 @@ def mark_all_notifications_read(request):
         Notification.objects.filter(
             recipient=request.user,
             is_read=False,
-        ).update(is_read=True)
+        ).update(is_read=True, read_at=timezone.now())
         messages.success(request, '所有通知已标记为已读。')
     return redirect('notification_list')
 
@@ -3648,7 +3647,7 @@ def mark_selected_notifications_read(request):
             recipient=request.user,
             is_read=False,
             id__in=notification_ids,
-        ).update(is_read=True)
+        ).update(is_read=True, read_at=timezone.now())
         if updated_count:
             messages.success(request, f'已将 {updated_count} 条通知标记为已读。')
         else:

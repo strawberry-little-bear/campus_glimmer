@@ -583,5 +583,103 @@
     {% else %}<div class="empty-inline mt-3">还没有配置学期日历。在后台「学期日历」中录入起止日期后，这里会按阶段展示交易高峰。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>阶段按「开学两周 / 常规教学 / 考试周 / 毕业季」等偏移天数划分，偏移量可在后台调整；阶段之间的对比说明的是供给节律，不代表单个用户的因果结论。</div>
 </section>
+<section class="content-card ops-panel mb-4 notification-response-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Response quality</span><h2>通知处理时效与触达质量</h2></div>
+        <span class="ops-panel-hint">区分「送达」与「被处理」，衡量每种提醒的真实价值</span>
+    </div>
+    {% if notification_response.has_data %}
+    <div class="notification-response-summary">
+        <div><span>周期发送</span><strong>{{ notification_response.summary.sent }}</strong><small>去重后的通知条数</small></div>
+        <div><span>已处理</span><strong>{{ notification_response.summary.handled }}</strong><small>处理率 {{ notification_response.summary.handling_rate }}%</small></div>
+        <div><span>中位处理时长</span><strong>{{ notification_response.summary.median_label }}</strong><small>P90 {{ notification_response.summary.p90_label }}</small></div>
+        <div class="notification-response-warning"><span>超一周未处理</span><strong>{{ notification_response.summary.stale_unread }}</strong><small>占未读 {{ notification_response.summary.unread }} 条</small></div>
+    </div>
+
+    <div class="notification-response-critical mt-3">
+        <div class="notification-response-critical-heading">
+            <strong>交易关键类通知</strong>
+            <span>直接影响成交与交付的提醒，单独看处理率</span>
+        </div>
+        <div class="notification-response-critical-stats">
+            <span>覆盖类型 <strong>{{ notification_response.critical_summary.count }}</strong> 种</span>
+            <span>发送 <strong>{{ notification_response.critical_summary.sent }}</strong> 条</span>
+            <span>已读 <strong>{{ notification_response.critical_summary.read }}</strong> 条</span>
+            <span>已读率 <strong>{{ notification_response.critical_summary.read_rate }}%</strong></span>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-7">
+            <div class="notification-response-block">
+                <div class="notification-response-block-heading"><strong>处理时长分布</strong><span>共 {{ notification_response.latency_total }} 条已处理</span></div>
+                <ul class="notification-response-buckets">
+                    {% for bucket in notification_response.latency_buckets %}
+                    <li>
+                        <span class="notification-response-bucket-label">{{ bucket.label }}</span>
+                        <span class="notification-response-bucket-track"><span style="width: {% widthratio bucket.count notification_response.latency_total 100 %}%;"></span></span>
+                        <span class="notification-response-bucket-value">{{ bucket.count }} 条<small>{{ bucket.share }}%</small></span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="notification-response-block">
+                <div class="notification-response-block-heading"><strong>发送与处理时段</strong><span>找出没人处理的发送时间</span></div>
+                <div class="notification-response-hours">
+                    {% for point in notification_response.hour_profile %}
+                    <span class="notification-response-hour" title="{{ point.label }} 发送 {{ point.sent }} 条 / 处理 {{ point.read }} 条">
+                        <span class="notification-response-hour-bar" style="height: {% widthratio point.sent notification_response.hour_max 100 %}%;"></span>
+                        {% if point.read %}<span class="notification-response-hour-dot"></span>{% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+                <div class="notification-response-hours-legend"><span><i class="notification-response-hour-bar"></i>发送量</span><span><i class="notification-response-hour-dot"></i>该时段有处理记录</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ops-table-wrap mt-3">
+        <table class="table ops-table align-middle mb-0">
+            <thead><tr><th>通知类型</th><th>发送</th><th>已读</th><th>已读率</th><th>平均处理时长</th><th>最快 / 最慢</th><th>状态</th></tr></thead>
+            <tbody>
+                {% for row in notification_response.kind_rows %}
+                <tr>
+                    <td><strong>{{ row.label }}</strong>{% if row.is_business_critical %}<span class="notification-response-critical-badge">交易关键</span>{% endif %}<small class="d-block text-muted">{{ row.kind }}</small></td>
+                    <td>{{ row.sent }}</td>
+                    <td>{{ row.read }}<small class="d-block text-muted">未读 {{ row.unread }}</small></td>
+                    <td>{{ row.read_rate }}%</td>
+                    <td>{{ row.avg_label }}</td>
+                    <td>{{ row.fastest_label }}<small class="d-block text-muted">最长 {{ row.slowest_label }}</small></td>
+                    <td>{% if row.needs_attention %}<span class="notification-response-attention">需关注</span>{% else %}<span class="notification-response-healthy">正常</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if notification_response.attention_rows %}
+    <div class="notification-response-attention-list mt-3">
+        <div class="notification-response-block-heading"><strong>需要关注的类型</strong><span>已读率低于 50% 或平均处理时长超过一周</span></div>
+        <ul>
+            {% for row in notification_response.attention_rows %}
+            <li><strong>{{ row.label }}</strong><span>已读率 {{ row.read_rate }}% · 平均 {{ row.avg_label }}</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="notification-response-recommendations mt-3">
+        <div class="notification-response-block-heading"><strong>运营建议</strong><span>基于本周期实测数据生成</span></div>
+        <ul>
+            {% for recommendation in notification_response.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有通知数据，发送第一条提醒后这里会开始统计处理时效。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>处理时长按「标记已读时间 − 通知创建时间」计算，反映的是用户查看并处理提醒的快慢，不代表交易本身是否完成；超一周未处理视为已忽略。</div>
+</section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

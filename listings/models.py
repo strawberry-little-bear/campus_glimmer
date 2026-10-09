@@ -906,6 +906,10 @@ class Notification(models.Model):
     message = models.CharField('通知内容', max_length=255)
     target_url = models.CharField('跳转地址', max_length=255, blank=True)
     is_read = models.BooleanField('已读', default=False)
+    read_at = models.DateTimeField(
+        '阅读时间', null=True, blank=True,
+        help_text='标记为已读的时间，用于统计各类通知的实际处理时效。',
+    )
     snoozed_until = models.DateTimeField(
         '延后至', null=True, blank=True,
         help_text='在这个时间之前不计入未读提醒，适合暂时不方便处理的事项。',
@@ -924,6 +928,7 @@ class Notification(models.Model):
             models.Index(fields=['recipient', '-created_at']),
             models.Index(fields=['recipient', 'kind', 'dedupe_key', 'is_read']),
             models.Index(fields=['recipient', 'is_read', 'snoozed_until', '-created_at']),
+            models.Index(fields=['recipient', 'kind', 'is_read', 'read_at']),
         ]
 
     @property
@@ -933,6 +938,46 @@ class Notification(models.Model):
             and self.snoozed_until
             and self.snoozed_until > timezone.now()
         )
+
+    def mark_read(self, *, now=None):
+        """Mark this notification as read and stamp when it happened.
+
+        Both fields are written together so the dashboard can measure how
+        long each notification type actually takes to be handled. Marking
+        an already read notification keeps its original timestamp.
+        """
+        if self.is_read and self.read_at:
+            return False
+        self.is_read = True
+        self.read_at = now or timezone.now()
+        self.save(update_fields=['is_read', 'read_at', 'snoozed_until'])
+        return True
+
+    @property
+    def response_seconds(self):
+        """Seconds between delivery and reading, or None while unread."""
+        if not self.is_read or not self.read_at:
+            return None
+        return max((self.read_at - self.created_at).total_seconds(), 0)
+
+    @property
+    def age_seconds(self):
+        """Seconds since this notification arrived, for stale reminders."""
+        if not self.created_at:
+            return None
+        return max((timezone.now() - self.created_at).total_seconds(), 0)
+
+    @property
+    def is_stale(self):
+        """Whether an unread notification has been waiting for over a week.
+
+        A week is the point where a reminder stops being useful and starts
+        inflating the unread badge, so the notification list surfaces a gentle
+        hint instead of letting it sit there silently.
+        """
+        if self.is_read or not self.created_at:
+            return False
+        return (timezone.now() - self.created_at) > timedelta(days=7)
 
     def __str__(self):
         return f'{self.recipient.username} · {self.title}'
