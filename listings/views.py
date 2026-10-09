@@ -39,6 +39,7 @@ from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
+from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
 from .meeting_scheduling import (
     find_appointment_conflicts,
     recommend_meeting_locations,
@@ -1924,6 +1925,39 @@ def browsing_history(request):
 
 
 @login_required
+def refresh_item(request, item_id):
+    """Push a listing back to the front of the browse order.
+
+    Refreshing is deliberately rate limited: it exists so sellers can promote
+    a listing they have genuinely improved, not to let anyone pin a listing
+    to the top permanently.  The limits live in the lifecycle module and are
+    explained back to the seller when a refresh is rejected.
+    """
+    item = get_object_or_404(Item, pk=item_id, seller=request.user)
+    if request.method != 'POST':
+        return redirect('my_items')
+
+    can_refresh, reason = _refresh_state(item, now=timezone.now())
+    if not can_refresh:
+        messages.warning(request, reason)
+        return redirect('my_items')
+
+    now = timezone.now()
+    with transaction.atomic():
+        locked = Item.objects.select_for_update().get(pk=item.pk)
+        can_refresh, reason = _refresh_state(locked, now=now)
+        if not can_refresh:
+            messages.warning(request, reason)
+            return redirect('my_items')
+        locked.last_refreshed_at = now
+        locked.refresh_count = locked.refresh_count + 1
+        locked.save(update_fields=['last_refreshed_at', 'refresh_count', 'updated_at'])
+
+    messages.success(request, f'已刷新《{item.title}》，商品会重新回到列表前排。')
+    return redirect('my_items')
+
+
+@login_required
 def my_items(request):
     items = Item.objects.filter(seller=request.user).select_related(
         'category', 'location', 'campaign',
@@ -1932,9 +1966,16 @@ def my_items(request):
     campaigns = CampusCampaign.objects.filter(is_active=True).filter(
         Q(ends_at__isnull=True) | Q(ends_at__gt=now),
     ).order_by('-starts_at', 'title')
+    lifecycle = build_seller_lifecycle(request.user)
+    diagnoses_by_id = {row.item_id: row for row in lifecycle['diagnoses']}
+    # 把诊断结果挂到商品对象上，模板里可以直接用 item.lifecycle_diagnosis，
+    # 不需要额外注册模板过滤器。
+    for item in items:
+        item.lifecycle_diagnosis = diagnoses_by_id.get(item.pk)
     return render(request, 'listings/my_items.html', {
         'items': items,
         'campaigns': campaigns,
+        'lifecycle': lifecycle,
         'title': '我的商品',
     })
 

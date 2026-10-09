@@ -145,6 +145,21 @@ class Item(models.Model):
     )
     created_at = models.DateTimeField('发布时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
+    last_refreshed_at = models.DateTimeField(
+        '最近刷新时间', null=True, blank=True,
+        help_text='卖家主动刷新上架的时间；未刷新过时为空，按发布时间计算新鲜度。',
+    )
+    refresh_count = models.PositiveIntegerField(
+        '刷新次数', default=0, help_text='记录卖家主动刷新次数，用于避免频繁刷屏。',
+    )
+    attention_reminder_sent_at = models.DateTimeField(
+        '关注放缓提醒时间', null=True, blank=True,
+        help_text='最近一次向卖家发送“关注放缓”建议提醒的时间，用于控制提醒频率。',
+    )
+    price_drop_reminder_sent_at = models.DateTimeField(
+        '降价提醒时间', null=True, blank=True,
+        help_text='最近一次向卖家发送降价建议提醒的时间。',
+    )
 
     @property
     def is_expired(self):
@@ -153,6 +168,19 @@ class Item(models.Model):
     @property
     def is_available_now(self):
         return self.status == 'available' and not self.is_expired
+
+    @property
+    def last_active_at(self):
+        """最近一次让商品重新回到列表前排的时间。"""
+        return self.last_refreshed_at or self.created_at
+
+    @property
+    def freshness_age_days(self):
+        """距离最近一次发布或刷新的天数，用于判断商品是否已经沉底。"""
+        if not self.last_active_at:
+            return 0
+        delta = timezone.now() - self.last_active_at
+        return max(0, delta.days)
 
     def __str__(self):
         return self.title

@@ -9,6 +9,57 @@
     <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
 </div>
 
+
+{% if lifecycle.summary.total %}
+<section class="content-card lifecycle-panel mb-4" aria-label="商品生命周期诊断">
+    <div class="lifecycle-panel-heading">
+        <div>
+            <span class="eyebrow eyebrow-soft">Listing lifecycle</span>
+            <h2 class="mt-2">商品生命周期诊断</h2>
+            <p>按发布与刷新时间、展示截止时间和公开互动信号，把每件商品分成不同阶段，并说明判断依据和建议动作。这里只统计你自己商品的公开数据。</p>
+        </div>
+        <a href="{% url 'circular_impact_report' %}" class="btn btn-outline-primary btn-sm">查看循环影响力</a>
+    </div>
+
+    <div class="lifecycle-summary">
+        <div><span>在管商品</span><strong>{{ lifecycle.summary.total }}</strong><small>含已下架与已成交</small></div>
+        <div{% if lifecycle.summary.attention %} class="lifecycle-summary-warning"{% endif %}><span>需要决策</span><strong>{{ lifecycle.summary.attention }}</strong><small>关注放缓、沉底或即将到期</small></div>
+        <div><span>新鲜 / 正常在售</span><strong>{{ lifecycle.summary.fresh }} / {{ lifecycle.summary.active }}</strong><small>7 天内发布为新鲜期</small></div>
+        <div><span>可刷新</span><strong>{{ lifecycle.summary.refreshable }}</strong><small>受刷新频率限制</small></div>
+    </div>
+
+    {% if lifecycle.attention %}
+    <div class="lifecycle-attention">
+        <div class="lifecycle-attention-heading">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            <strong>建议尽快处理</strong>
+            <span>按紧急程度排序，最多列出前 5 件</span>
+        </div>
+        <ul>
+            {% for row in lifecycle.attention|slice:":5" %}
+            <li>
+                <a href="{% url 'item_detail' row.item_id %}">{{ row.title }}</a>
+                <span class="lifecycle-tag lifecycle-tag-{{ row.tone }}">{{ row.level_label }}</span>
+                <span>{{ row.actions.0 }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="lifecycle-levels">
+        <span class="lifecycle-level lifecycle-level-fresh"><i></i>新鲜在售 <strong>{{ lifecycle.summary.fresh }}</strong></span>
+        <span class="lifecycle-level lifecycle-level-active"><i></i>正常在售 <strong>{{ lifecycle.summary.active }}</strong></span>
+        <span class="lifecycle-level lifecycle-level-slowing"><i></i>关注放缓 <strong>{{ lifecycle.summary.slowing }}</strong></span>
+        <span class="lifecycle-level lifecycle-level-stale"><i></i>沉底较久 <strong>{{ lifecycle.summary.stale }}</strong></span>
+        <span class="lifecycle-level lifecycle-level-expiring"><i></i>即将到期 <strong>{{ lifecycle.summary.expiring }}</strong></span>
+        <span class="lifecycle-level lifecycle-level-archived"><i></i>已下架或已成交 <strong>{{ lifecycle.summary.archived }}</strong></span>
+    </div>
+
+    <p class="lifecycle-note">诊断规则完全公开：7 天内为新鲜期，21 天后关注通常开始放缓，45 天后视为沉底；展示截止前 3 天会提醒延期。刷新有频率限制（每天最多 1 次、每月最多 4 次），用于奖励真正更新过的商品，而不是让某件商品长期占据前排。</p>
+</section>
+{% endif %}
+
 {% if items %}
 <div class="content-card bulk-campaign-toolbar mb-4">
     <div>
@@ -77,6 +128,22 @@
                                     <span class="badge {% if item.status == 'available' %}bg-success{% elif item.status == 'reserved' %}bg-warning{% else %}bg-secondary{% endif %}">
                                         {{ item.get_status_display }}
                                     </span>
+                                    {% with row=item.lifecycle_diagnosis %}
+                                    {% if row %}
+                                    <div class="lifecycle-diagnosis mt-1">
+                                        <span class="lifecycle-tag lifecycle-tag-{{ row.tone }}">{{ row.level_label }}</span>
+                                        <small class="text-muted">已发布 {{ row.age_days }} 天{% if row.days_until_expiry is not None %} · 剩 {{ row.days_until_expiry }} 天到期{% endif %}</small>
+                                    </div>
+                                    <ul class="lifecycle-reasons">
+                                        {% for reason in row.reasons %}<li>{{ reason }}</li>{% endfor %}
+                                    </ul>
+                                    <div class="lifecycle-signal">
+                                        <span>{{ row.signals.views }} 次浏览</span>
+                                        <span>{{ row.signals.favorites }} 次收藏</span>
+                                        <span>{{ row.signals.orders }} 次预约</span>
+                                    </div>
+                                    {% endif %}
+                                    {% endwith %}
                                 </td>
                                 <td>{{ item.created_at|date:"Y-m-d" }}</td>
                                 <td>
@@ -85,6 +152,16 @@
                                         <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success">状态</a>
                                         <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
                                     </div>
+                                    {% with row=item.lifecycle_diagnosis %}
+                                    {% if row.can_refresh %}
+                                    <form method="post" action="{% url 'refresh_item' item.id %}" class="lifecycle-refresh-form mt-1">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-success btn-sm w-100"><i class="bi bi-arrow-clockwise me-1"></i>刷新到前排</button>
+                                    </form>
+                                    {% elif row.refresh_block_reason %}
+                                    <small class="text-muted d-block mt-1">{{ row.refresh_block_reason }}</small>
+                                    {% endif %}
+                                    {% endwith %}
                                 </td>
                             </tr>
                             {% empty %}
