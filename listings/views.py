@@ -2620,6 +2620,55 @@ def operations_dashboard_export(request):
         '单独计数不参与结论；此处只做统计聚合，不会提前催收。',
     ])
 
+
+    trend = dashboard['borrow_escalation_trend']
+    writer.writerow([])
+    writer.writerow(['借用催收的跨周期时效对比'])
+    writer.writerow([
+        '当前周期起始', trend['current_period_start'].strftime('%Y-%m-%d'),
+        '上一周期起始', trend['previous_period_start'].strftime('%Y-%m-%d'),
+        '周期天数', trend['days'],
+        '最小样本门槛', trend['min_sample_size'],
+        '方向阈值（百分点）', trend['trend_delta_points'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '指标', '本周期', '上一周期', '差值', '方向',
+    ])
+    for row in trend['metric_rows']:
+        writer.writerow([
+            row['label'],
+            '' if row['current'] is None else row['current'],
+            '' if row['previous'] is None else row['previous'],
+            row['delta_display'],
+            row['direction_label'],
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '本周期借用', trend['current']['borrow_count'],
+        '本周期发生过升级', trend['current']['escalated_count'],
+        '本周期闭环', trend['current']['resolved_count'],
+        '上一周期借用', trend['previous']['borrow_count'],
+        '上一周期发生过升级', trend['previous']['escalated_count'],
+        '上一周期闭环', trend['previous']['resolved_count'],
+    ])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([trend['summary']])
+    writer.writerow([
+        '周期按本地午夜切分，与搜索趋势面板同一个函数；分子分母都按同一笔借用归期，否则调度器跑过来就会抬高升级率。',
+    ])
+    writer.writerow([
+        '升级率的分母含从未升级过的借用；催收命令只走 120 天回看窗口，超出窗口的订单会永远留在分母里，表现为升级率偏低。',
+    ])
+    writer.writerow([
+        '闭环时长从真正发生的那一级催收起算，不从到期日起算；未闭环订单的逾期天数属于快照，不参与对比——它只会随时间变老。',
+    ])
+    writer.writerow([
+        '此处只报告，不提前催收、不改动催收阶梯、不打标记借用人。',
+    ])
+
     return response
 
 def search_items(request):

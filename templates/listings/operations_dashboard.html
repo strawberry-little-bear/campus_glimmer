@@ -1101,6 +1101,43 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_escalation.summary_text }}三级阶梯各有不同受众：一级只告诉借用方，二级同时告知双方平台已开始记录，三级上报治理队列并离开双方私域；跨级追上来时会补发二级那一声，但不会补播被跳过的一级。平台只记录和通知，不取消订单、不代扣押金。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 borrow-escalation-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Escalation trend</span><h2>借用催收的跨周期时效对比</h2></div>
+        <span class="ops-panel-hint">同样的两个周期、同一把时钟：借用量、升级率和闭环时长，各自与上一个等长周期相比</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>本周期借用</span><strong>{{ borrow_escalation_trend.current.borrow_count }}</strong><small>最近 {{ borrow_escalation_trend.days }} 天</small></div>
+        <div><span>上一周期借用</span><strong>{{ borrow_escalation_trend.previous.borrow_count }}</strong><small>再往前 {{ borrow_escalation_trend.days }} 天</small></div>
+        <div{% if borrow_escalation_trend.current.level_three_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>本周期拖到第三级</span><strong>{{ borrow_escalation_trend.current.level_three_count }}</strong><small>{% if borrow_escalation_trend.current.level_three_rate != None %}占本周期 {{ borrow_escalation_trend.current.level_three_rate|floatformat }}%{% else %}暂无借用{% endif %}</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>逐项对比</strong><span>占比的分母都是所在周期的借用总数，含从未升级的借用；低于 {{ borrow_escalation_trend.min_sample_size }} 笔的周期只标记样本不足，不给方向</span></div>
+        {% if borrow_escalation_trend.has_data %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>变化</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_escalation_trend.metric_rows %}
+                    <tr{% if not borrow_escalation_trend.has_sample and row.direction == 'insufficient' %} class="text-muted"{% endif %}>
+                        <td data-label="指标"><strong>{{ row.label }}</strong></td>
+                        <td data-label="本周期">{% if row.current != None %}{{ row.current }}{% else %}—{% endif %}</td>
+                        <td data-label="上一周期">{% if row.previous != None %}{{ row.previous }}{% else %}—{% endif %}</td>
+                        <td data-label="变化"><span class="trend-delta is-{{ row.direction }}">{{ row.delta_display }}</span></td>
+                        <td data-label="方向"><span class="trend-direction is-{{ row.direction }}">{{ row.direction_label }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty-inline">两个周期内都没有借用订单，暂时没有可对比的催收时效。</div>{% endif %}
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_escalation_trend.summary }}口径：周期按本地午夜切分，与搜索趋势一致；闭环时长从真正发生的那一级催收起算，不从到期日起算。未闭环订单的逾期天数属于快照，不参与对比——那只会随时间变老，与队列好坏无关。本面板只报告，不提前催收、不改动催收阶梯。</div>
+</section>
+
+
 <section class="content-card ops-panel mb-4 borrow-risk-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Borrow risk</span><h2>借用逾期风险分层</h2></div>

@@ -22,6 +22,7 @@ from .task_run_health import build_task_run_health
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
 from .borrow_escalation import build_borrow_escalation_report
 from .borrow_risk import build_borrow_risk
+from .borrow_escalation_trend import build_borrow_escalation_trend
 from .borrow_rhythm import build_borrow_rhythm
 
 
@@ -1578,6 +1579,7 @@ def build_operations_dashboard(days=30):
     academic_calendar = build_academic_calendar(day=today)
     borrow_risk = build_borrow_risk(days=days, now=now)
     borrow_rhythm = build_borrow_rhythm(days=days, now=now)
+    borrow_escalation_trend = build_borrow_escalation_trend(days=days, now=now)
 
 
     return {
@@ -1614,6 +1616,7 @@ def build_operations_dashboard(days=30):
         'borrow_escalation': build_borrow_escalation_report(days=days, now=now),
         'borrow_risk': borrow_risk,
         'borrow_rhythm': borrow_rhythm,
+        'borrow_escalation_trend': borrow_escalation_trend,
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),
         'demand_radar': demand_radar,
         'demand_radar_outcomes': demand_radar_outcomes,

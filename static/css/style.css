@@ -1688,6 +1688,75 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+/* 借用催收的跨周期时效对比：两列同期数加一列差值，差值列是读者真正读的那一列 */
+.borrow-escalation-trend-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.borrow-escalation-trend-panel .supply-lifecycle-table th:nth-child(n+2),
+.borrow-escalation-trend-panel .supply-lifecycle-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 差值列跟方向词走颜色：上升是催收变多，下降是闭环变慢，都是要人看一眼的 */
+.borrow-escalation-trend-panel .trend-delta {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.borrow-escalation-trend-panel .trend-delta.is-rising {
+    color: #b4632a;
+}
+
+.borrow-escalation-trend-panel .trend-delta.is-falling {
+    color: #2f6f4f;
+}
+
+.borrow-escalation-trend-panel .trend-delta.is-flat,
+.borrow-escalation-trend-panel .trend-delta.is-insufficient {
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.borrow-escalation-trend-panel .trend-delta.is-new,
+.borrow-escalation-trend-panel .trend-delta.is-gone {
+    color: #7d8d83;
+    font-weight: 500;
+}
+
+/* 方向词单独成列，样本不足时靠它说明"这里没有可比的上一期" */
+.borrow-escalation-trend-panel .trend-direction {
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.borrow-escalation-trend-panel .trend-direction.is-rising {
+    color: #b4632a;
+}
+
+.borrow-escalation-trend-panel .trend-direction.is-falling {
+    color: #2f6f4f;
+}
+
+.borrow-escalation-trend-panel .trend-direction.is-insufficient,
+.borrow-escalation-trend-panel .trend-direction.is-new,
+.borrow-escalation-trend-panel .trend-direction.is-gone,
+.borrow-escalation-trend-panel .trend-direction.is-flat {
+    color: #6c757d;
+}
+
+.borrow-escalation-trend-panel .supply-lifecycle-table tr.text-muted strong {
+    font-weight: 600;
+}
+
+@media (max-width: 767px) {
+    .borrow-escalation-trend-panel .supply-lifecycle-table th,
+    .borrow-escalation-trend-panel .supply-lifecycle-table td {
+        white-space: normal;
+    }
+}
+
 /* 治理工作台：三类队列共用一套卡片语言，超期用颜色而不是单独文案强调 */
 .governance-summary {
     display: grid;
