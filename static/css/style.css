@@ -1548,6 +1548,33 @@ a { color: inherit; text-decoration: none; }
 }
 
 
+/* 借用逾期催收阶梯：完全复用定时任务台账那一套表格语言，只把等级徽章和
+   窄屏下的列宽调成七列需要的形态，不新造一套视觉规则。 */
+.borrow-escalation-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.borrow-escalation-table th:nth-child(3),
+.borrow-escalation-table td:nth-child(3),
+.borrow-escalation-table th:nth-child(5),
+.borrow-escalation-table td:nth-child(5) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.borrow-escalation-table th:nth-child(7),
+.borrow-escalation-table td:nth-child(7) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+    .borrow-escalation-table th,
+    .borrow-escalation-table td {
+        white-space: normal;
+    }
+}
+
 /* 治理工作台：三类队列共用一套卡片语言，超期用颜色而不是单独文案强调 */
 .governance-summary {
     display: grid;

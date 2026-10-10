@@ -1,6 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from listings.order_maintenance import DEFAULT_REMINDER_HOURS, process_borrow_due_notifications, process_order_timeouts
+from listings.borrow_escalation import escalate_overdue_borrows
 from listings.task_runs import normalise_metrics, record_task_run
 
 
@@ -19,12 +20,18 @@ class Command(BaseCommand):
         with record_task_run('process_order_timeouts') as run:
             result = process_order_timeouts(reminder_hours=options['reminder_hours'])
             borrow_result = process_borrow_due_notifications(reminder_hours=options['reminder_hours'])
+            escalation_result = escalate_overdue_borrows()
+            # 台账只保存固定的一组可比较标量，催收阶梯的三级分布留在命令输出里，
+            # 汇总成 marked 才能和同一条命令里的其他动作摆到同一列比较。
             run.metrics = normalise_metrics({
                 'reminded': result['reminded'] + borrow_result['reminded'],
                 'expired': result['expired'] + borrow_result['overdue'],
+                'marked': escalation_result['escalated'],
             })
         self.stdout.write(
             self.style.SUCCESS(
-                f"已发送 {result['reminded']} 条预约超时提醒、{borrow_result['reminded']} 条借用到期提醒，自动释放 {result['expired']} 笔预约，记录 {borrow_result['overdue']} 笔借用逾期。"
+                f"已发送 {result['reminded']} 条预约超时提醒、{borrow_result['reminded']} 条借用到期提醒，自动释放 {result['expired']} 笔预约，记录 {borrow_result['overdue']} 笔借用逾期；"
+                f"催收升级 {escalation_result['escalated']} 笔（一级 {escalation_result['level_one']}、二级 {escalation_result['level_two']}、三级 {escalation_result['level_three']}），"
+                f"闭环 {escalation_result['resolved']} 笔，仍在跟进 {escalation_result['tracked']} 笔。"
             )
         )

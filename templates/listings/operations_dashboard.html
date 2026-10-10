@@ -1016,6 +1016,45 @@
     {% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>静默天数按最近一次<i>成功</i>运行计算：一直失败的命令同样每天都在跑，若按任意运行计算就会把自己伪装成健康的。--dry-run 只统计发送范围、不写入任何通知，默认不计入成功率。失败记录写在独立短事务里，业务事务回滚也不会带走失败证据，异常仍会原样抛出，不会因为接了台账就被吞掉。</div>
 </section>
+<section class="content-card ops-panel mb-4 borrow-escalation-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Borrow recovery</span><h2>借用逾期催收阶梯</h2></div>
+        <span class="ops-panel-hint">逾期提醒只发一次，这一层负责把沉默的借用一级一级推下去</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div{% if borrow_escalation.summary.open_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>待催收</span><strong>{{ borrow_escalation.summary.open_count }}</strong><small>已升级且未闭环</small></div>
+        <div{% if borrow_escalation.summary.level_three_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>已上报治理队列</span><strong>{{ borrow_escalation.summary.level_three_count }}</strong><small>第三级</small></div>
+        <div><span>周期内升级</span><strong>{{ borrow_escalation.summary.period_count }}</strong><small>最近 {{ borrow_escalation.days }} 天</small></div>
+        <div><span>周期内闭环</span><strong>{{ borrow_escalation.summary.resolved_count }}</strong><small>归还即关闭，不留污点</small></div>
+        <div{% if borrow_escalation.summary.max_overdue_days %} class="supply-lifecycle-summary-warning"{% endif %}><span>最长逾期</span><strong>{% if borrow_escalation.summary.max_overdue_days != None %}{{ borrow_escalation.summary.max_overdue_days }} 天{% else %}—{% endif %}</strong><small>仍在跟进中的订单</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>催收中的借用订单</strong><span>按最近一次升级时间倒序，最多 {{ borrow_escalation.rows|length }} 笔</span></div>
+        {% if borrow_escalation.rows %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table borrow-escalation-table">
+                <thead><tr><th>商品与订单</th><th>借用双方</th><th>逾期</th><th>当前等级</th><th>升级次数</th><th>最近升级</th><th>状态</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_escalation.rows %}
+                    <tr>
+                        <td data-label="商品与订单"><strong>{{ row.order.item.title }}</strong><small class="d-block text-muted">订单 #{{ row.order.id }} · {{ row.order.get_trade_mode_display }}</small></td>
+                        <td data-label="借用双方">{{ row.order.buyer.username }}<small class="d-block text-muted">出借 {{ row.order.seller.username }}</small></td>
+                        <td data-label="逾期">{% if row.overdue_days != None %}{{ row.overdue_days }} 天{% else %}—{% endif %}</td>
+                        <td data-label="当前等级">{% if row.level == 3 %}<span class="supply-lifecycle-flag">{{ row.level_label }}</span>{% else %}{{ row.level_label }}{% endif %}</td>
+                        <td data-label="升级次数">{{ row.escalation_count }}</td>
+                        <td data-label="最近升级">{% if row.last_escalated_at %}{{ row.last_escalated_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
+                        <td data-label="状态">{% if row.is_open %}跟进中{% else %}已闭环{% if row.resolved_at %} · {{ row.resolved_at|date:"Y-m-d" }}{% endif %}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty-inline">当前没有需要催收的借用逾期。</div>{% endif %}
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_escalation.summary_text }}三级阶梯各有不同受众：一级只告诉借用方，二级同时告知双方平台已开始记录，三级上报治理队列并离开双方私域；跨级追上来时会补发二级那一声，但不会补播被跳过的一级。平台只记录和通知，不取消订单、不代扣押金。</div>
+</section>
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>

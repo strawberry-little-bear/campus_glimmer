@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
 
 
 class ItemImageInline(admin.TabularInline):
@@ -406,3 +406,21 @@ class AcademicTermSnapshotAdmin(admin.ModelAdmin):
     search_fields = ('term__name', 'phase_label')
     readonly_fields = ('refreshed_at',)
     date_hierarchy = 'start_date'
+
+
+@admin.register(BorrowReturnEscalation)
+class BorrowReturnEscalationAdmin(admin.ModelAdmin):
+    list_display = (
+        'order', 'escalation_level', 'escalation_count', 'last_escalated_at',
+        'resolved_at', 'is_resolved_label', 'note',
+    )
+    list_filter = ('escalation_level', 'resolved_at')
+    search_fields = (
+        'order__item__title', 'order__buyer__username', 'order__seller__username',
+    )
+    readonly_fields = ('created_at', 'updated_at')
+    date_hierarchy = 'last_escalated_at'
+
+    @admin.display(description='是否闭环')
+    def is_resolved_label(self, obj):
+        return '已闭环' if obj.is_resolved else '跟进中'

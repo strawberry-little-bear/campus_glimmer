@@ -33,6 +33,7 @@ from .contributions import (
     record_order_contribution,
 )
 from .availability import notify_item_available
+from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
@@ -1370,6 +1371,9 @@ def confirm_return(request, order_id):
             locked_order.returned_at = now
             locked_order.save(update_fields=['status', 'returned_at', 'updated_at'])
             record_order_contribution(locked_order, phase='borrow_returned')
+            # 归还确认是催收阶梯的终点：这一行只负责关闭，不删记录、不改等级，
+            # 否则运营看板会继续把一笔已经还清的借用算成待办。
+            close_escalation(locked_order, now=now)
             locked_order.item.status = 'available'
             locked_order.item.save(update_fields=['status', 'updated_at'])
             OrderEvent.objects.create(
