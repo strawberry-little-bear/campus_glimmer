@@ -1680,6 +1680,71 @@ class DemandResponse(models.Model):
         return f'{self.demand.title} · {self.item.title} · {self.get_status_display()}'
 
 
+class BorrowReturnEscalation(models.Model):
+    """Track how far an overdue borrow has been escalated, and when.
+
+    The overdue notice in ``process_borrow_due_notifications`` fires exactly
+    once. After that a borrowed item can sit unreturned for weeks with the
+    platform saying nothing more, which leaves the lender waiting on private
+    messages and leaves an operator with no evidence chain when the argument
+    eventually turns into a dispute. A single notice is not a follow-up process.
+
+    Three levels, each a real step rather than a louder repeat: the borrower is
+    asked first, both parties are told the platform is recording it second, and
+    the case is surfaced to the governance queue third. Escalating to the
+    borrower twice would only be noise, so the only way past level two is to
+    leave the private channel.
+
+    The platform records and notifies. It never cancels the order and never
+    touches the deposit, because the deposit is settled offline between the two
+    students and a platform-side deduction would invent a financial
+    relationship that the two of them did not agree to.
+
+    Resolution closes the escalation rather than deleting it. Campus borrowing
+    runs on trust between classmates, so a returned item should leave no
+    permanent stain - but the fact that an escalation happened stays auditable.
+    """
+
+    LEVEL_CHOICES = (
+        (0, '未升级'),
+        (1, '已提醒借用方'),
+        (2, '已通知双方'),
+        (3, '已上报治理队列'),
+    )
+
+    order = models.OneToOneField(
+        Order, on_delete=models.CASCADE, related_name='borrow_escalation', verbose_name='借用订单',
+    )
+    escalation_level = models.PositiveSmallIntegerField('升级等级', choices=LEVEL_CHOICES, default=0)
+    last_escalated_at = models.DateTimeField('最近升级时间', null=True, blank=True)
+    escalation_count = models.PositiveSmallIntegerField('累计升级次数', default=0)
+    resolved_at = models.DateTimeField('归还闭环时间', null=True, blank=True)
+    note = models.CharField('最近一次说明', max_length=200, blank=True)
+    created_at = models.DateTimeField('建立时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '借用逾期催收'
+        verbose_name_plural = '借用逾期催收'
+        ordering = ['-last_escalated_at', '-id']
+        indexes = [
+            models.Index(fields=['escalation_level', 'last_escalated_at']),
+            models.Index(fields=['resolved_at', 'escalation_level']),
+        ]
+
+    def __str__(self):
+        return f'{self.order.item.title} · {self.get_escalation_level_display()}'
+
+    @property
+    def is_resolved(self):
+        return self.resolved_at is not None
+
+    @property
+    def is_open(self):
+        """Still waiting on the borrower: escalated but never resolved."""
+        return self.escalation_level > 0 and self.resolved_at is None
+
+
 class AcademicTerm(models.Model):
     """A dated teaching term, used to segment campus supply and demand."""
 
