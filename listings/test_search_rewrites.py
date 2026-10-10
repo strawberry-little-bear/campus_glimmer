@@ -216,3 +216,100 @@ class SearchRewriteCandidateTests(TestCase):
         self.assertEqual(export.status_code, 200)
         self.assertContains(export, '同义词候选')
         self.assertContains(export, '需人工确认后启用')
+
+
+
+class SearchSynonymFeedbackViewTests(TestCase):
+    """效果回流必须出现在运营真会看的那两个地方：页面与导出。
+
+    模块本身算得再对，如果只停留在数据库里，运营依然要在后台翻记录才能
+    知道一条同义词究竟帮上了忙还是帮了倒忙——那这个闭环等于没闭上。
+    """
+
+    def setUp(self):
+        self.now = timezone.now()
+        self.user = User.objects.create_user(username='feedback-user', password='safe-password-123')
+
+    def _search(self, term, days_ago, result_count):
+        """按距确认时刻的相对天数写入搜索记录。"""
+        record = SearchQuery.objects.create(
+            user=self.user, query=term, result_count=result_count,
+        )
+        SearchQuery.objects.filter(pk=record.pk).update(
+            created_at=self.now - timedelta(days=days_ago),
+        )
+        return record
+
+    def _make_confirmed_synonym(self, keyword, synonym, age_days=30):
+        """造一条已经确认满一个观察期的同义词。"""
+        row = SearchSynonym.objects.create(keyword=keyword, synonym=synonym)
+        SearchSynonym.objects.filter(pk=row.pk).update(
+            created_at=self.now - timedelta(days=age_days),
+        )
+        return row
+
+    def _seed_improving_pair(self):
+        """确认前全是无结果搜索，确认后都能搜到东西。"""
+        self._make_confirmed_synonym('台灯', '护眼灯')
+        for offset in range(3):
+            self._search('台灯', 42 - offset, 0)
+        for offset in range(3):
+            self._search('台灯', 28 - offset, 4)
+
+    def _staff(self, username):
+        return User.objects.create_superuser(
+            username=username, email=f'{username}@example.com', password='safe-password-123',
+        )
+
+    def test_feedback_panel_appears_on_the_insights_page(self):
+        """页面要有效果回流面板，否则运营看不到闭环。"""
+        self._seed_improving_pair()
+        self.client.force_login(self._staff('feedback-view-staff'))
+
+        response = self.client.get(reverse('search_insights'), {'days': 180})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '同义词效果回流')
+        self.assertContains(response, '无结果率下降')
+        self.assertContains(response, '台灯')
+
+    def test_feedback_panel_explains_the_disabled_exclusion(self):
+        """停用不参与统计这件事必须写在页面上，否则运营会以为数据漏了。"""
+        row = self._make_confirmed_synonym('台灯', '护眼灯', age_days=30)
+        row.is_active = False
+        row.save()
+        self.client.force_login(self._staff('feedback-disabled-staff'))
+
+        response = self.client.get(reverse('search_insights'), {'days': 180})
+
+        self.assertContains(response, '已停用的同义词不参与统计')
+
+    def test_feedback_rows_are_included_in_csv_export(self):
+        """导出要带回流列，运营才能把结论带走逐条处理。"""
+        self._seed_improving_pair()
+        self.client.force_login(self._staff('feedback-export-staff'))
+
+        export = self.client.get(reverse('search_insights_export'), {'days': 180})
+
+        self.assertEqual(export.status_code, 200)
+        self.assertContains(export, '同义词效果回流')
+        self.assertContains(export, '观察无结果率')
+        self.assertContains(export, '台灯')
+
+    def test_feedback_rows_come_before_the_candidate_section(self):
+        """导出里回流段排在候选段之前：回流是对已确认同义词的验收，早就排在待确认的候选前面，运营会先看结论。"""
+        self._seed_improving_pair()
+        self.client.force_login(self._staff('feedback-order-staff'))
+
+        export = self.client.get(reverse('search_insights_export'), {'days': 180})
+
+        content = export.content.decode('utf-8-sig')
+        # 段落标题本身就是一行，按行首匹配才不会被正文里提到这两个词的地方干扰
+        section_lines = [
+            index for index, line in enumerate(content.splitlines())
+            if line.startswith('同义词效果回流') or line.startswith('同义词候选')
+        ]
+        self.assertEqual(len(section_lines), 2)
+        # 第一个匹配到的就是回流段，它应该出现在候选段之前
+        feedback_line, candidate_line = section_lines
+        self.assertLess(feedback_line, candidate_line)

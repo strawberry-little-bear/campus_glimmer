@@ -633,6 +633,12 @@ a { color: inherit; text-decoration: none; }
 .rewrite-candidate-footnote { margin: 13px 0 0; color: #8b9a92; font-size: .69rem; line-height: 1.6; }
 .rewrite-candidate-footnote i { color: #79ad88; }
 @media (max-width: 575px) { .rewrite-candidate-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.rewrite-candidate-summary > div { min-height: 72px; padding: 11px; }.rewrite-candidate-table td { white-space: normal; } }
+/* 同义词效果回流：与候选面板同属一次搜索治理，因此沿用同一套汇总卡片与
+   表格语言，只把“结论”一列留出换行空间——它要说的话比一个标签长得多，
+   压成 nowrap 会让这一列把整张表撑破。 */
+.rewrite-candidate-panel .synonym-effect-verdict { min-width: 240px; max-width: 360px; white-space: normal; color: #6a7d73; font-size: .74rem; line-height: 1.55; }
+.rewrite-candidate-table td:nth-child(4) strong, .rewrite-candidate-table td:nth-child(5) strong { font-variant-numeric: tabular-nums; }
+
 
 .message-center-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }.message-center-toolbar h1 { color: #315746; font-size: 1.7rem; font-weight: 800; }.message-search-form { position: relative; display: flex; align-items: center; gap: 7px; }.message-search-form i { position: absolute; left: 12px; color: #8da098; }.message-search-form input { width: min(250px, 52vw); padding: 8px 10px 8px 32px; border: 1px solid var(--line); border-radius: 10px; outline: none; font-size: .78rem; }.message-search-form input:focus { border-color: #9ed4bc; box-shadow: 0 0 0 4px rgba(29, 138, 104, .08); }
 @media (max-width: 767px) { .message-center-toolbar { align-items: stretch; flex-direction: column; }.message-search-form { width: 100%; }.message-search-form input { flex: 1; width: auto; } }

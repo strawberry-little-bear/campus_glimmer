@@ -25,6 +25,7 @@ from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
 from .search_rewrites import build_search_rewrite_candidates
+from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
 from .circular_impact import build_circular_impact_report
 from .contributions import (
@@ -2576,6 +2577,7 @@ def search_insights(request):
         period_days = 30
     dashboard = build_search_insights(period_days, request.GET.get('q', ''))
     dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
+    dashboard['synonym_effects'] = build_search_synonym_effects(days=period_days)
     return render(request, 'listings/search_insights.html', dashboard)
 
 
@@ -2589,6 +2591,7 @@ def search_insights_export(request):
         period_days = 30
     dashboard = build_search_insights(period_days, request.GET.get('q', ''))
     dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
+    dashboard['synonym_effects'] = build_search_synonym_effects(days=period_days)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2621,6 +2624,20 @@ def search_insights_export(request):
             row['query'], row['search_count'], row['click_count'], row['click_rate'],
             row['zero_result_count'], row['zero_result_rate'], row['average_results'],
             row['unique_users'], row['last_searched'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['同义词效果回流', '启用', '确认时间', '基线无结果率（%）', '观察无结果率（%）', '变化（百分点）', '判定', '结论'])
+    for row in dashboard['synonym_effects']['rows']:
+        writer.writerow([
+            f"{row['keyword']} → {row['synonym']}",
+            '是' if row['is_active'] else '否',
+            f"{row['created_at']:%Y-%m-%d}",
+            row['baseline_zero_rate'],
+            row['observation_zero_rate'],
+            row['delta_points'],
+            row['outcome_label'],
+            row['verdict'],
         ])
 
     writer.writerow([])

@@ -165,7 +165,6 @@
     {% else %}<div class="empty-inline">当前周期还没有发现分类或地点维度的明显供给缺口。</div>{% endif %}
 </section>
 
-<section class="content-card ops-panel mb-4">
 <section class="content-card ops-panel mb-4 rewrite-candidate-panel">
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Query rewrites</span><h2>搜索同义词候选</h2></div><span class="ops-panel-hint">来自同一用户 30 分钟内的相邻搜索</span></div>
     <p class="search-rhythm-note mb-3"><i class="bi bi-arrow-left-right me-1"></i>学生在搜不到结果后会本能地换个说法再试一次。把同一用户"先搜 A 无结果、紧接着搜 B 有结果"的相邻记录聚合起来，就能看出大家默认把哪些词当成一回事——这些候选需要人工确认后才会成为同义词。</p>
@@ -192,6 +191,35 @@
     {% else %}<div class="empty-inline">当前周期内没有出现重复的改口行为。等更多学生用起来，或把统计周期放长一些再看看。</div>{% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 rewrite-candidate-panel">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Synonym feedback</span><h2>同义词效果回流</h2></div><span class="ops-panel-hint">对比确认前后各四两周的无结果率</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-arrow-repeat me-1"></i>同义词确认之后，搜索是否真的变好了一直没人知道。这里把每一条确认时间当成分界线，统计学生原本输入的搜索词在分界线两侧的无结果率。无结果率下降才算这条配置起了作用；基本持平往往说明这两个词本来就不指同一类东西。</p>
+    <div class="rewrite-candidate-summary">
+        <div><span>周期内确认</span><strong>{{ synonym_effects.summary.synonym_count }}</strong><small>条同义词</small></div>
+        <div class="rewrite-candidate-warning"><span>让搜索变差</span><strong>{{ synonym_effects.summary.worse_count }}</strong><small>需回头核对</small></div>
+        <div><span>明显生效</span><strong>{{ synonym_effects.summary.effective_count }}</strong><small>无结果率下降</small></div>
+        <div><span>命中率</span><strong>{% if synonym_effects.summary.hit_rate is not None %}{{ synonym_effects.summary.hit_rate }}%{% else %}&mdash;{% endif %}</strong><small>仅统计可判定样本</small></div>
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-lightbulb me-1"></i>{{ synonym_effects.summary_text }}</p>
+    {% if synonym_effects.rows %}
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><thead><tr><th>词对</th><th>状态</th><th>确认时间</th><th>基线无结果率</th><th>观察无结果率</th><th>变化</th><th>判定</th><th>结论</th></tr></thead><tbody>
+        {% for row in synonym_effects.rows %}
+        <tr>
+            <td><strong>{{ row.keyword }}</strong><small class="d-block text-muted">{{ row.synonym }}</small></td>
+            <td>{% if row.is_active %}<span class="rewrite-candidate-confidence" data-level="strong">启用</span>{% else %}<span class="rewrite-candidate-confidence" data-level="weak">已停用</span>{% endif %}</td>
+            <td>{{ row.created_at|date:"Y-m-d" }}</td>
+            <td>{% if row.baseline_zero_rate is not None %}{{ row.baseline_zero_rate }}%<small class="d-block text-muted">{{ row.baseline_searches }} 次</small>{% else %}&mdash;{% endif %}</td>
+            <td>{% if row.observation_zero_rate is not None %}{{ row.observation_zero_rate }}%<small class="d-block text-muted">{{ row.observation_searches }} 次</small>{% else %}&mdash;{% endif %}</td>
+            <td>{% if row.delta_points is not None %}{% if row.delta_points > 0 %}+{% endif %}{{ row.delta_points }}{% else %}&mdash;{% endif %}<small class="d-block text-muted">百分点</small></td>
+            <td><span class="rewrite-candidate-confidence" data-level="{% if row.outcome == 'effective' %}strong{% elif row.outcome == 'worse' %}weak{% endif %}">{{ row.outcome_label }}</span></td>
+            <td class="synonym-effect-verdict">{{ row.verdict }}</td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>已停用的同义词不参与统计：停用后的搜索变化属于市场，不属于这条配置。同时只报道已确认的同义词效果，候选本身不落库，无法统计其确认率。</p>
+    {% else %}<div class="empty-inline">当前周期内没有新确认的同义词，还没有可回流的数据。</div>{% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Action queue</span><h2>运营建议</h2></div><span class="ops-panel-hint">由搜索行为自动生成</span></div>
     {% if insights %}<div class="search-insight-grid">{% for insight in insights %}<article class="search-insight-card"><div class="search-insight-icon"><i class="bi bi-lightbulb"></i></div><div><strong>{{ insight.query }}</strong><p>{{ insight.message }}</p><a href="{% url 'item_list' %}?q={{ insight.query|urlencode }}">查看相关商品 <i class="bi bi-arrow-right"></i></a></div></article>{% endfor %}</div>{% else %}<div class="empty-inline">暂无需要跟进的搜索需求。可以扩大统计周期，或等待新的搜索记录积累。</div>{% endif %}
 </section>
