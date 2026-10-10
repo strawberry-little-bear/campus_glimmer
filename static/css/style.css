@@ -1757,6 +1757,74 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+/* 命中率趋势：和催收时效对比同一套卡片语言，但方向色镜像过来——
+   命中率上升是雷达变准，用绿；下降是雷达在衰减，用赭。 */
+.demand-hit-trend-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.demand-hit-trend-panel .supply-lifecycle-table th:nth-child(n+2),
+.demand-hit-trend-panel .supply-lifecycle-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.demand-hit-trend-panel .trend-delta {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.demand-hit-trend-panel .trend-delta.is-rising {
+    color: #2f6f4f;
+}
+
+.demand-hit-trend-panel .trend-delta.is-falling {
+    color: #b4632a;
+}
+
+.demand-hit-trend-panel .trend-delta.is-flat,
+.demand-hit-trend-panel .trend-delta.is-insufficient {
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.demand-hit-trend-panel .trend-delta.is-new,
+.demand-hit-trend-panel .trend-delta.is-gone {
+    color: #7d8d83;
+    font-weight: 500;
+}
+
+.demand-hit-trend-panel .trend-direction {
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.demand-hit-trend-panel .trend-direction.is-rising {
+    color: #2f6f4f;
+}
+
+.demand-hit-trend-panel .trend-direction.is-falling {
+    color: #b4632a;
+}
+
+.demand-hit-trend-panel .trend-direction.is-insufficient,
+.demand-hit-trend-panel .trend-direction.is-new,
+.demand-hit-trend-panel .trend-direction.is-gone,
+.demand-hit-trend-panel .trend-direction.is-flat {
+    color: #6c757d;
+}
+
+.demand-hit-trend-panel .supply-lifecycle-table tr.text-muted strong {
+    font-weight: 600;
+}
+
+@media (max-width: 767px) {
+    .demand-hit-trend-panel .supply-lifecycle-table th,
+    .demand-hit-trend-panel .supply-lifecycle-table td {
+        white-space: normal;
+    }
+}
+
 /* 治理工作台：三类队列共用一套卡片语言，超期用颜色而不是单独文案强调 */
 .governance-summary {
     display: grid;

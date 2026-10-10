@@ -2669,6 +2669,42 @@ def operations_dashboard_export(request):
         '此处只报告，不提前催收、不改动催收阶梯、不打标记借用人。',
     ])
 
+    writer.writerow([])
+    writer.writerow(['需求雷达命中率的跨周期趋势'])
+    hit_trend = dashboard['demand_radar_hit_trend']
+    writer.writerow([
+        '当前周期起始', hit_trend['current_period_start'].strftime('%Y-%m-%d'),
+        '上一周期起始', hit_trend['previous_period_start'].strftime('%Y-%m-%d'),
+        '周期天数', hit_trend['days'],
+        '最小判定任务数', hit_trend['min_judged_tasks'],
+        '方向阈值（百分点）', hit_trend['trend_delta_points'],
+    ])
+    writer.writerow([])
+    writer.writerow(['指标, 本周期, 上一周期, 差值, 方向'])
+    for row in hit_trend['metric_rows']:
+        writer.writerow([
+            row['label'],
+            '' if row['current'] is None else row['current'],
+            '' if row['previous'] is None else row['previous'],
+            row['delta_display'],
+            row['direction_label'],
+        ])
+    writer.writerow([])
+    writer.writerow([
+        '本周期创建任务', hit_trend['current']['task_count'],
+        '本周期有证据', hit_trend['current']['judged_count'],
+        '本周期命中', hit_trend['current']['converged_count'],
+        '上一周期创建任务', hit_trend['previous']['task_count'],
+        '上一周期有证据', hit_trend['previous']['judged_count'],
+        '上一周期命中', hit_trend['previous']['converged_count'],
+    ])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([hit_trend['summary']])
+    writer.writerow(['任务按创建时间归期：一个任务在创建那一刻的证据就固定了，把它算进结果落地的那个周期，等于让一个安静月继承忙碌月的成绩。'])
+    writer.writerow(['每个任务按自己的观察期结束时刻判定，所以上一周期里最早创建的任务不会被误判成还没到判定时刻而丢出分母。'])
+    writer.writerow(['命中率只统计有证据的任务；基线期或观察期搜索量不足的任务单独数出来，既不算成功也不算失败。'])
+    writer.writerow(['这里只报告，不把命中率回流到机会分——雷达学会掩盖自己的误报，比误报本身更糟。'])
     return response
 
 def search_items(request):

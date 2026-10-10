@@ -1276,6 +1276,43 @@
 
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_rhythm.summary }}两个合成桶描述的是日历覆盖率而不是节律：没有学期日历时发生的借用、落在阶段空隙里的借用，都单独计数并说出来，不摊进任何阶段——静默丢掉会缩小分母，把每个阶段的占比悄悄放大。这里只做统计聚合：考试周看起来集中借出，是给人判断的事实，不是提前催收的许可；催收时机是「同学的东西最多能丢多久」的策略，不该被一个统计数字推着走。</div>
 </section>
+
+<section class="content-card ops-panel mb-4 demand-hit-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Hit trend</span><h2>需求雷达命中率的跨周期趋势</h2></div>
+        <span class="ops-panel-hint">同一个雷达，命中率是在变准还是在衰减——两个周期都按任务创建那一刻归期，不按结果落地的周期归期</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>本周期命中率</span><strong>{% if demand_radar_hit_trend.current.hit_rate != None %}{{ demand_radar_hit_trend.current.hit_rate|floatformat }}%{% else %}—{% endif %}</strong><small>有证据的任务 {{ demand_radar_hit_trend.current.judged_count }} 个</small></div>
+        <div><span>上一周期命中率</span><strong>{% if demand_radar_hit_trend.previous.hit_rate != None %}{{ demand_radar_hit_trend.previous.hit_rate|floatformat }}%{% else %}—{% endif %}</strong><small>有证据的任务 {{ demand_radar_hit_trend.previous.judged_count }} 个</small></div>
+        <div{% if not demand_radar_hit_trend.has_sample %} class="supply-lifecycle-summary-warning"{% endif %}><span>可比性</span><strong>{% if demand_radar_hit_trend.has_sample %}可比{% else %}样本不足{% endif %}</strong><small>每周期至少 {{ demand_radar_hit_trend.min_judged_tasks }} 个有证据的任务才给方向</small></div>
+        <div><span>本周期新建任务</span><strong>{{ demand_radar_hit_trend.current.task_count }}</strong><small>其中 {{ demand_radar_hit_trend.current.pending_count }} 个还没到判定时刻</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>周期对比</strong><span>命中率只跟有证据的任务比；样本不足的任务既不算成功也不算失败，单独数出来</span></div>
+        {% if demand_radar_hit_trend.has_data %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>变化</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in demand_radar_hit_trend.metric_rows %}
+                    <tr{% if not demand_radar_hit_trend.has_sample and row.direction == 'insufficient' %} class="text-muted"{% endif %}>
+                        <td data-label="指标"><strong>{{ row.label }}</strong></td>
+                        <td data-label="本周期">{% if row.current != None %}{{ row.current }}{{ row.unit }}{% else %}—{% endif %}</td>
+                        <td data-label="上一周期">{% if row.previous != None %}{{ row.previous }}{{ row.unit }}{% else %}—{% endif %}</td>
+                        <td data-label="变化"><span class="trend-delta is-{{ row.direction }}">{{ row.delta_display }}</span></td>
+                        <td data-label="方向"><span class="trend-direction is-{{ row.direction }}">{{ row.direction_label }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty-inline">两个周期内都没有创建跟进任务，命中率趋势需要先有任务发生。</div>{% endif %}
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ demand_radar_hit_trend.summary }}任务按创建时间归期：一个任务在创建那一刻的证据就固定了，把它算进结果落地的那个周期，等于让一个安静月继承忙碌月的成绩。每个任务按自己的观察期结束时刻判定，所以上一周期里最早创建的任务不会被误判成"还没到判定时刻"而丢出分母。这里只报告，不把命中率回流到机会分——雷达学会掩盖自己的误报，比误报本身更糟。</div>
+</section>
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
