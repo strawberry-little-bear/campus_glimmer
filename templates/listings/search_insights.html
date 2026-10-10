@@ -73,6 +73,70 @@
     </div>
 </section>
 
+
+<section class="content-card ops-panel search-trend-panel mb-4">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Trend &amp; preference</span><h2>搜索趋势与筛选偏好</h2></div><span class="ops-panel-hint">与上一等长周期对比</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-arrow-left-right me-1"></i>总量只能回答“搜索变多还是变少”，回答不了“是谁在变、筛选项有没有换口味”。这里按搜索词和按筛选项分别和上一个等长周期对比。占比一律按同一类筛选项内部计算，避免全站搜索量上涨把每个选项都推成上升。</p>
+    <div class="search-trend-summary">
+        <div><span>本周期的搜索</span><strong class="is-{{ search_trend.volume_change.direction }}">{{ search_trend.volume_change.change_display }}</strong><small>{{ search_trend.current_searches }} 次 vs {{ search_trend.previous_searches }} 次</small></div>
+        <div><span>本周期的搜索词</span><strong>{{ search_trend.current_terms }}</strong><small>上一周期 {{ search_trend.previous_terms }} 个</small></div>
+        <div><span>上升 / 下降</span><strong>{{ search_trend.direction_counts.rising|default:0 }} / {{ search_trend.direction_counts.falling|default:0 }}</strong><small>个搜索词</small></div>
+        <div><span>样本不足</span><strong>{{ search_trend.direction_counts.insufficient|default:0 }}</strong><small>不参与方向判定</small></div>
+    </div>
+    {% if search_trend.term_trends %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-list-columns-reverse me-1"></i>搜索词逐词对比</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 search-trend-table"><thead><tr><th>搜索词</th><th>方向</th><th>搜索量</th><th>无结果率</th><th>点击率</th></tr></thead><tbody>
+        {% for row in search_trend.term_trends %}
+        <tr>
+            <td><strong>{{ row.query }}</strong></td>
+            <td><span class="search-trend-badge" data-direction="{{ row.direction }}">{{ row.direction_label }}</span></td>
+            <td>{{ row.previous_searches }} &rarr; {{ row.current_searches }}<small class="d-block text-muted">{% if row.delta > 0 %}+{% endif %}{{ row.delta }}</small></td>
+            <td>{% if row.zero_result_delta is not None %}{% if row.zero_result_delta > 0 %}+{% endif %}{{ row.zero_result_delta }}{% else %}&mdash;{% endif %}<small class="d-block text-muted">百分点</small></td>
+            <td>{% if row.click_delta is not None %}{% if row.click_delta > 0 %}+{% endif %}{{ row.click_delta }}{% else %}&mdash;{% endif %}<small class="d-block text-muted">百分点</small></td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>搜索量少于 {{ search_trend.min_window_searches }} 次的词标为样本不足，只列出来、不判方向；一个两次搜索的词足以让无结果率从 0% 跳到 50%，那不是趋势。</p>
+    {% else %}<div class="empty-inline">当前周期没有可对比的搜索记录。</div>{% endif %}
+
+    {% if search_trend.facet_shifts %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-sliders me-1"></i>筛选偏好迁移</h3>
+    <div class="search-facet-grid">
+        {% for facet in search_trend.facet_shifts %}
+        <div class="search-facet-card" data-kind="{{ facet.kind }}">
+            <div class="search-facet-head"><strong>{{ facet.label }}</strong><small>{{ facet.current_total }} 次带此筛选项</small></div>
+            {% if facet.rows %}
+            <div class="search-facet-list">
+                {% for row in facet.rows %}
+                <div class="search-facet-row" data-direction="{{ row.direction }}">
+                    <span class="search-facet-label" title="{{ row.label }}">{{ row.label }}</span>
+                    <span class="search-facet-share">{% if row.current_share is not None %}{{ row.current_share }}%{% else %}&mdash;{% endif %}<small class="d-block text-muted">{% if row.previous_share is not None %}{{ row.previous_share }}%{% else %}&mdash;{% endif %}</small></span>
+                    <span class="search-trend-badge" data-direction="{{ row.direction }}">{{ row.direction_label }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}<p class="empty-inline">本周期没有使用{{ facet.label }}筛选。</p>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>占比只看同一类筛选项内部：分类占比上升不代表学生更爱搜这个分类，只代表在用了分类筛选的搜索里它份额变大。这里只做对比，不改动同义词候选的出现次数阈值。</p>
+    {% endif %}
+
+    {% if search_trend.lead_comparison %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-diagram-3 me-1"></i>搜不到与搜到不点</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 search-trend-table"><thead><tr><th>搜索词</th><th>问题类型</th><th>搜索量</th><th>无结果</th><th>有点击</th><th>方向</th></tr></thead><tbody>
+        {% for row in search_trend.lead_comparison %}
+        <tr>
+            <td><strong>{{ row.query }}</strong></td>
+            <td><span class="search-trend-badge" data-direction="{{ row.kind }}">{{ row.kind_label }}</span></td>
+            <td>{{ row.search_count }}</td>
+            <td>{% if row.zero_result_count %}{{ row.zero_result_count }}<small class="d-block text-muted">{% if row.zero_result_rate is not None %}{{ row.zero_result_rate }}%{% endif %}</small>{% else %}&mdash;{% endif %}</td>
+            <td>{% if row.click_rate is not None %}{{ row.click_rate }}%{% else %}&mdash;{% endif %}</td>
+            <td><small class="text-muted">{{ row.direction_label }}</small></td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-lightbulb me-1"></i>搜不到是供给问题，该补货；搜到了不点是排序、价格或标题问题，改搜索配置没有用。两类混在一张榜里会看错方向，所以分开标注。</p>
+    {% endif %}
+</section>
 <div class="content-card ops-panel search-period-comparison mb-4">
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Period movement</span><h2>需求变化</h2></div><span class="ops-panel-hint">与上一周期对比</span></div>
     <div class="search-comparison-metrics">

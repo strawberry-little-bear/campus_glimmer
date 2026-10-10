@@ -1887,3 +1887,43 @@ a { color: inherit; text-decoration: none; }
 .governance-panel .supply-lifecycle-summary strong {
     font-variant-numeric: tabular-nums;
 }
+
+
+/* 搜索趋势与筛选偏好：这一面板要说清的是“方向和幅度”，所以每个信号都落在
+   一个可以扫读的小标签上，而不是让读者自己在两列百分比里做减法。四个方向
+   共用同一套语义色——上升绿、下降赭、持平灰、样本不足淡——读者在词表和
+   筛选项卡片里看到的是同一件事，不需要重新理解一次。 */
+.search-trend-panel { overflow: hidden; }
+.search-trend-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.search-trend-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.search-trend-summary span, .search-trend-summary small { color: #83938b; font-size: .71rem; }
+.search-trend-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; letter-spacing: -.03em; }
+.search-trend-summary strong.is-up { color: #3f7a52; }
+.search-trend-summary strong.is-down { color: #b97828; }
+.search-trend-summary strong.is-flat { color: #5a7a68; }
+.search-trend-subtitle { display: flex; align-items: center; gap: 6px; margin: 20px 0 10px; color: #527a62; font-size: .8rem; font-weight: 800; }
+.search-trend-subtitle i { color: #79ad88; }
+.search-trend-table td { vertical-align: middle; }
+.search-trend-table td strong { color: #3b6650; }
+.search-trend-badge { display: inline-grid; min-width: 34px; height: 24px; padding: 0 8px; place-items: center; border-radius: 999px; color: #57766a; background: #eef6f0; font-size: .7rem; font-weight: 800; white-space: nowrap; }
+.search-trend-badge[data-direction="rising"], .search-trend-badge[data-direction="new"] { color: #3f7a52; background: #e2f2e8; }
+.search-trend-badge[data-direction="falling"], .search-trend-badge[data-direction="gone"] { color: #a9663a; background: #fbeadd; }
+.search-trend-badge[data-direction="flat"] { color: #6a7d73; background: #eef2ef; }
+.search-trend-badge[data-direction="insufficient"] { color: #8b9a92; background: #f3f6f4; }
+.search-trend-badge[data-direction="gap"] { color: #a14d43; background: #ffe8e3; }
+.search-trend-badge[data-direction="no_click"] { color: #9b6a27; background: #fff2db; }
+.search-trend-badge[data-direction="both"] { color: #7b4a86; background: #f3e9f7; }
+.search-facet-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.search-facet-card { padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.search-facet-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 10px; padding-bottom: 9px; border-bottom: 1px solid #edf3ef; }
+.search-facet-head strong { color: #315946; font-size: .8rem; }
+.search-facet-head small { color: #8b9a92; font-size: .66rem; }
+.search-facet-list { display: grid; gap: 7px; }
+.search-facet-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+.search-facet-label { overflow: hidden; color: #3b6650; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.search-facet-share { color: #315946; font-size: .74rem; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+.search-facet-share small { color: #9aa8a1; font-size: .62rem; font-weight: 400; }
+.search-facet-row[data-direction="rising"] .search-facet-share { color: #3f7a52; }
+.search-facet-row[data-direction="falling"] .search-facet-share { color: #b97828; }
+@media (max-width: 991px) { .search-trend-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.search-facet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575px) { .search-trend-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.search-trend-summary > div { min-height: 72px; padding: 11px; }.search-facet-grid { grid-template-columns: 1fr; }.search-trend-table td { white-space: normal; } }

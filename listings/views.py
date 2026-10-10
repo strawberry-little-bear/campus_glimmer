@@ -22,6 +22,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
+from .search_trend import build_search_trend
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
 from .search_rewrites import build_search_rewrite_candidates
@@ -2578,6 +2579,9 @@ def search_insights(request):
     dashboard = build_search_insights(period_days, request.GET.get('q', ''))
     dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
     dashboard['synonym_effects'] = build_search_synonym_effects(days=period_days)
+    dashboard['search_trend'] = build_search_trend(
+        days=period_days, query=request.GET.get('q', ''),
+    )
     return render(request, 'listings/search_insights.html', dashboard)
 
 
@@ -2592,6 +2596,9 @@ def search_insights_export(request):
     dashboard = build_search_insights(period_days, request.GET.get('q', ''))
     dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
     dashboard['synonym_effects'] = build_search_synonym_effects(days=period_days)
+    dashboard['search_trend'] = build_search_trend(
+        days=period_days, query=request.GET.get('q', ''),
+    )
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2646,6 +2653,55 @@ def search_insights_export(request):
         writer.writerow([
             f"{row['source']} → {row['target']}", row['occurrences'], row['user_count'],
             row['confidence'], f"{row['last_seen']:%Y-%m-%d %H:%M}", '需人工确认后启用',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '搜索趋势与筛选偏好对比',
+        '本周期', '上一周期', '变化',
+    ])
+    writer.writerow([
+        '搜索次数',
+        dashboard['search_trend']['current_searches'],
+        dashboard['search_trend']['previous_searches'],
+        dashboard['search_trend']['volume_change']['change_display'],
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '搜索词趋势',
+        '本周期次数', '上周期次数', '变化',
+        '方向', '无结果率变化（百分点）', '点击率变化（百分点）',
+    ])
+    for row in dashboard['search_trend']['term_trends']:
+        writer.writerow([
+            row['query'], row['current_searches'], row['previous_searches'], row['delta'],
+            row['direction_label'], row['zero_result_delta'], row['click_delta'],
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '筛选偏好迁移',
+        '取值', '本周期次数', '上周期次数',
+        '本周期占比（%）', '上周期占比（%）', '占比变化（百分点）', '方向',
+    ])
+    for facet in dashboard['search_trend']['facet_shifts']:
+        for row in facet['rows']:
+            writer.writerow([
+                facet['label'], row['label'], row['current_count'], row['previous_count'],
+                row['current_share'], row['previous_share'], row['share_delta'], row['direction_label'],
+            ])
+
+    writer.writerow([])
+    writer.writerow([
+        '失败类型对比',
+        '搜索次数', '无结果次数', '无结果率（%）',
+        '有结果无点击次数', '点击率（%）', '搜索量方向',
+    ])
+    for row in dashboard['search_trend']['lead_comparison']:
+        writer.writerow([
+            row['query'], row['search_count'], row['zero_result_count'], row['zero_result_rate'],
+            row['no_click_count'], row['click_rate'], row['direction_label'],
         ])
 
     writer.writerow([])
