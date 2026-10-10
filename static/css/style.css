@@ -1925,6 +1925,11 @@ a { color: inherit; text-decoration: none; }
 .search-facet-share small { color: #9aa8a1; font-size: .62rem; font-weight: 400; }
 .search-facet-row[data-direction="rising"] .search-facet-share { color: #3f7a52; }
 .search-facet-row[data-direction="falling"] .search-facet-share { color: #b97828; }
+.search-combo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.search-combo-card { padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.search-combo-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 10px; padding-bottom: 9px; border-bottom: 1px solid #edf3ef; }
+.search-combo-head strong { color: #315946; font-size: .8rem; }
+.search-combo-head small { color: #8b9a92; font-size: .66rem; }
 @media (max-width: 991px) { .search-trend-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.search-facet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 575px) { .search-trend-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.search-trend-summary > div { min-height: 72px; padding: 11px; }.search-facet-grid { grid-template-columns: 1fr; }.search-trend-table td { white-space: normal; } }
 .rewrite-candidate-table tr.is-current { background: #f4faf5; }

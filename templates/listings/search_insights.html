@@ -121,6 +121,28 @@
     <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>占比只看同一类筛选项内部：分类占比上升不代表学生更爱搜这个分类，只代表在用了分类筛选的搜索里它份额变大。这里只做对比，不改动同义词候选的出现次数阈值。</p>
     {% endif %}
 
+    {% if combo_shift.rows %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-grid-3x3-gap me-1"></i>分类与价格带组合</h3>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-diagram-2 me-1"></i>单维信号同时动，并不等于组合在动：图书占比上升和 50-200 元占比上升可能来自两群不相干的人。这里按分类和价格带两两交叉，占比一律在同一个分类内部计算，回答「在这个品类里，学生现在更多看哪个价位」。</p>
+    <div class="search-combo-grid">
+        {% for category in combo_shift.rows %}
+        <div class="search-combo-card">
+            <div class="search-combo-head"><strong>{{ category.category_label }}</strong><small>{{ category.current_total }} 次带此分类筛选</small></div>
+            <div class="search-facet-list">
+                {% for row in category.rows %}
+                <div class="search-facet-row" data-direction="{{ row.direction }}">
+                    <span class="search-facet-label">{{ row.label }}</span>
+                    <span class="search-facet-share">{% if row.current_share is not None %}{{ row.current_share }}%{% else %}&mdash;{% endif %}<small class="d-block text-muted">{% if row.previous_share is not None %}{{ row.previous_share }}%{% else %}&mdash;{% endif %}</small></span>
+                    <span class="search-trend-badge" data-direction="{{ row.direction }}">{{ row.direction_label }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>组合比单维更容易稀疏，所以门槛与单维筛选完全一致：本周期和上一周期都少于 {{ combo_shift.min_combination_searches }} 次的组合标为样本不足，只列出来、不判方向。宁可空格子说「看不出来」，也不降门槛把表格填满。</p>
+    {% endif %}
+
     {% if search_trend.lead_comparison %}
     <h3 class="search-trend-subtitle"><i class="bi bi-diagram-3 me-1"></i>搜不到与搜到不点</h3>
     <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 search-trend-table"><thead><tr><th>搜索词</th><th>问题类型</th><th>搜索量</th><th>无结果</th><th>有点击</th><th>方向</th></tr></thead><tbody>

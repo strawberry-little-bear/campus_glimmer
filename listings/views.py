@@ -22,6 +22,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
+from .search_combo_shift import build_search_combo_shift
 from .search_threshold_feedback import build_search_threshold_feedback
 from .search_trend import build_search_trend
 from .governance_sla import build_governance_sla
@@ -2583,6 +2584,9 @@ def search_insights(request):
     dashboard['search_trend'] = build_search_trend(
         days=period_days, query=request.GET.get('q', ''),
     )
+    dashboard['combo_shift'] = build_search_combo_shift(
+        days=period_days, query=request.GET.get('q', ''),
+    )
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
     return render(request, 'listings/search_insights.html', dashboard)
 
@@ -2599,6 +2603,9 @@ def search_insights_export(request):
     dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
     dashboard['synonym_effects'] = build_search_synonym_effects(days=period_days)
     dashboard['search_trend'] = build_search_trend(
+        days=period_days, query=request.GET.get('q', ''),
+    )
+    dashboard['combo_shift'] = build_search_combo_shift(
         days=period_days, query=request.GET.get('q', ''),
     )
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
@@ -2712,6 +2719,23 @@ def search_insights_export(request):
             writer.writerow([
                 facet['label'], row['label'], row['current_count'], row['previous_count'],
                 row['current_share'], row['previous_share'], row['share_delta'], row['direction_label'],
+            ])
+
+    writer.writerow([])
+    writer.writerow([
+        '分类与价格带组合',
+        '分类内搜索次数', '上周期分类内搜索次数',
+        '价格带', '本周期次数', '上周期次数',
+        '分类内占比（%）', '上周期分类内占比（%）', '占比变化（百分点）', '方向',
+    ])
+    for category in dashboard['combo_shift']['rows']:
+        for row in category['rows']:
+            writer.writerow([
+                category['category_label'], category['current_total'],
+                category['previous_total'], row['label'],
+                row['current_count'], row['previous_count'],
+                row['current_share'], row['previous_share'],
+                row['share_delta'], row['direction_label'],
             ])
 
     writer.writerow([])
