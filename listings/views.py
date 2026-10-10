@@ -2723,6 +2723,40 @@ def operations_dashboard_export(request):
     writer.writerow(['耗时看中位数、最长一次和异常慢的次数，不看平均值；一次跑了两个小时的运行会把平均值抬起来，而那个数字描述的其实是从未发生过的运行。'])
     writer.writerow(['运行次数不给方向：跑得更多只说明这个周期更忙，不代表更健康。'])
     writer.writerow(['此处只报告，不改 stale 阈值、不自动重试、不改调度配置。'])
+    writer.writerow([])
+    writer.writerow(['命令耗时的分位分布'])
+    percentiles = dashboard['task_run_duration_percentiles']
+    writer.writerow([
+        '窗口起始', percentiles['window_start'].strftime('%Y-%m-%d'),
+        '窗口结束', percentiles['window_end'].strftime('%Y-%m-%d %H:%M'),
+        '周期天数', percentiles['days'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '命令', '运行次数', '成功次数', '失败次数',
+        'P50（毫秒）', 'P90（毫秒）', 'P99（毫秒）',
+        'P50 样本', 'P90 样本', 'P99 样本', '尾部倍数',
+    ])
+    for row in percentiles['rows']:
+        writer.writerow([
+            row['name'],
+            row['run_count'], row['succeeded_count'], row['failed_count'],
+            '' if row['percentiles']['P50'] is None else row['percentiles']['P50'],
+            '' if row['percentiles']['P90'] is None else row['percentiles']['P90'],
+            '' if row['percentiles']['P99'] is None else row['percentiles']['P99'],
+            '足够' if row['sample_enough']['P50'] else '不足',
+            '足够' if row['sample_enough']['P90'] else '不足',
+            '足够' if row['sample_enough']['P99'] else '不足',
+            '' if row['tail_share'] is None else row['tail_share'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow(['分位数取最近秩，也就是某次真实发生过的运行，不是插值出来的值：插值 P90 会落在第九次和第十次之间，那是一次从未发生过的运行。'])
+    writer.writerow(['失败运行不进分位：失败可能毫秒级退出，也可能挂到被调度器杀掉，算进去会让同一个数字同时描述“多常坏”和“好的时候多慢”。'])
+    writer.writerow(['样本不够时不声称该分位：十次运行的最近秩 P99 就是最大值，贴上 P99 的标签会让读者以为尾巴被量过，其实只看见了一次运行。'])
+    writer.writerow(['尾部倍数取已声称的最高分位与 P50 的差：样本不足 P99 时退到 P90，而不是报告“没有尾巴”。'])
+    writer.writerow(['此处只报告，不拆分命令、不改调度配置、不把统计写回台账。'])
 
     writer.writerow([])
     writer.writerow(['需求雷达命中率的跨周期趋势'])

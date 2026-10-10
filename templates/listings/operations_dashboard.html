@@ -1127,6 +1127,47 @@
         </ul>
     </div>
 </section>
+<section class="content-card ops-panel mb-4 task-run-percentile-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Duration percentiles</span><h2>命令耗时的分位分布</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_duration_percentiles.days }} 天·按命令分组</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>统计命令</span><strong>{{ task_run_duration_percentiles.rows|length }}</strong><small>窗口内有运行的命令</small></div>
+        <div><span>样本够声称 P99</span><strong>{% for row in task_run_duration_percentiles.rows %}{% if row.sample_enough.P99 %}{% if not forloop.first %}、{% endif %}{{ row.name }}{% endif %}{% empty %}暂无{% endfor %}</strong><small>P99 需 {{ task_run_duration_percentiles.min_runs_for_p99 }} 次以上运行</small></div>
+    </div>
+
+    {% if task_run_duration_percentiles.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各命令的耗时分位</strong><span>取最近秩，即某次真实发生过的运行；样本不足的分位留空</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-percentile-table">
+                <thead><tr><th>命令</th><th>运行</th><th>P50</th><th>P90</th><th>P99</th><th>尾部倍数</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_duration_percentiles.rows %}
+                    <tr>
+                        <td data-label="命令">{{ row.name }}</td>
+                        <td data-label="运行">{{ row.run_count }}</td>
+                        <td data-label="P50">{% if row.percentiles.P50 %}{{ row.percentiles.P50 }} 毫秒{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
+                        <td data-label="P90">{% if row.percentiles.P90 %}{{ row.percentiles.P90 }} 毫秒{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
+                        <td data-label="P99">{% if row.percentiles.P99 %}{{ row.percentiles.P99 }} 毫秒{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
+                        <td data-label="尾部倍数">{% if row.tail_share != None %}{{ row.tail_share|floatformat:'-2' }} 倍{% else %}—{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <ul class="ops-panel-notes mt-3">
+        <li><i class="bi bi-info-circle me-1"></i>中位数回答“典型的一次有多久”，回答不了“最慢的那一档有多慢”：一个命令五十次四秒、一次四十秒，中位数在每个窗口里都是四秒，而调度窗口正是在被那一档悄悄吃掉。</li>
+        <li><i class="bi bi-hourglass-split me-1"></i>分位数取某次真实发生过的运行，不是插值出来的值——插值 P90 会落在第九次和第十次之间，那是一次从未发生过的运行。</li>
+        <li><i class="bi bi-exclamation-triangle me-1"></i>失败运行不进分位：失败可能毫秒级退出，也可能挂到被调度器杀掉，算进去会让同一个数字同时描述“多常坏”和“好的时候多慢”。失败次数仍列在运行次数里。</li>
+        <li><i class="bi bi-shield-check me-1"></i>此处只报告，不拆分命令、不改调度配置、不把统计写回台账。</li>
+    </ul>
+    {% else %}
+    <p class="text-muted mb-0 mt-3">窗口内还没有成功的定时任务运行。</p>
+    {% endif %}
+</section>
 <section class="content-card ops-panel mb-4 borrow-escalation-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Borrow recovery</span><h2>借用逾期催收阶梯</h2></div>

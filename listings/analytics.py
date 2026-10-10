@@ -19,6 +19,7 @@ from .governance_sla import build_governance_sla
 from .supply_lifecycle import build_supply_lifecycle
 from .task_run_failure_causes import build_task_run_failure_causes
 from .task_run_health import build_task_run_health
+from .task_run_duration_percentiles import build_task_run_duration_percentiles
 from .task_run_trend import build_task_run_trend
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
 from .borrow_escalation import build_borrow_escalation_report
@@ -1620,6 +1621,7 @@ def build_operations_dashboard(days=30):
         'supply_lifecycle': build_supply_lifecycle(days=days, now=now),
         'task_run_health': build_task_run_health(days=days, now=now),
         'task_run_trend': build_task_run_trend(days=days, now=now),
+        'task_run_duration_percentiles': build_task_run_duration_percentiles(days=days, now=now),
         'task_run_failure_causes': build_task_run_failure_causes(days=days, now=now),
         'borrow_escalation': build_borrow_escalation_report(days=days, now=now),
         'borrow_risk': borrow_risk,

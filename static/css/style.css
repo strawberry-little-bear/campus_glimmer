@@ -1684,6 +1684,42 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+/* 命令耗时的分位分布：和跨周期趋势面板同属调度可观测性这一组。分位数字用等宽
+   数字，因为 P50 到 P99 是要被逐位比着读的；「样本不足」用弱化色而不是警告色，
+   因为它不是问题，只是这一次还称不出来。 */
+.task-run-percentile-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.task-run-percentile-panel .supply-lifecycle-summary div:nth-child(2) strong {
+    font-size: .92rem;
+    font-weight: 700;
+    line-height: 1.35;
+    word-break: break-all;
+}
+
+.task-run-percentile-table th:nth-child(n+2),
+.task-run-percentile-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.task-run-percentile-table td code {
+    font-size: .78rem;
+}
+
+.task-run-percentile-table td:first-child {
+    font-weight: 600;
+}
+
+@media (max-width: 767px) {
+    .task-run-percentile-table th,
+    .task-run-percentile-table td {
+        white-space: normal;
+    }
+}
+
 .borrow-risk-panel .supply-lifecycle-summary strong {
     font-variant-numeric: tabular-nums;
 }
