@@ -1765,6 +1765,35 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+/* 失败原因的跨周期变化：和趋势面板同一组卡片语言，方向徽标直接复用 task-run-trend-direction，
+   但颜色语义反过来——失败的次数上升是坏消息，所以 rising 走赭色、falling 走绿色。
+   份额列用等宽数字，因为它要和上一期的份额逐位比着读。 */
+.task-run-cause-trend-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.task-run-cause-trend-table th:nth-child(n+2),
+.task-run-cause-trend-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.task-run-cause-trend-table td code {
+    font-size: .76rem;
+}
+
+.task-run-cause-trend-table td:first-child {
+    font-weight: 600;
+}
+
+@media (max-width: 767px) {
+    .task-run-cause-trend-table th,
+    .task-run-cause-trend-table td {
+        white-space: normal;
+    }
+}
+
 .borrow-risk-panel .supply-lifecycle-summary strong {
     font-variant-numeric: tabular-nums;
 }

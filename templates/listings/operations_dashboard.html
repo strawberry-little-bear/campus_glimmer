@@ -1127,6 +1127,54 @@
         </ul>
     </div>
 </section>
+<section class="content-card ops-panel mb-4 task-run-cause-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Cause trend</span><h2>失败原因的跨周期变化</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_failure_cause_trend.days }} 天·与上一等长周期比</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>本周期失败</span><strong>{{ task_run_failure_cause_trend.total_failed }}</strong><small>上一周期 {{ task_run_failure_cause_trend.previous_total_failed }} 次</small></div>
+        <div{% if task_run_failure_cause_trend.has_direction %} class="supply-lifecycle-summary-warning"{% endif %}><span>有方向</span><strong>{% if task_run_failure_cause_trend.has_direction %}是{% else %}否{% endif %}</strong><small>份额漂移超 {{ task_run_failure_cause_trend.cause_share_drift_percent }}%</small></div>
+        <div><span>类别门槛</span><strong>{{ task_run_failure_cause_trend.min_cause_runs }} 次</strong><small>不到只报数不判方向</small></div>
+        <div><span>周期门槛</span><strong>{{ task_run_failure_cause_trend.min_period_failures }} 次</strong><small>按份额算方向的底线</small></div>
+    </div>
+
+    {% if task_run_failure_cause_trend.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各类原因的跨周期对比</strong><span>按方向从坏到好排列，份额取占本周期失败总数的比例</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-cause-trend-table">
+                <thead><tr><th>原因类别</th><th>本周期</th><th>上一周期</th><th>差值</th><th>份额</th><th>方向</th><th>涉及命令</th><th>最近一次失败</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_failure_cause_trend.causes %}
+                    <tr>
+                        <td data-label="原因类别"><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.hint }}</small></td>
+                        <td data-label="本周期">{{ row.current_display }}</td>
+                        <td data-label="上一周期">{{ row.previous_display }}</td>
+                        <td data-label="差值">{{ row.delta_display }}</td>
+                        <td data-label="份额">{% if row.current_share %}{{ row.current_share|floatformat }}%{% else %}&mdash;{% endif %}<small class="d-block text-muted">{% if row.previous_share %}上期 {{ row.previous_share|floatformat }}%{% endif %}</small></td>
+                        <td data-label="方向"><span class="task-run-trend-direction" data-tone="{{ row.tone }}">{{ row.direction_label }}</span></td>
+                        <td data-label="涉及命令">{{ row.command_count }} 个<small class="d-block text-muted">{% for command in row.commands %}{{ command.name }} {{ command.count }} 次{% if not forloop.last %}、{% endif %}{% endfor %}</small></td>
+                        <td data-label="最近一次失败">{% if row.last_failure_at %}{{ row.last_failure_at|date:"m-d H:i" }}{% else %}&mdash;{% endif %}<small class="d-block text-muted">{% if row.last_note %}<code>{{ row.last_note }}</code>{% endif %}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}<div class="empty-inline mt-3">两个周期内都没有失败的运行记录。</div>{% endif %}
+
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>怎么读这张表</strong><span>失败次数是原始计数，方向按份额判</span></div>
+        <ul>
+            <li><i class="bi bi-info-circle me-1"></i>{{ task_run_failure_cause_trend.summary }}</li>
+            <li><i class="bi bi-arrow-left-right me-1"></i>一次运行按它<i>开始</i>的时刻归期，和上方的调度趋势面板同一个边界：两个面板对“这次失败算哪一期”必须给出同一个答案。</li>
+            <li><i class="bi bi-percent me-1"></i>方向按“占本周期失败总数的比例”判，不按次数差判：失败次数本身没有百分点这个尺度，只有本来就是百分比的数字才有。</li>
+            <li><i class="bi bi-hourglass-split me-1"></i>周期内失败总数要过 {{ task_run_failure_cause_trend.min_period_failures }} 次的门槛才判方向；类别本身也要过 {{ task_run_failure_cause_trend.min_cause_runs }} 次——一次失败不是一种形态，两个周期各一次也读不出走向。</li>
+            <li><i class="bi bi-slash-circle me-1"></i>失败的类别只说明失败长什么样，不代表严重程度。这里只报告，不改分类映射表、不自动重试、不改调度配置。</li>
+        </ul>
+    </div>
+</section>
 <section class="content-card ops-panel mb-4 task-run-percentile-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Duration percentiles</span><h2>命令耗时的分位分布</h2></div>

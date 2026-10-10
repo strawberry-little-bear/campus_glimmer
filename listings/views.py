@@ -2796,6 +2796,89 @@ def operations_dashboard_export(request):
     writer.writerow([u'只报最忙的若干个小时，样本少的小时不判拥塞。'])
     writer.writerow([u'此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。'])
     writer.writerow([])
+    writer.writerow(['定时任务失败原因分类'])
+    causes = dashboard['task_run_failure_causes']
+    writer.writerow([
+        '周期天数', causes['days'],
+        '失败总数', causes['total_failed'],
+        '已归类', causes['classified_count'],
+        '未归类', causes['unclassified_count'],
+        '最大类别', causes['top_cause'] or '—',
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '原因类别', '失败次数', '已归类失败数', '未归类失败数',
+        '涉及命令数', '最近一次失败', '最近一次备注',
+    ])
+    if not causes['has_data']:
+        writer.writerow(['周期内没有失败的运行记录。'])
+    else:
+        for row in causes['causes']:
+            writer.writerow([
+                row['label'],
+                row['count'],
+                causes['classified_count'],
+                causes['unclassified_count'],
+                row['command_count'],
+                '' if row['last_failure_at'] is None else row['last_failure_at'].strftime('%Y-%m-%d %H:%M'),
+                row['last_note'] or '',
+            ])
+
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([causes['summary']])
+    writer.writerow(['只统计失败的运行，成功运行不进任何类别。'])
+    writer.writerow(['dry-run 的运行不算数：一次什么都没发的运行没法替任何事作证，它的失败也说明不了调度。'])
+    writer.writerow(['备注里的异常名按冒号前的部分取；取不到可识别的异常名就归到未归类，不猜——归错类比不归类更糟，它把人送去错误的地方翻。'])
+    writer.writerow(['分类只说明失败长什么样，不代表严重程度；同一个异常名可能是致命的配置错误，也可能只是“今天没有到期订单”的正常提前返回。'])
+    writer.writerow(['此处只报告，不改分类映射表、不自动重试、不改调度配置。'])
+    writer.writerow([])
+
+    writer.writerow(['失败原因的跨周期变化'])
+    cause_trend = dashboard['task_run_failure_cause_trend']
+    writer.writerow([
+        '本周期起始', cause_trend['window_start'].strftime('%Y-%m-%d'),
+        '上一周期起始', cause_trend['previous_window_start'].strftime('%Y-%m-%d'),
+        '周期天数', cause_trend['days'],
+        '类别门槛', cause_trend['min_cause_runs'],
+        '周期门槛', cause_trend['min_period_failures'],
+        '份额漂移阈值（%）', cause_trend['cause_share_drift_percent'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '原因类别', '本周期失败次数', '上一周期失败次数', '差值',
+        '本周期份额（%）', '上一周期份额（%）', '方向',
+        '本期新出现', '涉及命令数', '最近一次失败', '最近一次备注',
+    ])
+    if not cause_trend['has_data']:
+        writer.writerow(['两个周期内都没有失败的运行记录。'])
+    else:
+        for row in cause_trend['causes']:
+            writer.writerow([
+                row['label'],
+                row['current_display'],
+                row['previous_display'],
+                row['delta_display'],
+                '' if row['current_share'] is None else row['current_share'],
+                '' if row['previous_share'] is None else row['previous_share'],
+                row['direction_label'],
+                '是' if row['previous_count'] is None else '',
+                row['command_count'],
+                '' if row['last_failure_at'] is None else row['last_failure_at'].strftime('%Y-%m-%d %H:%M'),
+                row['last_note'] or '',
+            ])
+
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([cause_trend['summary']])
+    writer.writerow(['本周期失败总数', cause_trend['total_failed']])
+    writer.writerow(['上一周期失败总数', cause_trend['previous_total_failed']])
+    writer.writerow(['一次运行按它开始的时刻归期，和上方的调度趋势面板同一个边界：两个面板对“这次失败算哪一期”必须给出同一个答案。'])
+    writer.writerow(['方向按“占本周期失败总数的比例”判，不按次数差判：失败次数是原始计数，没有百分点这个尺度，只有本来就是百分比的数字才有。'])
+    writer.writerow(['周期内失败总数要过门槛才判方向；类别本身也要过门槛——一次失败不是一种形态，两个周期各一次也读不出走向。'])
+    writer.writerow(['份额就是占该周期失败总数的比例，所以份额的变化同时反映这一类的起落和整体的厚薄；整体失败变多时，单个类别的份额也可能下降。'])
+    writer.writerow(['此处只报告，不改分类映射表、不自动重试、不改调度配置。'])
+    writer.writerow([])
 
     writer.writerow(['此处只报告，不拆分命令、不改调度配置、不把统计写回台账。'])
 
