@@ -34,6 +34,21 @@ from .search_combo_shift import (
 )
 
 
+def _local_noon_today():
+    """参考时刻锹在本地当天正午，而不是运行刻。
+
+    跨周期面板按本地午夜切窗口，而测试里的时间戳往前推了几天。
+    如果参考时刻就取运行刻，那么每当本地时间走过午夜、UTC
+    还停在前一天的那几个小时，“今天”的搜索就会落到窗口上界之外。
+    正午既跑完了当天该有的搜索，也远远跑不出本地这一天，
+    于是无论什么时候跑这个测试，结果都一样。
+    """
+    from django.utils import timezone
+    today = timezone.localdate()
+    noon = timezone.datetime.combine(today, timezone.datetime.min.time()) + timedelta(hours=12)
+    return timezone.make_aware(noon)
+
+
 class ComboShiftSetupTests(TestCase):
     """Window construction and the scope the comparison is built on."""
 
@@ -41,7 +56,7 @@ class ComboShiftSetupTests(TestCase):
         self.user = User.objects.create_user(
             username='combo-user', password='safe-password-123',
         )
-        self.now = timezone.now()
+        self.now = _local_noon_today()
         self.books = Category.objects.create(name='组合图书')
         self.lamps = Category.objects.create(name='组合台灯')
 
@@ -102,7 +117,7 @@ class ComboShareTests(TestCase):
         self.user = User.objects.create_user(
             username='combo-share-user', password='safe-password-123',
         )
-        self.now = timezone.now()
+        self.now = _local_noon_today()
         self.books = Category.objects.create(name='占比图书')
         self.lamps = Category.objects.create(name='占比台灯')
 
@@ -213,7 +228,7 @@ class ComboSampleTests(TestCase):
         self.user = User.objects.create_user(
             username='combo-sample-user', password='safe-password-123',
         )
-        self.now = timezone.now()
+        self.now = _local_noon_today()
         self.books = Category.objects.create(name='样本图书')
 
     def search(self, *, days_ago, min_price=None, max_price=None):
@@ -307,7 +322,7 @@ class ComboPanelTests(TestCase):
     """The panel, the CSV export and the boundary they must state out loud."""
 
     def setUp(self):
-        self.now = timezone.now()
+        self.now = _local_noon_today()
         self.staff = User.objects.create_superuser(
             username='combo-staff', email='combo-staff@example.com',
             password='safe-password-123',

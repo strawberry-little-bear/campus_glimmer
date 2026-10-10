@@ -1061,6 +1061,72 @@
         </ul>
     </div>
 </section>
+<section class="content-card ops-panel mb-4 task-run-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Schedule trend</span><h2>定时任务健康度的跨周期趋势</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_trend.days }} 天·与上一个等长周期对比</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>本周期运行</span><strong>{{ task_run_trend.current.run_count }}</strong><small>失败 {{ task_run_trend.current.failed_count }} 次</small></div>
+        <div{% if task_run_trend.current.success_rate %} class="supply-lifecycle-summary-warning"{% endif %}><span>成功率</span><strong>{% if task_run_trend.current.success_rate %}{{ task_run_trend.current.success_rate|floatformat }}%{% else %}—{% endif %}</strong><small>上一周期 {% if task_run_trend.previous.success_rate %}{{ task_run_trend.previous.success_rate|floatformat }}%{% else %}—{% endif %}</small></div>
+        <div><span>耗时中位数</span><strong>{% if task_run_trend.current.median_duration_ms %}{{ task_run_trend.current.median_duration_ms }} 毫秒{% else %}—{% endif %}</strong><small>上一周期 {% if task_run_trend.previous.median_duration_ms %}{{ task_run_trend.previous.median_duration_ms }} 毫秒{% else %}—{% endif %}</small></div>
+        <div{% if task_run_trend.current.slow_run_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>异常慢的运行</span><strong>{{ task_run_trend.current.slow_run_count }}</strong><small>达到中位数 {{ task_run_trend.slow_run_factor }} 倍以上</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>整体指标的跨周期对比</strong><span>超过 {{ task_run_trend.trend_delta_points }} 个百分点才算上升或下降</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-trend-metric-table">
+                <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>差值</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_trend.metric_rows %}
+                    <tr>
+                        <td data-label="指标">{{ row.label }}</td>
+                        <td data-label="本周期">{% if row.current != None %}{{ row.current }}{% else %}—{% endif %}</td>
+                        <td data-label="上一周期">{% if row.previous != None %}{{ row.previous }}{% else %}—{% endif %}</td>
+                        <td data-label="差值">{{ row.delta_display }}</td>
+                        <td data-label="方向">{% if row.has_direction %}<span class="task-run-trend-direction" data-tone="{{ row.tone }}">{{ row.direction_label }}</span>{% else %}<span class="text-muted">不判方向</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if task_run_trend.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各命令的跨周期对比</strong><span>按命令名字典序，运行次数不足 {{ task_run_trend.min_period_runs }} 次的窗口只报数不判方向</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-trend-command-table">
+                <thead><tr><th>命令</th><th>本周期运行</th><th>上一周期运行</th><th>成功率</th><th>耗时中位数</th><th>异常慢</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_trend.commands %}
+                    <tr>
+                        <td data-label="命令">{{ row.name }}</td>
+                        <td data-label="本周期运行">{{ row.current.run_count }}</td>
+                        <td data-label="上一周期运行">{{ row.previous.run_count }}</td>
+                        <td data-label="成功率">{% if row.current.success_rate %}{{ row.current.success_rate|floatformat }}%{% else %}—{% endif %}<small class="d-block text-muted">{% if row.previous.success_rate %}上期 {{ row.previous.success_rate|floatformat }}%{% endif %}</small></td>
+                        <td data-label="耗时中位数">{% if row.current.median_duration_ms %}{{ row.current.median_duration_ms }} 毫秒{% else %}—{% endif %}<small class="d-block text-muted">{% if row.previous.median_duration_ms %}上期 {{ row.previous.median_duration_ms }} 毫秒{% endif %}</small></td>
+                        <td data-label="异常慢">{% if row.current.slow_run_count %}<span class="supply-lifecycle-flag">{{ row.current.slow_run_count }} 次</span>{% else %}0{% endif %}</td>
+                        <td data-label="方向">{% if row.has_sample %}<span class="task-run-trend-direction" data-tone="{{ row.tone }}">{{ row.direction_label }}</span>{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>怎么读这张表</strong><span>只报告，不动调度</span></div>
+        <ul>
+            <li><i class="bi bi-info-circle me-1"></i>{{ task_run_trend.summary }}</li>
+            <li><i class="bi bi-clock-history me-1"></i>耗时看中位数、最长一次和异常慢的次数，不看平均值：一次跑了两小时的运行会把平均值抬起来，而那个数字描述的其实是从未发生过的运行。</li>
+            <li><i class="bi bi-arrow-left-right me-1"></i>一次运行按它<i>开始</i>的时刻归期。按结束时刻归期会让卡在边界上的那次算进下一个周期，于是坏周期会报成“好周期之后跟着一个慢周期”。</li>
+            <li><i class="bi bi-slash-circle me-1"></i>运行次数不给方向：跑得更多只说明这个周期更忙，不代表更健康。这里也不改 stale 阈值、不自动重试、不改调度配置。</li>
+        </ul>
+    </div>
+</section>
 <section class="content-card ops-panel mb-4 borrow-escalation-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Borrow recovery</span><h2>借用逾期催收阶梯</h2></div>

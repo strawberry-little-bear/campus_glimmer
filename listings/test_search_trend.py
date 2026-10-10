@@ -35,12 +35,27 @@ from .search_trend import (
 )
 
 
+def _local_noon_today():
+    """参考时刻锹在本地当天正午，而不是运行刻。
+
+    跨周期面板按本地午夜切窗口，而测试里的时间戳往前推了几天。
+    如果参考时刻就取运行刻，那么每当本地时间走过午夜、UTC
+    还停在前一天的那几个小时，“今天”的搜索就会落到窗口上界之外。
+    正午既跑完了当天该有的搜索，也远远跑不出本地这一天，
+    于是无论什么时候跑这个测试，结果都一样。
+    """
+    from django.utils import timezone
+    today = timezone.localdate()
+    noon = timezone.datetime.combine(today, timezone.datetime.min.time()) + timedelta(hours=12)
+    return timezone.make_aware(noon)
+
+
 class SearchTrendSetupTests(TestCase):
     """Window construction and the boundaries the comparison is built on."""
 
     def setUp(self):
         self.user = User.objects.create_user(username='trend-user', password='safe-password-123')
-        self.now = timezone.now()
+        self.now = _local_noon_today()
 
     def test_windows_cover_the_same_number_of_calendar_days(self):
         trend = build_search_trend(days=7, now=self.now)
@@ -116,7 +131,7 @@ class TermTrendTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(username='trend-term-user', password='safe-password-123')
-        self.now = timezone.now()
+        self.now = _local_noon_today()
         # 模块读到 now 为止，而“今天”的搜索时间戳等于 setUp 取到的 now，
         # 它的点击又在五分钟之后，会超过上界。把参考时刻往后推一段，
         # 同一天的点击才落在窗口内，这也是其他测试已经在用的做法。
@@ -247,7 +262,7 @@ class FacetShiftTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(username='trend-facet-user', password='safe-password-123')
-        self.now = timezone.now()
+        self.now = _local_noon_today()
         self.category_a = Category.objects.create(name='趋势分类甲')
         self.category_b = Category.objects.create(name='趋势分类乙')
         self.location_a = CampusLocation.objects.create(name='趋势地点甲')
@@ -369,7 +384,7 @@ class LeadComparisonTests(TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(username='trend-lead-user', password='safe-password-123')
-        self.now = timezone.now()
+        self.now = _local_noon_today()
         self.reference = self.now + timedelta(minutes=30)
         self.click_category = Category.objects.create(name='线索点击分类')
 

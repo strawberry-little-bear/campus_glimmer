@@ -1622,6 +1622,68 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+/* 定时任务健康度的跨周期趋势：和健康面板、失败原因面板同属一组，沿用同一套
+   卡片语言。方向徽标不用警告色，因为「较上期上升」对成功率是好消息、对耗时
+   是坏消息，颜色必须跟着「往哪边算好」走，而不是跟着字面方向走。 */
+.task-run-trend-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.task-run-trend-direction {
+    display: inline-grid;
+    min-width: 62px;
+    height: 24px;
+    padding: 0 9px;
+    place-items: center;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 800;
+    white-space: nowrap;
+    color: #57766a;
+    background: #eef6f0;
+}
+
+.task-run-trend-direction[data-tone="good"] {
+    color: #2f6f4f;
+    background: #e2f2e8;
+}
+
+.task-run-trend-direction[data-tone="bad"] {
+    color: #b4632a;
+    background: #fbeade;
+}
+
+.task-run-trend-direction[data-tone="flat"] {
+    color: #7c8b84;
+    background: #f0f2f1;
+}
+
+.task-run-trend-metric-table th:nth-child(n+2),
+.task-run-trend-metric-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.task-run-trend-command-table th:nth-child(n+2),
+.task-run-trend-command-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.task-run-trend-command-table td small {
+    font-size: .7rem;
+}
+
+@media (max-width: 767px) {
+    .task-run-trend-metric-table th,
+    .task-run-trend-metric-table td,
+    .task-run-trend-command-table th,
+    .task-run-trend-command-table td {
+        white-space: normal;
+    }
+}
+
 .borrow-risk-panel .supply-lifecycle-summary strong {
     font-variant-numeric: tabular-nums;
 }

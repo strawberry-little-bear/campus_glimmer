@@ -2670,6 +2670,60 @@ def operations_dashboard_export(request):
         '此处只报告，不提前催收、不改动催收阶梯、不打标记借用人。',
     ])
 
+    trend_runs = dashboard['task_run_trend']
+    writer.writerow([])
+    writer.writerow(['定时任务健康度的跨周期趋势'])
+    writer.writerow([
+        '当前周期起始', trend_runs['current_period_start'].strftime('%Y-%m-%d'),
+        '上一周期起始', trend_runs['previous_period_start'].strftime('%Y-%m-%d'),
+        '周期天数', trend_runs['days'],
+        '最小运行次数', trend_runs['min_period_runs'],
+        '方向阈值（百分点）', trend_runs['trend_delta_points'],
+        '耗时漂移阈值（%）', trend_runs['duration_drift_percent'],
+        '异常慢倍数', trend_runs['slow_run_factor'],
+    ])
+    writer.writerow([])
+    writer.writerow(['指标', '本周期', '上一周期', '差值', '方向'])
+    for row in trend_runs['metric_rows']:
+        writer.writerow([
+            row['label'],
+            '' if row['current'] is None else row['current'],
+            '' if row['previous'] is None else row['previous'],
+            row['delta_display'],
+            row['direction_label'],
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '命令', '本周期运行', '上一周期运行',
+        '本周期失败', '上一周期失败',
+        '本周期成功率（%）', '上一周期成功率（%）',
+        '本周期耗时中位数（毫秒）', '上一周期耗时中位数（毫秒）',
+        '本周期最长耗时（毫秒）',
+        '本周期异常慢', '方向',
+    ])
+    for row in trend_runs['commands']:
+        writer.writerow([
+            row['name'],
+            row['current']['run_count'], row['previous']['run_count'],
+            row['current']['failed_count'], row['previous']['failed_count'],
+            '' if row['current']['success_rate'] is None else row['current']['success_rate'],
+            '' if row['previous']['success_rate'] is None else row['previous']['success_rate'],
+            '' if row['current']['median_duration_ms'] is None else row['current']['median_duration_ms'],
+            '' if row['previous']['median_duration_ms'] is None else row['previous']['median_duration_ms'],
+            '' if row['current']['max_duration_ms'] is None else row['current']['max_duration_ms'],
+            row['current']['slow_run_count'],
+            row['direction_label'] if row['has_sample'] else '样本不足',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([trend_runs['summary']])
+    writer.writerow(['一次运行按它开始的时刻归期；按结束时刻归期会让卡在边界上的那次算进下一个周期，于是坏周期会报成“好周期之后跟着一个慢周期”。'])
+    writer.writerow(['耗时看中位数、最长一次和异常慢的次数，不看平均值；一次跑了两个小时的运行会把平均值抬起来，而那个数字描述的其实是从未发生过的运行。'])
+    writer.writerow(['运行次数不给方向：跑得更多只说明这个周期更忙，不代表更健康。'])
+    writer.writerow(['此处只报告，不改 stale 阈值、不自动重试、不改调度配置。'])
+
     writer.writerow([])
     writer.writerow(['需求雷达命中率的跨周期趋势'])
     hit_trend = dashboard['demand_radar_hit_trend']

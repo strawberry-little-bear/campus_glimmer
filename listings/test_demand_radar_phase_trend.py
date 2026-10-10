@@ -29,6 +29,21 @@ from .demand_radar_phase_trend import (
 from .models import AcademicTerm, Category, CampusLocation, DemandOpportunityTask, SearchQuery
 
 
+def _local_noon_today():
+    """参考时刻锹在本地当天正午，而不是运行刻。
+
+    学期阶段的用例把任务放在学期开始后第 N 天的本地正午，
+    其中有一个用例的 N 就等于“今天”。参考时刻若取运行刻，那么
+    本地走过午夜而 UTC 还在前一天的那几个小时里，这个任务就还没到
+    它自己的正午，会被窗口上界所过滤。把参考时刻固定到正午，
+    任务和上界就都落在同一天里，无论什么时候跑都一样。
+    """
+    from django.utils import timezone
+    today = timezone.localdate()
+    noon = timezone.datetime.combine(today, timezone.datetime.min.time()) + timedelta(hours=12)
+    return timezone.make_aware(noon)
+
+
 class DemandRadarPhaseTrendTests(TestCase):
     """同一阶段要在学期之间比，而不是在相邻月份之间比。"""
 
@@ -116,7 +131,7 @@ class DemandRadarPhaseTrendTests(TestCase):
 
     def report(self, *, days=DEFAULT_LOOKBACK_DAYS, now=None):
         return build_demand_radar_phase_trend(
-            days=days, now=now or timezone.now(),
+            days=days, now=now or _local_noon_today(),
         )
 
 
