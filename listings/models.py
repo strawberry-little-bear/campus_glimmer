@@ -1175,6 +1175,71 @@ class SearchSynonym(models.Model):
         return f'{self.keyword} ↔ {self.synonym}'
 
 
+class SearchSynonymRejection(models.Model):
+    """An operator's decision that a mined rewrite pair is not a real equivalence.
+
+    Candidates are mined from real rewrites and never applied automatically, so
+    until now the only record of an operator's judgement was the pair that got
+    confirmed. A pair that was read and dismissed left nothing behind: the same
+    rewrite came back into the candidate list the following week and the
+    reviewer read it again, and the threshold feedback saw a pool of pure
+    confirmations because dismissals were never written down anywhere.
+
+    This table is the negative half of that record. It stores the normalized
+    pair, normalized with the same helper the miner uses so that a rejection of
+    "充电宝" and one of "充电宝 " collapse into a single row. The reason is what
+    makes the row useful later: "not_equivalent" is an operator saying the two
+    words describe different things, while "too_rare" is an operator saying the
+    evidence is thin, and those two call for opposite changes to the mining
+    threshold. A row without a reason would only say "somebody disliked this".
+
+    The row is deliberately not a synonym. It never expands a search, never
+    enters the synonym table, and it hides a candidate without touching the
+    constant that gates the candidate list. If the pair is confirmed as a
+    SearchSynonym anyway, the rejection is marked superseded rather than
+    deleted: a reviewer who reconsiders can still see that somebody already
+    said no, and deleting the synonym brings the rejection back into force.
+    """
+
+    REASON_CHOICES = (
+        ('not_equivalent', '不是同一个东西'),
+        ('too_rare', '出现次数太少，证据不足'),
+        ('ambiguous', '词义有歧义，不宜扩大搜索范围'),
+    )
+
+    source = models.CharField('用户先搜', max_length=120)
+    target = models.CharField('随后改搜', max_length=120)
+    reason = models.CharField('否决原因', max_length=20, choices=REASON_CHOICES)
+    note = models.CharField('备注', max_length=200, blank=True)
+    rejected_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='synonym_rejections', verbose_name='否决人',
+    )
+    created_at = models.DateTimeField('否决时间', auto_now_add=True)
+    superseded_at = models.DateTimeField('失效时间', null=True, blank=True)
+
+    class Meta:
+        verbose_name = '同义词候选否决'
+        verbose_name_plural = '同义词候选否决'
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source', 'target'], name='unique_synonym_rejection_pair',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['reason', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.source} → {self.target}（{self.get_reason_display()}）'
+
+    @property
+    def is_superseded(self):
+        """Whether a later confirmation made this rejection irrelevant."""
+        return self.superseded_at is not None
+
+
 class SearchClick(models.Model):
     """A click-through event from a recorded search to a listing detail page."""
 

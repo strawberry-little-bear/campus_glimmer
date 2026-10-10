@@ -27,6 +27,7 @@ from .search_threshold_feedback import build_search_threshold_feedback
 from .search_trend import build_search_trend
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
+from .search_rejection_stats import build_search_rejection_stats
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -41,7 +42,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
@@ -2905,7 +2906,90 @@ def search_insights(request):
         days=period_days, query=request.GET.get('q', ''),
     )
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
+    dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
+    dashboard['rejection_reasons'] = list(SearchSynonymRejection.REASON_CHOICES)
     return render(request, 'listings/search_insights.html', dashboard)
+
+
+def _insights_rejection_pair(request):
+    """Read a normalized rewrite pair out of a POST body.
+
+    The pair is normalized with the miner's own helper rather than the caller's
+    raw strings, so a rejection written from the insights page and one written
+    from the admin land on the same row instead of creating a duplicate that
+    hides nothing. An unparseable pair is reported as None rather than guessed
+    at: a half-normalized pair would block the wrong candidate.
+    """
+    from .search_rewrites import _normalize
+
+    source = _normalize(request.POST.get('source', ''))
+    target = _normalize(request.POST.get('target', ''))
+    if not source or not target or source == target:
+        return None
+    return source, target
+
+
+def reject_rewrite_candidate(request):
+    """Record that a mined candidate is not an equivalence worth confirming.
+
+    A candidate list that can only be acted on by confirming is a list with no
+    memory. Without this endpoint an operator's only options are to confirm the
+    pair or to leave it, and leaving it means the same rewrite surfaces again
+    next week for somebody else to read. The row is deliberately small: a pair,
+    a reason, and an optional note. It never expands a search and never touches
+    the mining constant, because the whole point is to record a judgement
+    without acting on it.
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+    if request.method == 'POST':
+        pair = _insights_rejection_pair(request)
+        reason = request.POST.get('reason', '').strip()
+        valid_reasons = {code for code, _ in SearchSynonymRejection.REASON_CHOICES}
+        if pair and reason in valid_reasons:
+            source, target = pair
+            SearchSynonymRejection.objects.update_or_create(
+                source=source,
+                target=target,
+                defaults={
+                    'reason': reason,
+                    'note': request.POST.get('note', '').strip()[:200],
+                    'rejected_by': request.user,
+                    'superseded_at': None,
+                },
+            )
+            messages.success(request, f'已记录否决：{source} → {target}。这条候选不会再出现在列表里。')
+        else:
+            messages.error(request, '没能记录这条否决：词对或原因不完整。')
+    return redirect('search_insights')
+
+
+def restore_rewrite_candidate(request):
+    """Take back a rejection so the pair can be reviewed again.
+
+    Undoing a rejection is a normal outcome, not an error path: an operator who
+    dismissed a pair in March may well reconsider it in October when the
+    vocabulary has changed. The row is deleted rather than deactivated, because
+    a rejected pair that is neither active nor visible would be a record nobody
+    can interpret, and the reason it was dismissed is still in the audit trail
+    if it is ever confirmed instead.
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+    if request.method == 'POST':
+        pair = _insights_rejection_pair(request)
+        if pair:
+            source, target = pair
+            deleted, _ = SearchSynonymRejection.objects.filter(
+                source=source, target=target,
+            ).delete()
+            if deleted:
+                messages.success(request, f'已撤销否决：{source} → {target}。这条候选会重新参与挖掘。')
+            else:
+                messages.error(request, '没有找到对应的否决记录。')
+        else:
+            messages.error(request, '没能撤销这条否决：词对不完整。')
+    return redirect('search_insights')
 
 
 @login_required
@@ -2926,6 +3010,7 @@ def search_insights_export(request):
         days=period_days, query=request.GET.get('q', ''),
     )
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
+    dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2999,6 +3084,35 @@ def search_insights_export(request):
         writer.writerow([
             '档位候选量', row['threshold'], row['total'], row['visible'],
             row['occurrences'], '是' if row['is_current'] else '否',
+        ])
+
+    rejections = dashboard['rejection_stats']
+    writer.writerow([])
+    writer.writerow(['候选否决记录', '否决总数', '达到当前门槛', '低于门槛', '累计出现次数'])
+    writer.writerow([
+        '候选否决记录', rejections['total_count'], rejections['passing_count'],
+        rejections['below_threshold_count'], rejections['occurrence_total'],
+    ])
+    writer.writerow([
+        '否决分布', '原因', '条数', '占比（%）', '达到门槛条数', '平均出现次数',
+    ])
+    for row in rejections['reason_rows']:
+        writer.writerow([
+            '否决分布', row['reason_label'], row['count'], row['share'],
+            row['passing_count'], row['average_occurrences'],
+        ])
+    writer.writerow([
+        '否决信号', rejections['signal']['label'],
+        rejections['not_equivalent_count'], rejections['too_rare_count'],
+        rejections['ambiguous_count'],
+    ])
+    writer.writerow([])
+    writer.writerow(['被否决词对', '用户先搜', '随后改搜', '否决原因', '出现次数', '是否达到门槛', '最近出现'])
+    for row in rejections['rows']:
+        writer.writerow([
+            f"{row['source']} → {row['target']}", row['source'], row['target'],
+            row['reason_label'], row['occurrences'], row['threshold_display'],
+            f"{row['last_seen']:%Y-%m-%d %H:%M}" if row['last_seen'] else '周期内未再出现',
         ])
 
     writer.writerow([])

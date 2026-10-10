@@ -259,6 +259,7 @@
         <div class="rewrite-candidate-warning"><span>较强证据</span><strong>{{ rewrite_candidates.summary.strong_count }}</strong><small>出现 3 次以上</small></div>
         <div><span>累计改口</span><strong>{{ rewrite_candidates.summary.occurrence_total }}</strong><small>候选背后的搜索次数</small></div>
         <div><span>符合条件词对</span><strong>{{ rewrite_candidates.summary.total_pair_count }}</strong><small>含暂未展示的候选</small></div>
+        <div class="rewrite-candidate-warning"><span>已被否决</span><strong>{{ rewrite_candidates.summary.rejected_count }}</strong><small>不再出现的词对</small></div>
     </div>
     {% if rewrite_candidates.rows %}
     <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><thead><tr><th>用户先搜</th><th>随后改搜</th><th>出现次数</th><th>涉及用户</th><th>置信提示</th><th>最近出现</th><th>操作</th></tr></thead><tbody>
@@ -270,10 +271,19 @@
             <td>{{ row.user_count }}<small class="d-block text-muted">人</small></td>
             <td><span class="rewrite-candidate-confidence" data-level="{% if row.occurrences >= 3 %}strong{% else %}weak{% endif %}">{{ row.confidence }}</span></td>
             <td>{{ row.last_seen|date:"Y-m-d H:i" }}</td>
-            <td><a class="btn btn-outline-success btn-sm" href="{% url 'admin:listings_searchsynonym_add' %}?keyword={{ row.source|urlencode }}&amp;synonym={{ row.target|urlencode }}"><i class="bi bi-check2 me-1"></i>确认并启用</a></td>
+            <td class="rewrite-candidate-actions"><a class="btn btn-outline-success btn-sm" href="{% url 'admin:listings_searchsynonym_add' %}?keyword={{ row.source|urlencode }}&amp;synonym={{ row.target|urlencode }}"><i class="bi bi-check2 me-1"></i>确认并启用</a>
+                <form method="post" action="{% url 'reject_rewrite_candidate' %}" class="rewrite-reject-form">{% csrf_token %}
+                    <input type="hidden" name="source" value="{{ row.source }}">
+                    <input type="hidden" name="target" value="{{ row.target }}">
+                    <select name="reason" class="form-select form-select-sm" aria-label="否决原因">
+                        {% for code, label in rejection_reasons %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+                    </select>
+                    <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-x-lg me-1"></i>否决</button>
+                </form></td>
         </tr>
         {% endfor %}</tbody></table></div>
     <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>候选只提议、不自动生效：同义词会改变此后每一次搜索的结果范围，配错会让搜索悄悄变差，所以每一条都由运营在后台确认后写入。</p>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-x-circle me-1"></i>不认同的候选也可以直接否决：否决会连同出现次数一起记下来，进入下面的「候选否决分析」，但不会扩大任何搜索的结果范围。</p>
     {% else %}<div class="empty-inline">当前周期内没有出现重复的改口行为。等更多学生用起来，或把统计周期放长一些再看看。</div>{% endif %}
 </section>
 
@@ -305,6 +315,52 @@
     {% else %}<div class="empty-inline">当前周期内没有新确认的同义词，还没有可回流的数据。</div>{% endif %}
 </section>
 
+
+<section class="content-card ops-panel mb-4 rewrite-candidate-panel">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Dismissed pairs</span><h2>候选否决分析</h2></div><span class="ops-panel-hint">被运营看过并否掉的候选，以及它们其实有多频繁</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-x-circle me-1"></i>候选列表此前只能「确认」不能「否决」，被否掉的词对下周又会原样出现，运营只能把同一批噪声再读一遍；而门槛建议只读已确认的词，被否决的词的证据完全丢失。这里把每一次否决连同它背后的改口频率一起记下来：一个出现四十次仍被否掉的词对和一个只出现两次的词对，说的不是同一件事。</p>
+    <div class="rewrite-candidate-summary">
+        <div><span>否决总数</span><strong>{{ rejection_stats.total_count }}</strong><small>仍在生效的否决</small></div>
+        <div><span>达到当前门槛</span><strong>{{ rejection_stats.passing_count }}</strong><small>出现 {{ rejection_stats.current_threshold }} 次以上</small></div>
+        <div class="rewrite-candidate-warning"><span>低于门槛</span><strong>{{ rejection_stats.below_threshold_count }}</strong><small>在列表外否决，不作门槛依据</small></div>
+        <div><span>高频被否</span><strong>{{ rejection_stats.strong_count }}</strong><small>出现 3 次以上仍被否</small></div>
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-lightbulb me-1"></i>{{ rejection_stats.signal.reason }}</p>
+    {% if rejection_stats.reason_rows %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-pie-chart me-1"></i>否决原因分布</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><thead><tr><th>否决原因</th><th>条数</th><th>占比</th><th>达到门槛</th><th>平均出现次数</th></tr></thead><tbody>
+        {% for row in rejection_stats.reason_rows %}
+        <tr>
+            <td><strong>{{ row.reason_label }}</strong></td>
+            <td>{{ row.count }}</td>
+            <td>{{ row.share }}%</td>
+            <td>{{ row.passing_count }}</td>
+            <td>{{ row.average_occurrences }}</td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    {% endif %}
+    {% if rejection_stats.rows %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-list-check me-1"></i>被否决的词对</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><thead><tr><th>用户先搜</th><th>随后改搜</th><th>否决原因</th><th>出现次数</th><th>与门槛的关系</th><th>最近出现</th><th>备注</th><th>操作</th></tr></thead><tbody>
+        {% for row in rejection_stats.rows %}
+        <tr{% if not row.passes_threshold %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ row.source }}</strong><small class="d-block text-muted">无结果搜索</small></td>
+            <td><strong>{{ row.target }}</strong><small class="d-block text-muted">有结果搜索</small></td>
+            <td>{{ row.reason_label }}</td>
+            <td><strong>{{ row.occurrences }}</strong><small class="d-block text-muted">次</small></td>
+            <td><span class="rewrite-candidate-confidence" data-level="{% if row.is_strong %}strong{% else %}weak{% endif %}">{{ row.threshold_display }}</span></td>
+            <td>{% if row.last_seen %}{{ row.last_seen|date:"Y-m-d H:i" }}{% else %}&mdash;{% endif %}</td>
+            <td class="synonym-effect-verdict">{{ row.note|default:"—" }}</td>
+            <td><form method="post" action="{% url 'restore_rewrite_candidate' %}" onsubmit="return confirm('撤销否决后，这条候选会重新参与挖掘，确定吗？');">{% csrf_token %}
+                <input type="hidden" name="source" value="{{ row.source }}">
+                <input type="hidden" name="target" value="{{ row.target }}">
+                <button class="btn btn-outline-secondary btn-sm" type="submit"><i class="bi bi-arrow-counterclockwise me-1"></i>撤销否决</button>
+            </form></td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>否决只让一条候选不再出现，不扩大也不缩小任何搜索的结果范围，更不修改候选次数门槛本身。低于门槛的否决单独计数、不进入门槛判断：运营在列表之外否掉一个从未达到门槛的词对，说明不了门槛该松还是该紧。</p>
+    {% else %}<div class="empty-inline">还没有记录过否决。看到明显不是同一个东西的候选时，可以直接在这里否决，它会连同出现次数一起留在表里。</div>{% endif %}
+</section>
 
 <section class="content-card ops-panel mb-4 rewrite-candidate-panel">
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Threshold tuning</span><h2>候选门槛建议</h2></div><span class="ops-panel-hint">由同义词命中率反推，只建议不自动改</span></div>

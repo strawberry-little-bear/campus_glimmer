@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
 
 class ItemImageInline(admin.TabularInline):
@@ -302,6 +303,29 @@ class SearchSynonymAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     search_fields = ('keyword', 'synonym')
     list_editable = ('is_active',)
+
+    def save_model(self, request, obj, form, change):
+        # 确认一条同义词时，把针对同一词对的否决标记为失效。同一条词对
+        # 同时存在「已确认生效」和「仍在屏蔽候选」两条记录是自相矛盾的，
+        # 而矛盾必须由人来解开，所以这里只改否决记录的状态，不动同义词本身。
+        super().save_model(request, obj, form, change)
+        supersede_rejections_for_pair(obj.keyword, obj.synonym)
+
+    def delete_model(self, request, obj):
+        # 删掉同义词意味着这个词对不再扩大搜索，之前被它压制的否决重新生效，
+        # 否则候选会被一条已经无关的记录继续挡着。
+        restore_rejections_for_pair(obj.keyword, obj.synonym)
+        super().delete_model(request, obj)
+
+
+@admin.register(SearchSynonymRejection)
+class SearchSynonymRejectionAdmin(admin.ModelAdmin):
+    # 否决记录是运营判断的负面留痕，后台必须能改：运营改主意是常态，
+    # 一个只能新增不能撤销的否决表会把一次误判永久变成一次误判。
+    list_display = ('source', 'target', 'reason', 'rejected_by', 'superseded_at', 'created_at')
+    list_filter = ('reason',)
+    search_fields = ('source', 'target', 'note')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(DemandOpportunityTask)

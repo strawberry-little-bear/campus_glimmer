@@ -22,13 +22,21 @@ adjacent searches, because two unrelated users searching two unrelated terms
 prove nothing about equivalence. And the gap between the two searches must be
 short, because a rewrite half a day later is a new need rather than a
 restatement of the old one.
+
+A third boundary is written by the operator rather than inferred from the log.
+A pair that has been dismissed with a SearchSynonymRejection row is dropped
+from the list, because a reviewer who already read the pair and said no should
+not be made to read it again next week. Rejections are consulted in both
+directions like active synonyms, and a rejection that has been superseded by a
+later confirmation stops hiding the pair. The module never writes those rows;
+it only reads them.
 """
 
 from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import SearchQuery, SearchSynonym
+from .models import SearchQuery, SearchSynonym, SearchSynonymRejection
 
 # Two searches further apart than this are treated as separate needs. The
 # student has moved on to something else, so the second term says nothing about
@@ -72,6 +80,39 @@ def _existing_pairs():
     return pairs
 
 
+def _rejected_pairs():
+    """Load dismissed rewrite pairs in both directions for exclusion.
+
+    Only rejections that still stand are returned. One whose pair was confirmed
+    as a synonym afterwards is marked superseded, and a superseded rejection
+    hides nothing: the operator reconsidered, and this module reports the state
+    of the reviewer's queue now, not a decision that has since been overruled.
+
+    The set is expanded in both directions because a dismissal is one judgement,
+    not two: recording "移动电源 -> 充电宝" must hide the candidate the miner
+    built as "充电宝 -> 移动电源". That expansion makes the set the wrong thing
+    to count. A panel that reports len() of it tells an operator they dismissed
+    two pairs when they dismissed one, and a count that grows just because the
+    same judgement was written down in the other order is a count nobody can
+    reconcile with the table. `rejected_count` is therefore taken from the row
+    count, not from the set size.
+    """
+    pairs = set()
+    for source, target in SearchSynonymRejection.objects.filter(
+        superseded_at__isnull=True,
+    ).values_list('source', 'target'):
+        left, right = _normalize(source), _normalize(target)
+        if left and right:
+            pairs.add((left, right))
+            pairs.add((right, left))
+    return pairs
+
+
+def _rejected_row_count():
+    """How many dismissals are still in force, one per recorded judgement."""
+    return SearchSynonymRejection.objects.filter(superseded_at__isnull=True).count()
+
+
 def _build_pair_row(source, target, occurrences, users, last_seen):
     return {
         'source': source,
@@ -90,6 +131,7 @@ def build_search_rewrite_candidates(
     now = now or timezone.now()
     start = now - timedelta(days=days)
     existing = _existing_pairs()
+    rejected = _rejected_pairs()
 
     # Only searches tied to a user can form a pair; anonymous sessions carry no
     # continuity, so chaining them would attribute one person's rewrite to
@@ -145,6 +187,11 @@ def build_search_rewrite_candidates(
     # Pairs already configured as synonyms are dropped: re-listing them would
     # make the operator re-read work they have already done.
     candidates = [row for row in candidates if (row['source'], row['target']) not in existing]
+    # A dismissed pair is not evidence any more, it is a decision already made.
+    # Filtering here rather than at render time keeps the candidate counts
+    # honest: the panel's totals describe the queue an operator still has to
+    # work through, not a longer list with the finished rows painted over.
+    candidates = [row for row in candidates if (row['source'], row['target']) not in rejected]
     candidates.sort(
         key=lambda row: (-row['occurrences'], -row['user_count'], row['source']),
     )
@@ -163,5 +210,6 @@ def build_search_rewrite_candidates(
             'total_pair_count': len(candidates),
             'occurrence_total': sum(row['occurrences'] for row in visible),
             'strong_count': sum(row['occurrences'] >= 3 for row in visible),
+            'rejected_count': _rejected_row_count(),
         },
     }
