@@ -2565,6 +2565,183 @@ def operations_dashboard_export(request):
         for recommendation in supply['recommendations']:
             writer.writerow([recommendation])
 
+    pulse = dashboard['campus_pulse']
+    writer.writerow([])
+    writer.writerow(['校园供需热力'])
+    writer.writerow([
+        '活跃地点', pulse['summary']['location_count'],
+        '当前在售', pulse['summary']['available_supply'],
+        '有效求购', pulse['summary']['active_demands'],
+        '需求紧张地点', pulse['summary']['high_pressure_count'],
+        '周期内预约', pulse['summary']['period_orders'],
+        '周期天数', pulse['period_days'],
+    ])
+    writer.writerow([])
+    writer.writerow(['校园地点', '楼宇', '公开地点', '当前在售', '周期新增供给',
+                     '有效求购', '周期内预约', '周期内完成', '活跃度',
+                     '活跃度占比（%）', '需求占比（%）', '供需状态'])
+    if not pulse['rows']:
+        writer.writerow(['当前周期还没有地点供需数据。'])
+    else:
+        for row in pulse['rows']:
+            writer.writerow([
+                row['name'],
+                row['building'],
+                '是' if row['is_public'] else '',
+                row['available_supply'],
+                row['new_supply'],
+                row['active_demands'],
+                row['period_orders'],
+                row['completed_orders'],
+                row['activity_score'],
+                row['heat_percent'],
+                row['pressure_ratio'],
+                row['pressure_label'],
+            ])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([
+        '热力按配置地点聚合，不读用户的实时定位：需求压力由公开的商品、求购和'
+        '预约记录推出来，一条记录都不会指到某个人的当前位置上。',
+    ])
+    writer.writerow([
+        '活跃度由周期新增、求购和预约加权合成，占比是同一批地点里的相对热度，'
+        '不是跨周期的增长；只看一行看不出它在变热还是变冷。',
+    ])
+    writer.writerow([
+        '供需状态只看当下这一刻的存量，与统计周期无关：期初上架、周期内卖掉的'
+        '那件商品不计入在售，所以状态回答的是"现在缺不缺"，不是"这周热闹吗"。',
+    ])
+    writer.writerow([
+        '此处只报告，不调整地点排序、不据此给任何地点增加曝光或减少曝光。',
+    ])
+
+    campaigns = dashboard['campaign_analytics']
+    writer.writerow([])
+    writer.writerow(['校园专题表现'])
+    writer.writerow([
+        '统计专题', campaigns['summary']['campaign_count'],
+        '专题新增商品', campaigns['summary']['new_items'],
+        '专题当前在售', campaigns['summary']['current_items'],
+        '专题浏览', campaigns['summary']['views'],
+        '专题收藏', campaigns['summary']['favorites'],
+        '专题预约', campaigns['summary']['orders'],
+        '专题完成交易', campaigns['summary']['completed_orders'],
+        '浏览转预约（%）', campaigns['summary']['view_to_order_rate'],
+        '需要关注', campaigns['summary']['attention_count'],
+        '周期天数', campaigns['period_days'],
+    ])
+    writer.writerow([])
+    writer.writerow(['专题', '周期新增商品', '当前在售', '参与卖家',
+                     '浏览', '浏览用户', '收藏', '浏览转收藏（%）',
+                     '预约', '完成交易', '完成率（%）',
+                     '收藏转预约（%）', '浏览转预约（%）', '判断'])
+    if not campaigns['rows']:
+        writer.writerow(['当前统计周期还没有专题行为数据。'])
+    else:
+        for row in campaigns['rows']:
+            writer.writerow([
+                row['title'],
+                row['new_items'],
+                row['current_items'],
+                row['seller_count'],
+                row['views'],
+                row['viewers'],
+                row['favorites'],
+                row['view_to_favorite_rate'],
+                row['orders'],
+                row['completed_orders'],
+                row['completion_rate'],
+                row['favorite_to_order_rate'],
+                row['view_to_order_rate'],
+                row['performance_label'],
+            ])
+    writer.writerow([])
+    writer.writerow(['需要关注的专题', '判断', '说明'])
+    if campaigns['attention_rows']:
+        for row in campaigns['attention_rows']:
+            writer.writerow([row['title'], row['performance_label'], row['performance_note']])
+    else:
+        writer.writerow(['暂无需要关注的专题。'])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([
+        '指标按专题窗口与统计周期重叠的那一段计算，不是按整个专题的历史：'
+        '一个开学初就上线的专题，在"最近 30 天"里只有这 30 天的行为被计入。',
+    ])
+    writer.writerow([
+        '浏览用户是去重后的用户数，只作为辅助信号；浏览、收藏和预约是事件数，'
+        '同一个用户多次操作会被计多次。',
+    ])
+    writer.writerow([
+        '转化率用于横向比较专题，不代表任何单个用户的完整行为路径，'
+        '也不代表专题本身的质量：运营人员仍需结合商品质量和活动内容判断。',
+    ])
+    writer.writerow([
+        '此处只报告，不调整专题的投放位置、不自动结束或续期任何专题。',
+    ])
+
+    calendar = dashboard['academic_calendar']
+    writer.writerow([])
+    writer.writerow(['学期节律与交易高峰'])
+    if calendar['has_terms']:
+        context = calendar['context']
+        writer.writerow([
+            '当前学期', context['term_name'] or '未配置',
+            '当前阶段', context['phase_label'] or '未划分阶段',
+            '阶段进度（%）', context['progress_percent'],
+            '阶段剩余天数', '' if context['days_left'] is None else context['days_left'],
+            '阶段说明', context['phase_note'],
+        ])
+    else:
+        writer.writerow(['还没有配置学期日历，后台录入起止日期后这里会开始统计。'])
+    writer.writerow([])
+    writer.writerow(['学期', '学期类型', '阶段', '开始', '结束', '天数', '进行中',
+                     '新增商品', '新增求购', '完成交易', '新增预约',
+                     '新增搜索', '无结果搜索', '无结果率（%）',
+                     '较上一阶段新增商品', '较上一阶段新增求购', '供给趋势', '求购趋势'])
+    if not calendar['has_terms'] or not calendar['terms']:
+        writer.writerow(['当前没有可统计的学期阶段。'])
+    else:
+        for term in calendar['terms']:
+            for row in term['phases']:
+                writer.writerow([
+                    row['term_name'],
+                    term['kind_label'],
+                    row['phase_label'],
+                    row['start_date'],
+                    row['end_date'],
+                    row['day_count'],
+                    '是' if row['is_current'] else '',
+                    row['new_items'],
+                    row['new_demands'],
+                    row['completed_orders'],
+                    row['new_orders'],
+                    row['new_searches'],
+                    row['zero_result_searches'],
+                    row['zero_result_rate'],
+                    '' if not row['previous_phase_label'] else row['delta_new_items'],
+                    '' if not row['previous_phase_label'] else row['delta_new_demands'],
+                    row['supply_trend_label'],
+                    row['demand_trend_label'],
+                ])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([
+        '阶段按学期开始后的偏移天数划分，偏移量可在后台调整；一个阶段覆盖哪些天'
+        '完全由配置决定，不随统计周期变化。',
+    ])
+    writer.writerow([
+        '阶段之间的比较说的是供给节律，不是因果：开学两周的商品变多，'
+        '既可以解释成"学生更愿意卖东西"，也可以解释成"上一届离校清了一批库存"。',
+    ])
+    writer.writerow([
+        '学期首阶段没有可比的上一阶段，差值留空；把它当成 0 会读成"没有增长"，'
+        '而真实情况是根本没有参照。',
+    ])
+    writer.writerow([
+        '此处只报告，不修改学期日历、不按阶段调整任何商品的曝光或提醒策略。',
+    ])
     rhythm = dashboard['borrow_rhythm']
     writer.writerow([])
     writer.writerow(['借用节奏与学期阶段交叉'])
@@ -2670,6 +2847,209 @@ def operations_dashboard_export(request):
         '此处只报告，不提前催收、不改动催收阶梯、不打标记借用人。',
     ])
 
+    risk = dashboard['borrow_risk']
+    writer.writerow([])
+    writer.writerow(['借用逾期风险分层'])
+    writer.writerow([
+        '回看天数', risk['days'],
+        '周期内借用', risk['borrow_count'],
+        '发生过升级', risk['escalated_count'],
+        '升级率（%）', '' if risk['escalation_rate'] is None else risk['escalation_rate'],
+        '拖到第三级', risk['level_three_count'],
+        '第三级率（%）', '' if risk['level_three_rate'] is None else risk['level_three_rate'],
+        '最小样本门槛', risk['min_sample_size'],
+    ])
+    writer.writerow([])
+    writer.writerow(['分层方式', '分组', '借用', '升级', '第三级', '已闭环', '跟进中',
+                     '升级率（%）', '第三级率（%）', '平均闭环（天）',
+                     '最长逾期（天）', '样本不足'])
+    if not risk['has_data']:
+        writer.writerow(['当前回看期内还没有借用订单，风险分层需要先有借用发生。'])
+    else:
+        for stratify_label, rows in (
+            ('按分类', risk['category_rows']),
+            ('按押金档位', risk['deposit_rows']),
+        ):
+            for row in rows:
+                writer.writerow([
+                    stratify_label,
+                    row['key'],
+                    row['borrow_count'],
+                    row['escalated_count'],
+                    row['level_three_count'],
+                    row['resolved_count'],
+                    row['open_count'],
+                    '' if row['escalation_rate'] is None else row['escalation_rate'],
+                    '' if row['level_three_rate'] is None else row['level_three_rate'],
+                    '' if row['average_close_days'] is None else row['average_close_days'],
+                    '' if row['max_overdue_days'] is None else row['max_overdue_days'],
+                    '是' if row['is_small_sample'] else '',
+                ])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([risk['summary']])
+    writer.writerow([
+        '分母包含从未升级过的借用：只看升级过的订单会让每一组的升级率都变成 '
+        '100%，分层就失去了意义。',
+    ])
+    writer.writerow([
+        '两种分层读的是同一批借用，分组互斥且穷尽，所以两张表的合计应当一致；'
+        '若对不上，说明改动时只动了一侧的取数。',
+    ])
+    writer.writerow([
+        '平均闭环从真正发生的那一级催收起算，不从到期日起算：在 L1 躺了一周的订单'
+        '不是治理侧花了一周处理的那一单。',
+    ])
+    writer.writerow([
+        '最长逾期只对仍在跟进中的订单有意义，已闭环的订单不会再变老，'
+        '把它和未闭环的放在一起比，会读成"闭环反而更危险"。',
+    ])
+    writer.writerow([
+        '样本少于 ', risk['min_sample_size'], ' 笔的组只报数字、不给结论：'
+        '两笔里有一笔逾期是 50%，这个数字说明不了任何事。',
+    ])
+    writer.writerow([
+        '此处只报告，不因为某个分类看起来更容易拖就提前催收它的借用方，'
+        '也不据此调整押金额度或给任何人打标记。',
+    ])
+
+    response_quality = dashboard['notification_response']
+    writer.writerow([])
+    writer.writerow(['通知处理时效与触达质量'])
+    response_summary = response_quality['summary']
+    critical_summary = response_quality['critical_summary']
+    writer.writerow([
+        '周期发送', response_summary['sent'],
+        '已处理', response_summary['handled'],
+        '处理率（%）', response_summary['handling_rate'],
+        '未处理', response_summary['unread'],
+        '超一周未处理', response_summary['stale_unread'],
+        '中位处理时长', response_summary['median_label'],
+        'P90 处理时长', response_summary['p90_label'],
+        '交易关键类型', critical_summary['count'],
+        '交易关键发送', critical_summary['sent'],
+        '交易关键已读', critical_summary['read'],
+        '交易关键已读率（%）', critical_summary['read_rate'],
+        '周期天数', response_quality['period_days'],
+    ])
+    writer.writerow([])
+    writer.writerow(['通知类型', '代码', '交易关键', '发送', '已读', '未读',
+                     '已读率（%）', '平均处理时长', '最快', '最慢', '需关注'])
+    if not response_quality['has_data']:
+        writer.writerow(['当前周期还没有通知数据。'])
+    else:
+        for row in response_quality['kind_rows']:
+            writer.writerow([
+                row['label'], row['kind'],
+                '是' if row['is_business_critical'] else '',
+                row['sent'], row['read'], row['unread'],
+                row['read_rate'], row['avg_label'],
+                row['fastest_label'], row['slowest_label'],
+                '是' if row['needs_attention'] else '',
+            ])
+    writer.writerow([])
+    writer.writerow(['处理时长分布', '条数', '占比（%）'])
+    for bucket in response_quality['latency_buckets']:
+        writer.writerow([bucket['label'], bucket['count'], bucket['share']])
+    writer.writerow([])
+    writer.writerow(['发送时段', '发送量', '该时段处理量'])
+    for point in response_quality['hour_profile']:
+        writer.writerow([point['label'], point['sent'], point['read']])
+    writer.writerow([])
+    writer.writerow(['运营建议'])
+    for recommendation in response_quality['recommendations']:
+        writer.writerow([recommendation])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([
+        '处理时长按"标记已读时间 − 通知创建时间"算，反映的是用户查看并处理提醒的'
+        '快慢，不代表交易本身是否完成。',
+    ])
+    writer.writerow([
+        '未读超过一周的通知按已忽略计，不算待处理：一个七天后才被点开的角标'
+        '对用户已经不再有意义，把它留在待处理里会让处理时长虚高。',
+    ])
+    writer.writerow([
+        '小时按本地时钟切，不按 UTC：CI 跑 UTC 而项目时区是东八区，'
+        '免打扰时段是按用户墙上的钟设的，按 UTC 分桶会把"没人处理的时段"读错八小时。',
+    ])
+    writer.writerow([
+        '此处只报告，不改变任何通知的发送时段、不折叠未读角标、不修改免打扰配置。',
+    ])
+
+    reminder_effect = dashboard['lifecycle_reminder_effect']
+    writer.writerow([])
+    writer.writerow(['生命周期提醒触达与行动'])
+    reminder_summary = reminder_effect['summary']
+    writer.writerow([
+        '周期内提醒商品', reminder_summary['reminded_items'],
+        '覆盖卖家', reminder_summary['reminded_sellers'],
+        '提醒通知数', reminder_summary['notices'],
+        '通知被打开', reminder_summary['read_notices'],
+        '通知打开率（%）', reminder_summary['notice_read_rate'],
+        '找到对应通知的商品', reminder_summary['reached_items'],
+        '通知被打开的商品', reminder_summary['read_items'],
+        '商品打开率（%）', reminder_summary['read_rate'],
+        '提醒后有动作', reminder_summary['acted_after'],
+        '其中刷新上架', reminder_summary['refreshed_after'],
+        '其中完成交易', reminder_summary['completed_after'],
+        '行动率（%）', reminder_summary['action_rate'],
+        '看了但没动', reminder_summary['read_but_inactive'],
+        '完全没动作', reminder_summary['untouched'],
+        '观察窗口（天）', reminder_summary['window_days'],
+        '周期天数', reminder_effect['period_days'],
+    ])
+    writer.writerow([])
+    writer.writerow(['提醒类型', '口径', '商品数', '被打开', '打开率（%）', '有动作', '行动率（%）'])
+    if not reminder_effect['has_data']:
+        writer.writerow(['周期内还没有发送过生命周期提醒。'])
+    else:
+        for row in reminder_effect['kind_rows']:
+            writer.writerow([
+                row['label'], row['note'],
+                row['items'], row['read'], row['read_rate'],
+                row['acted'], row['action_rate'],
+            ])
+    writer.writerow([])
+    writer.writerow(['当前仍未真正收到', '商品数', '说明'])
+    for row in reminder_effect['blocked_rows']:
+        writer.writerow([row['label'], row['items'], row['note']])
+    writer.writerow([])
+    writer.writerow(['商品', '卖家', '提醒类型', '等级', '发布/刷新天数', '距提醒天数', '是否看过'])
+    for row in reminder_effect['untouched_rows']:
+        writer.writerow([
+            row['item'].title, row['seller'].username,
+            '、'.join('价格参考' if kind == 'price' else '待处理' for kind in row['kinds']),
+            row['level_label'], row['age_days'], row['days_since_reminder'],
+            '看过' if row['read'] else '未读',
+        ])
+    writer.writerow([])
+    writer.writerow(['运营建议'])
+    for recommendation in reminder_effect['recommendations']:
+        writer.writerow([recommendation])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([
+        '这里只统计"提醒之后发生"的动作，不区分是否由提醒引起：卖家完全可能在'
+        '提醒之前就已经在整理商品。所有比例都按提醒的时间戳切开计算，'
+        '读成相关性而不是因果。',
+    ])
+    writer.writerow([
+        '动作只认两个观测到的写入点：主动刷新看 last_refreshed_at，成交看订单走到'
+        '终态的时间。编辑商品不算动作，因为任何保存都会改写更新时间。',
+    ])
+    writer.writerow([
+        '三个提醒类型桶互斥：同时收到两类提醒的商品单独成桶，只报告不比较，'
+        '否则同一个卖家的动作无法归因给任何一类。',
+    ])
+    writer.writerow([
+        '"当前仍未真正收到"用当前的偏好与免打扰时段重算，不是发送当天的历史快照：'
+        '发送时的计数只存在于命令的返回值里，从来没有被存下来。',
+    ])
+    writer.writerow([
+        '此处只报告，不补发提醒、不修改提醒阈值、不按行动率给卖家排序。',
+    ])
+
     trend_runs = dashboard['task_run_trend']
     writer.writerow([])
     writer.writerow(['定时任务健康度的跨周期趋势'])
@@ -2723,6 +3103,58 @@ def operations_dashboard_export(request):
     writer.writerow(['耗时看中位数、最长一次和异常慢的次数，不看平均值；一次跑了两个小时的运行会把平均值抬起来，而那个数字描述的其实是从未发生过的运行。'])
     writer.writerow(['运行次数不给方向：跑得更多只说明这个周期更忙，不代表更健康。'])
     writer.writerow(['此处只报告，不改 stale 阈值、不自动重试、不改调度配置。'])
+
+    run_health = dashboard['task_run_health']
+    writer.writerow([])
+    writer.writerow(['定时任务运行台账与健康统计'])
+    writer.writerow([
+        '周期内运行', run_health['total_runs'],
+        '失败', run_health['total_failed'],
+        '成功率（%）', '' if run_health['success_rate_percent'] is None else run_health['success_rate_percent'],
+        '静默命令', run_health['stale_count'],
+        '正在连续失败', run_health['failing_count'],
+        '静默判定天数', run_health['stale_after_days'],
+        '周期天数', run_health['days'],
+    ])
+    writer.writerow([])
+    writer.writerow(['命令', '周期内运行', '失败', '成功率（%）', '最近状态',
+                     '最近运行', '最近成功', '静默', '连续失败',
+                     '平均耗时（毫秒）', '累计处理'])
+    for row in run_health['commands']:
+        writer.writerow([
+            row['name'],
+            row['run_count'], row['failed_count'],
+            '' if row['success_rate'] is None else round(row['success_rate'] * 100, 1),
+            {'failed': '失败', 'succeeded': '成功'}.get(row['last_status'], '无记录'),
+            '' if row['last_run_at'] is None else row['last_run_at'].strftime('%Y-%m-%d %H:%M'),
+            '' if row['last_success_at'] is None else row['last_success_at'].strftime('%Y-%m-%d %H:%M'),
+            row['silence_label'],
+            row['consecutive_failures'],
+            '' if row['avg_duration_ms'] is None else row['avg_duration_ms'],
+            '；'.join(f'{key} {value}' for key, value in row['metrics_total'].items()),
+        ])
+    writer.writerow([])
+    writer.writerow(['调度建议'])
+    for recommendation in run_health['recommendations']:
+        writer.writerow([recommendation])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([run_health['summary']])
+    writer.writerow([
+        '静默天数按最近一次成功运行计算，不按任意一次运行算：一直失败的命令同样'
+        '每天都在跑，按任意运行算会把它伪装成健康的。',
+    ])
+    writer.writerow([
+        '--dry-run 只统计发送范围、不写入任何通知，默认不计入成功率：一个只做过'
+        '预演的命令没有证明过任何事。',
+    ])
+    writer.writerow([
+        '失败记录写在独立的短事务里，业务事务回滚也不会带走失败证据，'
+        '异常仍会原样抛出，不会因为接了台账就被吞掉。',
+    ])
+    writer.writerow([
+        '此处只报告，不重跑命令、不改调度配置、不把统计写回台账。',
+    ])
     writer.writerow([])
     writer.writerow(['命令耗时的分位分布'])
     percentiles = dashboard['task_run_duration_percentiles']
@@ -3147,6 +3579,87 @@ def operations_dashboard_export(request):
         '丢了就会缩小分母，'
         '让每个阶段的命中率安静地变大。',
     ])
+    sla = dashboard['governance_sla']
+    writer.writerow([])
+    writer.writerow(['治理队列处理时效'])
+    writer.writerow([
+        '回看天数', sla['days'],
+        '周期内事项', sla['total_cases'],
+        '周期内已处理', sla['total_closed'],
+        '当前待处理', sla['total_open'],
+        '已超期', sla['total_overdue'],
+        '时限内完成率（%）', '' if sla['within_sla_rate'] is None else sla['within_sla_rate'],
+    ])
+    writer.writerow([])
+    writer.writerow(['队列', '周期内', '已处理', '待处理', '超期', '临近超期',
+                     '超期率（%）', '平均耗时', '中位耗时', 'P90 耗时',
+                     '最快', '最慢', '处理时限', '时限内完成数',
+                     '时限内完成率（%）'])
+    for queue in sla['queues']:
+        writer.writerow([
+            queue['label'],
+            queue['total'], queue['closed'], queue['open'],
+            queue['overdue'], queue['warning'],
+            queue['overdue_rate'],
+            queue['avg_label'], queue['median_label'], queue['p90_label'],
+            queue['fastest_label'], queue['slowest_label'],
+            queue['sla_label'], queue['within_sla_count'],
+            '' if queue['within_sla_rate'] is None else queue['within_sla_rate'],
+        ])
+    writer.writerow([])
+    writer.writerow(['队列', '处理时长分布', '条数', '占比（%）'])
+    for queue in sla['queues']:
+        for bucket in queue['latency_buckets']:
+            writer.writerow([
+                queue['label'], bucket['label'], bucket['count'], bucket['share'],
+            ])
+    writer.writerow([])
+    writer.writerow(['队列', '事项', '类型', '对象', '被指方', '提起人',
+                     '创建时间', '已等待', '处理时限', '剩余', '状态'])
+    for queue in sla['queues']:
+        for case in queue['open_cases']:
+            writer.writerow([
+                queue['label'],
+                case['case_id'],
+                case['reason_label'],
+                case['subject'],
+                case['counterparty'],
+                case['reporter'],
+                '' if case['created_at'] is None
+                else case['created_at'].strftime('%Y-%m-%d %H:%M'),
+                case['age_label'],
+                case['sla_label'],
+                case['remaining_label'],
+                '已超期' if case['is_overdue'] else '时限内',
+            ])
+    writer.writerow([])
+    writer.writerow(['治理建议'])
+    for recommendation in sla['recommendations']:
+        writer.writerow([recommendation])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([sla['summary']])
+    writer.writerow([
+        '响应时长从处理人写进记录的那一刻起算，打开队列页不算响应：'
+        '否则"响应快"会退化成"刷新得勤"，这个指标就废了。',
+    ])
+    writer.writerow([
+        '借用催收队列的创建时刻取拖到第三级的那一次催收，不是订单的创建时刻：'
+        '在 L1 躺了一周，不该记在治理侧的账上。',
+    ])
+    writer.writerow([
+        '各队列的处理时限本来就不同：预约异常阻塞一次线下交付，按小时计；'
+        '举报只是离线复核，可以等一两天。共用一条时限要么让异常队列天天报假警，'
+        '要么让举报烂在队列里。',
+    ])
+    writer.writerow([
+        '待处理清单不按统计周期过滤：周期开始前就超期的事项，'
+        '恰恰是最不该被藏起来的那一件。',
+    ])
+    writer.writerow([
+        '此处只报告，不自动派单、不改处理时限、不关闭任何事项。',
+    ])
+
     return response
 
 def search_items(request):
@@ -4770,3 +5283,5 @@ def mark_selected_notifications_read(request):
     ):
         next_url = reverse('notification_list')
     return redirect(next_url)
+
+

@@ -572,3 +572,75 @@ class GovernanceDashboardTests(TestCase):
 
         alert_keys = {alert['key'] for alert in response.context['operational_alerts']}
         self.assertFalse([key for key in alert_keys if key.startswith('governance_')])
+
+class GovernanceExportTests(TestCase):
+    """导出要和面板说同一件事，否则下载回去的表会被读成另一个项目的数据。"""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='sla-export-staff', password='safe-password-123', is_staff=True,
+        )
+        self.seller = User.objects.create_user(
+            username='sla-export-seller', password='safe-password-123',
+        )
+        self.buyer = User.objects.create_user(
+            username='sla-export-buyer', password='safe-password-123',
+        )
+        self.category = Category.objects.create(name='导出治理分类')
+        self.location = CampusLocation.objects.create(name='导出治理地点')
+
+    def make_overdue_incident(self):
+        item = Item.objects.create(
+            title='导出治理商品', description='用于测试治理导出。', price='30.00',
+            category=self.category, location=self.location,
+            condition='9成新', seller=self.seller,
+        )
+        order = Order.objects.create(
+            item=item, buyer=self.buyer, seller=self.seller,
+            meeting_location=self.location, agreed_price='30.00', status='confirmed',
+        )
+        appointment = MeetingAppointment.objects.create(
+            order=order, proposed_by=self.seller, location=self.location,
+            start_at=timezone.now() + timedelta(days=1),
+            end_at=timezone.now() + timedelta(days=1, hours=1), status='confirmed',
+        )
+        incident = MeetingIncident.objects.create(
+            appointment=appointment, reported_by=self.buyer, accused=self.seller,
+            reason='no_show', detail='对方未到场。',
+        )
+        # 预约异常时限 24 小时，这里直接把创建时间推到 3 天前。
+        MeetingIncident.objects.filter(pk=incident.pk).update(
+            created_at=timezone.now() - timedelta(days=3),
+        )
+        return incident
+
+    def test_the_export_carries_every_queue_and_the_deadline_it_used(self):
+        # 四个队列都要在，且每条时限要随表导出：时限不同是这块的全部意义，
+        # 下载回去的表若不带时限，就看不出哪一条是真的超期。
+        self.make_overdue_incident()
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('治理队列处理时效', text)
+        for label in ('商品举报', '交易争议', '交付预约异常', '借用逾期催收'):
+            self.assertIn(label, text)
+        # 1 天是预约异常的时限（_format_duration 按最粗的可读单位渲染），
+        # 超过它才叫超期；待处理清单里那一条要真的标成已超期。
+        self.assertIn('1 天', text)
+        self.assertIn('已超期', text)
+
+    def test_the_export_states_that_it_only_reports(self):
+        # 边界要随表导出：治理面板最容易被读成"可以自动派单"的授权，
+        # 这句话必须在下载回去的表里，而不是只留在看板上。
+        self.make_overdue_incident()
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('此处只报告', text)
+        self.assertIn('不自动派单', text)
+        self.assertIn('打开队列页不算响应', text)

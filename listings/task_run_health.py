@@ -174,6 +174,14 @@ def build_task_run_health(days=7, now=None):
         'total_runs': total_runs,
         'total_failed': total_failed,
         'success_rate': ((total_runs - total_failed) / total_runs) if total_runs else None,
+        # The panel shows the same figure the trend module shows, on a 0-100
+        # scale. Keeping the raw fraction in `success_rate` for callers that
+        # compare it as a ratio while exposing the percentage here means the
+        # dashboard and the trend panel cannot disagree by a factor of a
+        # hundred, which is what a `floatformat` over a fraction renders.
+        'success_rate_percent': (
+            round((total_runs - total_failed) / total_runs * 100, 1) if total_runs else None
+        ),
         'stale_count': len(stale),
         'failing_count': len(failing),
         'never_run': [row for row in commands if row['run_count'] == 0],

@@ -975,7 +975,7 @@
     </div>
     <div class="supply-lifecycle-summary">
         <div><span>周期内运行</span><strong>{{ task_run_health.total_runs }}</strong><small>已排除预演</small></div>
-        <div{% if task_run_health.total_failed %} class="supply-lifecycle-summary-warning"{% endif %}><span>失败</span><strong>{{ task_run_health.total_failed }}</strong><small>成功率 {% if task_run_health.success_rate %}{{ task_run_health.success_rate|floatformat }}%{% else %}—{% endif %}</small></div>
+        <div{% if task_run_health.total_failed %} class="supply-lifecycle-summary-warning"{% endif %}><span>失败</span><strong>{{ task_run_health.total_failed }}</strong><small>成功率 {% if task_run_health.success_rate %}{{ task_run_health.success_rate_percent|floatformat }}%{% else %}—{% endif %}</small></div>
         <div{% if task_run_health.stale_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>超过 {{ task_run_health.stale_after_days }} 天没成功</span><strong>{{ task_run_health.stale_count }}</strong><small>个命令</small></div>
         <div{% if task_run_health.failing_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>正在连续失败</span><strong>{{ task_run_health.failing_count }}</strong><small>个命令</small></div>
     </div>

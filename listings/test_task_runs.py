@@ -126,6 +126,19 @@ class TaskRunHealthTests(TestCase):
         self.assertEqual(data['total_failed'], 1)
         self.assertEqual(round(data['success_rate'], 4), round(2 / 3, 4))
 
+    def test_success_rate_percent_uses_the_same_scale_as_the_panel(self):
+        # 0-1 的小数给模板拼 % 会渲染成 0.7%，看板上就会读成"几乎全都失败"。
+        # 这里把两种刻度都钉住：小数留给 API，百分数留给展示。
+        self.make_run('expire_items', metrics={'expired': 3})
+        self.make_run('expire_items', metrics={'expired': 2})
+        self.make_run('send_operations_digest', status='failed', metrics={'failed': 1})
+
+        data = build_task_run_health(days=7)
+        self.assertEqual(data['success_rate_percent'], 66.7)
+        # 没有运行的周期给 None 而不是 0：0% 会被读成"全都失败"，
+        # 而真实情况是根本没有证据。
+        self.assertIsNone(build_task_run_health(days=1, now=timezone.now() + timedelta(days=365))['success_rate_percent'])
+
     def test_consecutive_failures_counts_back_to_the_last_success(self):
         self.make_run('expire_items', status='succeeded', minutes_ago=300)
         self.make_run('expire_items', status='failed', minutes_ago=30)
