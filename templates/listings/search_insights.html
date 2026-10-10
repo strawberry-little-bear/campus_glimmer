@@ -283,6 +283,33 @@
     {% else %}<div class="empty-inline">当前周期内没有新确认的同义词，还没有可回流的数据。</div>{% endif %}
 </section>
 
+
+<section class="content-card ops-panel mb-4 rewrite-candidate-panel">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Threshold tuning</span><h2>候选门槛建议</h2></div><span class="ops-panel-hint">由同义词命中率反推，只建议不自动改</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-sliders2 me-1"></i>同义词候选的出现次数门槛一直是个人为设定的常量，从未被回流数据校正过。这里用已确认同义词的命中率判断这个门槛是松了还是紧了，并在固定档位表上给出相邻的一档。门槛决定运营能看到哪些候选，属于平台行为开关，因此这里只出建议，<strong>不会自动修改代码里的常量</strong>；改不改、什么时候改，由运营决定。</p>
+    <div class="rewrite-candidate-summary">
+        <div><span>当前门槛</span><strong>{{ threshold_feedback.current_threshold }}</strong><small>次出现才进候选</small></div>
+        <div><span>建议门槛</span><strong>{% if threshold_feedback.recommendation.suggested_threshold %}{{ threshold_feedback.recommendation.suggested_threshold }}{% else %}维持不变{% endif %}</strong><small>{{ threshold_feedback.confidence_label }}</small></div>
+        <div><span>命中率</span><strong>{% if threshold_feedback.synonym_effects.summary.hit_rate is not None %}{{ threshold_feedback.synonym_effects.summary.hit_rate }}%{% else %}&mdash;{% endif %}</strong><small>可判定 {{ threshold_feedback.synonym_effects.summary.judged_count }} 条</small></div>
+        <div><span>当前候选</span><strong>{{ threshold_feedback.current_volume.total }}</strong><small>条达到当前门槛</small></div>
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-lightbulb me-1"></i>{{ threshold_feedback.recommendation.reason }}</p>
+    {% if threshold_feedback.threshold_volumes %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-list-ol me-1"></i>换一档会多出多少活</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><thead><tr><th>门槛（次）</th><th>候选总数</th><th>可展示条数</th><th>累计出现次数</th><th>与当前档相比</th></tr></thead><tbody>
+        {% for row in threshold_feedback.threshold_volumes %}
+        <tr{% if row.is_current %} class="is-current"{% endif %}>
+            <td><strong>{{ row.threshold }}</strong>{% if row.is_current %}<span class="rewrite-candidate-confidence" data-level="strong">当前</span>{% endif %}</td>
+            <td>{{ row.total }}</td>
+            <td>{{ row.visible }}</td>
+            <td>{{ row.occurrences }}</td>
+            <td class="synonym-effect-verdict">{% if row.is_current %}运营现在就要处理的候选量{% else %}{{ row.delta_display }}{% endif %}</td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    {% endif %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>命中率衡量的是「候选池 + 人工确认」这一整条链，不只有候选池本身：一个其实不错的候选池，遇上把所有候选都确认下来的运营，也会得到偏低的命中率。因此这条建议只作为调整门槛的参考，不作为候选质量的结论。样本不足时不给方向，宁可维持现状。</p>
+</section>
+
 <section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Action queue</span><h2>运营建议</h2></div><span class="ops-panel-hint">由搜索行为自动生成</span></div>
     {% if insights %}<div class="search-insight-grid">{% for insight in insights %}<article class="search-insight-card"><div class="search-insight-icon"><i class="bi bi-lightbulb"></i></div><div><strong>{{ insight.query }}</strong><p>{{ insight.message }}</p><a href="{% url 'item_list' %}?q={{ insight.query|urlencode }}">查看相关商品 <i class="bi bi-arrow-right"></i></a></div></article>{% endfor %}</div>{% else %}<div class="empty-inline">暂无需要跟进的搜索需求。可以扩大统计周期，或等待新的搜索记录积累。</div>{% endif %}

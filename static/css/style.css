@@ -1927,3 +1927,6 @@ a { color: inherit; text-decoration: none; }
 .search-facet-row[data-direction="falling"] .search-facet-share { color: #b97828; }
 @media (max-width: 991px) { .search-trend-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }.search-facet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 575px) { .search-trend-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.search-trend-summary > div { min-height: 72px; padding: 11px; }.search-facet-grid { grid-template-columns: 1fr; }.search-trend-table td { white-space: normal; } }
+.rewrite-candidate-table tr.is-current { background: #f4faf5; }
+.rewrite-candidate-table tr.is-current td { font-weight: 700; }
+.rewrite-candidate-table tr.is-current .rewrite-candidate-confidence { margin-left: 8px; }
