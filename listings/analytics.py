@@ -20,6 +20,7 @@ from .supply_lifecycle import build_supply_lifecycle
 from .task_run_health import build_task_run_health
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
 from .borrow_escalation import build_borrow_escalation_report
+from .borrow_risk import build_borrow_risk
 
 
 PERIOD_CHOICES = (
@@ -1530,6 +1531,7 @@ def build_operations_dashboard(days=30):
     campus_pulse = build_campus_pulse(days=days, now=now)
     campaign_analytics = build_campaign_analytics(days=days, now=now)
     academic_calendar = build_academic_calendar(day=today)
+    borrow_risk = build_borrow_risk(days=days, now=now)
 
 
     return {
@@ -1563,6 +1565,7 @@ def build_operations_dashboard(days=30):
         'supply_lifecycle': build_supply_lifecycle(days=days, now=now),
         'task_run_health': build_task_run_health(days=days, now=now),
         'borrow_escalation': build_borrow_escalation_report(days=days, now=now),
+        'borrow_risk': borrow_risk,
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),
         'demand_radar': demand_radar,
         'demand_radar_outcomes': demand_radar_outcomes,

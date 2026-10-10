@@ -1055,6 +1055,72 @@
 
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_escalation.summary_text }}三级阶梯各有不同受众：一级只告诉借用方，二级同时告知双方平台已开始记录，三级上报治理队列并离开双方私域；跨级追上来时会补发二级那一声，但不会补播被跳过的一级。平台只记录和通知，不取消订单、不代扣押金。</div>
 </section>
+
+<section class="content-card ops-panel mb-4 borrow-risk-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Borrow risk</span><h2>借用逾期风险分层</h2></div>
+        <span class="ops-panel-hint">回答「是哪些品类天生容易拖到第三级」，而不是把平均值摊平</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>周期内借用</span><strong>{{ borrow_risk.borrow_count }}</strong><small>最近 {{ borrow_risk.days }} 天</small></div>
+        <div><span>发生过升级</span><strong>{{ borrow_risk.escalated_count }}</strong><small>{% if borrow_risk.escalation_rate %}{{ borrow_risk.escalation_rate|floatformat }}% 的借用{% else %}占比待积累{% endif %}</small></div>
+        <div{% if borrow_risk.level_three_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>拖到第三级</span><strong>{{ borrow_risk.level_three_count }}</strong><small>{% if borrow_risk.level_three_rate %}{{ borrow_risk.level_three_rate|floatformat }}% 的借用{% else %}占比待积累{% endif %}</small></div>
+    </div>
+
+    {% if borrow_risk.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>按分类</strong><span>第三级催收率高的排在前，样本少于 {{ borrow_risk.min_sample_size }} 笔不参与结论</span></div>
+        {% if borrow_risk.category_rows %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>分类</th><th>借用</th><th>升级</th><th>第三级</th><th>升级率</th><th>第三级率</th><th>平均闭环</th><th>跟进中</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_risk.category_rows %}
+                    <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                        <td data-label="分类"><strong>{{ row.key }}</strong>{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ borrow_risk.min_sample_size }} 笔，仅供参考</small>{% endif %}</td>
+                        <td data-label="借用">{{ row.borrow_count }}</td>
+                        <td data-label="升级">{{ row.escalated_count }}</td>
+                        <td data-label="第三级">{% if row.level_three_count %}<span class="supply-lifecycle-flag">{{ row.level_three_count }}</span>{% else %}0{% endif %}</td>
+                        <td data-label="升级率">{% if row.escalation_rate != None %}{{ row.escalation_rate|floatformat }}%{% else %}—{% endif %}</td>
+                        <td data-label="第三级率">{% if row.level_three_rate != None %}{{ row.level_three_rate|floatformat }}%{% else %}—{% endif %}</td>
+                        <td data-label="平均闭环">{% if row.average_close_days != None %}{{ row.average_close_days }} 天{% else %}—{% endif %}</td>
+                        <td data-label="跟进中">{{ row.open_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty-inline">周期内还没有借用订单。</div>{% endif %}
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>按押金档位</strong><span>档位按借用表单上的实际押金划分，用来区分「品类问题」和「金额问题」</span></div>
+        {% if borrow_risk.deposit_rows %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>押金档位</th><th>借用</th><th>升级</th><th>第三级</th><th>升级率</th><th>第三级率</th><th>平均闭环</th><th>跟进中</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_risk.deposit_rows %}
+                    <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                        <td data-label="押金档位"><strong>{{ row.key }}</strong>{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ borrow_risk.min_sample_size }} 笔，仅供参考</small>{% endif %}</td>
+                        <td data-label="借用">{{ row.borrow_count }}</td>
+                        <td data-label="升级">{{ row.escalated_count }}</td>
+                        <td data-label="第三级">{% if row.level_three_count %}<span class="supply-lifecycle-flag">{{ row.level_three_count }}</span>{% else %}0{% endif %}</td>
+                        <td data-label="升级率">{% if row.escalation_rate != None %}{{ row.escalation_rate|floatformat }}%{% else %}—{% endif %}</td>
+                        <td data-label="第三级率">{% if row.level_three_rate != None %}{{ row.level_three_rate|floatformat }}%{% else %}—{% endif %}</td>
+                        <td data-label="平均闭环">{% if row.average_close_days != None %}{{ row.average_close_days }} 天{% else %}—{% endif %}</td>
+                        <td data-label="跟进中">{{ row.open_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty-inline">周期内还没有借用订单。</div>{% endif %}
+    </div>
+    {% else %}<div class="empty-inline">周期内还没有借用订单，风险分层需要先有借用发生。</div>{% endif %}
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_risk.summary }}分母包含从未升级过的借用，只看升级过的订单会让每一组的升级率都变成 100%。这里只做统计聚合：不会因为某个分类看起来更容易拖就提前催收它的借用方，也不会据此调整押金或给任何人打标记——催收时机是「同学的东西最多能丢多久」的策略，不该被一个统计数字推着走。</div>
+</section>
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>

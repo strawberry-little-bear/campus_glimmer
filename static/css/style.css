@@ -1575,6 +1575,30 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+/* 借用逾期风险分层：和催收阶梯面板共用同一套表格语言，只把两处调成八列需要
+   的形态。样本不足的行整行压暗，而不是单独给一列加图标——读者要一眼看出
+   这一行不该被当成结论。 */
+.borrow-risk-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.borrow-risk-panel .supply-lifecycle-table th:nth-child(n+2),
+.borrow-risk-panel .supply-lifecycle-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.borrow-risk-panel .supply-lifecycle-table tr.text-muted strong {
+    font-weight: 600;
+}
+
+@media (max-width: 767px) {
+    .borrow-risk-panel .supply-lifecycle-table th,
+    .borrow-risk-panel .supply-lifecycle-table td {
+        white-space: normal;
+    }
+}
+
 /* 治理工作台：三类队列共用一套卡片语言，超期用颜色而不是单独文案强调 */
 .governance-summary {
     display: grid;
