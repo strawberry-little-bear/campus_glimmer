@@ -208,9 +208,26 @@ class NotificationResponseInsightTests(TestCase):
         self.assertNotEqual(read_hour, timezone.localtime(self.now).hour)
 
     def test_handled_trend_covers_every_day_of_the_period(self):
-        # Kept inside the same day so the handling lands on a date the trend
-        # actually reports.
-        self.create_notification(kind='order_created', read_after=timedelta(minutes=45))
+        # The read stamp has to land on a date the trend actually reports, so it is
+        # pinned a few days back inside the window instead of being left at "now
+        # plus a latency". The window is derived from localdate(now), and a stamp
+        # measured forward from `now` slides past midnight whenever the suite runs
+        # late in the day - the CI runners sit on UTC while this project's timezone
+        # is eight hours ahead, so "now" can be late evening locally. The row would
+        # then be bucketed into tomorrow, which the seven-day window does not
+        # contain, and the count would come back empty for a reason that has nothing
+        # to do with the trend itself. Anchoring to localdate(now) - 3 days keeps
+        # the assertion about the trend rather than about the clock.
+        created_at = timezone.make_aware(
+            timezone.datetime.combine(
+                timezone.localdate(self.now) - timedelta(days=3),
+                timezone.datetime.min.time(),
+            )
+        ) + timedelta(hours=9)
+        self.create_notification(
+            kind='order_created', created_ago=self.now - created_at,
+            read_after=timedelta(minutes=45),
+        )
 
         insights = build_notification_response_insights(days=7, now=self.now)
 
