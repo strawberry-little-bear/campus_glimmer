@@ -1643,6 +1643,13 @@ a { color: inherit; text-decoration: none; }
     border-color: #f0cdbe;
 }
 
+.governance-queue-hint {
+    margin: 0 0 .5rem;
+    font-size: .72rem;
+    line-height: 1.5;
+    color: #6b7d72;
+}
+
 .governance-queue-heading {
     display: flex;
     align-items: baseline;
@@ -1753,6 +1760,7 @@ a { color: inherit; text-decoration: none; }
 .governance-case-kind-report { color: #6b5aa8; background: #f2f0fd; }
 .governance-case-kind-dispute { color: #a1543e; background: #fff0eb; }
 .governance-case-kind-incident { color: #9b762e; background: #fff8e8; }
+.governance-case-kind-borrow { color: #2f6f5e; background: #e9f6f1; }
 
 .governance-case-sla {
     text-align: right;

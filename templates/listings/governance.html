@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
 {% block title %}治理工作台 - 拾光校园{% endblock %}
 {% block content %}
-<div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h1 class="mt-2">治理工作台</h1><p class="text-muted mb-0">把举报、交易争议和交付预约异常放进同一个队列，用「等待了多久」而不是「有多少」来决定先处理哪一件。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
+<div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h1 class="mt-2">治理工作台</h1><p class="text-muted mb-0">把举报、交易争议、交付预约异常和借用逾期催收放进同一个队列，用「等待了多久」而不是「有多少」来决定先处理哪一件。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
 
 <div class="governance-summary mb-4">
-    <div class="governance-summary-item"><span>待处理</span><strong>{{ governance.total_open }}</strong><small>三类队列合计</small></div>
+    <div class="governance-summary-item"><span>待处理</span><strong>{{ governance.total_open }}</strong><small>各队列合计</small></div>
     <div class="governance-summary-item{% if governance.total_overdue %} is-alert{% endif %}"><span>已超期</span><strong>{{ governance.total_overdue }}</strong><small>超过各自处理时限</small></div>
     <div class="governance-summary-item"><span>时限内完成率</span><strong>{% if governance.within_sla_rate %}{{ governance.within_sla_rate }}%{% else %}—{% endif %}</strong><small>周期内已处理事项</small></div>
     <div class="governance-summary-item"><span>周期处理量</span><strong>{{ governance.total_closed }}</strong><small>最近 {{ governance.days }} 天</small></div>
@@ -25,6 +25,7 @@
 {% for queue in governance.queues %}
     <div class="content-card governance-queue-card{% if queue.overdue %} is-alert{% endif %}">
         <div class="governance-queue-heading"><strong>{{ queue.label }}</strong><span>处理时限 {{ queue.sla_label }}</span></div>
+        {% if queue.kind == 'borrow' %}<p class="governance-queue-hint">进入本队列的借用已经走完三级催收，时限从三级发出时起算。</p>{% endif %}
         <div class="governance-queue-stats">
             <div><span>周期内</span><strong>{{ queue.total }}</strong></div>
             <div><span>已处理</span><strong>{{ queue.closed }}</strong></div>
@@ -60,16 +61,18 @@
         <div class="governance-case-body">
             <span class="small text-muted">涉及对方：{{ case.counterparty }}</span>
             <span class="small text-muted">已等待 {{ case.age_label }}（时限 {{ case.sla_label }}）</span>
-            {% if case.reviewer_id %}<span class="small text-muted">已分配处理人</span>{% else %}<span class="small text-muted">尚未分配处理人</span>{% endif %}
+            {% if case.kind == 'borrow' %}<span class="small text-muted">催收等级 三级 · 累计升级 {{ case.escalation_count }} 次</span>
+            {% elif case.reviewer_id %}<span class="small text-muted">已分配处理人</span>{% else %}<span class="small text-muted">尚未分配处理人</span>{% endif %}
         </div>
         <div class="governance-case-footer">
             <span class="small text-muted">{% if case.is_open %}需要在本队列时限内给出结论{% else %}处理时间已记入时效统计{% endif %}</span>
-            {% if case.is_open %}<a class="btn btn-sm btn-primary" href="{{ case.url }}"><i class="bi bi-check2-circle me-1"></i>处理</a>
+            {% if case.kind == 'borrow' %}<a class="btn btn-sm btn-outline-primary" href="{{ case.url }}"><i class="bi bi-clock-history me-1"></i>查看订单时间线</a>
+            {% elif case.is_open %}<a class="btn btn-sm btn-primary" href="{{ case.url }}"><i class="bi bi-check2-circle me-1"></i>处理</a>
             {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ case.url }}">查看记录</a>{% endif %}
         </div>
     </article>
-{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-shield-check"></i><h2>当前筛选下没有治理事项</h2><p>三类队列都清空了，或者换个筛选条件看看。</p></div>{% endfor %}
+{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-shield-check"></i><h2>当前筛选下没有治理事项</h2><p>各队列都清空了，或者换个筛选条件看看。</p></div>{% endfor %}
 </section>
 
-<div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>三类队列的处理时限不同：交付预约异常会阻塞一次线下交付，因此时限最短；交易争议涉及双方举证，时限最长。响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。</div>
+<div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>四类队列的处理时限不同：交付预约异常会阻塞一次线下交付，因此时限最短；交易争议涉及双方举证，时限居中；借用逾期催收的时限从三级催收发出那一刻起算，因为那之前平台已经在走自己的阶梯，不该记在治理账上。响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。</div>
 {% endblock %}

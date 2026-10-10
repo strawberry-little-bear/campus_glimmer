@@ -634,15 +634,30 @@ def build_operational_alerts(
     for queue in (governance_sla or {}).get('queues', []):
         if not queue['overdue']:
             continue
-        severity = 'critical' if queue['kind'] == 'incident' or queue['overdue'] >= 3 else 'warning'
+        # 借用催收超期只升到 warning：它不阻塞一次线下交付，只是账还没平，
+        # 而预约异常是要么今天要么撕票的那一种。所以这里按队列性质分档，
+        # 不再单纯看件数——三件慢还的充电宝不该盖过一次约好的当面交付。
+        if queue['kind'] == 'incident':
+            severity = 'critical'
+        elif queue['kind'] == 'borrow':
+            severity = 'warning'
+        elif queue['overdue'] >= 3:
+            severity = 'critical'
+        else:
+            severity = 'warning'
         alerts.append({
             'key': f"governance_overdue_{queue['kind']}",
             'severity': severity,
             'severity_label': '优先处理' if severity == 'critical' else '需要关注',
             'title': f"{queue['label']}处理超期",
             'message': (
-                f"{queue['label']}队列有 {queue['overdue']} 件已超过 {queue['sla_label']}处理时限，"
-                f"周期内处理时长中位数为 {queue['median_label']}。"
+                f"{queue['label']}队列有 {queue['overdue']} 件已超过 {queue['sla_label']}处理时限。"
+                # 借用队列可能一件都没闭环过，此时中位数是空的；拿 None 拼句比不说更糟。
+                + (
+                    f"周期内处理时长中位数为 {queue['median_label']}。"
+                    if queue['median_seconds'] is not None else
+                    "周期内还没有闭环记录，暂时无法给出处理时长中位数。"
+                )
             ),
             'metric': str(queue['overdue']),
             'metric_label': '超期事项',

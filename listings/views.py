@@ -1597,6 +1597,12 @@ def governance_workbench(request):
     workbench normalises them onto one shape and adds the dimension none of
     them had: how long each case has been waiting against its own deadline.
 
+    The borrow queue is the only one without a staff action page, and that is
+    deliberate: the platform records and notifies an overdue borrow but never
+    cancels the order or touches the deposit, so the only useful thing an
+    operator can do here is read the order timeline and go back to the two
+    students. A button that pretended otherwise would be a lie in the UI.
+
     The statistics window follows the dashboard's period selector, but the open
     backlog is deliberately not filtered by it - overdue work opened before the
     period is exactly what an operator must not miss.
@@ -1607,7 +1613,7 @@ def governance_workbench(request):
     days = _operations_period_days(request)
     kind_filter = request.GET.get('kind', 'all')
     status_filter = request.GET.get('status', 'open')
-    if kind_filter not in {'all', 'report', 'dispute', 'incident'}:
+    if kind_filter not in {'all', 'report', 'dispute', 'incident', 'borrow'}:
         kind_filter = 'all'
     if status_filter not in {'all', 'open', 'closed'}:
         status_filter = 'open'
@@ -1637,6 +1643,7 @@ def governance_workbench(request):
             ('report', '商品举报'),
             ('dispute', '交易争议'),
             ('incident', '交付预约异常'),
+            ('borrow', '借用逾期催收'),
         ),
         'status_choices': (
             ('open', '待处理'),
