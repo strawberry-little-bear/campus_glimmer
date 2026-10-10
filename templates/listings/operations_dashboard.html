@@ -1313,6 +1313,46 @@
 
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ demand_radar_hit_trend.summary }}任务按创建时间归期：一个任务在创建那一刻的证据就固定了，把它算进结果落地的那个周期，等于让一个安静月继承忙碌月的成绩。每个任务按自己的观察期结束时刻判定，所以上一周期里最早创建的任务不会被误判成"还没到判定时刻"而丢出分母。这里只报告，不把命中率回流到机会分——雷达学会掩盖自己的误报，比误报本身更糟。</div>
 </section>
+
+<section class="content-card ops-panel mb-4 demand-hit-layers-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Hit layers</span><h2>需求雷达闭环的分类与地点分层</h2></div>
+        <span class="ops-panel-hint">整体命中率只能告诉你雷达变好还是变坏，行动时要知道是哪里在变——分层命中率只按层内读，不按该层占全部任务的比例读，每层各自要过任务数门槛</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>整体命中率</span><strong>{% if demand_radar_hit_layers.overall.hit_rate != None %}{{ demand_radar_hit_layers.overall.hit_rate|floatformat }}%{% else %}—{% endif %}</strong><small>有证据的任务 {{ demand_radar_hit_layers.overall.judged_count }} 个</small></div>
+        <div><span>分层数</span><strong>{{ demand_radar_hit_layers.layer_counts.category|add:demand_radar_hit_layers.layer_counts.location }}</strong><small>分类 {{ demand_radar_hit_layers.layer_counts.category }} 个、地点 {{ demand_radar_hit_layers.layer_counts.location }} 个</small></div>
+        <div{% if demand_radar_hit_layers.flagged_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>被标记分层</span><strong>{{ demand_radar_hit_layers.flagged_count }}</strong><small>与整体相差超过 {{ demand_radar_hit_layers.gap_points }} 个百分点</small></div>
+        <div><span>等待证据的分层</span><strong>{{ demand_radar_hit_layers.waiting_layer_count }}</strong><small>每层至少 {{ demand_radar_hit_layers.min_judged_tasks }} 个有证据任务才给方向</small></div>
+    </div>
+
+    {% for group in demand_radar_hit_layers.facet_groups %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>按{{ group.label }}分层</strong><span>命中率是层内收敛任务占该层有证据任务的比例；任务数只说明证据厚度，不归一到占比</span></div>
+        {% if demand_radar_hit_layers.has_data %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>层</th><th>任务数</th><th>有证据</th><th>命中率</th><th>与整体差值</th><th>中位收敛幅度</th></tr></thead>
+                <tbody>
+                    {% for layer in group.layers %}
+                    <tr{% if not layer.has_sample %} class="text-muted"{% endif %}>
+                        <td data-label="层"><strong>{{ layer.label }}</strong>{% if layer.is_flagged %} <span class="supply-lifecycle-flag">已标记</span>{% endif %}</td>
+                        <td data-label="任务数">{{ layer.task_count }}</td>
+                        <td data-label="有证据">{{ layer.judged_count }}{% if layer.insufficient_count %}<small class="text-muted">（另有 {{ layer.insufficient_count }} 个样本不足）</small>{% endif %}</td>
+                        <td data-label="命中率">{% if layer.hit_rate != None %}{{ layer.hit_rate|floatformat }}%{% else %}—{% endif %}</td>
+                        <td data-label="与整体差值">{% if layer.gap_points != None %}<span class="hit-layer-gap {% if layer.gap_points > 0 %}is-above{% elif layer.gap_points < 0 %}is-below{% endif %}">{% if layer.gap_points > 0 %}+{% endif %}{{ layer.gap_points|floatformat }}</span>{% else %}—{% endif %}</td>
+                        <td data-label="中位收敛幅度">{% if layer.median_delta_points != None %}{{ layer.median_delta_points|floatformat }} 百分点{% else %}—{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty-inline">这个周期内还没有创建跟进任务，分层命中率需要先有任务发生。</div>{% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ demand_radar_hit_layers.summary }}命中率只跟层内的命中率比，不跟该层占全部任务的比例比；任务数只说明证据厚度，不归一到占比。每层各自要过 {{ demand_radar_hit_layers.min_judged_tasks }} 个有证据任务的门槛，门槛不会为了让表格好看而放开。分层上的差值只说明走向，任务数少的分层上的差值不算结论；这里也不排序、不改机会分。没有分类或地点的任务落在“{{ demand_radar_hit_layers.unassigned_label }}”层，不会被丢掉——丢了分层就加不回整体。</div>
+</section>
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>

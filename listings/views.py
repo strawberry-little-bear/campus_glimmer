@@ -2705,6 +2705,69 @@ def operations_dashboard_export(request):
     writer.writerow(['每个任务按自己的观察期结束时刻判定，所以上一周期里最早创建的任务不会被误判成还没到判定时刻而丢出分母。'])
     writer.writerow(['命中率只统计有证据的任务；基线期或观察期搜索量不足的任务单独数出来，既不算成功也不算失败。'])
     writer.writerow(['这里只报告，不把命中率回流到机会分——雷达学会掩盖自己的误报，比误报本身更糟。'])
+
+    writer.writerow([])
+    writer.writerow(['需求雷达闭环的分类与地点分层'])
+    hit_layers = dashboard['demand_radar_hit_layers']
+    writer.writerow([
+        '统计周期', hit_layers['days'],
+        '每层最少有证据任务', hit_layers['min_judged_tasks'],
+        '标记差值阈值（百分点）', hit_layers['gap_points'],
+        '整体命中率',
+        '' if hit_layers['overall']['hit_rate'] is None else hit_layers['overall']['hit_rate'],
+    ])
+    writer.writerow([])
+    for group in hit_layers['facet_groups']:
+        writer.writerow([f"按{group['label']}分层"])
+        writer.writerow([
+            '层', '任务数', '有证据', '命中率（%）',
+            '与整体差值（百分点）',
+            '中位收敛幅度（百分点）',
+            '样本不足', '已标记',
+        ])
+        if not hit_layers['has_data']:
+            writer.writerow([
+                '这个周期内还没有创建跟进任务，'
+                '分层命中率需要先有任务发生。',
+            ])
+        else:
+            for layer in group['layers']:
+                writer.writerow([
+                    layer['label'],
+                    layer['task_count'],
+                    layer['judged_count'],
+                    '' if layer['hit_rate'] is None else layer['hit_rate'],
+                    '' if layer['gap_points'] is None else layer['gap_points'],
+                    '' if layer['median_delta_points'] is None else layer['median_delta_points'],
+                    layer['insufficient_count'],
+                    '已标记' if layer['is_flagged'] else '',
+                ])
+        writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([hit_layers['summary']])
+    writer.writerow([
+        '命中率是层内收敛任务占该层有证据任务的比例，'
+        '只跟层内的命中率比，不跟该层占全部任务的比例比；'
+        '任务数只说明证据厚度，不归一到占比。',
+    ])
+    writer.writerow([
+        '每层各自要过 ',
+        hit_layers['min_judged_tasks'],
+        ' 个有证据任务的门槛，'
+        '门槛不会为了表格好看而放开；'
+        '低于门槛的层只报数字，不给方向。',
+    ])
+    writer.writerow([
+        '分层上的差值只说明走向，'
+        '任务数少的分层上的差值不算结论；'
+        '这里也不排序、不改机会分。',
+    ])
+    writer.writerow([
+        '没有分类或地点的任务落在“',
+        hit_layers['unassigned_label'],
+        '”层，不会被丢掉——'
+        '丢了分层就加不回整体。',
+    ])
     return response
 
 def search_items(request):

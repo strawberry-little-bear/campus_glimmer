@@ -1757,6 +1757,53 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+
+/* 命中率分层：和跟踪面板同一套卡片语言，但差值色
+   不表示好坏——高于整体只说明这个层走在前
+   面，低于整体只说明落后，两者都要人去看，
+   所以一个用绿、一个用赋，都不带警告意味。 */
+.demand-hit-layers-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.demand-hit-layers-panel .supply-lifecycle-table th:nth-child(n+2),
+.demand-hit-layers-panel .supply-lifecycle-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.demand-hit-layers-panel .hit-layer-gap {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.demand-hit-layers-panel .hit-layer-gap.is-above {
+    color: #2f6f4f;
+}
+
+.demand-hit-layers-panel .hit-layer-gap.is-below {
+    color: #b4632a;
+}
+
+/* 未过门槛的层整行变淡，但仍然可见——不走
+   吐乖不给方向是因为样本不够，不是因为这个层
+   不存在。 */
+.demand-hit-layers-panel .supply-lifecycle-table tr.text-muted strong {
+    font-weight: 600;
+}
+
+.demand-hit-layers-panel .supply-lifecycle-table tr.text-muted .hit-layer-gap {
+    color: inherit;
+    font-weight: 500;
+}
+
+@media (max-width: 767px) {
+    .demand-hit-layers-panel .supply-lifecycle-table th,
+    .demand-hit-layers-panel .supply-lifecycle-table td {
+        white-space: normal;
+    
+}
+
 /* 命中率趋势：和催收时效对比同一套卡片语言，但方向色镜像过来——
    命中率上升是雷达变准，用绿；下降是雷达在衰减，用赭。 */
 .demand-hit-trend-panel .supply-lifecycle-summary strong {
