@@ -1168,6 +1168,49 @@
     <p class="text-muted mb-0 mt-3">窗口内还没有成功的定时任务运行。</p>
     {% endif %}
 </section>
+<section class="content-card ops-panel mb-4 task-run-hour-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Hourly load</span><h2>运行时长的按小时分布</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_hour_load.days }} 天·按本地小时分组</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>拥塞小时</span><strong>{% if task_run_hour_load.crowded_hour_count %}{{ task_run_hour_load.crowded_hour_count }}{% else %}暂无{% endif %}</strong><small>同时满足运行数与变慢两个条件</small></div>
+        <div><span>拥塞门槛</span><strong>至少 {{ task_run_hour_load.min_hour_runs }} 次运行</strong><small>样本少的小时不判拥塞</small></div>
+        <div><span>变慢倍数</span><strong>{{ task_run_hour_load.slowdown_factor }} 倍</strong><small>比命令自身全周期中位数</small></div>
+        <div{% if task_run_hour_load.crowded_hour_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>最忙小时</span><strong>{% if task_run_hour_load.busiest_hour != None %}{{ task_run_hour_load.busiest_hour|stringformat:"02d" }}:00{% else %}—{% endif %}</strong><small>最多 {{ task_run_hour_load.max_hour_rows }} 行</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各本地小时的运行与耗时</strong><span>按运行次数倒序，上一周期同一小时并排报</span></div>
+        {% if task_run_hour_load.has_data %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-hour-table">
+                <thead><tr><th>本地小时</th><th>运行</th><th>命令</th><th>本周期中位数</th><th>上一周期同一小时</th><th>这一小时比自身平时慢的命令</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_hour_load.hours %}
+                    <tr{% if row.is_crowded %} class="supply-lifecycle-row-warning"{% endif %}>
+                        <td data-label="本地小时"><strong>{{ row.label }}</strong></td>
+                        <td data-label="运行">{{ row.run_count }}</td>
+                        <td data-label="命令">{{ row.command_count }}</td>
+                        <td data-label="本周期中位数">{% if row.median_duration_ms %}{{ row.median_duration_ms }} 毫秒{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                        <td data-label="上一周期同一小时">{% if row.previous_run_count %}{{ row.previous_run_count }} 次{% if row.previous_median_duration_ms %} / {{ row.previous_median_duration_ms }} 毫秒{% endif %}{% else %}<span class="text-muted">本周期新出现</span>{% endif %}</td>
+                        <td data-label="这一小时比自身平时慢的命令">{% if row.slow_commands %}{% for name in row.slow_commands %}<code>{{ name }}</code>{% if not forloop.last %}、{% endif %}{% endfor %}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <ul class="ops-panel-notes mt-3">
+            <li><i class="bi bi-info-circle me-1"></i>其余面板都按命令切，看不见小时级的互相排队：七个命令共用同一块磁盘、同一个连接池和校园接口那点配额，两条各自四秒的命令配在同一分钟启动会跑成十一秒。</li>
+            <li><i class="bi bi-clock-history me-1"></i>小时按本地时钟切，不按 UTC：本地凌晨两点的那次运行在 UTC 里是前一天傍晚六点，按 UTC 分桶会把拥塞报在一个没人配过的小时刻上。</li>
+            <li><i class="bi bi-hourglass-split me-1"></i>“这一小时比平时慢”用命令自己的全周期中位数当基线，不是小时之间互比：一条每次都慢的命令不该让它跑过的每个小时都显得拥塞。</li>
+            <li><i class="bi bi-shield-check me-1"></i>此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。</li>
+        </ul>
+        {% else %}
+        <p class="text-muted mb-0 mt-3">窗口内还没有已记录的定时任务运行。</p>
+        {% endif %}
+    </div>
+</section>
 <section class="content-card ops-panel mb-4 borrow-escalation-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Borrow recovery</span><h2>借用逾期催收阶梯</h2></div>

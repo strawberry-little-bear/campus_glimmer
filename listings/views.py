@@ -2756,6 +2756,47 @@ def operations_dashboard_export(request):
     writer.writerow(['失败运行不进分位：失败可能毫秒级退出，也可能挂到被调度器杀掉，算进去会让同一个数字同时描述“多常坏”和“好的时候多慢”。'])
     writer.writerow(['样本不够时不声称该分位：十次运行的最近秩 P99 就是最大值，贴上 P99 的标签会让读者以为尾巴被量过，其实只看见了一次运行。'])
     writer.writerow(['尾部倍数取已声称的最高分位与 P50 的差：样本不足 P99 时退到 P90，而不是报告“没有尾巴”。'])
+    writer.writerow(['运行时长的按小时分布'])
+    hour_load = dashboard['task_run_hour_load']
+    writer.writerow([
+        '本周期起始', hour_load['window_start'].strftime('%Y-%m-%d'),
+        '本周期结束', hour_load['window_end'].strftime('%Y-%m-%d %H:%M'),
+        '上一周期起始', hour_load['previous_window_start'].strftime('%Y-%m-%d'),
+        '周期天数', hour_load['days'],
+        '拥塞门槛', u'至少 {} 次运行'.format(hour_load['min_hour_runs']),
+        '变慢倍数', hour_load['slowdown_factor'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        u'本地小时', u'运行次数', u'成功次数', u'失败次数', u'命令数',
+        u'本周期耗时中位数（毫秒）', u'本周期最长耗时（毫秒）',
+        u'上一周期同一小时运行次数', u'上一周期同一小时耗时中位数（毫秒）',
+        u'是否拥塞', u'这一小时比自身平时慢的命令',
+    ])
+    for row in hour_load['hours']:
+        writer.writerow([
+            row['label'],
+            row['run_count'], row['succeeded_count'], row['failed_count'],
+            row['command_count'],
+            '' if row['median_duration_ms'] is None else row['median_duration_ms'],
+            '' if row['max_duration_ms'] is None else row['max_duration_ms'],
+            row['previous_run_count'],
+            '' if row['previous_median_duration_ms'] is None else row['previous_median_duration_ms'],
+            u'拥塞' if row['is_crowded'] else '',
+            u'、'.join(row['slow_commands']),
+        ])
+
+    writer.writerow([])
+    writer.writerow([u'说明'])
+    writer.writerow([hour_load['summary']])
+    writer.writerow([u'小时按本地时钟切，不按 UTC：CI 跑 UTC 而项目时区是东八区，本地凌晨两点的那次运行在 UTC 里是前一天傍晚六点，按 UTC 分桶会把拥塞报在一个没人配过的小时刻上。'])
+    writer.writerow([u'拥塞要同时满足两个条件：这一小时至少有门槛那么多次运行，且其中有命令比它自己的全周期中位数慢到变慢倍数。只满足一个都不算，否则“忙”会被读成“堵”。'])
+    writer.writerow([u'基线用命令自己的全周期中位数，不是小时之间互比：一条每次都慢的命令不该让它跑过的每个小时都显得拥塞，那是按速度给命令排名，不是发现队列。'])
+    writer.writerow([u'一次运行按它开始的时刻归期，卡在小时边界上的那次归它开始的那个小时，不归它结束的那个小时。'])
+    writer.writerow([u'只报最忙的若干个小时，样本少的小时不判拥塞。'])
+    writer.writerow([u'此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。'])
+    writer.writerow([])
+
     writer.writerow(['此处只报告，不拆分命令、不改调度配置、不把统计写回台账。'])
 
     writer.writerow([])
