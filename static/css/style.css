@@ -1804,6 +1804,51 @@ a { color: inherit; text-decoration: none; }
     
 }
 
+/* 学期纵向对比：和命中率分层同一套卡片语言，但差值色
+   不表示好坏——高于上一学期只说明这个阶段走在前
+   面，低于只说明落后，两者都要人去看，所以一个用
+   绿、一个用贡，都不带告警意味。 */
+.demand-phase-trend-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.demand-phase-trend-panel .supply-lifecycle-table th:nth-child(n+2),
+.demand-phase-trend-panel .supply-lifecycle-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.demand-phase-trend-panel .hit-phase-gap {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.demand-phase-trend-panel .hit-phase-gap.is-above {
+    color: #2f6f4f;
+}
+
+.demand-phase-trend-panel .hit-phase-gap.is-below {
+    color: #b4632a;
+}
+
+/* 未过门槛的格子整行变淡，但仍然可见——不给方向
+   是因为样本不够，不是因为这个阶段不存在。 */
+.demand-phase-trend-panel .supply-lifecycle-table tr.text-muted strong {
+    font-weight: 600;
+}
+
+.demand-phase-trend-panel .supply-lifecycle-table tr.text-muted .hit-phase-gap {
+    color: inherit;
+    font-weight: 500;
+}
+
+@media (max-width: 767px) {
+    .demand-phase-trend-panel .supply-lifecycle-table th,
+    .demand-phase-trend-panel .supply-lifecycle-table td {
+        white-space: normal;
+    }
+}
+
 /* 命中率趋势：和催收时效对比同一套卡片语言，但方向色镜像过来——
    命中率上升是雷达变准，用绿；下降是雷达在衰减，用赭。 */
 .demand-hit-trend-panel .supply-lifecycle-summary strong {

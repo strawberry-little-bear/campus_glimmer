@@ -26,6 +26,7 @@ from .borrow_escalation_trend import build_borrow_escalation_trend
 from .borrow_rhythm import build_borrow_rhythm
 from .demand_radar_hit_trend import build_demand_radar_hit_trend
 from .demand_radar_hit_layers import build_demand_radar_hit_layers
+from .demand_radar_phase_trend import build_demand_radar_phase_trend
 
 
 PERIOD_CHOICES = (
@@ -1584,6 +1585,7 @@ def build_operations_dashboard(days=30):
     borrow_escalation_trend = build_borrow_escalation_trend(days=days, now=now)
     demand_radar_hit_trend = build_demand_radar_hit_trend(days=days, now=now)
     demand_radar_hit_layers = build_demand_radar_hit_layers(days=days, now=now)
+    demand_radar_phase_trend = build_demand_radar_phase_trend(days=days, now=now)
 
 
     return {
@@ -1623,6 +1625,7 @@ def build_operations_dashboard(days=30):
         'borrow_escalation_trend': borrow_escalation_trend,
         'demand_radar_hit_trend': demand_radar_hit_trend,
         'demand_radar_hit_layers': demand_radar_hit_layers,
+        'demand_radar_phase_trend': demand_radar_phase_trend,
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),
         'demand_radar': demand_radar,
         'demand_radar_outcomes': demand_radar_outcomes,

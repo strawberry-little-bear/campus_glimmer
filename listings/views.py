@@ -2768,6 +2768,119 @@ def operations_dashboard_export(request):
         '”层，不会被丢掉——'
         '丢了分层就加不回整体。',
     ])
+    writer.writerow([])
+    writer.writerow(['需求雷达命中率的学期纵向对比'])
+    phase_trend = dashboard['demand_radar_phase_trend']
+    writer.writerow([
+        '回看天数', phase_trend['days'],
+        '每个阶段最少有证据任务', phase_trend['min_judged_tasks'],
+        '标记差值阈值（百分点）', phase_trend['gap_points'],
+        '涉及学期数', phase_trend['term_count'],
+        '被标记阶段', phase_trend['flagged_count'],
+        '等待证据的阶段格子', phase_trend['waiting_cell_count'],
+    ])
+    writer.writerow([])
+    for group in phase_trend['phase_groups']:
+        writer.writerow([
+            f"阶段：{group['label']}"
+            + ('（日历覆盖范围，不参与跳学期对比）'
+               if group['is_synthetic'] else ''),
+        ])
+        writer.writerow([
+            '学期', '任务数', '有证据',
+            '命中率（%）',
+            '中位收敛幅度（百分点）',
+            '样本不足',
+        ])
+        if not phase_trend['has_data']:
+            writer.writerow([
+                '这个回看期内还没有创建跟进任务，'
+                '学期纵向对比需要先有任务发生。',
+            ])
+        else:
+            for cell in group['cells']:
+                writer.writerow([
+                    cell['term_name'] or '—',
+                    cell['task_count'],
+                    cell['judged_count'],
+                    '' if cell['hit_rate'] is None else cell['hit_rate'],
+                    '' if cell['median_delta_points'] is None
+                    else cell['median_delta_points'],
+                    '' if cell['has_sample'] else '样本不足',
+                ])
+        writer.writerow([])
+
+    if phase_trend['comparisons']:
+        writer.writerow([
+            '同一阶段在相邻两个学期之间的对比',
+        ])
+        writer.writerow([
+            '阶段', '本学期命中率（%）',
+            '上一学期命中率（%）',
+            '差值（百分点）',
+            '样本不足', '已标记',
+        ])
+        for item in phase_trend['comparisons']:
+            current = item['current']
+            previous = item['previous']
+            writer.writerow([
+                item['phase_label'],
+                '' if current['hit_rate'] is None else current['hit_rate'],
+                '' if previous is None or previous['hit_rate'] is None
+                else previous['hit_rate'],
+                '' if item['gap_points'] is None else item['gap_points'],
+                '' if item['has_sample'] else '样本不足',
+                '已标记' if item['is_flagged'] else '',
+            ])
+
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([phase_trend['summary']])
+    writer.writerow([
+        '每个阶段按任务自己的创建日归期，'
+        '用的是学期历自己的区间，'
+        '因此一个任务在这里所属的阶段'
+        '与其余面板所说的一致。',
+    ])
+    writer.writerow([
+        '比较只取相邻两个学期的同一个阶段：'
+        '逆季节的需求本就不同，'
+        '把上个月当成上个学期比，'
+        '会把季节性读成雷达在漂移。',
+    ])
+    writer.writerow([
+        '只在一个学期出现过的阶段不给方向：'
+        '没有同类的早期阶段可减，'
+        '而前三十天是另一个季节。',
+    ])
+    writer.writerow([
+        '任务按自己的观察期结束时刻判定，'
+        '不按 now，否则上个学期的任务会全部置为待定，'
+        '而这正是跳学期对比要读的那批工作。',
+    ])
+    writer.writerow([
+        '每个阶段格子各自要过 ',
+        phase_trend['min_judged_tasks'],
+        ' 个有证据任务的门槛，'
+        '门槛不会为了让表格好看而放开；'
+        '低于门槛的格子只报数字，不给方向。',
+    ])
+    writer.writerow([
+        '阶段上的差值只说明走向，'
+        '任务数少的阶段上的差值不算结论；'
+        '这里也不排序、不改机会分。',
+    ])
+    writer.writerow([
+        '早于第一个学期开始配置、'
+        '或落在学期内未划分阶段的任务，'
+        '分别落在“',
+        phase_trend['no_term_label'],
+        '”和“',
+        phase_trend['unassigned_phase_label'],
+        '”，不会被丢掉——'
+        '丢了就会缩小分母，'
+        '让每个阶段的命中率安静地变大。',
+    ])
     return response
 
 def search_items(request):
