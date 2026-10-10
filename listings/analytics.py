@@ -19,6 +19,7 @@ from .governance_sla import build_governance_sla
 from .supply_lifecycle import build_supply_lifecycle
 from .task_run_failure_causes import build_task_run_failure_causes
 from .task_run_failure_cause_trend import build_task_run_failure_cause_trend
+from .task_run_overlap import build_task_run_overlap
 from .task_run_health import build_task_run_health
 from .task_run_duration_percentiles import build_task_run_duration_percentiles
 from .task_run_trend import build_task_run_trend
@@ -1627,6 +1628,7 @@ def build_operations_dashboard(days=30):
         'task_run_hour_load': build_task_run_hour_load(days=days, now=now),
         'task_run_failure_causes': build_task_run_failure_causes(days=days, now=now),
         'task_run_failure_cause_trend': build_task_run_failure_cause_trend(days=days, now=now),
+        'task_run_overlap': build_task_run_overlap(days=days, now=now),
         'borrow_escalation': build_borrow_escalation_report(days=days, now=now),
         'borrow_risk': borrow_risk,
         'borrow_rhythm': borrow_rhythm,

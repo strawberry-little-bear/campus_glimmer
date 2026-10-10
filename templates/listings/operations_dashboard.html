@@ -1259,6 +1259,56 @@
         {% endif %}
     </div>
 </section>
+<section class="content-card ops-panel mb-4 task-run-overlap-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Self overlap</span><h2>命令的自我重叠</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_overlap.days }} 天·耗时对照运行间隔</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>自我重叠</span><strong>{% if task_run_overlap.overlapping_count %}{{ task_run_overlap.overlapping_count }} 条命令{% else %}暂无{% endif %}</strong><small>既叠在一起、又真的更慢</small></div>
+        <div><span>正在逼近</span><strong>{% if task_run_overlap.approaching_count %}{{ task_run_overlap.approaching_count }} 条命令{% else %}暂无{% endif %}</strong><small>最长耗时已达间隔的 {{ task_run_overlap.approaching_interval|floatformat }} 成</small></div>
+        <div><span>节奏门槛</span><strong>至少 {{ task_run_overlap.min_runs_for_rhythm }} 次运行</strong><small>样本少的不反推间隔</small></div>
+        <div><span>变慢倍数</span><strong>{{ task_run_overlap.overlap_slowdown }} 倍</strong><small>低于此值只报数字</small></div>
+    </div>
+
+    {% if task_run_overlap.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>每条命令的耗时与它自己的间隔</strong><span>会撞的排前面，其余按重叠对数排</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-overlap-table">
+                <thead><tr><th>命令</th><th>运行</th><th>运行间隔</th><th>最长耗时</th><th>最长/间隔</th><th>重叠对数</th><th>重叠代价</th><th>状态</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_overlap.rows %}
+                    <tr{% if row.is_self_overlapping %} class="supply-lifecycle-row-warning"{% endif %}>
+                        <td data-label="命令"><strong>{{ row.name }}</strong><small class="d-block text-muted">{{ row.run_count }} 次运行，其中 {{ row.succeeded_count }} 次成功</small></td>
+                        <td data-label="运行间隔">{% if row.interval_ms %}{{ row.interval_ms }} 毫秒<small class="d-block text-muted">{{ row.interval_runs }} 个间隔的中位数</small>{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
+                        <td data-label="最长耗时">{% if row.longest_run_ms %}{{ row.longest_run_ms }} 毫秒{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                        <td data-label="最长/间隔">{{ row.longest_run_ratio_display }}</td>
+                        <td data-label="重叠对数">{{ row.overlap_pair_count }}</td>
+                        <td data-label="重叠代价">{{ row.overlap_cost_display }}</td>
+                        <td data-label="状态">
+                            {% if row.is_self_overlapping %}<span class="task-run-trend-direction" data-tone="bad">正在撞自己</span>
+                            {% elif row.is_approaching %}<span class="task-run-trend-direction" data-tone="warn">正在逼近</span>
+                            {% else %}<span class="text-muted">正常</span>{% endif %}
+                            <small class="d-block text-muted">{% if row.last_started_at %}最近 {{ row.last_started_at|date:"m-d H:i" }}{% endif %}</small>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <ul class="ops-panel-notes mt-3">
+            <li><i class="bi bi-info-circle me-1"></i>{{ task_run_overlap.summary }}</li>
+            <li><i class="bi bi-arrow-repeat me-1"></i>运行间隔从台账反推，不读 crontab：crontab 记的是写下来的安排，不是真正跑出来的节奏，一次被拖慢的运行会让实际间隔长于配置。</li>
+            <li><i class="bi bi-hourglass-bottom me-1"></i>重叠按台账里真实发生过的成对运行数：前一次的开始加它自己的耗时晚于后一次的开始，才算一对。比值报在旁边，从不代替对数。</li>
+            <li><i class="bi bi-speedometer2 me-1"></i>逼近用观测到的最长一次耗时当基数，不用分位：决定会不会撞上下一次的是真正跑过最长的那次，分位会把它抹掉。</li>
+            <li><i class="bi bi-shield-check me-1"></i>此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。</li>
+        </ul>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0 mt-3">窗口内还没有已记录的定时任务运行。</p>
+    {% endif %}
+</section>
 <section class="content-card ops-panel mb-4 borrow-escalation-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Borrow recovery</span><h2>借用逾期催收阶梯</h2></div>

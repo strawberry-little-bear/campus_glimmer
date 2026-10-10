@@ -2880,6 +2880,59 @@ def operations_dashboard_export(request):
     writer.writerow(['此处只报告，不改分类映射表、不自动重试、不改调度配置。'])
     writer.writerow([])
 
+    writer.writerow([u'命令的自我重叠'])
+    overlap = dashboard['task_run_overlap']
+    writer.writerow([
+        u'周期起始', overlap['window_start'].strftime('%Y-%m-%d'),
+        u'周期结束', overlap['window_end'].strftime('%Y-%m-%d %H:%M'),
+        u'周期天数', overlap['days'],
+        u'节奏门槛', u'至少 {} 次运行'.format(overlap['min_runs_for_rhythm']),
+        u'重叠对数门槛', overlap['min_overlap_pairs'],
+        u'变慢倍数', overlap['overlap_slowdown'],
+        u'逼近间隔比值', overlap['approaching_interval'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        u'命令', u'运行次数', u'成功次数',
+        u'运行间隔（毫秒）', u'间隔样本数',
+        u'最长耗时（毫秒）', u'最长耗时与间隔之比',
+        u'重叠对数', u'重叠时耗时中位数（毫秒）',
+        u'不重叠时耗时中位数（毫秒）',
+        u'重叠代价', u'自我重叠', u'正在逼近',
+        u'最后一次开始',
+    ])
+    if not overlap['has_data']:
+        writer.writerow([u'窗口内还没有已记录的定时任务运行。'])
+    else:
+        for row in overlap['rows']:
+            writer.writerow([
+                row['name'],
+                row['run_count'], row['succeeded_count'],
+                '' if row['interval_ms'] is None else row['interval_ms'],
+                row['interval_runs'],
+                '' if row['longest_run_ms'] is None else row['longest_run_ms'],
+                row['longest_run_ratio_display'],
+                row['overlap_pair_count'],
+                '' if row['overlapped_median_ms'] is None else row['overlapped_median_ms'],
+                '' if row['clean_median_ms'] is None else row['clean_median_ms'],
+                row['overlap_cost_display'],
+                u'是' if row['is_self_overlapping'] else '',
+                u'是' if row['is_approaching'] else '',
+                '' if row['last_started_at'] is None else row['last_started_at'].strftime('%Y-%m-%d %H:%M'),
+            ])
+
+    writer.writerow([])
+    writer.writerow([u'说明'])
+    writer.writerow([overlap['summary']])
+    writer.writerow([u'运行间隔从台账反推，不读 crontab：本项目没有这个数据源，而且即使有，crontab 记的是写下来的安排而不是真正跑出来的节奏。'])
+    writer.writerow([u'间隔取相邻两次开始时刻的中位数，不取平均值：一次漏跑会让某一个间隔翻倍，平均值会报出一个从未发生过的节奏。'])
+    writer.writerow([u'重叠按台账里真实发生过的成对运行数，不按比值推断：前一次的开始加它自己的耗时晚于后一次的开始，才算一对。'])
+    writer.writerow([u'比值报在对数旁边，从不取代对数：比值是推测，而对数是两行都被记录过时间戳的运行。'])
+    writer.writerow([u'重叠必须有代价才算问题：两条各自等一个外部的东西，那个东西变慢了，重叠越来越多而什么都没有退化，这种重叠只报数字。'])
+    writer.writerow([u'正在逼近用观测到的最长一次运行当基数，不用分位：决定一次运行会不会撞上下一次的是真正跑过最长的那次，分位会把它抹掉。'])
+    writer.writerow([u'只看当前窗口，不给间隔拿上一周期：跳过窗口起点的那一个间隔说的是窗口在哪里被切开，不是命令的节奏。'])
+    writer.writerow([u'此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。'])
+    writer.writerow([])
     writer.writerow(['此处只报告，不拆分命令、不改调度配置、不把统计写回台账。'])
 
     writer.writerow([])
