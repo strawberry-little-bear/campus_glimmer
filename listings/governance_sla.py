@@ -8,6 +8,13 @@ count, so it cannot say whether a report waited ten minutes or ten days, cannot
 compare one queue against another, and cannot tell which cases have crossed the
 point where a user is still waiting for an answer.
 
+A fourth queue was added later, and it is not another model: a borrow that has
+been escalated to level three is a case waiting on an operator, and it already
+carries everything a case needs - when it entered the queue, how long the item
+has been overdue, and when it closed. Reading it here rather than building a
+mirror table keeps a single write path: the escalation module still owns the
+record, this module only reports on it.
+
 This module normalises the three models onto one comparable shape and measures
 the dimension none of them had: handling latency. It deliberately does not add
 a storage table. All three models already carry a created_at and a closing
@@ -29,7 +36,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import MeetingIncident, OrderDispute, Report
+from .models import BorrowReturnEscalation, MeetingIncident, OrderDispute, Report
 
 
 # Each queue's handling deadline. These are deliberately different: a meeting
@@ -40,6 +47,12 @@ SLA_TARGETS = {
     'report': timedelta(days=2),
     'dispute': timedelta(days=3),
     'incident': timedelta(hours=24),
+    # A level-three borrow has already waited out the whole private channel:
+    # the borrower was asked, both sides were told, and seven days of overdue
+    # have passed. Another seven days on the operator side bounds the worst case
+    # at two weeks of a classmate's item being gone, which is long enough for a
+    # dispute to be opened anyway but short enough to still be recoverable.
+    'borrow': timedelta(days=7),
 }
 
 # How long before the deadline a case is flagged as approaching it. Used to
@@ -60,6 +73,7 @@ QUEUE_LABELS = {
     'report': '商品举报',
     'dispute': '交易争议',
     'incident': '交付预约异常',
+    'borrow': '借用逾期催收',
 }
 
 # Statuses that mean a case is still waiting for a human. Everything else has
@@ -202,6 +216,46 @@ def _incident_cases(queryset):
         ))
     return rows
 
+def _borrow_cases(queryset):
+    """Read escalated borrows as governance cases.
+
+    A case enters this queue at the moment it reaches level three, so the
+    creation time is ``last_escalated_at`` and not the row's own created_at.
+    The difference matters: an order may sit at level one for a week before it
+    is escalated, and measuring the operator's wait from the level-one row
+    would charge the governance queue for time the escalation module spent.
+    """
+    rows = []
+    for row in queryset.values(
+        'id', 'escalation_level', 'escalation_count', 'last_escalated_at',
+        'resolved_at', 'note', 'order__id', 'order__item__title',
+        'order__buyer__username', 'order__seller__username',
+        'order__return_due_at',
+    ):
+        # 只把真正离开双方私域的那一级算成治理事项：L1/L2 仍在两个同学之间，
+        # 进工作台等于把一次慢还变成公开示众。
+        if row['escalation_level'] < 3:
+            continue
+        rows.append(normalise_case(
+            case_id=row['id'],
+            kind='borrow',
+            status='closed' if row['resolved_at'] else 'open',
+            created_at=row['last_escalated_at'],
+            closed_at=row['resolved_at'],
+            reviewer_id=None,
+            subject=row['order__item__title'],
+            counterparty=row['order__seller__username'],
+            reporter=row['order__buyer__username'],
+            reason='overdue_borrow',
+            reason_label='借用逾期未归还',
+            escalation_level=row['escalation_level'],
+            escalation_count=row['escalation_count'],
+            return_due_at=row['order__return_due_at'],
+            note=row['note'],
+            url=f"/listings/order/{row['order__id']}/",
+        ))
+    return rows
+
 
 def _fetch_cases(*, days, now):
     """Load every case created in the period, whatever queue it came from."""
@@ -210,6 +264,9 @@ def _fetch_cases(*, days, now):
     cases += _report_cases(Report.objects.filter(created_at__gte=start, created_at__lte=now))
     cases += _dispute_cases(OrderDispute.objects.filter(created_at__gte=start, created_at__lte=now))
     cases += _incident_cases(MeetingIncident.objects.filter(created_at__gte=start, created_at__lte=now))
+    cases += _borrow_cases(BorrowReturnEscalation.objects.filter(
+        escalation_level__gte=3, last_escalated_at__gte=start, last_escalated_at__lte=now,
+    ))
     return cases
 
 
@@ -224,6 +281,9 @@ def _fetch_open_cases():
     cases += _report_cases(Report.objects.filter(status__in=OPEN_STATUSES))
     cases += _dispute_cases(OrderDispute.objects.filter(status__in=OPEN_STATUSES))
     cases += _incident_cases(MeetingIncident.objects.filter(status__in=OPEN_STATUSES))
+    cases += _borrow_cases(BorrowReturnEscalation.objects.filter(
+        escalation_level__gte=3, resolved_at__isnull=True,
+    ))
     return cases
 
 
@@ -325,7 +385,7 @@ def _summary(queues, now):
         return f'有 {total_overdue} 件治理事项已超过处理时限，其中{worst["label"]}队列 {worst["overdue"]} 件，建议优先处理。'
     if total_open:
         return f'当前 {total_open} 件治理事项都在处理时限内，按队列分别跟进即可。'
-    return '当前没有待处理的治理事项，三类队列均已清空。'
+    return '当前没有待处理的治理事项，所有队列均已清空。'
 
 
 def build_governance_sla(*, days=30, now=None):
@@ -343,7 +403,10 @@ def build_governance_sla(*, days=30, now=None):
     open_cases = _fetch_open_cases()
 
     queues = []
-    for kind in ('report', 'dispute', 'incident'):
+    for kind in ('report', 'dispute', 'incident', 'borrow'):
+        # The borrow queue is listed last on purpose. It is the only one whose
+        # deadline is not a moderation target but the tail of an escalation
+        # ladder, so it belongs after the queues an operator can act on directly.
         kind_period = [case for case in period_cases if case['kind'] == kind]
         kind_open = [case for case in open_cases if case['kind'] == kind]
         # Merge so the queue row shows both the period's throughput and the
@@ -374,7 +437,7 @@ def build_governance_sla(*, days=30, now=None):
                 f"{queue['label']}虽然都在时限内，但处理时长中位数已达 {queue['median_label']}，接近 {queue['sla_label']}上限。"
             )
     if not recommendations and total_closed:
-        recommendations.append('三类治理队列都在处理时限内，暂时不需要调整审核人力。')
+        recommendations.append('各治理队列都在处理时限内，暂时不需要调整审核人力。')
 
     return {
         'days': days,

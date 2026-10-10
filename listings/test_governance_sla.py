@@ -157,7 +157,7 @@ class GovernanceSlaTests(TestCase):
         self.assertEqual(data['total_open'], 0)
         self.assertEqual(data['total_overdue'], 0)
         self.assertIsNone(data['within_sla_rate'])
-        self.assertIn('三类队列均已清空', data['summary'])
+        self.assertIn('所有队列均已清空', data['summary'])
         self.assertEqual(data['recommendations'], [])
 
     def test_all_three_queues_are_reported_with_their_own_deadline(self):
@@ -167,7 +167,8 @@ class GovernanceSlaTests(TestCase):
 
         rows = {row['kind']: row for row in build_governance_sla(days=30, now=self.now)['queues']}
 
-        self.assertEqual(set(rows), {'report', 'dispute', 'incident'})
+        # 借用催收队列只有真正升级到三级的订单才出现，这里没有任何借用单。
+        self.assertEqual(set(rows), {'report', 'dispute', 'incident', 'borrow'})
         # 时限必须各不相同：预约异常阻塞一次线下交付，举报只是离线复核。
         self.assertEqual(rows['report']['sla_label'], '2 天')
         self.assertEqual(rows['dispute']['sla_label'], '3 天')
@@ -250,7 +251,7 @@ class GovernanceSlaTests(TestCase):
 
         self.assertEqual(data['total_overdue'], 0)
         self.assertEqual(data['overdue_cases'], [])
-        self.assertIn('三类队列均已清空', data['summary'])
+        self.assertIn('所有队列均已清空', data['summary'])
 
     def test_cases_outside_the_period_are_excluded_from_throughput(self):
         self.make_report(created_ago=timedelta(hours=2), closed_ago=timedelta(hours=1))
@@ -286,7 +287,7 @@ class GovernanceSlaTests(TestCase):
 
         self.assertEqual(
             data['recommendations'],
-            ['三类治理队列都在处理时限内，暂时不需要调整审核人力。'],
+            ['各治理队列都在处理时限内，暂时不需要调整审核人力。'],
         )
 
     def test_case_rows_carry_a_stable_key_and_the_age_so_far(self):
