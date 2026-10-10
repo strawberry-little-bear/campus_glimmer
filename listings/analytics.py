@@ -17,6 +17,7 @@ from .notification_response import build_notification_response_insights
 from .order_stage_flow import build_order_stage_flow
 from .governance_sla import build_governance_sla
 from .supply_lifecycle import build_supply_lifecycle
+from .task_run_failure_causes import build_task_run_failure_causes
 from .task_run_health import build_task_run_health
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
 from .borrow_escalation import build_borrow_escalation_report
@@ -575,7 +576,7 @@ def _build_user_retention(start, previous_start, end):
 
 def build_operational_alerts(
     metrics, period_comparisons, demand_radar=None, governance_sla=None,
-    demand_radar_outcomes=None,
+    demand_radar_outcomes=None, task_run_failure_causes=None,
 ):
     """Turn dashboard signals into a short, actionable operations queue."""
     alerts = []
@@ -751,6 +752,47 @@ def build_operational_alerts(
             'action_url_name': 'operations_dashboard',
         })
 
+    # 定时任务失败原因分类是唯一一项只描述“失败长什么样”而不下结论的信号，
+    # 因此这里只在“同一类原因反复出现”时提醒运营去看，不按类别自动判定严重程度。
+    # 同一个异常名可能是致命的配置错误，也可能只是“今天没有到期订单”的正常提前返回，
+    # 抄名单判严重程度会让运营在正常失败上浪费时间。
+    causes = (task_run_failure_causes or {}).get('causes') or []
+    for cause in causes:
+        if cause['cause'] == 'unknown' or cause['count'] < 3:
+            continue
+        if cause['cause'] == 'external':
+            alerts.append({
+                'key': 'task_run_external_failures',
+                'severity': 'warning',
+                'severity_label': '要关注',
+                'title': '定时任务频繁遇到外部依赖故障',
+                'message': (
+                    f'周期内有 {cause["count"]} 次失败属于“{cause["label"]}”，涉及 {cause["command_count"]} 个命令。'
+                    f'最近一次是 {cause["last_failure_at"]:%m-%d %H:%M} 的“{cause["command_rows"][0]["name"]}”。'
+                    '这类故障多为数据库、邮件服务等短暂不可达，建议先重试再观察，'
+                    '若持续出现再考虑改变调度策略。'
+                ),
+                'metric': str(cause['count']),
+                'metric_label': '外部依赖失败',
+                'action_label': '查看失败原因分类',
+                'action_url_name': 'operations_dashboard',
+            })
+        else:
+            alerts.append({
+                'key': 'task_run_repeated_failures',
+                'severity': 'warning',
+                'severity_label': '要关注',
+                'title': '定时任务同类失败反复出现',
+                'message': (
+                    f'周期内有 {cause["count"]} 次失败属于“{cause["label"]}”，涉及 {cause["command_count"]} 个命令。'
+                    f'最近一次是 {cause["last_failure_at"]:%m-%d %H:%M} 的“{cause["command_rows"][0]["name"]}”。'
+                    '分类只说明失败长什么样，不代表可以忽略；具体是否需要处理请结合原始备注判断。'
+                ),
+                'metric': str(cause['count']),
+                'metric_label': '同类失败次数',
+                'action_label': '查看失败原因分类',
+                'action_url_name': 'operations_dashboard',
+            })
     severity_order = {'critical': 0, 'warning': 1, 'info': 2}
     return sorted(alerts, key=lambda alert: severity_order.get(alert['severity'], 9))
 
@@ -1525,8 +1567,10 @@ def build_operations_dashboard(days=30):
     demand_radar = build_demand_radar(days=days, now=now)
     demand_radar_outcomes = build_demand_radar_outcomes(days=days, now=now)
     governance_sla = build_governance_sla(days=days, now=now)
+    task_run_failure_causes = build_task_run_failure_causes(days=days, now=now)
     operational_alerts = build_operational_alerts(
         metrics, period_comparisons, demand_radar, governance_sla, demand_radar_outcomes,
+        task_run_failure_causes,
     )
     campus_pulse = build_campus_pulse(days=days, now=now)
     campaign_analytics = build_campaign_analytics(days=days, now=now)
@@ -1564,6 +1608,7 @@ def build_operations_dashboard(days=30):
         'governance_sla': governance_sla,
         'supply_lifecycle': build_supply_lifecycle(days=days, now=now),
         'task_run_health': build_task_run_health(days=days, now=now),
+        'task_run_failure_causes': build_task_run_failure_causes(days=days, now=now),
         'borrow_escalation': build_borrow_escalation_report(days=days, now=now),
         'borrow_risk': borrow_risk,
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),

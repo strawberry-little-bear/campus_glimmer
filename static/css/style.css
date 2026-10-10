@@ -1584,6 +1584,34 @@ a { color: inherit; text-decoration: none; }
 /* 借用逾期风险分层：和催收阶梯面板共用同一套表格语言，只把两处调成八列需要
    的形态。样本不足的行整行压暗，而不是单独给一列加图标——读者要一眼看出
    这一行不该被当成结论。 */
+/* 定时任务失败原因分类：与调度健康面板同属一组，只是把失败按“长什么样”归类。
+   表格里有一列是原始备注，长度不受控，因此允许换行并把字号降下。 */
+.task-run-failure-causes-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.task-run-failure-causes-table th:nth-child(2),
+.task-run-failure-causes-table td:nth-child(2),
+.task-run-failure-causes-table th:nth-child(4),
+.task-run-failure-causes-table td:nth-child(4) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.task-run-failure-causes-table td:last-child code {
+    font-size: 0.78rem;
+    word-break: break-all;
+    white-space: normal;
+    color: #b4632a;
+}
+
+@media (max-width: 767px) {
+    .task-run-failure-causes-table th,
+    .task-run-failure-causes-table td {
+        white-space: normal;
+    }
+}
+
 .borrow-risk-panel .supply-lifecycle-summary strong {
     font-variant-numeric: tabular-nums;
 }
