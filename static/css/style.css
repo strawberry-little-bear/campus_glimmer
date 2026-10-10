@@ -1633,6 +1633,61 @@ a { color: inherit; text-decoration: none; }
     }
 }
 
+/* 借用节律交叉：和风险分层共用卡片语言，日均口径并列展示，避免读者拿总量当结论 */
+.borrow-rhythm-panel .supply-lifecycle-summary strong {
+    font-variant-numeric: tabular-nums;
+}
+
+.borrow-rhythm-panel .supply-lifecycle-table th:nth-child(n+2),
+.borrow-rhythm-panel .supply-lifecycle-table td:nth-child(n+2) {
+    text-align: center;
+    white-space: nowrap;
+}
+
+/* 阶段内分类明细按阶段分组，靠左边线和留白区分层次，不再叠一层卡片边框 */
+.borrow-rhythm-phase-group {
+    padding: 12px 0 4px 14px;
+    border-left: 2px solid #e6efe9;
+}
+
+.borrow-rhythm-phase-group + .borrow-rhythm-phase-group {
+    margin-top: 10px;
+}
+
+.borrow-rhythm-phase-group-heading {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.borrow-rhythm-phase-group-heading strong {
+    font-size: 0.95rem;
+}
+
+.borrow-rhythm-phase-group-heading span {
+    color: #6c757d;
+    font-size: 0.8rem;
+}
+
+.borrow-rhythm-phase-group.is-small-sample .borrow-rhythm-phase-group-heading strong {
+    color: #6c757d;
+    font-weight: 600;
+}
+
+.borrow-rhythm-panel .supply-lifecycle-table tr.text-muted strong {
+    font-weight: 600;
+}
+
+@media (max-width: 767px) {
+    .borrow-rhythm-panel .supply-lifecycle-table th,
+    .borrow-rhythm-panel .supply-lifecycle-table td {
+        white-space: normal;
+    }
+}
+
 /* 治理工作台：三类队列共用一套卡片语言，超期用颜色而不是单独文案强调 */
 .governance-summary {
     display: grid;

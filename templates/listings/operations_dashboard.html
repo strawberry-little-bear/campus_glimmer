@@ -1166,6 +1166,79 @@
 
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_risk.summary }}分母包含从未升级过的借用，只看升级过的订单会让每一组的升级率都变成 100%。这里只做统计聚合：不会因为某个分类看起来更容易拖就提前催收它的借用方，也不会据此调整押金或给任何人打标记——催收时机是「同学的东西最多能丢多久」的策略，不该被一个统计数字推着走。</div>
 </section>
+
+<section class="content-card ops-panel mb-4 borrow-rhythm-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Borrow rhythm</span><h2>借用节律与学期阶段交叉</h2></div>
+        <span class="ops-panel-hint">区分「考试周集中借出」和「这个品类本身难还」——同一个第三级率，落在十四天考试周和十四周常规教学周里不是一回事</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>周期内借用</span><strong>{{ borrow_rhythm.borrow_count }}</strong><small>最近 {{ borrow_rhythm.days }} 天</small></div>
+        <div><span>日历覆盖</span><strong>{% if borrow_rhythm.covered_share != None %}{{ borrow_rhythm.covered_share|floatformat }}%{% else %}—{% endif %}</strong><small>{{ borrow_rhythm.covered_count }} 笔落入学期阶段，{% if not borrow_rhythm.has_calendar %}尚未配置学期日历{% else %}{{ borrow_rhythm.unplaced_count }} 笔在覆盖范围之外{% endif %}</small></div>
+        <div{% if borrow_rhythm.level_three_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>拖到第三级</span><strong>{{ borrow_rhythm.level_three_count }}</strong><small>{% if borrow_rhythm.level_three_rate %}{{ borrow_rhythm.level_three_rate|floatformat }}% 的借用{% else %}占比待积累{% endif %}</small></div>
+    </div>
+
+    {% if borrow_rhythm.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>按学期阶段</strong><span>按学期进程排列；日均的分母是阶段真正产生借用的天数，所以窗口切出来的阶段不会伪装成尖峰</span></div>
+        {% if borrow_rhythm.rows %}
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>阶段</th><th>借用</th><th>升级</th><th>第三级</th><th>第三级率</th><th>活跃天数</th><th>日均借用</th><th>日均第三级</th><th>平均闭环</th><th>最长逾期</th><th>跟进中</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_rhythm.rows %}
+                    <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                        <td data-label="阶段"><strong>{{ row.phase_label }}</strong>{% if row.term_name %}<small class="d-block text-muted">{{ row.term_name }}</small>{% endif %}{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ borrow_rhythm.min_sample_size }} 笔，仅供参考</small>{% endif %}</td>
+                        <td data-label="借用">{{ row.borrow_count }}</td>
+                        <td data-label="升级">{{ row.escalated_count }}</td>
+                        <td data-label="第三级">{% if row.level_three_count %}<span class="supply-lifecycle-flag">{{ row.level_three_count }}</span>{% else %}0{% endif %}</td>
+                        <td data-label="第三级率">{% if row.level_three_rate != None %}{{ row.level_three_rate|floatformat }}%{% else %}—{% endif %}</td>
+                        <td data-label="活跃天数">{{ row.active_days }}</td>
+                        <td data-label="日均借用">{% if row.borrow_per_day != None %}{{ row.borrow_per_day|floatformat:2 }}{% else %}—{% endif %}</td>
+                        <td data-label="日均第三级">{% if row.level_three_per_day != None %}{{ row.level_three_per_day|floatformat:2 }}{% else %}—{% endif %}</td>
+                        <td data-label="平均闭环">{% if row.average_close_days != None %}{{ row.average_close_days }} 天{% else %}—{% endif %}</td>
+                        <td data-label="最长逾期">{% if row.max_overdue_days != None %}{{ row.max_overdue_days }} 天{% else %}—{% endif %}</td>
+                        <td data-label="跟进中">{{ row.open_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}<div class="empty-inline">周期内还没有借用订单。</div>{% endif %}
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>阶段内分类明细</strong><span>占比的分母是所在阶段的借用总数，回答「这个阶段发生的事里有多少出了错」</span></div>
+        {% for row in borrow_rhythm.rows %}
+        <div class="borrow-rhythm-phase-group{% if row.is_small_sample %} is-small-sample{% endif %}">
+            <div class="borrow-rhythm-phase-group-heading"><strong>{{ row.phase_label }}</strong><span>{{ row.borrow_count }} 笔{% if row.term_name %} · {{ row.term_name }}{% endif %}{% if row.is_small_sample %} · 样本不足仅供参考{% endif %}</span></div>
+            {% if row.category_rows %}
+            <div class="ops-table-wrap">
+                <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                    <thead><tr><th>分类</th><th>借用</th><th>第三级</th><th>阶段内占比</th><th>第三级率</th></tr></thead>
+                    <tbody>
+                        {% for entry in row.category_rows %}
+                        <tr{% if entry.is_small_sample %} class="text-muted"{% endif %}>
+                            <td data-label="分类">{{ entry.category_label }}{% if entry.is_small_sample %}<small class="d-block text-muted">样本不足 {{ borrow_rhythm.min_sample_size }} 笔</small>{% endif %}</td>
+                            <td data-label="借用">{{ entry.borrow_count }}</td>
+                            <td data-label="第三级">{% if entry.level_three_count %}<span class="supply-lifecycle-flag">{{ entry.level_three_count }}</span>{% else %}0{% endif %}</td>
+                            <td data-label="阶段内占比">{% if entry.share_in_phase != None %}{{ entry.share_in_phase|floatformat }}%{% else %}—{% endif %}</td>
+                            <td data-label="第三级率">{% if entry.level_three_rate != None %}{{ entry.level_three_rate|floatformat }}%{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}<div class="empty-inline">这个阶段还没有分类明细。</div>{% endif %}
+        </div>
+        {% empty %}
+        <div class="empty-inline">周期内还没有借用订单。</div>
+        {% endfor %}
+    </div>
+    {% else %}<div class="empty-inline">周期内还没有借用订单，节律交叉需要先有借用发生。</div>{% endif %}
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ borrow_rhythm.summary }}两个合成桶描述的是日历覆盖率而不是节律：没有学期日历时发生的借用、落在阶段空隙里的借用，都单独计数并说出来，不摊进任何阶段——静默丢掉会缩小分母，把每个阶段的占比悄悄放大。这里只做统计聚合：考试周看起来集中借出，是给人判断的事实，不是提前催收的许可；催收时机是「同学的东西最多能丢多久」的策略，不该被一个统计数字推着走。</div>
+</section>
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>

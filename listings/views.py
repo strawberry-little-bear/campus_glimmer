@@ -2564,6 +2564,62 @@ def operations_dashboard_export(request):
         for recommendation in supply['recommendations']:
             writer.writerow([recommendation])
 
+    rhythm = dashboard['borrow_rhythm']
+    writer.writerow([])
+    writer.writerow(['借用节奏与学期阶段交叉'])
+    writer.writerow([
+        '周期内借用', rhythm['borrow_count'],
+        '拖到第三级', rhythm['level_three_count'],
+        '第三级率（%）', '' if rhythm['level_three_rate'] is None else rhythm['level_three_rate'],
+        '日历覆盖（%）', '' if rhythm['covered_share'] is None else rhythm['covered_share'],
+        '覆盖范围外借用', rhythm['unplaced_count'],
+        '最小样本门槛', rhythm['min_sample_size'],
+    ])
+    writer.writerow([])
+    writer.writerow(['阶段', '学期', '借用', '升级', '第三级',
+                     '第三级率（%）', '活跃天数', '日均借用',
+                     '日均第三级', '平均闭环（天）',
+                     '最长逾期（天）', '跟进中', '样本不足'])
+    for row in rhythm['rows']:
+        writer.writerow([
+            row['phase_label'], row['term_name'], row['borrow_count'], row['escalated_count'],
+            row['level_three_count'],
+            '' if row['level_three_rate'] is None else row['level_three_rate'],
+            row['active_days'],
+            '' if row['borrow_per_day'] is None else row['borrow_per_day'],
+            '' if row['level_three_per_day'] is None else row['level_three_per_day'],
+            '' if row['average_close_days'] is None else row['average_close_days'],
+            '' if row['max_overdue_days'] is None else row['max_overdue_days'],
+            row['open_count'], '是' if row['is_small_sample'] else '',
+        ])
+
+    for row in rhythm['rows']:
+        if not row['category_rows']:
+            continue
+        writer.writerow([])
+        writer.writerow([f"阶段内分类明细：{row['phase_label']}"])
+        writer.writerow(['分类', '借用', '第三级',
+                         '阶段内占比（%）', '第三级率（%）', '样本不足'])
+        for entry in row['category_rows']:
+            writer.writerow([
+                entry['category_label'], entry['borrow_count'], entry['level_three_count'],
+                '' if entry['share_in_phase'] is None else entry['share_in_phase'],
+                '' if entry['level_three_rate'] is None else entry['level_three_rate'],
+                '是' if entry['is_small_sample'] else '',
+            ])
+
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([rhythm['summary']])
+    writer.writerow([
+        '日均分母为阶段真正产生借用的天数，因为报告窗口可能只覆盖阶段的一部分；'
+        '占比的分母是所在阶段的借用总数，不是全站借用数。',
+    ])
+    writer.writerow([
+        '无学期日历、阶段空隙两个合成桶描述的是日历覆盖率而不是节奏，'
+        '单独计数不参与结论；此处只做统计聚合，不会提前催收。',
+    ])
+
     return response
 
 def search_items(request):

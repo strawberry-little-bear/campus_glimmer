@@ -22,6 +22,7 @@ from .task_run_health import build_task_run_health
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
 from .borrow_escalation import build_borrow_escalation_report
 from .borrow_risk import build_borrow_risk
+from .borrow_rhythm import build_borrow_rhythm
 
 
 PERIOD_CHOICES = (
@@ -1576,6 +1577,7 @@ def build_operations_dashboard(days=30):
     campaign_analytics = build_campaign_analytics(days=days, now=now)
     academic_calendar = build_academic_calendar(day=today)
     borrow_risk = build_borrow_risk(days=days, now=now)
+    borrow_rhythm = build_borrow_rhythm(days=days, now=now)
 
 
     return {
@@ -1611,6 +1613,7 @@ def build_operations_dashboard(days=30):
         'task_run_failure_causes': build_task_run_failure_causes(days=days, now=now),
         'borrow_escalation': build_borrow_escalation_report(days=days, now=now),
         'borrow_risk': borrow_risk,
+        'borrow_rhythm': borrow_rhythm,
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),
         'demand_radar': demand_radar,
         'demand_radar_outcomes': demand_radar_outcomes,
