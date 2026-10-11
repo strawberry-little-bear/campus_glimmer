@@ -3,7 +3,7 @@ import mimetypes
 import secrets
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from datetime import timedelta
+from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
@@ -31,6 +31,7 @@ from .search_rejection_stats import build_search_rejection_stats
 from .search_position_quality import build_search_position_quality
 from .demand_match_quality import build_demand_match_quality
 from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
+from .demand_opportunity_followups import build_demand_opportunity_followups
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2174,6 +2175,7 @@ def operations_dashboard(request):
     dashboard = build_operations_dashboard(days)
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
+    dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2194,6 +2196,32 @@ def operations_dashboard(request):
     dashboard['demand_outcome_status_filter'] = _demand_outcome_status_filter(request)
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     return render(request, 'listings/operations_dashboard.html', dashboard)
+
+
+# 跟进备注的长度上限。表单上是同一个数字，两处各写一份就会各自漂移，
+# 所以这里集中一个常量，视图截断时用它。
+MAX_DEMAND_TASK_NOTE_LENGTH = 500
+
+
+def _parse_due_at(raw):
+    """解析跟进截止时间，解析不了就返回 None 并给出原因。
+
+    ``datetime-local`` 输入框交上来的是 ``2026-10-20T18:00`` 这种本地时间字符串，
+    没有时区信息，直接交给 Django 会踩 ``NaiveDateTimeWarning`` 并用项目的默认时区
+    解释它。这里按东八区所在的本地时区显式转成 aware 时间，解析失败就明说，而不是
+    静默丢弃——一个被悄悄丢掉的期限比一个报错更糟：运营以为设了，看板以为没有。
+    """
+    raw = (raw or '').strip()
+    if not raw:
+        return None, None
+    text = raw.replace('T', ' ')
+    for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d %H', '%Y-%m-%d'):
+        try:
+            naive = datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+        return timezone.make_aware(naive, timezone.get_current_timezone()), None
+    return None, '截止时间的格式看不懂，请用日期选择器重新选择。'
 
 
 @login_required
@@ -2227,6 +2255,10 @@ def create_demand_opportunity_task(request):
             'evidence': row['evidence'],
             'recommendations': row['recommendations'],
             'created_by': request.user,
+            # 建立任务时可以顺手把期限填上。不填也能建：一个没有期限的任务
+            # 至少还被统计着，而要求必填会让人干脆不建任务。
+            'due_at': _parse_due_at(request.POST.get('due_at', ''))[0],
+            'note': request.POST.get('note', '').strip()[:MAX_DEMAND_TASK_NOTE_LENGTH],
         },
     )
     if created:
@@ -2243,12 +2275,32 @@ def update_demand_opportunity_task(request, task_id):
     task = get_object_or_404(DemandOpportunityTask, pk=task_id)
     if request.method == 'POST':
         status = request.POST.get('status', '')
+        due_at, due_error = _parse_due_at(request.POST.get('due_at', ''))
+        note = request.POST.get('note', '').strip()
+        # 备注长度沿用表单一侧的上限。截断而不是报错：运营正在赶时间，
+        # 一段超长的备注该被收下，而不是让人删字重打。
+        note = note[:MAX_DEMAND_TASK_NOTE_LENGTH]
+        update_fields = []
         if status in dict(DemandOpportunityTask.STATUS_CHOICES):
             task.status = status
             if not task.assigned_to_id and status == 'in_progress':
                 task.assigned_to = request.user
-            task.save(update_fields=['status', 'assigned_to', 'updated_at'])
-            messages.success(request, f'任务“{task.title}”已更新为{task.get_status_display()}。')
+            update_fields.extend(['status', 'assigned_to'])
+        if due_error:
+            messages.error(request, due_error)
+        elif due_at != task.due_at:
+            task.due_at = due_at
+            update_fields.append('due_at')
+        if note != (task.note or '').strip():
+            task.note = note
+            update_fields.append('note')
+        if update_fields:
+            task.save(update_fields=update_fields + ['updated_at'])
+            messages.success(
+                request,
+                f'任务“{task.title}”已更新为{task.get_status_display()}'
+                + (f'，截止 {timezone.localtime(due_at):%Y-%m-%d %H:%M}。' if due_at else '。'),
+            )
     try:
         days = int(request.POST.get('days', 30))
     except (TypeError, ValueError):
@@ -2265,6 +2317,7 @@ def operations_dashboard_export(request):
     dashboard = build_operations_dashboard(days)
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
+    dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2547,6 +2600,78 @@ def operations_dashboard_export(request):
             row['supply_now'], row['supply_at_creation'],
             row['outcome_label'], row['verdict'],
         ])
+
+    followups = dashboard['demand_opportunity_followups']
+    writer.writerow([])
+    writer.writerow(['跟进任务的截止时间与备注', '数值', '说明'])
+    writer.writerow(['口径与门槛', followups['summary'], '先报填写率再报逾期：没人填的字段该被撤掉，不该被分析'])
+    writer.writerow(['周期内跟进任务', followups['fill_stats']['total'], '按任务创建时间归期'])
+    writer.writerow(['设了截止时间', followups['fill_stats']['with_due_count'], f"填写率 {followups['fill_stats']['due_fill_rate']}%"])
+    writer.writerow(['没有截止时间', followups['fill_stats']['without_due_count'], '任务建了但没人给期限，比逾期更能说明跟进流程有没有在跑'])
+    writer.writerow(['写过备注', followups['fill_stats']['with_note_count'], f"填写率 {followups['fill_stats']['note_fill_rate']}%"])
+    writer.writerow(['平均备注长度（字）', followups['fill_stats']['average_note_length'], f"最长 {followups['fill_stats']['max_note_length']} 字，上限 {MAX_DEMAND_TASK_NOTE_LENGTH} 字"])
+    writer.writerow(['期限距建任务超过上限', followups['fill_stats']['distant_due_count'], f"超过 {followups['fill_stats']['max_reasonable_due_days']} 天的期限读起来像「填个日子好让字段不为空」"])
+
+    writer.writerow([])
+    writer.writerow(['有期限与无期限的完成率对比', '任务数', '已闭环', '已完成', '完成率（%）', '样本'])
+    for row in followups['due_contrast']['rows']:
+        writer.writerow([
+            row['label'], row['task_count'], row['closed_count'],
+            row['completed_count'], row['completion_rate'],
+            f"样本不足 {followups['due_contrast']['min_comparison_tasks']} 条，只报数字"
+            if row['is_small_sample'] else '可读数',
+        ])
+    gap = followups['due_contrast']['gap_points']
+    writer.writerow([
+        '两组完成率之差（百分点）', '' if gap is None else gap,
+        f"相差不满 {followups['due_contrast']['noise_points']} 个百分点视为噪声，样本薄的时候和抛硬币差不多",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['逾期分档', '任务数'])
+    for row in followups['overdue_stats']['bucket_rows']:
+        writer.writerow([row['label'], row['count']])
+
+    writer.writerow([])
+    writer.writerow(['待处理的逾期任务', '主题', '状态', '负责人', '截止时间', '已超期（天）', '备注长度（字）', '建立时间'])
+    overdue_stats = followups['overdue_stats']
+    if overdue_stats['overdue_rows']:
+        for row in overdue_stats['overdue_rows'][:overdue_stats['open_task_limit']]:
+            writer.writerow([
+                row['title'], row['status_label'],
+                row['assigned_to'] or '未指派',
+                timezone.localtime(row['due_at']).strftime('%Y-%m-%d %H:%M'),
+                row['overdue_days'], row['note_length'],
+                timezone.localtime(row['created_at']).strftime('%Y-%m-%d %H:%M'),
+            ])
+    else:
+        writer.writerow(['—', '当前没有已过期限且未闭环的任务', '', '', '', '', ''])
+
+    writer.writerow([])
+    writer.writerow(['临期任务', '主题', '状态', '负责人', '截止时间', '还剩（天）', '备注长度（字）'])
+    if overdue_stats['approaching_rows']:
+        for row in overdue_stats['approaching_rows']:
+            writer.writerow([
+                row['title'], row['status_label'],
+                row['assigned_to'] or '未指派',
+                timezone.localtime(row['due_at']).strftime('%Y-%m-%d %H:%M'),
+                row['days_until_due'], row['note_length'],
+            ])
+    else:
+        writer.writerow(['—', f"当前没有 {overdue_stats['due_soon_days']} 天内到期的未闭环任务", '', '', '', ''])
+
+    writer.writerow([])
+    writer.writerow(['任务状态分布', '任务数', '设了截止时间', '写过备注'])
+    for row in followups['status_rows']:
+        writer.writerow([row['label'], row['task_count'], row['with_due_count'], row['with_note_count']])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '待处理清单不按统计周期过滤：周期开始之前就超期的那个任务，恰恰是最不该被藏起来的一件。'
+        '这里只报告，不自动派单、不改任务状态、不改截止时间、不新增任何提醒；'
+        '备注是跟进人写给自己的内部备忘，只数字数，不做切词、不聚类、不推断语义，也不公开任何一条原文。',
+    ])
 
     writer.writerow([])
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])

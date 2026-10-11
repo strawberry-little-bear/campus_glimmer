@@ -1014,6 +1014,10 @@ a { color: inherit; text-decoration: none; }
 .demand-outcome-pending { color: #5f7d9c; background: #e9f1f8; }
 .demand-outcome-table td { vertical-align: top; }
 
+.demand-radar-task-form { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.demand-radar-task-form .demand-radar-due-input { width: 11rem; }
+.demand-radar-task-form .demand-radar-note-input { width: 13rem; }
+.demand-followup-panel .ops-table td { vertical-align: top; }
 .demand-radar-task-status { display: inline-flex; align-items: center; color: #62806d; font-size: .69rem; font-weight: 700; }
 .demand-radar-task-status i { color: #5c9b76; }
 .demand-radar-task .btn { padding: 4px 9px; border-radius: 8px; font-size: .67rem; }
