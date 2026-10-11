@@ -901,7 +901,7 @@ class ListingFlowTests(TestCase):
         self.assertEqual(export.status_code, 200)
         report = export.content.decode('utf-8-sig')
         self.assertIn('求购匹配转化', report)
-        self.assertIn('求购匹配分类表现', report)
+        self.assertIn('分类表现,响应数,求购数,确认数,响应确认率（%）', report)
 
     def test_operations_dashboard_reports_notification_deduplication(self):
         Notification.objects.create(

@@ -2322,12 +2322,12 @@ def operations_dashboard_export(request):
         writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
 
     writer.writerow([])
-    writer.writerow(['求购匹配分类表现', '响应数', '求购数', '确认数', '响应确认率（%）'])
+    writer.writerow(['分类表现', '响应数', '求购数', '确认数', '响应确认率（%）'])
     for row in dashboard['demand_match_insights']['category_rows']:
         writer.writerow([row['name'], row['response_count'], row['demand_count'], row['accepted_count'], row['acceptance_rate']])
 
     writer.writerow([])
-    writer.writerow(['求购匹配地点表现', '响应数', '求购数', '确认数', '响应确认率（%）'])
+    writer.writerow(['地点表现', '响应数', '求购数', '确认数', '响应确认率（%）'])
     for row in dashboard['demand_match_insights']['location_rows']:
         writer.writerow([row['name'], row['response_count'], row['demand_count'], row['accepted_count'], row['acceptance_rate']])
 
@@ -2351,12 +2351,12 @@ def operations_dashboard_export(request):
         writer.writerow([row['label'], row['points'], row['event_count'], row['user_count'], row['point_share']])
 
     writer.writerow([])
-    writer.writerow(['排名', '用户名', '贡献事件', '贡献积分'])
+    writer.writerow(['周期贡献排行', '用户名', '贡献事件', '贡献积分'])
     for rank, row in enumerate(contribution_insights['top_users'], start=1):
         writer.writerow([rank, row['username'], row['event_count'], row['points']])
 
     writer.writerow([])
-    writer.writerow(['每日互助趋势', '贡献积分', '贡献事件', '参与用户'])
+    writer.writerow(['每日贡献趋势', '贡献积分', '贡献事件', '参与用户'])
     for point in contribution_insights['trend']:
         if point['points'] or point['event_count']:
             writer.writerow([point['date'], point['points'], point['event_count'], point['user_count']])
@@ -2371,7 +2371,7 @@ def operations_dashboard_export(request):
     writer.writerow(['互助完成率（%）', feedback_insights['completion_rate']])
 
     writer.writerow([])
-    writer.writerow(['互助反馈来源', '反馈数', '完成数', '暂未解决数', '完成率（%）'])
+    writer.writerow(['反馈来源', '反馈数', '完成数', '暂未解决数', '完成率（%）'])
     for row in feedback_insights['source_rows']:
         writer.writerow([row['label'], row['feedback_count'], row['completed_count'], row['unresolved_count'], row['completion_rate']])
 
@@ -2379,6 +2379,12 @@ def operations_dashboard_export(request):
     writer.writerow(['反馈标签', '次数', '占反馈（%）'])
     for row in feedback_insights['tag_rows']:
         writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['每日反馈趋势', '反馈数', '完成数', '暂未解决数'])
+    for point in feedback_insights['trend']:
+        if point['feedback_count']:
+            writer.writerow([point['date'], point['feedback_count'], point['completed_count'], point['unresolved_count']])
 
     writer.writerow([])
     writer.writerow(['互助闭环漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
@@ -2618,6 +2624,7 @@ def operations_dashboard_export(request):
     pulse = dashboard['campus_pulse']
     writer.writerow([])
     writer.writerow(['校园供需热力'])
+    writer.writerow(['口径与门槛'])
     writer.writerow([
         '活跃地点', pulse['summary']['location_count'],
         '当前在售', pulse['summary']['available_supply'],
@@ -2669,6 +2676,7 @@ def operations_dashboard_export(request):
     campaigns = dashboard['campaign_analytics']
     writer.writerow([])
     writer.writerow(['校园专题表现'])
+    writer.writerow(['口径与门槛'])
     writer.writerow([
         '统计专题', campaigns['summary']['campaign_count'],
         '专题新增商品', campaigns['summary']['new_items'],
@@ -2966,6 +2974,7 @@ def operations_dashboard_export(request):
     response_quality = dashboard['notification_response']
     writer.writerow([])
     writer.writerow(['通知处理时效与触达质量'])
+    writer.writerow(['口径与门槛'])
     response_summary = response_quality['summary']
     critical_summary = response_quality['critical_summary']
     writer.writerow([
@@ -3030,6 +3039,7 @@ def operations_dashboard_export(request):
     reminder_effect = dashboard['lifecycle_reminder_effect']
     writer.writerow([])
     writer.writerow(['生命周期提醒触达与行动'])
+    writer.writerow(['口径与门槛'])
     reminder_summary = reminder_effect['summary']
     writer.writerow([
         '周期内提醒商品', reminder_summary['reminded_items'],
@@ -3103,6 +3113,7 @@ def operations_dashboard_export(request):
     trend_runs = dashboard['task_run_trend']
     writer.writerow([])
     writer.writerow(['定时任务健康度的跨周期趋势'])
+    writer.writerow(['口径与门槛'])
     writer.writerow([
         '当前周期起始', trend_runs['current_period_start'].strftime('%Y-%m-%d'),
         '上一周期起始', trend_runs['previous_period_start'].strftime('%Y-%m-%d'),
@@ -3157,6 +3168,7 @@ def operations_dashboard_export(request):
     run_health = dashboard['task_run_health']
     writer.writerow([])
     writer.writerow(['定时任务运行台账与健康统计'])
+    writer.writerow(['口径与门槛'])
     writer.writerow([
         '周期内运行', run_health['total_runs'],
         '失败', run_health['total_failed'],
@@ -3279,6 +3291,7 @@ def operations_dashboard_export(request):
     writer.writerow([u'此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。'])
     writer.writerow([])
     writer.writerow(['定时任务失败原因分类'])
+    writer.writerow(['口径与门槛'])
     causes = dashboard['task_run_failure_causes']
     writer.writerow([
         '周期天数', causes['days'],
@@ -3351,10 +3364,12 @@ def operations_dashboard_export(request):
             ])
 
     writer.writerow([])
-    writer.writerow(['说明'])
-    writer.writerow([cause_trend['summary']])
+    writer.writerow(['口径与门槛'])
     writer.writerow(['本周期失败总数', cause_trend['total_failed']])
     writer.writerow(['上一周期失败总数', cause_trend['previous_total_failed']])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([cause_trend['summary']])
     writer.writerow(['一次运行按它开始的时刻归期，和上方的调度趋势面板同一个边界：两个面板对“这次失败算哪一期”必须给出同一个答案。'])
     writer.writerow(['方向按“占本周期失败总数的比例”判，不按次数差判：失败次数是原始计数，没有百分点这个尺度，只有本来就是百分比的数字才有。'])
     writer.writerow(['周期内失败总数要过门槛才判方向；类别本身也要过门槛——一次失败不是一种形态，两个周期各一次也读不出走向。'])
@@ -3518,6 +3533,7 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([])
     writer.writerow(['需求雷达命中率的学期纵向对比'])
+    writer.writerow(['口径与门槛'])
     phase_trend = dashboard['demand_radar_phase_trend']
     writer.writerow([
         '回看天数', phase_trend['days'],
