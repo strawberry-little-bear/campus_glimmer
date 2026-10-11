@@ -28,6 +28,7 @@ from .search_trend import build_search_trend
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
 from .search_rejection_stats import build_search_rejection_stats
+from .search_position_quality import build_search_position_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -3752,6 +3753,7 @@ def search_insights(request):
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
     dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
     dashboard['rejection_reasons'] = list(SearchSynonymRejection.REASON_CHOICES)
+    dashboard['position_quality'] = build_search_position_quality(days=period_days)
     return render(request, 'listings/search_insights.html', dashboard)
 
 
@@ -3855,6 +3857,7 @@ def search_insights_export(request):
     )
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
     dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
+    dashboard['position_quality'] = build_search_position_quality(days=period_days)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -4068,6 +4071,62 @@ def search_insights_export(request):
     writer.writerow(['下降搜索词', '上一周期', '当前周期', '变化'])
     for row in comparison['falling_terms']:
         writer.writerow([row['query'], row['previous_count'], row['current_count'], row['delta']])
+
+    quality = dashboard['position_quality']
+    writer.writerow([])
+    writer.writerow(['搜索结果位置质量', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', quality['summary'],
+        f"曝光 {quality['metrics']['impressions']} 次 · 点击 {quality['metrics']['clicks']} 次 · "
+        f"总体点击率 {quality['metrics']['overall_click_through_rate']}%",
+    ])
+    writer.writerow([
+        '达到样本门槛的位置档', quality['metrics']['measured_buckets'],
+        f"每档至少 {quality['metrics']['min_bucket_sample']} 次曝光才给结论",
+    ])
+    writer.writerow([
+        '明显衰减的位置档', quality['metrics']['decayed_buckets'],
+        f"点击率低于前排 {quality['metrics']['decay_flag_points']} 个百分点以上",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['位置衰减曲线', '曝光数', '点击数', '点击率（%）', '平均曝光位置', '平均点击位置', '读数'])
+    for row in quality['decay_curve']:
+        writer.writerow([
+            row['label'], row['impression_count'], row['click_count'],
+            row['click_through_rate'],
+            row['average_impression_position'] if row['average_impression_position'] is not None else '',
+            row['average_click_position'] if row['average_click_position'] is not None else '',
+            f"样本不足 {quality['metrics']['min_bucket_sample']} 次曝光，只报数字"
+            if row['is_small_sample'] else ('点击率相对前排明显衰减' if row['decay_flag'] else '可读数'),
+        ])
+
+    effect = quality['ranking_effect']
+    writer.writerow([])
+    writer.writerow([
+        '排序效果', '曝光平均位置', '点击平均位置', '位置差', '判定',
+    ])
+    writer.writerow([
+        '排序效果', effect['exposure_average_position'], effect['click_average_position'],
+        effect['lift'], effect['direction_label'],
+    ])
+
+    writer.writerow([])
+    writer.writerow(['深度诊断', '判定', '结论'])
+    writer.writerow([
+        '深度诊断', quality['depth_diagnosis']['kind_label'], quality['depth_diagnosis']['summary'],
+    ])
+
+    writer.writerow([])
+    writer.writerow(['可以做什么', '建议'])
+    for index, note in enumerate(quality['recommendations'], start=1):
+        writer.writerow([f'建议 {index}', note])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明', '此处只报告，不改 relevance 权重、不自动调整分页、'
+        '也不把统计写回曝光或点击记录。',
+    ])
     return response
 
 
