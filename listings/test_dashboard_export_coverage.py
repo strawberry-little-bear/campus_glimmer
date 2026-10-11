@@ -7,14 +7,14 @@
 都是对的：面板渲染得出来，导出也导得出来，只有把它们放在一起比才会发现少了一块。
 
 这个模块就是那次比较。它把渲染后的看板 HTML 里的面板标题抓出来，再和 CSV 里的节
-标题对：每个面板要么在导出里有同名的节，要么在下面两张表里被显式登记过。登记而不是
-放过，是因为历史上面板和导出本来就存在合理的差异，一律判失败会让这张表变成一张永远
-改不动的告示；而不登记又会让下一块漏接的面板悄悄溜过去。
+标题对：默认要求两边同名，只有确实不能同名的情况才在下面两张表里显式登记。历史上
+先后有九处「面板叫这个、导出叫那个」的差异，都靠登记活着；这些差异已经逐一改完，
+现在节标题直接等于面板标题，登记从常态退回了例外。
 
 三条边界比其余更要紧。空态标题不算面板：暂时没有高优先级提醒这种文案只在无数据时
 出现，它本来就不该有导出节。别名表里的每一条都必须写明理由，写不出理由的差异应该去
-改代码而不是往表里加一行——这张表的长度本身就是一处技术债的度量。以及这里只做比对，
-不改写看板、不改写导出，也不为了让某个标题对上而调整任何一边的文案。
+改代码而不是往表里加一行。以及这里只做比对，不改写看板、不改写导出，也不为了让某个
+标题对上而调整任何一边的文案。
 """
 
 import csv
@@ -41,31 +41,15 @@ def panel_titles(html):
 
 
 def csv_first_cells(text):
-    """CSV 里每一行第一个非空格子的集合，节标题都是这么落的。"""
+    """CSV 里每一行第一个非空格子的集合，节标题和子标题都是这么落的。"""
     return {row[0].strip() for row in csv.reader(io.StringIO(text)) if row and row[0].strip()}
 
 
-# 面板标题 -> 导出节标题。每一条都得能说清为什么两边不同名。
-# 这些是历史上先有面板、后补导出时留下的差异：数据一直都在，只是节标题另起了名字。
+# 面板标题 -> 导出节标题。九处历史差异已经逐一改完，节标题现在直接等于面板标题，
+# 所以这张表是空的。保留它是为了让「加一条别名」这件事在代码里有一个明确的位置：
+# 新面板漏接导出时，测试会失败，而正确的修法是补一节，不是往这里加一行。
+# 每一条真的需要登记的差异，都得在注释里写明为什么面板和导出不能同名。
 PANEL_TO_SECTION = {
-    # 面板叫「通知触达与聚合」，导出的节按通知类型表命名。
-    '通知触达与聚合': '通知类型',
-    # 面板叫「求购匹配转化」，导出按它下面的三块表分节，各起各的表头名。
-    '求购匹配转化': '求购匹配转化漏斗',
-    # 面板叫「用户回访率」，导出的表头用的是指标名。
-    '用户回访率': '用户回访',
-    # 面板叫「用户行为转化漏斗」，导出按漏斗表命名。
-    '用户行为转化漏斗': '转化漏斗',
-    # 面板叫「交易状态分布」，导出的节按数据源命名。
-    '交易状态分布': '订单状态',
-    # 面板叫「分类与地点」，导出把它拆成供给两张表，各起各的表头名。
-    '分类与地点': '分类供给',
-    # 面板叫「校园需求机会」，导出的节用数据源里的字段名。
-    '校园需求机会': '需求主题',
-    # 面板叫「订单全链路阶段时长」，导出按表内容命名。
-    '订单全链路阶段时长': '订单阶段耗时',
-    # 面板叫「借用节律与学期阶段交叉」，导出把它挂在学期节律主节下面。
-    '借用节律与学期阶段交叉': '借用节奏与学期阶段交叉',
 }
 
 # 本来就不该有导出节的面板：空态文案，只在无数据时渲染出来。
@@ -75,7 +59,7 @@ NOT_EXPORTED = {
 
 
 class DashboardExportCoverageTests(TestCase):
-    """每个面板都得在导出里找得到，或者在上面的两张表里登记过。"""
+    """每个面板都得在导出里有同名的节；同名是默认，登记是例外。"""
 
     def setUp(self):
         self.user = User.objects.create_user(
@@ -101,6 +85,26 @@ class DashboardExportCoverageTests(TestCase):
             and title not in NOT_EXPORTED
         ]
         self.assertEqual(unexplained, [])
+
+    def test_the_alias_table_is_empty_now(self):
+        # 九处历史差异已经清完，这张表该是空的。哪天它又长出一条，说明有人宁愿
+        # 在两套名字之间记映射，也不愿意把节标题改成和面板一样——那正是这个模块
+        # 当初要拦的事，所以空表本身要作为契约钉住。
+        titles, _, _ = self.fetch()
+
+        self.assertTrue(titles)
+        self.assertEqual(PANEL_TO_SECTION, {})
+
+    def test_every_panel_title_appears_verbatim_in_the_export(self):
+        # 上一条测试允许「面板不在导出里，但登记过」这条路；这条更严：没有任何
+        # 登记时，每个面板标题都必须原样出现在导出的节标题里。空态文案是唯一例外。
+        titles, sections, _ = self.fetch()
+
+        missing = [
+            title for title in titles
+            if title not in NOT_EXPORTED and title not in sections
+        ]
+        self.assertEqual(missing, [])
 
     def test_every_alias_points_at_a_section_the_export_really_writes(self):
         # 别名表指向一个导出里根本不存在的节，等于这条登记是空的：
@@ -131,6 +135,24 @@ class DashboardExportCoverageTests(TestCase):
 
         self.assertIn('暂时没有高优先级提醒', titles)
         self.assertNotIn('运营提醒', titles)
+
+    def test_the_demand_radar_opportunities_have_their_own_section(self):
+        # 校园需求机会原来没有节标题，表格裸跟在待处理交易争议后面，下载回去的
+        # 运营得靠数行才知道这块表是谁的。现在它自己占一节，列名也一并钉住：
+        # 需求雷达的测试断言过第一列叫需求主题，改列名会一起红。
+        _, sections, text = self.fetch()
+
+        self.assertIn('校园需求机会', sections)
+        self.assertIn('需求主题', text)
+
+    def test_category_and_location_live_in_one_section_with_subheadings(self):
+        # 分类与地点在面板里是一节，下面两个小标题；导出原来把它拆成两张没有
+        # 归属的裸表。现在导出一节带两个子标题，和面板同一副样子。
+        _, sections, text = self.fetch()
+
+        self.assertIn('分类与地点', sections)
+        self.assertIn('分类', sections)
+        self.assertIn('地点', sections)
 
     def test_the_export_carries_the_newly_covered_sections(self):
         # 这两节是刚补的，也是这个模块存在的直接理由：面板上有、导出里整节失踪。

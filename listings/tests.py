@@ -900,7 +900,7 @@ class ListingFlowTests(TestCase):
         export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
         self.assertEqual(export.status_code, 200)
         report = export.content.decode('utf-8-sig')
-        self.assertIn('求购匹配转化漏斗', report)
+        self.assertIn('求购匹配转化', report)
         self.assertIn('求购匹配分类表现', report)
 
     def test_operations_dashboard_reports_notification_deduplication(self):
@@ -1145,7 +1145,7 @@ class ListingFlowTests(TestCase):
         self.assertIn('周期活跃用户,1', report)
         self.assertIn('活跃用户分层,人数,占活跃用户（%）,识别口径', report)
         self.assertIn('供给贡献者,0,0.0,周期内发布了多件商品', report)
-        self.assertIn('用户回访,人数,比例（%）,口径说明', report)
+        self.assertIn('用户回访率,人数,比例（%）,口径说明', report)
 
     def test_operations_dashboard_export_includes_period_comparison(self):
         self.user.is_staff = True

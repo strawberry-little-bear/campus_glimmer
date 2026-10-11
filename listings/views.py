@@ -2317,7 +2317,7 @@ def operations_dashboard_export(request):
         value = metrics[key]
         writer.writerow([label, '' if value is None else value])
     writer.writerow([])
-    writer.writerow(['求购匹配转化漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
+    writer.writerow(['求购匹配转化', '数量', '相对上一步转化率（%）', '口径说明'])
     for stage in dashboard['demand_match_insights']['funnel']:
         writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
 
@@ -2332,7 +2332,7 @@ def operations_dashboard_export(request):
         writer.writerow([row['name'], row['response_count'], row['demand_count'], row['accepted_count'], row['acceptance_rate']])
 
     writer.writerow([])
-    writer.writerow(['通知类型', '触达事件', '通知记录', '未读记录', '压缩率（%）'])
+    writer.writerow(['通知触达与聚合', '触达事件', '通知记录', '未读记录', '压缩率（%）'])
     for row in dashboard['notification_insights']['kind_rows']:
         writer.writerow([row['label'], row['event_count'], row['row_count'], row['unread_count'], row['compression_rate']])
 
@@ -2392,6 +2392,7 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    writer.writerow(['校园需求机会'])
     writer.writerow(['需求主题', '优先级', '机会分', '无结果搜索', '有效求购', '当前供给', '证据信号', '建议动作'])
     for row in dashboard['demand_radar']['rows']:
         writer.writerow([
@@ -2447,7 +2448,7 @@ def operations_dashboard_export(request):
         writer.writerow([row['label'], row['count'], row['share'], row['note']])
 
     writer.writerow([])
-    writer.writerow(['用户回访', '人数', '比例（%）', '口径说明'])
+    writer.writerow(['用户回访率', '人数', '比例（%）', '口径说明'])
     writer.writerow([
         '上一周期新用户', dashboard['user_retention']['cohort_size'], '', '上一周期内注册的新用户',
     ])
@@ -2457,7 +2458,7 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['转化漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
+    writer.writerow(['用户行为转化漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
     for stage in dashboard['conversion_funnel']:
         writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
 
@@ -2469,7 +2470,7 @@ def operations_dashboard_export(request):
         ])
 
     writer.writerow([])
-    writer.writerow(['订单状态', '数量'])
+    writer.writerow(['交易状态分布', '数量'])
     for row in dashboard['order_statuses']:
         writer.writerow([row['label'], row['count']])
 
@@ -2485,7 +2486,7 @@ def operations_dashboard_export(request):
 
     stage_flow = dashboard['order_stage_flow']
     writer.writerow([])
-    writer.writerow(['订单阶段耗时', '数值'])
+    writer.writerow(['订单全链路阶段时长', '数值'])
     writer.writerow(['周期订单数', stage_flow['summary']['total_orders']])
     writer.writerow(['可测量订单数', stage_flow['summary']['measured_orders']])
     writer.writerow(['可测量占比（%）', stage_flow['summary']['measured_share']])
@@ -2572,12 +2573,13 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['分类供给', '周期内新增', '当前在售'])
+    writer.writerow(['分类与地点'])
+    writer.writerow(['分类', '周期内新增', '当前在售'])
     for row in dashboard['category_stats']:
         writer.writerow([row.name, row.new_count, row.available_count])
 
     writer.writerow([])
-    writer.writerow(['地点供给与交易', '周期内新增商品', '周期内交易预约'])
+    writer.writerow(['地点', '周期内新增商品', '周期内交易预约'])
     for row in dashboard['location_stats']:
         writer.writerow([row.name, row.new_count, row.order_count])
 
@@ -2792,7 +2794,7 @@ def operations_dashboard_export(request):
     ])
     rhythm = dashboard['borrow_rhythm']
     writer.writerow([])
-    writer.writerow(['借用节奏与学期阶段交叉'])
+    writer.writerow(['借用节律与学期阶段交叉'])
     writer.writerow([
         '周期内借用', rhythm['borrow_count'],
         '拖到第三级', rhythm['level_three_count'],
