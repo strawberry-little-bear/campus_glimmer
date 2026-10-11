@@ -164,6 +164,56 @@
     </div>
 </section>
 
+<section class="content-card ops-panel mb-4 demand-match-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Match quality</span><h2>求购匹配质量</h2></div>
+        <span class="ops-panel-hint">平台自己的匹配打分 vs 求购人的真实决定</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-clipboard2-data me-1"></i>上一节数的是「有多少求购收到了响应」，这一节数的是另一件事：匹配打分写在每一条卖家响应上，也是这件商品能不能响应这条求购的准入依据，而它从来没有和求购人的真实取舍对照过。打分虚高会让卖家白费一次响应机会，也会把好商品挡在门外；打分偏低则让匹配提醒变成人人学会忽略的噪声。这两种失败在按分类的响应数里都看不出来。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已决断响应</span><strong>{{ demand_match_quality.metrics.decided_responses }}</strong><small>采纳 {{ demand_match_quality.metrics.accepted_count }} · 未采纳 {{ demand_match_quality.metrics.rejected_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>整体采纳率</span><strong>{{ demand_match_quality.metrics.acceptance_rate }}%</strong><small>平均匹配分 {{ demand_match_quality.metrics.average_score|default:"—" }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>打分与采纳的关系</span><strong style="font-size:1rem;">{{ demand_match_quality.monotonicity.kind_label }}</strong><small>{{ demand_match_quality.metrics.measured_bands }} 个分段达到样本门槛</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>高分被拒</span><strong>{% if demand_match_quality.over_promised.has_sample %}{{ demand_match_quality.over_promised.rejection_rate }}%{% else %}&mdash;{% endif %}</strong><small>{{ demand_match_quality.metrics.high_score_floor }} 分以上响应中被拒的比例</small></div></div>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-lightbulb me-1"></i>{{ demand_match_quality.summary }}</p>
+    {% if demand_match_quality.has_data %}
+    <h3 class="h6 mb-3">按匹配分的采纳率</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>匹配分区间</th><th>响应数</th><th>采纳</th><th>未采纳</th><th>采纳率</th><th>平均分</th><th>读数</th></tr></thead><tbody>
+        {% for band in demand_match_quality.score_bands %}<tr{% if band.is_small_sample %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ band.label }}</strong></td>
+            <td>{{ band.response_count }}</td>
+            <td>{{ band.accepted_count }}</td>
+            <td>{{ band.rejected_count }}</td>
+            <td><strong>{{ band.acceptance_rate }}%</strong></td>
+            <td>{% if band.average_score is not None %}{{ band.average_score }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if band.is_small_sample %}样本不足 {{ demand_match_quality.metrics.min_band_responses }} 条，只报数字{% else %}可读数{% endif %}</td>
+        </tr>{% endfor %}
+    </tbody></table></div>
+    <div class="row g-4 mt-3">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">打分里的每个维度，各自拉开了采纳率吗</h3>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>匹配依据</th><th>带此依据</th><th>采纳率</th><th>不带此依据</th><th>采纳率</th><th>差值（百分点）</th></tr></thead><tbody>
+                {% for row in demand_match_quality.dimension_effect %}<tr{% if row.is_small_sample %} class="is-below-threshold"{% endif %}>
+                    <td><strong>{{ row.label }}</strong></td>
+                    <td>{{ row.with_count }}</td>
+                    <td>{{ row.with_acceptance_rate }}%</td>
+                    <td>{{ row.without_count }}</td>
+                    <td>{{ row.without_acceptance_rate }}%</td>
+                    <td>{% if row.gap_points is not None %}{% if row.gap_points > 0 %}+{% endif %}{{ row.gap_points }}{% else %}&mdash;{% endif %}</td>
+                </tr>{% endfor %}
+            </tbody></table></div>
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>维度取自响应上记录的匹配依据原文，而不是重新算一遍分数——求购的条件可能在响应之后变过，重新算会把不是当时判断的东西算成当时的判断。</p>
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">可以做什么</h3>
+            {% if demand_match_quality.recommendations %}<div class="ops-mini-summary h-100 demand-match-quality-notes">{% for note in demand_match_quality.recommendations %}<span>建议 {{ forloop.counter }}</span><small>{{ note }}</small>{% endfor %}</div>{% else %}<p class="empty-inline">当前没有需要跟进的匹配质量问题。</p>{% endif %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>这里只报告，不改匹配权重、不改任何门槛、也不把统计写回响应记录。</p>
+        </div>
+    </div>
+    {% else %}<div class="empty-inline">当前周期还没有已决断的求购响应。等求购人真正点了「采纳」或「未采纳」，这里才开始有读数。</div>{% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 mutual-aid-feedback-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Mutual-aid loop</span><h2>互助反馈闭环</h2></div>

@@ -29,6 +29,7 @@ from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
 from .search_rejection_stats import build_search_rejection_stats
 from .search_position_quality import build_search_position_quality
+from .demand_match_quality import build_demand_match_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2170,6 +2171,7 @@ def operations_dashboard(request):
         raise PermissionDenied
     days = _operations_period_days(request)
     dashboard = build_operations_dashboard(days)
+    dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2188,6 +2190,7 @@ def operations_dashboard(request):
         days=days, statuses=_demand_outcome_status_filter(request),
     )
     dashboard['demand_outcome_status_filter'] = _demand_outcome_status_filter(request)
+    dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     return render(request, 'listings/operations_dashboard.html', dashboard)
 
 
@@ -2256,7 +2259,9 @@ def operations_dashboard_export(request):
     if not request.user.is_staff:
         raise PermissionDenied
 
-    dashboard = build_operations_dashboard(_operations_period_days(request))
+    days = _operations_period_days(request)
+    dashboard = build_operations_dashboard(days)
+    dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2331,6 +2336,73 @@ def operations_dashboard_export(request):
     writer.writerow(['地点表现', '响应数', '求购数', '确认数', '响应确认率（%）'])
     for row in dashboard['demand_match_insights']['location_rows']:
         writer.writerow([row['name'], row['response_count'], row['demand_count'], row['accepted_count'], row['acceptance_rate']])
+
+    match_quality = dashboard['demand_match_quality']
+    writer.writerow([])
+    writer.writerow(['求购匹配质量', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', match_quality['summary'],
+        f"已决断 {match_quality['metrics']['decided_responses']} 条 · "
+        f"整体采纳率 {match_quality['metrics']['acceptance_rate']}% · "
+        f"平均匹配分 {match_quality['metrics']['average_score'] if match_quality['metrics']['average_score'] is not None else '—'}",
+    ])
+    writer.writerow([
+        '达到样本门槛的分段', match_quality['metrics']['measured_bands'],
+        f"每段至少 {match_quality['metrics']['min_band_responses']} 条已决断响应才给结论",
+    ])
+    writer.writerow([
+        '打分与采纳的关系', match_quality['monotonicity']['kind_label'],
+        match_quality['monotonicity']['summary'],
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '按匹配分的采纳率', '响应数', '采纳数', '未采纳数',
+        '采纳率（%）', '平均分', '读数',
+    ])
+    for band in match_quality['score_bands']:
+        writer.writerow([
+            band['label'], band['response_count'], band['accepted_count'],
+            band['rejected_count'], band['acceptance_rate'],
+            band['average_score'] if band['average_score'] is not None else '',
+            f"样本不足 {match_quality['metrics']['min_band_responses']} 条，只报数字"
+            if band['is_small_sample'] else '可读数',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '打分里的每个维度，各自拉开了采纳率吗', '匹配依据', '带此依据响应数',
+        '带此依据采纳率（%）', '不带此依据响应数', '不带此依据采纳率（%）',
+        '差值（百分点）',
+    ])
+    for row in match_quality['dimension_effect']:
+        writer.writerow([
+            row['label'], row['with_count'], row['with_acceptance_rate'],
+            row['without_count'], row['without_acceptance_rate'],
+            row['gap_points'] if row['gap_points'] is not None else '',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['高分被拒', '响应数', '被拒数', '拒绝率（%）', '说明'])
+    over = match_quality['over_promised']
+    if over.get('has_sample'):
+        writer.writerow([
+            '高分被拒', over['high_count'], over['rejected_count'],
+            over['rejection_rate'], over['summary'],
+        ])
+    else:
+        writer.writerow(['高分被拒', '', '', '', over['summary']])
+
+    writer.writerow([])
+    writer.writerow(['可以做什么', '建议'])
+    for index, note in enumerate(match_quality['recommendations'], start=1):
+        writer.writerow([f'建议 {index}', note])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明', '此处只报告，不改匹配权重、不改任何门槛、'
+        '也不把统计写回响应记录。',
+    ])
 
     writer.writerow([])
     writer.writerow(['通知触达与聚合', '触达事件', '通知记录', '未读记录', '压缩率（%）'])
