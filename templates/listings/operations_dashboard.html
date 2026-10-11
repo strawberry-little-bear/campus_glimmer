@@ -1331,7 +1331,7 @@
                 <tbody>
                     {% for row in borrow_escalation.rows %}
                     <tr>
-                        <td data-label="商品与订单"><strong>{{ row.order.item.title }}</strong><small class="d-block text-muted">订单 #{{ row.order.id }} · {{ row.order.get_trade_mode_display }}</small></td>
+                        <td data-label="商品与订单"><strong>{{ row.order.item.title }}</strong><small class="d-block text-muted">订单 #{{ row.order.id }} · {{ row.order.item.get_trade_mode_display }}</small></td>
                         <td data-label="借用双方">{{ row.order.buyer.username }}<small class="d-block text-muted">出借 {{ row.order.seller.username }}</small></td>
                         <td data-label="逾期">{% if row.overdue_days != None %}{{ row.overdue_days }} 天{% else %}—{% endif %}</td>
                         <td data-label="当前等级">{% if row.level == 3 %}<span class="supply-lifecycle-flag">{{ row.level_label }}</span>{% else %}{{ row.level_label }}{% endif %}</td>

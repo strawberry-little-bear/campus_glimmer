@@ -2524,6 +2524,54 @@ def operations_dashboard_export(request):
         for recommendation in stage_flow['recommendations']:
             writer.writerow([recommendation])
     writer.writerow([])
+    writer.writerow(['热门搜索', '次数', '无结果', '平均结果', '无结果占比（%）'])
+    for search in dashboard['top_searches']:
+        zero_share = (
+            search['zero_result_count'] / search['search_count'] * 100
+            if search['search_count'] else None
+        )
+        writer.writerow([
+            search['query'], search['search_count'], search['zero_result_count'],
+            None if search['average_results'] is None else round(search['average_results'], 1),
+            '' if zero_share is None else round(zero_share, 1),
+        ])
+    if not dashboard['top_searches']:
+        writer.writerow(['当前周期还没有搜索记录。', '', '', '', ''])
+
+    escalation = dashboard['borrow_escalation']
+    writer.writerow([])
+    writer.writerow(['借用逾期催收阶梯'])
+    writer.writerow([
+        '回看天数', escalation['days'],
+        '待催收', escalation['summary']['open_count'],
+        '其中已上报治理队列', escalation['summary']['level_three_count'],
+        '周期内升级', escalation['summary']['period_count'],
+        '周期内闭环', escalation['summary']['resolved_count'],
+        '最长逾期（天）', '' if escalation['summary']['max_overdue_days'] is None else escalation['summary']['max_overdue_days'],
+        '累计升级次数', escalation['summary']['escalation_total'],
+    ])
+    writer.writerow([])
+    writer.writerow(['商品与订单', '借用双方', '逾期（天）', '当前等级', '升级次数', '最近升级', '归还闭环', '状态'])
+    for row in escalation['rows']:
+        order = row['order']
+        writer.writerow([
+            f"{order.item.title} · 订单 #{order.id} · {order.item.get_trade_mode_display()}",
+            f"借用 {order.buyer.username} / 出借 {order.seller.username}",
+            '' if row['overdue_days'] is None else row['overdue_days'],
+            row['level_label'],
+            row['escalation_count'],
+            '' if row['last_escalated_at'] is None else f"{timezone.localtime(row['last_escalated_at']):%Y-%m-%d %H:%M}",
+            '' if row['resolved_at'] is None else f"{timezone.localtime(row['resolved_at']):%Y-%m-%d}",
+            '跟进中' if row['is_open'] else '已闭环',
+        ])
+    if not escalation['rows']:
+        writer.writerow(['当前没有需要催收的借用逾期。', '', '', '', '', '', '', ''])
+    writer.writerow([
+        '三级阶梯各有不同受众：一级只告诉借用方，二级同时告知双方平台已开始记录，三级上报治理队列并离开双方私域；'
+        '跨级追上来时会补发二级那一声，但不会补播被跳过的一级。平台只记录和通知，不取消订单、不代扣押金。',
+    ])
+
+    writer.writerow([])
     writer.writerow(['分类供给', '周期内新增', '当前在售'])
     for row in dashboard['category_stats']:
         writer.writerow([row.name, row.new_count, row.available_count])
