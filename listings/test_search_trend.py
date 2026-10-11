@@ -398,12 +398,25 @@ class LeadComparisonTests(TestCase):
         return query
 
     def click(self, query):
+        """Record a click, back-dated to sit next to the search it answers.
+
+        The click is back-dated to the search's own moment rather than left at
+        "now", because the module counts clicks inside each window: a click
+        stamped now belongs to a window that has nothing to do with the search
+        it answers. CI runs UTC while the project runs on Asia/Shanghai, so a
+        click left at "now" lands eight hours past the window's upper bound
+        and every search reads as "nobody clicked".
+        """
         item = Item.objects.create(
             title=f'测试商品 {query.pk}', description='用于点击统计',
             price=Decimal('10.00'), seller=self.user, status='available',
             category=self.click_category,
         )
-        SearchClick.objects.create(search_query=query, item=item, user=self.user)
+        click = SearchClick.objects.create(search_query=query, item=item, user=self.user)
+        SearchClick.objects.filter(pk=click.pk).update(
+            created_at=SearchQuery.objects.get(pk=query.pk).created_at + timedelta(minutes=5),
+        )
+        return item
 
     def test_a_term_with_no_results_is_reported_as_a_supply_gap(self):
         for offset in range(3):
@@ -445,6 +458,28 @@ class LeadComparisonTests(TestCase):
         trend = build_search_trend(days=7, now=self.reference)
         # 搜到了也点了，这不是失败线索，不该出现在对比里。
         self.assertEqual(trend['lead_comparison'], [])
+
+    def test_a_click_is_stamped_inside_the_window_it_answers(self):
+        """点击要真的落在它回答的那个窗口里。
+
+        这里只守一件事：测试造的数据必须落在它膨称的那个窗口里。
+        SearchClick 的时间戳是 auto_now_add，不填就是运行刻。
+        CI 跑 UTC、项目跑东八区，运行刻就落在窗口上界之外八个钟头，
+        于是每次搜索都被读成“搜到了不点”。
+        上面几条测试看起来在每次搜索后都点了一下，其实点的是一个空窗口；
+        这一条把那件事兑现成断言，省得下一次删掉回填时又静默失效。
+        """
+        for offset in range(3):
+            query = self.search('键盘', days_ago=offset, result_count=4)
+            self.click(query)
+        stored = SearchClick.objects.get(search_query=query)
+        # search() 也是用 .update() 回填的，本地这个 query 还握着运行刻，
+        # 要比就得重新取一次，否则比的是两个运行刻。
+        searched = SearchQuery.objects.get(pk=query.pk)
+        # 点击落在搜索之后五分钟，又落在参考刻之前，
+        # 这样它才真的属于本周期。
+        self.assertGreater(stored.created_at, searched.created_at)
+        self.assertLess(stored.created_at, self.reference)
 
     def test_a_click_outside_the_window_does_not_rescue_a_term(self):
         for offset in range(3):
