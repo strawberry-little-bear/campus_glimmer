@@ -30,6 +30,7 @@ from .demand_radar import build_demand_radar
 from .search_rejection_stats import build_search_rejection_stats
 from .search_position_quality import build_search_position_quality
 from .demand_match_quality import build_demand_match_quality
+from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2172,6 +2173,7 @@ def operations_dashboard(request):
     days = _operations_period_days(request)
     dashboard = build_operations_dashboard(days)
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
+    dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2262,6 +2264,7 @@ def operations_dashboard_export(request):
     days = _operations_period_days(request)
     dashboard = build_operations_dashboard(days)
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
+    dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2463,6 +2466,47 @@ def operations_dashboard_export(request):
     writer.writerow(['互助闭环漏斗', '数量', '相对上一步转化率（%）', '口径说明'])
     for stage in feedback_insights['funnel']:
         writer.writerow([stage['label'], stage['count'], stage['rate'], stage['note']])
+
+    notes_insights = dashboard['mutual_aid_feedback_notes']
+    writer.writerow([])
+    writer.writerow(['互助反馈的补充说明', '数值', '说明'])
+    writer.writerow(['口径与门槛', notes_insights['summary'], f"只读 note 字段 · 短于 {notes_insights['min_note_length']} 字不计词频"])
+    writer.writerow(['写过补充说明的反馈', notes_insights['fill_stats']['filled_count'], f"共 {notes_insights['fill_stats']['total']} 条反馈"])
+    writer.writerow(['填写率（%）', notes_insights['fill_stats']['fill_rate'], '先报填写率再报词频：没人写的字段该被撤掉，不该被分析'])
+    writer.writerow(['平均长度（字）', notes_insights['fill_stats']['average_length'], '只统计写了补充说明的那些反馈'])
+    writer.writerow(['最长一条（字）', notes_insights['fill_stats']['max_length'], '上限是表单上的五百字'])
+
+    writer.writerow([])
+    writer.writerow(['长度分布', '条数'])
+    for row in notes_insights['fill_stats']['length_rows']:
+        writer.writerow([row['label'], row['count']])
+
+    writer.writerow([])
+    writer.writerow(['写与不写，是按结果分的吗', '结果', '反馈数', '写过说明', '填写率（%）', '平均长度（字）'])
+    for row in notes_insights['outcome_contrast']['rows']:
+        writer.writerow([
+            row['label'], row['feedback_count'], row['filled_count'],
+            row['fill_rate'], row['average_length'],
+        ])
+    gap = notes_insights['outcome_contrast']['gap_points']
+    writer.writerow([
+        '未完成减已完成（百分点）', gap,
+        '相差不满 8 个百分点视为噪声，样本薄的时候和抛硬币差不多',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['出现得最多的词', '被多少条反馈提到', '占写了说明的反馈（%）'])
+    for row in notes_insights['term_rows']:
+        writer.writerow([row['term'], row['count'], row['share']])
+    if not notes_insights['term_rows']:
+        writer.writerow(['—', 0, 0])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        f"高频词仅供参考，不做语义判断。一个词要出现在至少 {notes_insights['min_term_count']} 条不同的补充说明里才进榜单，"
+        f"最多列 {notes_insights['top_terms']} 个。这里只报告，不公开反馈原文、不新增标签、不把任何词回写成结构化字段。",
+    ])
 
     writer.writerow([])
     writer.writerow([
