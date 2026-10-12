@@ -49,6 +49,19 @@ def add_comment(request, item_id):
 
     return redirect('item_detail', item_id=item.id)
 
+def _mark_messages_read(queryset):
+    """把一组未读私信标为已读，并记录第一次被读的时刻。
+
+    四条写路径（逐条、全部、选中、整个会话）必须用同一个时刻，
+    否则同一次“用户动手”会被拆成几个毫秒级别的时刻，统计口径就不一致了。
+    """
+    read_at = timezone.now()
+    target_ids = list(queryset.values_list('id', flat=True))
+    if not target_ids:
+        return 0
+    return queryset.update(is_read=True, read_at=read_at)
+
+
 def _build_conversation_data(user, conversation_users):
     """Build the inbox conversation list with a bounded number of queries."""
     conversation_messages = PrivateMessage.objects.filter(
@@ -173,10 +186,10 @@ def inbox(request):
 @login_required
 def mark_all_messages_read(request):
     if request.method == 'POST':
-        updated_count = PrivateMessage.objects.filter(
+        updated_count = _mark_messages_read(PrivateMessage.objects.filter(
             receiver=request.user,
             is_read=False,
-        ).update(is_read=True)
+        ))
         if updated_count:
             django_messages.success(request, f'已将 {updated_count} 条私信标记为已读。')
         else:
@@ -192,7 +205,8 @@ def mark_message_read(request, message_id):
     )
     if request.method == 'POST' and not private_message.is_read:
         private_message.is_read = True
-        private_message.save(update_fields=['is_read'])
+        private_message.read_at = timezone.now()
+        private_message.save(update_fields=['is_read', 'read_at'])
 
     next_url = request.POST.get('next', '').strip()
     if not next_url or not url_has_allowed_host_and_scheme(
@@ -214,11 +228,11 @@ def mark_selected_messages_read(request):
                 message_ids.append(int(raw_id))
             except (TypeError, ValueError):
                 continue
-        updated_count = PrivateMessage.objects.filter(
+        updated_count = _mark_messages_read(PrivateMessage.objects.filter(
             id__in=message_ids,
             receiver=request.user,
             is_read=False,
-        ).update(is_read=True)
+        ))
         if updated_count:
             django_messages.success(request, f'已将 {updated_count} 条选中私信标记为已读。')
         else:
@@ -231,11 +245,11 @@ def mark_conversation_read(request, user_id):
     """Mark one sender's unread messages as read without touching other conversations."""
     other_user = get_object_or_404(User, id=user_id)
     if request.method == 'POST':
-        updated_count = PrivateMessage.objects.filter(
+        updated_count = _mark_messages_read(PrivateMessage.objects.filter(
             sender=other_user,
             receiver=request.user,
             is_read=False,
-        ).update(is_read=True)
+        ))
         if updated_count:
             django_messages.success(request, f'已读完与 {other_user.username} 的未读私信。')
         else:
@@ -296,7 +310,7 @@ def conversation(request, user_id):
     ).select_related('sender', 'receiver', 'item').order_by('created_at')
 
     # 打开会话时一次性更新未读状态，避免逐条保存造成额外查询。
-    messages_queryset.filter(receiver=request.user, is_read=False).update(is_read=True)
+    _mark_messages_read(messages_queryset.filter(receiver=request.user, is_read=False))
     messages_page = Paginator(messages_queryset, 30).get_page(request.GET.get('page', 1))
 
     # 发送新消息的表单

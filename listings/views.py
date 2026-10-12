@@ -5709,6 +5709,78 @@ def operations_dashboard_export(request):
         '丢了就会缩小分母，'
         '让每个阶段的命中率安静地变大。',
     ])
+    writer.writerow([])
+    chat_response = dashboard['chat_response']
+    writer.writerow(['私信响应时效'])
+    writer.writerow([
+        '一条私信隔了多久被打开，第一次被运营读到', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', chat_response['summary'],
+        '只读 PrivateMessage 的 sender、receiver、is_read、read_at 和 created_at，'
+        '不改写任何一条私信、不替谁回复、不催回复、'
+        '不把打开时长写回任何人的信誉分、不对对话双方暴露"对方已读"',
+    ])
+    writer.writerow([
+        '周期内发出', chat_response['summary']['sent'], '',
+        '去重后的私信条数，含自己发给自己的会话',
+    ])
+    writer.writerow([
+        '已被打开', chat_response['summary']['opened'], '',
+        f"占 {chat_response['summary']['open_rate']}%",
+    ])
+    writer.writerow([
+        '中位打开时长', chat_response['summary']['median_label'],
+        f"P90 {chat_response['summary']['p90_label']}，样本 {chat_response['summary']['latency_sample_size']} 条",
+    ])
+    if not chat_response['summary']['latency_sample_sufficient']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {chat_response['summary']['min_latency_sample']} 条，时长只作参考",
+        ])
+    writer.writerow([
+        '超期未打开', chat_response['summary']['unopened'], '',
+        f"超过 {chat_response['silent_after_days']} 天仍未被打开，视为已经沉没",
+    ])
+    writer.writerow([
+        '旧数据无法计时', chat_response['summary']['opened_untimed'], '',
+        '在 read_at 字段上线前就已读的私信，计入打开数但不进入时长分布',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['一条私信发出后，多久被第一次打开'])
+    writer.writerow(['区间', '条数', '占比（%）'])
+    for bucket in chat_response['latency_buckets']:
+        writer.writerow([bucket['label'], bucket['count'], bucket['share']])
+
+    writer.writerow([])
+    writer.writerow(['同一类人，发出去的话有没有人接'])
+    writer.writerow(['角色', '发出', '打开', '打开率', '中位时长', '样本'])
+    for row in chat_response['role_rows']:
+        writer.writerow([
+            row['label'], row['sent'], row['opened'], row['open_rate'],
+            row['median_label'],
+            row['sample_size'] if row['has_sample'] else '样本不足',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['会话是聊起来了，还是只说了一句'])
+    writer.writerow(['形状', '会话数', '占比（%）', '说明'])
+    for row in chat_response['conversation_health']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['note']])
+    writer.writerow([
+        '合计', chat_response['conversation_health']['total'], '', '',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['哪个钟点发出去的话没人接'])
+    writer.writerow(['钟点', '发出', '已被打开', '说明'])
+    for point in chat_response['hour_profile']:
+        writer.writerow([
+            point['label'], point['sent'], point['opened'],
+            f"占该钟点发出量的 {round(point['opened'] / point['sent'] * 100, 1)}%"
+            if point['sent'] else '本周期这个钟点没有私信',
+        ])
     sla = dashboard['governance_sla']
     writer.writerow([])
     writer.writerow(['治理队列处理时效'])

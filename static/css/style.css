@@ -1380,6 +1380,37 @@ a { color: inherit; text-decoration: none; }
   .academic-term-block { padding: 11px; }
 }
 
+.chat-response-panel .chat-response-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.chat-response-panel .chat-response-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.chat-response-panel .chat-response-summary span { color: #83938b; font-size: .71rem; }
+.chat-response-panel .chat-response-summary small { color: #9aa8a0; font-size: .69rem; }
+.chat-response-panel .chat-response-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; }
+.chat-response-panel .chat-response-warning { border-color: #efd8d1; background: #fff8f6; }
+.chat-response-block { height: 100%; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fcfdfc; }
+.chat-response-block-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.chat-response-block-heading strong { color: #2f5344; font-size: .92rem; }
+.chat-response-block-heading span { color: #8b9a91; font-size: .74rem; }
+.chat-response-buckets { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.chat-response-buckets li { display: grid; grid-template-columns: 72px 1fr auto; align-items: center; gap: 10px; }
+.chat-response-bucket-label { color: #6d8078; font-size: .76rem; }
+.chat-response-bucket-track { height: 8px; border-radius: 999px; background: #eef3f0; overflow: hidden; }
+.chat-response-bucket-track > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #7bb894, #4f9c72); }
+.chat-response-bucket-value { color: #2f5344; font-size: .78rem; font-variant-numeric: tabular-nums; }
+.chat-response-bucket-value small { margin-left: 5px; color: #9aa8a0; }
+.chat-response-health { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.chat-response-health > div { padding: 11px 12px; border: 1px solid #e7efe9; border-radius: 12px; background: #fbfdfb; }
+.chat-response-health span { display: block; color: #83938b; font-size: .71rem; }
+.chat-response-health strong { color: #2f6a4f; font-size: 1.16rem; }
+.chat-response-role-note { color: #8b9a91; font-size: .74rem; }
+.chat-response-hours { display: flex; align-items: flex-end; gap: 3px; height: 84px; padding-top: 6px; }
+.chat-response-hour { position: relative; flex: 1; display: flex; align-items: flex-end; justify-content: center; height: 100%; }
+.chat-response-hour-bar { width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: #cfe4d6; }
+.chat-response-hour-dot { position: absolute; bottom: -7px; width: 5px; height: 5px; border-radius: 50%; background: #4f9c72; }
+.chat-response-hours-legend { display: flex; gap: 16px; margin-top: 14px; color: #8b9a91; font-size: .72rem; }
+.chat-response-hours-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 3px; vertical-align: -1px; }
+.chat-response-hours-legend i.chat-response-hour-bar { background: #cfe4d6; }
+.chat-response-hours-legend i.chat-response-hour-dot { border-radius: 50%; background: #4f9c72; }
+
 .notification-response-panel .notification-response-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .notification-response-panel .notification-response-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
 .notification-response-panel .notification-response-summary span { color: #83938b; font-size: .71rem; }

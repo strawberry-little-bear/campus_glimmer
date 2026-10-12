@@ -73,7 +73,11 @@ class PrivateMessage(models.Model):
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)
-    
+    read_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='第一次被标记为已读的时间，用于统计私信的实际响应时效。',
+    )
+
     def __str__(self):
         return f"从{self.sender.username}到{self.receiver.username}的私信"
         
@@ -91,5 +95,9 @@ class PrivateMessage(models.Model):
             models.Index(
                 fields=['receiver', 'sender', '-created_at'],
                 name='pm_receiver_sender_created_idx',
+            ),
+            models.Index(
+                fields=['receiver', 'is_read', 'read_at'],
+                name='pm_receiver_read_read_at_idx',
             ),
         ]
