@@ -39,6 +39,9 @@ from .handoff_code_usage import (
 from .return_handshake import (
     NOISE_POINTS as RETURN_HANDSHAKE_NOISE_POINTS, build_return_handshake,
 )
+from .first_viewed import (
+    NOISE_POINTS as FIRST_VIEWED_NOISE_POINTS, build_first_viewed,
+)
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2186,6 +2189,7 @@ def operations_dashboard(request):
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
+    dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2331,6 +2335,7 @@ def operations_dashboard_export(request):
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
+    dashboard['first_viewed'] = build_first_viewed(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3155,6 +3160,140 @@ def operations_dashboard_export(request):
         '发布者先登记意味着他先收到了东西、而借用方还没点，这个顺序在借用的语境里是反常的。'
         '本模块只报告，不改 confirm_return 的任何逻辑、不加超时、不自动推进任何一笔订单、'
         '不改催收阶梯的触发条件、不改 close_escalation 的调用点、不新增提醒类型，'
+        '也不把统计写回任何记录。',
+    ])
+
+    writer.writerow([])
+    first_viewed = dashboard['first_viewed']
+    writer.writerow(['从第一次心动到下一步', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', first_viewed['summary'],
+        '只读 first_viewed_at 与 last_viewed_at，不改写任何一笔浏览记录、任何一件商品、'
+        '任何一笔订单，也不把统计写回任何记录',
+    ])
+    writer.writerow([
+        '至少回访过一次的浏览记录', first_viewed['revisit_count'], '',
+        '一条浏览记录就是一个（用户，商品）对，本身就是一次心动的完整轨迹；'
+        '不按人聚合、也不按商品聚合，那样会把多次心动混成一个数',
+    ])
+    writer.writerow([
+        '只看过一次的浏览记录', first_viewed['single_view_count'], '',
+        '没有窗口可言——first_viewed_at 和 last_viewed_at 是同一次写入的产物；'
+        '它是「看了就走」的规模，是前者的对照组',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['考虑窗口', '笔数', '占比（%）', '这一档说明什么'])
+    window_stats = first_viewed['window_stats']
+    writer.writerow([
+        '可分档的回访记录', window_stats['measured_count'], '', '',
+        '分母只收回访过的记录；窗口算不出来的记录不计入分档也不计入分母',
+    ])
+    for row in window_stats['bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '中位 / P90 / 最久', '',
+        f"{window_stats['median_label']} / {window_stats['p90_label']} / "
+        f"{window_stats['slowest_label']}", '', '',
+        '考虑时长一律按天分档，不按小时：一次考虑的时间尺度是天',
+    ])
+    writer.writerow([
+        '单看一次占比（%）', '', window_stats['single_view_share'], '',
+        '拿两堆合起来做分母：它回答「这个平台上的心动，有多大比例看一眼就走」',
+    ])
+    if window_stats['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {window_stats['min_measured_histories']} 条，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['反复回访之后的下一步', '笔数', '占回访过（%）', '这一档说明什么'])
+    next_step_stats = first_viewed['next_step_stats']
+    writer.writerow([
+        '回访过的记录', '', next_step_stats['measured_total'], '',
+        '只看过一次的记录不进这一列：它连窗口都没有，问它「之后做了什么」没有意义',
+    ])
+    for row in next_step_stats['rows']:
+        writer.writerow([
+            '', row['label'], row['count'], row['share'], row['hint'],
+        ])
+    writer.writerow([
+        '先下单、后浏览', next_step_stats['ordered_before_count'], '', '',
+        '考虑窗口是负的，不计入任何等待分布；算进「没有任何下一步」会让这批'
+        '本已成交的样本看起来像失败的样本',
+    ])
+    if not next_step_stats['has_direction'] and next_step_stats['measured_total']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {next_step_stats['min_measured_histories']} 条，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['从第一次心动到下单', '笔数', '占比（%）', '这一档说明什么'])
+    decision_stats = first_viewed['decision_stats']
+    writer.writerow([
+        '先浏览、后下单的记录', decision_stats['measured_count'], '', '',
+        '窗口从 first_viewed_at 算到 Order.created_at；分档以周为单位，'
+        '因为从心动到掏钱中间还隔着一整套预约、见面、议价',
+    ])
+    for row in decision_stats['bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '中位 / P90 / 最久', '',
+        f"{decision_stats['median_label']} / {decision_stats['p90_label']} / "
+        f"{decision_stats['slowest_label']}", '', '',
+        '这一列没有上界，所以报分布而不是平均值：一个想了 90 天的买家会被平均值藏起来',
+    ])
+    if decision_stats['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {decision_stats['min_measured_histories']} 条，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '想了很久却没有下一步的记录', '商品', '买家', '卖家', '浏览次数',
+        '考虑窗口', '首次浏览', '最近回访', '商品状态', '口径说明',
+    ])
+    if first_viewed['stalled_rows']:
+        for row in first_viewed['stalled_rows']:
+            writer.writerow([
+                row['item_title'], row['buyer'], row['seller'], row['view_count'],
+                row['window_label'], row['first_viewed_label'],
+                row['last_viewed_label'], row['item_status_label'],
+                '窗口拖过一周且至今没有任何下一步；一周是「正常节奏」的上界，'
+                '比这更短的样本不进清单',
+            ])
+    else:
+        writer.writerow([
+            '—', '当前周期没有想了超过一周、至今没有任何下一步的浏览记录',
+            '', '', '', '', '', '', '',
+        ])
+    if (
+        first_viewed['stalled_rows']
+        and len(first_viewed['stalled_rows']) > first_viewed['stalled_row_limit']
+    ):
+        writer.writerow([
+            '—', f"清单最多列 {first_viewed['stalled_row_limit']} 条，完整的在数据库里",
+            '', '', '', '', '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '统计窗口按 first_viewed_at 取，不按 last_viewed_at：窗口要回答「这段时间里新产生的'
+        '心动考虑了多久」，起点必须是第一次心动。按 last_viewed_at 取会把一条横跨多个周期的'
+        '长考虑塞进最后一个周期，而那个周期的其他记录都是当天心动的，混在一起两个数都不能用。'
+        '零和「当天」必须分开：零说明两个时间戳是同一次写入的产物，压根没有第二次访问；'
+        '「当天」说明第二次访问真的发生了，只是发生在同一天。把前者算成后者，'
+        '会让「当天就回访」的比例虚高。'
+        '只认 first_viewed_at 之后的收藏和下单：一件先被收藏、后来才第一次被浏览的商品，'
+        '收藏不是浏览的结果，不能算成心动的下一步。'
+        '模块不判定「为什么没行动」：反复看却不行动，可能是价格，可能是描述没说清，'
+        '可能是照片看不出成色，也可能只是买家自己拖——平台没有能力区分这四者，'
+        '也就不该替其中任何一种下结论。'
+        '不降价、不下架、不给卖家发提醒、不用 first_viewed_at 做任何推荐排序，'
         '也不把统计写回任何记录。',
     ])
 

@@ -2209,6 +2209,90 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 first-viewed-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">First view</span><h2>从第一次心动到下一步</h2></div>
+        <span class="ops-panel-hint">从心动到下单中间隔了多久，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-eye me-1"></i>商品详情页一直在写三列：<code>view_count</code>、<code>first_viewed_at</code>、<code>last_viewed_at</code>。前两列被反复读取，唯独 <code>first_viewed_at</code> 只出现在后台那一列——它由 <code>auto_now_add</code> 写一次，此后永远不变，而没有任何一行代码读过它。于是数据库里一直躺着一个没人看过的差：<code>last_viewed_at - first_viewed_at</code>，一个用户对一件商品的考虑窗口。<code>view_count</code> 回答「看了几次」，这个差回答「从第一次心动到最近一次回访拖了多久」——一件被看了 12 次、横跨 9 天、最后既没收藏也没下单的商品，和一件被看了 1 次的商品，在 <code>view_count</code> 的榜上前者显眼得多，但真正该被问的恰恰是前者。</p>
+    {% if not first_viewed.has_data %}
+    <div class="empty-inline">{{ first_viewed.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>考虑窗口中位</span><strong>{{ first_viewed.window_stats.median_label }}</strong><small>P90 {{ first_viewed.window_stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>回访过 / 只看一次</span><strong>{{ first_viewed.revisit_count }} / {{ first_viewed.single_view_count }}</strong><small>只看一次占 {{ first_viewed.window_stats.single_view_share }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>反复看却不行动</span><strong>{{ first_viewed.next_step_stats.none_count }}</strong><small>占回访过的 {{ first_viewed.next_step_stats.none_share }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>心动到下单中位</span><strong>{{ first_viewed.decision_stats.median_label }}</strong><small>P90 {{ first_viewed.decision_stats.p90_label }}</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从第一次心动到最近一次回访，隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>考虑窗口</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in first_viewed.window_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母只收<strong>至少回访过一次</strong>的记录。只看过一次的记录没有窗口可言——<code>first_viewed_at</code> 和 <code>last_viewed_at</code> 是同一次写入的产物，差是零，而<strong>零和「当天」不是一回事</strong>：当天就走了的样本窗口是真的短，只看一次的样本压根没有窗口。把它算成「当天」，会让「当天就回访」的比例虚高。只看一次的那 {{ first_viewed.single_view_count }} 条单独数出来，它是「看了就走」的规模，也是前者的对照组——两者放在一起，才能回答「这个平台上的心动，通常是想多久的」。分档<strong>左闭右开</strong>：正好 3 天落在「3-7 天」档。{% if first_viewed.window_stats.is_small_sample %}当前不足 {{ first_viewed.window_stats.min_measured_histories }} 条，占比只作参考。{% endif %}</p>
+            <h3 class="h6 mb-3 mt-4">反复回访之后，有没有走到下一步</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>下一步</th><th>笔数</th><th>占回访过（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in first_viewed.next_step_stats.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">收藏和预约<strong>必须分开报</strong>：收藏是留待观察，预约是准备成交。合并成一个「有动作」会让「只是想留着」和「已经在推进」变成一回事，而这两批样本要做的运营动作完全不同。只认 <code>first_viewed_at</code> 之后的收藏和下单——一件先被收藏、后来才第一次被浏览的商品，收藏不是浏览的结果，不能算成心动的下一步。另有 {{ first_viewed.next_step_stats.ordered_before_count }} 条是<strong>先下单、后浏览</strong>，考虑窗口是负的，单独一列：算进「没有任何下一步」会让这批本已成交的样本看起来像失败的样本。{% if not first_viewed.next_step_stats.has_direction and first_viewed.next_step_stats.measured_total %}当前不足 {{ first_viewed.next_step_stats.min_measured_histories }} 条，占比只作参考。{% endif %}</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">下单的人，从第一次心动到下单拖了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>决策时长</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in first_viewed.decision_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母是<strong>先浏览、后下单</strong>的记录，窗口从 <code>first_viewed_at</code> 算到 <code>Order.created_at</code>。分档比回访窗口<strong>粗，以周为单位</strong>：从心动到掏钱中间还隔着一整套预约、见面、议价，它天然比「回访」长——用同一套天分档会把绝大多数样本堆在最后一档，那张表就等于没分。中位 {{ first_viewed.decision_stats.median_label }}，P90 {{ first_viewed.decision_stats.p90_label }}，最久 {{ first_viewed.decision_stats.slowest_label }}。{% if first_viewed.decision_stats.is_small_sample %}当前不足 {{ first_viewed.decision_stats.min_measured_histories }} 条，占比只作参考。{% endif %}</p>
+            <h3 class="h6 mb-3 mt-4">想了很久却没有下一步的记录</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>商品</th><th>买家</th><th>浏览次数</th><th>考虑窗口</th><th>商品状态</th></tr></thead>
+                    <tbody>
+                        {% for row in first_viewed.stalled_rows %}
+                        <tr>
+                            <td>{{ row.item_title }}</td>
+                            <td>{{ row.buyer }}</td>
+                            <td>{{ row.view_count }}</td>
+                            <td>{{ row.window_label }}</td>
+                            <td>{% if row.is_still_available %}<span class="badge bg-success-subtle text-success-emphasis">在售</span>{% else %}{{ row.item_status_label }}{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5">当前周期没有想了超过一周、至今没有任何下一步的浏览记录。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if first_viewed.stalled_rows|length > first_viewed.stalled_row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ first_viewed.stalled_row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0">挑出来的口径是<strong>窗口已经拖过一周、且至今没有任何下一步</strong>。一周是「正常节奏」的上界——三天之内想清楚是常见的，等满一周之内还在比价也说得过去，超过一周仍然既没有收藏也没有预约，才是运营该看一眼的。每行带上商品当前状态，因为「这件商品还在不在架上」决定了这条记录还能不能被补救：一件已经售出或下架的商品，再提醒也没有意义；一件还在架上、还被反复回访的商品，才值得运营去想它是价格问题还是描述问题。想得越久的排在越前面——清单是给「现在去核实」用的。</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不判定「为什么没行动」</strong>：反复看却不行动，可能是价格，可能是描述没说清，可能是照片看不出成色，也可能只是买家自己拖——平台没有能力区分这四者，也就不该替其中任何一种下结论。不改 <code>views.py</code> 详情页的写入逻辑、不清浏览记录、不降价、不下架、不给卖家发提醒、不用 <code>first_viewed_at</code> 做任何推荐排序，也不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
