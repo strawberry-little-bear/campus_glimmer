@@ -33,6 +33,9 @@ from .demand_match_quality import build_demand_match_quality
 from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .demand_opportunity_followups import build_demand_opportunity_followups
 from .meeting_attendance import build_meeting_attendance
+from .handoff_code_usage import (
+    NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
+)
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2178,6 +2181,7 @@ def operations_dashboard(request):
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
+    dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2321,6 +2325,7 @@ def operations_dashboard_export(request):
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
+    dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2828,6 +2833,144 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    code = dashboard['handoff_code_usage']
+    writer.writerow([])
+    writer.writerow(['在现场念出来的那六位数字', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', code['summary'],
+        '只读确认码五个字段与站内通知，不改写任何字段，也不自动判定爽约',
+    ])
+    writer.writerow([
+        '撞到几次锁定视为作废', code['lock_threshold'], '',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['生成与使用', '笔数', '占走完当面交付订单（%）', '口径说明'])
+    adoption = code['adoption_stats']
+    writer.writerow([
+        '走完当面交付的订单', adoption['total'], '',
+        '分母只收已经离开本阶段的订单；还挂在本阶段的是右删失样本，单独数不计入分母',
+    ])
+    writer.writerow([
+        '生成过确认码', adoption['issued_count'], adoption['issue_rate'],
+        '只看 handoff_code_hash，生成过就有哈希',
+    ])
+    writer.writerow([
+        '在现场被核对使用', adoption['used_count'], adoption['use_rate'],
+        '以生成过确认码的订单为分母',
+    ])
+    writer.writerow([
+        '生成后没有核对记录', adoption['unused_count'], '',
+        '码发下去了，现场没走完；它和上一行加起来才等于「生成过」',
+    ])
+    writer.writerow([
+        '重新生成过（下界）', adoption['regenerated_count'], adoption['regenerated_rate'],
+        '从站内通知反推；卖家关掉订单状态通知后生成不再留痕，所以这是下界不是准数',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['生成之后，现场发生了什么', '情况', '笔数', '占生成过（%）', '这一档说明什么'])
+    attempt = code['attempt_stats']
+    writer.writerow([
+        '生成过确认码的订单', '', attempt['issued_total'], '',
+        '没生成过码的订单不属于这一列的分母',
+    ])
+    for row in attempt['bucket_rows']:
+        writer.writerow([
+            '', row['label'], row['count'], row['share'], row['hint'],
+        ])
+    writer.writerow([
+        '一次就对', '', attempt['first_try_count'], attempt['first_try_rate'],
+        '注意：这一列描述的是最后一枚码，重新生成会把错误次数归零',
+    ])
+    if attempt['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', attempt['issued_total'], '',
+            f"不足 {attempt['min_measured_orders']} 笔，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['生成到现场核对隔了多久', '间隔', '笔数', '占比（%）', '口径说明'])
+    gap_stats = code['issue_gap_stats']
+    writer.writerow([
+        '可测量的订单', '', gap_stats['measured_count'], '',
+        '只收既生成了码、又留下核对记录的订单',
+    ])
+    for row in gap_stats['bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], ''])
+    writer.writerow(['中位间隔', '', gap_stats['median_label'], '', ''])
+    writer.writerow(['P90 间隔', '', gap_stats['p90_label'], '', ''])
+    writer.writerow([
+        '最快 / 最慢', '', f"{gap_stats['fastest_label']} / {gap_stats['slowest_label']}", '', '',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '重新生成与间隔汇总', '中位间隔', 'P90 间隔', '重新生成过（下界）',
+        '可测量订单', '口径说明',
+    ])
+    writer.writerow([
+        '生成到核对的全貌', gap_stats['median_label'], gap_stats['p90_label'],
+        adoption['regenerated_count'], gap_stats['measured_count'],
+        '重新生成从站内通知反推，卖家关掉订单状态通知后生成不再留痕，所以这是下界',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '用过确认码的订单更可能做成吗', '分组', '笔数', '做成数', '完成率（%）', '口径说明',
+    ])
+    contrast = code['outcome_contrast']
+    writer.writerow([
+        '用过确认码', '', contrast['used_count'], contrast['used_success_count'],
+        contrast['used_success_rate'], '取消的两组都留着：取消不是失败',
+    ])
+    writer.writerow([
+        '生成过但没用', '', contrast['unused_count'], contrast['unused_success_count'],
+        contrast['unused_success_rate'], '同上',
+    ])
+    if contrast['gap_points'] is not None:
+        writer.writerow([
+            '差值（百分点）', '', contrast['gap_points'], '', '',
+            '这是对照，不是结论：愿意生成码的双方可能本来就是更认真的那批人',
+        ])
+    if contrast['has_direction']:
+        writer.writerow([
+            '方向', '', '可用', '', '', '两组各自过门槛且差值超过噪声带',
+        ])
+    else:
+        writer.writerow([
+            '方向', '', '不给', '', '',
+            f"两组各自不足 {contrast['min_measured_orders']} 笔，或差值落在 {HANDOFF_NOISE_POINTS} 个百分点噪声带内",
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '撞到锁定的订单', '商品', '买家', '卖家', '错误次数', '重新生成过',
+        '生成次数', '最终状态', '口径说明',
+    ])
+    if code['locked_rows']:
+        for row in code['locked_rows']:
+            writer.writerow([
+                row['item_title'], row['buyer'], row['seller'], row['attempts'],
+                '是' if row['regenerated'] else '否', row['generation_count'],
+                row['status_label'], '',
+            ])
+    else:
+        writer.writerow([
+            '—', '当前周期没有撞到锁定的订单', '', '', '', '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '错误次数记的是最后一枚码的错误次数，不是这笔订单累计的错误次数——重新生成会把它归零。'
+        '所以「一次就对」必须和「重新生成过」合起来读，单看任何一列都会得出一个过于乐观的结论。'
+        '重新生成从站内通知反推，卖家关掉订单状态通知后生成不再留痕，因此报的是下界。'
+        '完成率对照只做对照、不给因果。这里只报告，不自动派单、不改确认码、不新增提醒，'
+        '也不把统计写回任何记录。',
+    ])
+
+
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
     if dashboard['operational_alerts']:
         for alert in dashboard['operational_alerts']:
@@ -5803,5 +5946,3 @@ def mark_selected_notifications_read(request):
     ):
         next_url = reverse('notification_list')
     return redirect(next_url)
-
-

@@ -2003,6 +2003,105 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 handoff-code-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Handover proof</span><h2>在现场念出来的那六位数字</h2></div>
+        <span class="ops-panel-hint">确认码的生成、核对与锁定，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-shield-lock me-1"></i>交付确认码是这套系统里少见的"平台自己推荐、自己记录、自己从不统计"的机制：五个字段都有完整的写入路径，有行锁、有五次错误锁定、有"重新生成即作废旧码"的语义，而读取路径只有后台和订单详情页。交易安全卡在订单进入"待当面交付"时会明确建议"建议启用交付确认码"并给出按钮——一个平台在向用户推荐一个自己从不统计使用情况的机制。</p>
+    {% if not handoff_code_usage.has_data %}
+    <div class="empty-inline">{{ handoff_code_usage.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>生成率</span><strong>{{ handoff_code_usage.adoption_stats.issue_rate }}%</strong><small>{{ handoff_code_usage.adoption_stats.issued_count }} / {{ handoff_code_usage.adoption_stats.total }} 笔走完当面交付</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>现场核对率</span><strong>{{ handoff_code_usage.adoption_stats.use_rate }}%</strong><small>以生成过确认码的订单为分母</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>一次就对</span><strong>{{ handoff_code_usage.attempt_stats.first_try_rate }}%</strong><small>描述的是最后一枚码，重新生成会归零</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>撞到 {{ handoff_code_usage.lock_threshold }} 次锁定</span><strong>{{ handoff_code_usage.attempt_stats.locked_count }}</strong><small>共 {{ handoff_code_usage.attempt_stats.issued_total }} 笔生成过</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">生成之后，现场发生了什么</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>情况</th><th>笔数</th><th>占生成过（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in handoff_code_usage.attempt_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">错误次数记的是<strong>最后一枚码</strong>的错误次数，不是这笔订单累计的错误次数——重新生成会把它归零。所以这一列必须和"重新生成过"合起来读：单看它，一个现场出过问题、后来换过码的订单一手滑就对的订单一模一样，而这是两回事。</p>
+            <h3 class="h6 mb-3 mt-4">生成到现场核对隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>间隔</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in handoff_code_usage.issue_gap_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <table class="table table-sm align-middle ops-table mt-3 handoff-code-mini-table">
+                <tbody>
+                    <tr><th scope="row">中位间隔</th><td>{{ handoff_code_usage.issue_gap_stats.median_label }}</td><td>{{ handoff_code_usage.issue_gap_stats.measured_count }} 笔可测量</td></tr>
+                    <tr><th scope="row">P90 间隔</th><td>{{ handoff_code_usage.issue_gap_stats.p90_label }}</td><td>&mdash;</td></tr>
+                    <tr><th scope="row">重新生成过（下界）</th><td>{{ handoff_code_usage.adoption_stats.regenerated_count }}</td><td>{{ handoff_code_usage.adoption_stats.regenerated_rate }}%</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">用过确认码的订单更可能做成吗</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分组</th><th>笔数</th><th>做成数</th><th>完成率（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>用过确认码</td><td>{{ handoff_code_usage.outcome_contrast.used_count }}</td><td>{{ handoff_code_usage.outcome_contrast.used_success_count }}</td><td>{{ handoff_code_usage.outcome_contrast.used_success_rate }}</td></tr>
+                        <tr><td>生成过但没用</td><td>{{ handoff_code_usage.outcome_contrast.unused_count }}</td><td>{{ handoff_code_usage.outcome_contrast.unused_success_count }}</td><td>{{ handoff_code_usage.outcome_contrast.unused_success_rate }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">
+                {% if handoff_code_usage.outcome_contrast.has_direction %}
+                两组相差 {{ handoff_code_usage.outcome_contrast.gap_points }} 个百分点，已过噪声带。<strong>这是对照，不是结论</strong>——愿意生成码的双方可能本来就是更认真的那批人，平台没有能力把"码起了作用"和"这对双方本来就靠谱"分开。
+                {% elif handoff_code_usage.outcome_contrast.is_small_sample %}
+                两组各自不足 {{ handoff_code_usage.outcome_contrast.min_measured_orders }} 笔，完成率对照只报数字、不给方向。
+                {% else %}
+                两组差值落在噪声带内，不给方向：两个方向相差几个百分点，在几十条样本上和一次抛硬币没有区别。
+                {% endif %}
+                取消的订单两组都留着——取消不是失败，把它剔掉会让两边的完成率一起变好看，而那正好是最该被看见的那批订单。
+            </p>
+            <h3 class="h6 mb-3 mt-4">撞到锁定的订单</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>商品</th><th>买家</th><th>卖家</th><th>错误次数</th><th>重新生成过</th><th>最终状态</th></tr></thead>
+                    <tbody>
+                        {% for row in handoff_code_usage.locked_rows %}
+                        <tr>
+                            <td><strong>{{ row.item_title }}</strong></td>
+                            <td>{{ row.buyer }}</td>
+                            <td>{{ row.seller }}</td>
+                            <td>{{ row.attempts }}</td>
+                            <td>{% if row.regenerated %}是（{{ row.generation_count }} 次）{% else %}否{% endif %}</td>
+                            <td>{{ row.status_label }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6">当前周期没有撞到锁定的订单。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if handoff_code_usage.locked_rows|length > handoff_code_usage.locked_row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ handoff_code_usage.locked_row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0">错误次数达到上限，意味着现场发生过一次真实的沟通问题，而不是手滑打错一位。每一行都带上后来有没有重新生成、有没有最终做成——因为一笔锁定之后换码顺利交付的订单，和一笔锁定后就僵在那里的订单，要做的动作完全不一样。</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>分母只收已经离开"待当面交付"阶段的订单：一个现在还挂在本阶段的订单，见面还没发生，根本谈不上有没有生成码，把它算进分母会让生成率凭空变小，这是右删失样本。重新生成从站内通知反推，卖家关掉订单状态通知后生成不再留痕，所以这一列报的是下界不是准数。本模块只报告，不自动派单、不改确认码、不新增提醒，也不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
