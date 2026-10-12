@@ -819,6 +819,11 @@ a { color: inherit; text-decoration: none; }
 
 .handoff-code-panel { padding: 14px; border: 1px solid #dcebe1; border-radius: 14px; background: linear-gradient(135deg, #f5fbf6, #fbfdfb); color: #426b53; }
 .handoff-code-panel p { color: #718278; }
+/* 归还握手面板和确认码面板共用一套卡片底色：两次握手都发生在交付之后的尾段，
+   用同一组色相让运营在看板上一眼看出「这一片是交付之后的事」。 */
+.return-handshake-panel { padding: 14px; border: 1px solid #e3e7d9; border-radius: 14px; background: linear-gradient(135deg, #f8faf3, #fcfdfa); color: #5b6b4a; }
+.return-handshake-panel p { color: #7a8272; }
+.return-handshake-panel .ops-mini-stat { background: #fff; }
 .handoff-code-value { margin: 14px 0 8px; padding: 12px 14px; border: 1px dashed #77ac89; border-radius: 10px; background: #fff; color: #2f7650; font: 700 1.65rem/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: .28em; text-align: center; }
 .handoff-code-panel .form-control { background: #fff; border-color: #cfe3d5; letter-spacing: .16em; text-align: center; font-weight: 600; }
 .handoff-code-panel .form-control:focus { border-color: #79ad89; box-shadow: 0 0 0 .2rem rgba(121, 173, 137, .15); }
@@ -1018,7 +1023,8 @@ a { color: inherit; text-decoration: none; }
 .demand-radar-task-form .demand-radar-due-input { width: 11rem; }
 .demand-radar-task-form .demand-radar-note-input { width: 13rem; }
 .meeting-attendance-panel .ops-table td,
-.handoff-code-panel .ops-table td { vertical-align: top; }
+.handoff-code-panel .ops-table td,
+.return-handshake-panel .ops-table td { vertical-align: top; }
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,

@@ -36,6 +36,9 @@ from .meeting_attendance import build_meeting_attendance
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
 )
+from .return_handshake import (
+    NOISE_POINTS as RETURN_HANDSHAKE_NOISE_POINTS, build_return_handshake,
+)
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2182,6 +2185,7 @@ def operations_dashboard(request):
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
+    dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2326,6 +2330,7 @@ def operations_dashboard_export(request):
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
+    dashboard['return_handshake'] = build_return_handshake(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2967,6 +2972,189 @@ def operations_dashboard_export(request):
         '所以「一次就对」必须和「重新生成过」合起来读，单看任何一列都会得出一个过于乐观的结论。'
         '重新生成从站内通知反推，卖家关掉订单状态通知后生成不再留痕，因此报的是下界。'
         '完成率对照只做对照、不给因果。这里只报告，不自动派单、不改确认码、不新增提醒，'
+        '也不把统计写回任何记录。',
+    ])
+
+    writer.writerow([])
+    handshake = dashboard['return_handshake']
+    writer.writerow(['归还登记的那两次握手', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', handshake['summary'],
+        '只读 buyer_returned_at 与 seller_returned_at，不改写任何字段，也不自动推进任何一笔订单',
+    ])
+    writer.writerow([
+        '还挂在借用中的订单', handshake['still_borrowed_count'], '',
+        '握手还没结束，是右删失样本，不计入完成率分母',
+    ])
+    writer.writerow([
+        '从没进入借用就被取消', handshake['cancelled_before_count'], '',
+        '握手压根没开始，不计入任何分母',
+    ])
+    writer.writerow([
+        '状态是已归还却查不到进入借用中的事件', handshake['no_borrow_count'], '',
+        '这不该发生；静默忽略它会让分母悄悄变小，所以单独数出来',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['走完借用的订单', '笔数', '占比（%）', '口径说明'])
+    completion = handshake['completion_stats']
+    writer.writerow([
+        '周期内走完借用的订单', completion['concluded_total'], '',
+        '分母只收已经离开借用中的订单；取消的借用订单留着，一次东西已经拿走、'
+        '最后走取消的订单仍然发生过握手',
+    ])
+    writer.writerow([
+        '双方都登记了归还', completion['returned_count'], completion['completion_rate'],
+        '两个时间戳都写上，订单才会走到已归还',
+    ])
+    writer.writerow([
+        '带着真实借用记录被取消', completion['cancelled_count'], '',
+        '它和上一行加起来才等于走完借用的订单数',
+    ])
+    writer.writerow([
+        '两次握手都点了的订单', completion['both_registered_count'], '',
+        '它和归还数应当相等；不相等说明有订单两次握手都点了却没有走到已归还，'
+        '那是数据里的一处矛盾',
+    ])
+    if completion['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '',
+            f"不足 {completion['min_measured_orders']} 笔，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['谁先登记', '笔数', '占登记过（%）', '这一档说明什么'])
+    first_registered = handshake['first_registered_stats']
+    writer.writerow([
+        '登记过归还的订单', '', first_registered['measured_total'], '',
+        '双方都没登记的订单不进这一列',
+    ])
+    for row in first_registered['rows']:
+        writer.writerow([
+            '', row['label'], row['count'], row['share'],
+            '借用方先登记是正常路径；发布者先登记通常说明双方对「归还」的定义不一致',
+        ])
+    writer.writerow([
+        '双方都还没登记', '', first_registered['unregistered_count'], '',
+        '借用已经开始，但两个时间戳都还空着',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['双方都登记的等待时长', '笔数', '占比（%）', '口径说明'])
+    wait_stats = handshake['wait_stats']
+    writer.writerow([
+        '可测量的订单', '', wait_stats['measured_count'], '',
+        '只收双方都登记了的订单；一方登记另一方没登记的没有「等待多久」可言',
+    ])
+    for row in wait_stats['bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '中位 / P90 等待', '',
+        f"{wait_stats['median_label']} / {wait_stats['p90_label']}", '', '',
+        '按天分档不按小时：一次归还等待的时间尺度是天',
+    ])
+    writer.writerow([
+        '最快 / 最慢', '', f"{wait_stats['fastest_label']} / {wait_stats['slowest_label']}",
+        '', '',
+    ])
+    if wait_stats['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {wait_stats['min_measured_orders']} 笔，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['仍挂在借用中的订单', '笔数', '口径说明'])
+    stalled_stats = handshake['stalled_stats']
+    writer.writerow([
+        '逾期未归还', stalled_stats['overdue_count'], '',
+        '已过预计归还时间而双方都没登记——催收阶梯该管的那一类，本模块只报数不改阶梯',
+    ])
+    writer.writerow([
+        '已登记未确认', stalled_stats['registered_count'], '',
+        '一方已登记、另一方没有——东西可能已经回来了，该做的是提醒另一方点一下',
+    ])
+    writer.writerow([
+        '等了超过一周', stalled_stats['over_week_count'], '',
+        '从先登记那一刻算到现在，按订单的一生累计，不按统计周期切',
+    ])
+    writer.writerow([
+        '等了超过两周', stalled_stats['over_two_weeks_count'], '',
+        '长尾：等了两周以上，商品和押金都还卡在这一笔上',
+    ])
+    if stalled_stats['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '',
+            f"不足 {stalled_stats['min_measured_orders']} 笔，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['已登记未确认的等待时长', '笔数', '占比（%）', '口径说明'])
+    for row in stalled_stats['bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '中位 / 最久', '',
+        f"{stalled_stats['median_label']} / {stalled_stats['slowest_label']}", '', '',
+        '这一列没有上界，所以报分布而不是平均值：一个等了四十天的订单会被平均值藏起来',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '已登记未确认的订单', '商品', '买家', '卖家', '先登记的一方', '在等谁',
+        '已等多久', '预计归还', '登记之后还有没有动静', '口径说明',
+    ])
+    if handshake['stalled_rows']:
+        for row in handshake['stalled_rows']:
+            writer.writerow([
+                row['item_title'], row['buyer'], row['seller'], row['first_label'],
+                row['waiting_for'], row['waiting_label'], row['due_label'],
+                row['last_event_label'],
+                '报「登记之后没有新事件」而不是报「卡住」：前者是可以核实的事实，'
+                '后者是一个判断' if not row['moved_after_register'] else '',
+            ])
+    else:
+        writer.writerow([
+            '—', '当前周期没有一方已登记、另一方未确认的借用订单',
+            '', '', '', '', '', '', '', '',
+        ])
+    if handshake['stalled_rows'] and len(handshake['stalled_rows']) > handshake['stalled_row_limit']:
+        writer.writerow([
+            '—', f"清单最多列 {handshake['stalled_row_limit']} 条，完整的在数据库里",
+            '', '', '', '', '', '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '从没进入过借用就被取消的订单', '商品', '买家', '卖家', '当前状态', '口径说明',
+    ])
+    if handshake['cancelled_rows']:
+        for row in handshake['cancelled_rows']:
+            writer.writerow([
+                row['item_title'], row['buyer'], row['seller'], row['status_label'],
+                '握手压根没开始，所以不进任何分母',
+            ])
+    else:
+        writer.writerow([
+            '—', '当前周期没有从没进入过借用就被取消的订单', '', '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '分母只收「周期内创建、且已经离开借用中」的借用订单。已经离开的意思是走到了已归还，'
+        '或者带着一次真实的借用记录被取消；从来没进入过借用就被取消的订单，握手压根没开始，'
+        '不算进来。还挂在借用中的订单是右删失样本——握手还没有结束，根本谈不上有没有完成——'
+        '把它算进分母会让完成率凭空变小，这部分单独数出来，不丢也不混。'
+        '等待时长一律按天分档，不按小时：一次归还等待的时间尺度是天。'
+        '「已登记未确认」的等待从先登记那一刻算到现在，而「现在」不属于任何统计周期，'
+        '所以它按订单的一生累计，不按周期切——按周期切会把一个跨越周期边界的等待算成两段短的，'
+        '而那正是最不该被切开的样本。'
+        '「逾期未归还」和「已登记未确认」必须分开报：这两类都表现为「订单还没结束」，'
+        '但运营动作完全相反——前者是催收阶梯该管的事，后者是「去提醒另一方点一下」的事。'
+        '「谁先登记」单独一档，因为它和「等多久」不是一回事：借用方先登记是正常路径，'
+        '发布者先登记意味着他先收到了东西、而借用方还没点，这个顺序在借用的语境里是反常的。'
+        '本模块只报告，不改 confirm_return 的任何逻辑、不加超时、不自动推进任何一笔订单、'
+        '不改催收阶梯的触发条件、不改 close_escalation 的调用点、不新增提醒类型，'
         '也不把统计写回任何记录。',
     ])
 
