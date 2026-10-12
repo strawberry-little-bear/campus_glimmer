@@ -72,6 +72,7 @@ from .lost_found_matching import expire_lost_found_posts, find_lost_found_matche
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
+from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
 from .opportunity_feed import build_opportunity_feed
@@ -2214,6 +2215,7 @@ def operations_dashboard(request):
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
+    dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2370,6 +2372,7 @@ def operations_dashboard_export(request):
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
+    dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -5818,6 +5821,67 @@ def operations_dashboard_export(request):
         '与搜索趋势面板同一套口径；未打开按占本周期发出总量的比例判，'
         '不按次数差判。本模块只报告，不改写任何一条私信、不调整静默期阈值、'
         '不给任何人打回复速度分。',
+    ])
+    quality = dashboard['recommendation_quality']
+    writer.writerow([])
+    writer.writerow(['首页推荐卡挑得准不准'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', quality['period_days'],
+        '理由样本门槛', quality['metrics']['min_reason_feedback'],
+        '噪声阈值（百分点）', quality['metrics']['reason_noise_points'],
+    ])
+    writer.writerow([
+        '反馈后动作窗口（天）', quality['metrics']['followup_window_days'],
+    ])
+    writer.writerow(['整体'])    # 表格标题行
+    writer.writerow(['指标', '数值', '说明'])
+    loop = quality['feedback_loop']
+    writer.writerow([
+        '反馈总数', loop['feedback_total'],
+        '分母是有过反馈的推荐，不含展示数',
+    ])
+    writer.writerow([
+        '正反馈比例', f"{loop['positive_rate']}%" if loop['positive_rate'] is not None else '本周期没有反馈',
+        '「想看看」除以全部反馈；没有反馈时这个数不存在，不是 0%',
+    ])
+    writer.writerow([
+        '改口数', loop['switched_total'],
+        '先「想看」后「不感兴趣」的行数，一次改口算一条',
+    ])
+    writer.writerow([
+        '被点开过的商品', loop['viewed_recommendations'],
+        '反馈率的分母：窗口内全部被点开过的商品，不和反馈取交集',
+    ])
+    writer.writerow([
+        '反馈率', f"{loop['feedback_rate']}%" if loop['feedback_rate'] is not None else '本周期没有被点开过的商品',
+        '这是反馈率的下界，只低不高：从搜索点进去的商品也占分母却没有推荐卡可点',
+    ])
+    writer.writerow([])
+    writer.writerow(['按理由拆'])    # 表格标题行
+    writer.writerow(['理由', '反馈数', '想看看', '不感兴趣', '正反馈比例', '改口数', '样本是否够'])
+    for row in quality['reason_rows']:
+        if not row['feedback_count']:
+            continue
+        writer.writerow([
+            row['label'], row['feedback_count'], row['interested_count'],
+            row['dismissed_count'],
+            f"{row['positive_rate']}%" if row['positive_rate'] is not None else '没有反馈',
+            row['switched_count'],
+            '够' if not row['is_small_sample'] else f"不足 {quality['metrics']['min_reason_feedback']} 条",
+        ])
+    writer.writerow([])
+    writer.writerow(['结论'])
+    writer.writerow([quality['summary']])
+    for note in quality['recommendations']:
+        writer.writerow([note])
+    writer.writerow([
+        '理由按反馈时刻重算，走 recommendations.py 的 recommendation_reason_key；'
+        '复算里的 feedback_match 取「改过口」，因为只表过一次态的行，'
+        '点击本身就是入集合的那个动作，「你标记过想看」那一刻还没生效。'
+        '复算还原的是点击那一刻的理由，不是推荐当时的理由。'
+        '反馈率的分母是窗口内全部被点开过的商品，只低不高。'
+        '本模块只报告，不调 +10、不调 0.8、不调 +8、不改任何一句理由文案。',
     ])
     sla = dashboard['governance_sla']
     writer.writerow([])

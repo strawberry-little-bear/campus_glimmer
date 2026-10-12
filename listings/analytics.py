@@ -34,6 +34,7 @@ from .borrow_rhythm import build_borrow_rhythm
 from .demand_radar_hit_trend import build_demand_radar_hit_trend
 from .demand_radar_hit_layers import build_demand_radar_hit_layers
 from .demand_radar_phase_trend import build_demand_radar_phase_trend
+from .recommendation_quality import build_recommendation_quality
 
 
 PERIOD_CHOICES = (
@@ -1623,6 +1624,7 @@ def build_operations_dashboard(days=30):
         'notification_response': build_notification_response_insights(days=days),
         'chat_response': build_chat_response_insights(days=days, now=now),
         'chat_response_trend': build_chat_response_trend(days=days, now=now),
+        'recommendation_quality': build_recommendation_quality(days=days, now=now),
         'order_stage_flow': build_order_stage_flow(days=days, now=now),
         'governance_sla': governance_sla,
         'supply_lifecycle': build_supply_lifecycle(days=days, now=now),

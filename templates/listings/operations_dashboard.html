@@ -1042,6 +1042,52 @@
     {% else %}<div class="empty-inline mt-3">两个周期内都没有私信记录，发出第一条私信后这里会开始统计跨周期变化。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>两条曲线都按私信发出时刻归期，两侧窗口等长、都从本地午夜切，与搜索趋势面板同一套口径。未打开按「占本周期发出总量的比例」判，不按次数差判：次数是原始计数，量涨起来每条曲线都会跟着涨。本模块只报告，不改写任何一条私信、不调整静默期阈值、不给任何人打回复速度分。</div>
 </section>
+<section class="content-card ops-panel mb-4 recommendation-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Recommendation</span><h2>首页推荐卡挑得准不准</h2></div>
+        <span class="ops-panel-hint">周期 {{ recommendation_quality.period_days }} 天·只报告不改权重</span>
+    </div>
+    {% if recommendation_quality.has_data %}
+    <div class="recommendation-quality-summary">
+        <div><span>反馈总数</span><strong>{{ recommendation_quality.feedback_loop.feedback_total }}</strong><small>分母是有过反馈的推荐</small></div>
+        <div><span>正反馈比例</span><strong>{% if recommendation_quality.feedback_loop.positive_rate != None %}{{ recommendation_quality.feedback_loop.positive_rate }}%{% else %}—{% endif %}</strong><small>「想看看」除以全部反馈</small></div>
+        <div><span>改口数</span><strong>{{ recommendation_quality.feedback_loop.switched_total }}</strong><small>先想看后不感兴趣</small></div>
+        <div><span>反馈率</span><strong>{% if recommendation_quality.feedback_loop.feedback_rate != None %}{{ recommendation_quality.feedback_loop.feedback_rate }}%{% else %}—{% endif %}</strong><small>下界，只低不高</small></div>
+    </div>
+
+    <div class="recommendation-quality-reading mt-3">
+        <div class="recommendation-quality-block-heading"><strong>按理由拆</strong><span>一条理由要凑够 {{ recommendation_quality.metrics.min_reason_feedback }} 条反馈才给方向</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+                <thead><tr><th>理由</th><th>反馈数</th><th>想看看</th><th>不感兴趣</th><th>正反馈比例</th><th>改口数</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_quality.reason_rows %}
+                    {% if row.feedback_count %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.feedback_count }}</td>
+                        <td>{{ row.interested_count }}</td>
+                        <td>{{ row.dismissed_count }}</td>
+                        <td>{% if row.positive_rate != None %}{{ row.positive_rate }}%{% else %}—{% endif %}</td>
+                        <td>{{ row.switched_count }}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ recommendation_quality.metrics.min_reason_feedback }} 条</span>{% else %}<span class="recommendation-quality-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="recommendation-quality-note mb-0"><i class="bi bi-info-circle me-1"></i>{{ recommendation_quality.summary }}</p>
+        {% for note in recommendation_quality.recommendations %}
+        <p class="recommendation-quality-note mb-0">{{ note }}</p>
+        {% endfor %}
+        <p class="recommendation-quality-note mb-0">理由按反馈时刻重算，走 <code>recommendations.py</code> 的 <code>recommendation_reason_key</code>，首页渲染的那句话和面板按它归组的那句话是同一句。复算里的「你标记过想看」只对改过口的行生效：只表过一次态的行，点击本身就是入集合的那个动作，那句话在点击那一刻还没出现。复算还原的是点击那一刻的理由，不是推荐当时的理由——用户在那之后又收藏或浏览过的东西会改变它。</p>
+        <p class="recommendation-quality-note mb-0">反馈率的分母是窗口内<b>全部</b>被点开过的商品，不和反馈取交集：取交集会让反馈率恒为 100%，这个数字就不存在了。它只低不高——一件从搜索点进去的商品也占了分母，却没有推荐卡可点；真正的分母要一张曝光表才数得出来，而首页不该为一个运营面板多一次 insert。</p>
+        <p class="recommendation-quality-note mb-0">两条理由的正反馈比例相差不满 {{ recommendation_quality.metrics.reason_noise_points }} 个百分点视为噪声，同一个量级的理由之间的这点差别，运营看不出来、也动不了手。本面板只报告，不调 +10、不调 0.8、不调 +8、不改任何一句理由文案、不把负反馈的商品加进黑名单。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有推荐反馈，用户在首页推荐卡上点第一次「想看看」或「不感兴趣」后，这里会开始统计。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>按理由聚合，不按用户、不按商品：按用户是排名（隐私，也不是运营射程），按商品让被推一万次和一次不可比。理由是打分的可解释输出，也是运营唯一能动手改的东西。「想看看」之后有没有真的去看，只算表态之后 {{ recommendation_quality.metrics.followup_window_days }} 天内的浏览与下单——先看后点不算，超过窗口的浏览可能是用户在翻历史记录。本模块只报告，不改权重。</div>
+</section>
 <section class="content-card ops-panel mb-4 order-stage-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Stage flow</span><h2>订单全链路阶段时长</h2></div>

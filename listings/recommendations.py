@@ -15,6 +15,55 @@ class Recommendation:
     score: float
 
 
+# 五句理由，顺序与打分检查它们的顺序一致。导出成常量，是为了让运营面板读到
+# 的就是首页渲染出来的那几句：看板若自己另起一套说法，运营就会去改一个用户在
+# 页面上根本看不见的理由。
+REASONS = (
+    'feedback_match',
+    'category_and_location',
+    'category',
+    'location',
+    'popular',
+    'fresh',
+)
+
+REASON_LABELS = {
+    'feedback_match': '你标记过想看，优先为你保留',
+    'category_and_location': '符合你的分类与交易地点偏好',
+    'category': '与你收藏或交易过的分类相近',
+    'location': '就在你关注过的校园地点附近',
+    'popular': '校园用户正在关注',
+    'fresh': '校园新上架',
+}
+
+
+def recommendation_reason_key(*, feedback_match, category_match, location_match, favorite_count):
+    """当前命中的是哪一句理由，返回稳定的 key。
+
+    检查顺序与服务里的打分一致，单独收成一个函数，首页上那句话和运营面板按它归
+    组的那句话就不会各走各的。它是五个匹配标记与收藏数的纯函数：不读数据库、也
+    不取时钟，所以可以拿反馈那一行当时的输入重算一遍。
+
+    返回 REASONS 里的一个 key，渲染文案走 recommendation_reason_label。
+    """
+    if feedback_match:
+        return 'feedback_match'
+    if category_match and location_match:
+        return 'category_and_location'
+    if category_match:
+        return 'category'
+    if location_match:
+        return 'location'
+    if favorite_count:
+        return 'popular'
+    return 'fresh'
+
+
+def recommendation_reason_label(key):
+    """一个理由 key 对应的、首页渲染出来的那句话。"""
+    return REASON_LABELS[key]
+
+
 class RecommendationService:
     """轻量级、可解释的校园商品推荐服务。"""
 
@@ -77,19 +126,15 @@ class RecommendationService:
             if location_match:
                 score += 5
 
-            if feedback_match:
-                reason = '你标记过想看，优先为你保留'
-            elif category_match and location_match:
-                reason = '符合你的分类与交易地点偏好'
-            elif category_match:
-                reason = '与你收藏或交易过的分类相近'
-            elif location_match:
-                reason = '就在你关注过的校园地点附近'
-            elif item.favorite_count:
-                reason = '校园用户正在关注'
-            else:
-                reason = '校园新上架'
-            recommendations.append(Recommendation(item=item, reason=reason, score=score))
+            reason_key = recommendation_reason_key(
+                feedback_match=feedback_match,
+                category_match=category_match,
+                location_match=location_match,
+                favorite_count=item.favorite_count,
+            )
+            recommendations.append(
+                Recommendation(item=item, reason=REASON_LABELS[reason_key], score=score)
+            )
 
         recommendations.sort(key=lambda recommendation: (-recommendation.score, -recommendation.item.created_at.timestamp()))
         return recommendations[:limit]
