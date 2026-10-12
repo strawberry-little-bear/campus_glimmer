@@ -45,6 +45,8 @@ from .first_viewed import (
 from .saved_search_latency import build_saved_search_latency
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
+# 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
+from .item_image_coverage import build_item_image_coverage
 from .moderation_rule_quality import build_moderation_rule_quality
 from .availability_watch_quality import build_availability_watch_quality
 from .rating_quality import build_rating_quality
@@ -2205,6 +2207,7 @@ def operations_dashboard(request):
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
+    dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     dashboard['rating_quality'] = build_rating_quality(days=days)
@@ -2360,6 +2363,7 @@ def operations_dashboard_export(request):
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
+    dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     dashboard['rating_quality'] = build_rating_quality(days=days)
@@ -3561,6 +3565,134 @@ def operations_dashboard_export(request):
             '样本不足', '', '', '', '',
             f"不足 {gift['min_measured_applications']} 份，占比只作参考",
         ])
+
+    writer.writerow([])
+    images = dashboard['item_image_coverage']
+    writer.writerow([
+        '商品图片配了多少张，第一次被运营读到', '值', '说明',
+    ])
+    writer.writerow([
+        '概述', images['summary'],
+        '只看当前在架商品（available），已售出 / 已预订 / 已过期不进分母；'
+        '上传后又删图不留历史，这里只能读到剩下几张',
+    ])
+    writer.writerow([
+        '在架商品总数', images['coverage']['total'], '',
+        '分母只含在架商品',
+    ])
+    writer.writerow([
+        '一张图都没配', images['coverage']['no_image_count'], '',
+        '这些商品在详情页上直接露出空图位',
+    ])
+    writer.writerow([
+        '无图占比（%）', images['coverage']['no_image_rate'], '',
+        '无图商品数 / 在架商品总数',
+    ])
+    writer.writerow([
+        '无图商品被举报过', images['coverage']['no_image_reported_count'], '',
+        '只统计更新前就存在的举报，不录举报理由；'
+        '图片覆盖度不能推断举报原因',
+    ])
+    writer.writerow([
+        '最小视测商品数', images['coverage']['min_measured_items'], '',
+        '低于这个数量时占比只能参考',
+    ])
+    if images['coverage']['is_small_sample']:
+        writer.writerow([
+            '小样本提醒', '', '',
+            f"当前在架商品只有 {images['coverage']['total']} 件，"
+            f"占比仅供参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['有图 / 无图对照'])
+    writer.writerow([
+        '分组', '商品数', '订单数', '成交数',
+        '成交率（%）',
+    ])
+    for key, label in (
+        ('with_image', '有图商品'),
+        ('no_image', '无图商品'),
+    ):
+        group = images['contrast'][key]
+        writer.writerow([
+            label, group['item_count'], group['order_count'],
+            group['dealt_count'], group['dealt_rate'],
+        ])
+    writer.writerow([
+        '差距（百分点）', '', '', '',
+        images['contrast']['gap_points'],
+        '只做对照不给因果；选择效应下不要把它当回应效应',
+    ])
+    if not images['contrast']['is_measurable']:
+        writer.writerow([
+            '不可比较', '', '', '',
+            f"两组商品数均小于 {images['min_measured_items']}，"
+            f"不展示差距结论",
+        ])
+    elif not images['contrast']['gap_is_meaningful']:
+        writer.writerow([
+            '差距未超器声线', '', '', '',
+            f"差距低于 {images['noise_points']} 个百分点，不视为真实差异",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['图片数分档'])
+    writer.writerow([
+        '图片数', '商品数', '占比（%）', '订单数',
+        '成交数', '成交率（%）',
+    ])
+    for row in images['image_counts']['rows']:
+        writer.writerow([
+            row['label'], row['item_count'], row['item_share'],
+            row['order_count'], row['dealt_count'], row['dealt_rate'],
+            '商品数低于门槛，成交率仅供参考' if row['is_small_sample'] else '',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['按交易方式看无图情况'])
+    writer.writerow([
+        '交易方式', '商品数', '无图数', '无图占比（%）',
+        '订单数', '成交数', '成交率（%）',
+    ])
+    for row in images['by_trade_mode']['rows']:
+        writer.writerow([
+            row['label'], row['item_count'], row['no_image_count'],
+            row['no_image_rate'], row['order_count'], row['dealt_count'],
+            row['dealt_rate'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['按分类看无图情况'])
+    writer.writerow([
+        '分类', '商品数', '无图数', '无图占比（%）',
+        '订单数', '成交数', '成交率（%）',
+    ])
+    for row in images['by_category']['rows']:
+        writer.writerow([
+            row['label'], row['item_count'], row['no_image_count'],
+            row['no_image_rate'], row['order_count'], row['dealt_count'],
+            row['dealt_rate'],
+            '商品数低于门槛，仅供参考' if row['is_small_sample'] else '',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['一张图都没配的商品'])
+    writer.writerow([
+        '商品', '分类', '交易方式',
+        '举报数', '上架时间',
+    ])
+    for row in images['no_image_rows']['rows']:
+        writer.writerow([
+            row.item.title, row.category_label, row.trade_mode_label,
+            row.report_count,
+            row.item.created_at.strftime('%Y-%m-%d %H:%M'),
+        ])
+    writer.writerow([
+        '共计', '', '', '',
+        f"无图商品共 {images['no_image_rows']['row_total']} 件，"
+        f"以上只列 {images['no_image_rows']['row_limit']} 件，不按商品进行排名",
+    ])
 
     writer.writerow([])
     rule = dashboard['moderation_rule_quality']

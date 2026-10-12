@@ -1132,6 +1132,19 @@ a { color: inherit; text-decoration: none; }
 .demand-response-conversion-panel .ops-mini-stat { background: #fff; }
 .demand-response-conversion-panel .ops-mini-stat strong { color: #8c3a5e; }
 .demand-response-conversion-panel .badge { font-weight: 600; }
+/* 商品图片覆盖度面板。
+ * 为什么自成一套颜色：前面几十个面板分别占了红粉（礼贾申请）、紫（求购响应转化）、
+ * 绿（会面到场）等色相，图片覆盖度讲的是“商品资料完整度”，和商品本身的存储、
+ * 图库有关系，所以取一个偏蓝的石碳色，和现有面板都不打道，滚动时一眼能分出这是商品资料区块。
+ * 注意不用红色：无图商品多不代表错误，只代表资料缺口，用红色会误导运营当成故障去处理。 */
+.item-image-coverage-panel { padding: 14px; border: 1px solid #cfd9e3; border-radius: 14px; background: linear-gradient(135deg, #f2f6fb, #fbfcfe); color: #4a5766; }
+.item-image-coverage-panel p { color: #5f6d7e; }
+.item-image-coverage-panel .ops-mini-stat strong { color: #3f5b80; }
+.item-image-coverage-panel .ops-mini-stat span, .item-image-coverage-panel .ops-mini-stat small { color: #7b8899; }
+.item-image-coverage-panel .table th { color: #55647a; }
+.item-image-coverage-panel .badge { font-weight: 600; }
+.item-image-coverage-panel .rewrite-candidate-footnote { color: #4e637d; }
+.item-image-coverage-panel .ops-footer-note { color: #5f6d7e; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
