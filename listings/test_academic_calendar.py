@@ -266,6 +266,34 @@ class AcademicCalendarTests(TestCase):
         refresh_academic_term_snapshots()
         self.assertEqual(AcademicTermSnapshot.objects.filter(term=self.term).count(), 4)
 
+    def test_a_phase_starting_after_the_term_ends_keeps_a_valid_day_count(self):
+        """短学期里，整体落在学期外的阶段不能把 `day_count` 算成负数。
+
+        默认阶段计划铺到开学后第 125 天，而夏学期、冬学期只有一个来月。原来的截断只按学期
+        长度算，开学第 98 天才开始的考试周会被截到学期结束日之前，于是结束日早于开始日；
+        `AcademicTermSnapshot.day_count` 这一列带 CHECK 约束，`refresh_academic_term_snapshots`
+        会在写快照时直接抛 IntegrityError，`sync_academic_calendar` 整个命令跑不完。
+        """
+        short = AcademicTerm.objects.create(
+            name='夏季学期（短）', slug='summer-short', kind='summer',
+            starts_on=self.today, ends_on=self.today + timedelta(days=30),
+        )
+        ensure_default_phases(short)
+
+        for phase in short.phases.all():
+            self.assertLessEqual(phase.start_date, phase.end_date)
+            self.assertGreaterEqual(
+                (phase.end_date - phase.start_date).days + 1, 1,
+            )
+
+        # 这一步就是原先会崩掉的地方：写快照会触到 day_count 的 CHECK 约束。只刷这一个学期，
+        # 不带参数会连 setUp 里那个长学期一起刷。
+        updated = refresh_academic_term_snapshots(term=short)
+
+        self.assertEqual(updated, 4)
+        for snapshot in AcademicTermSnapshot.objects.filter(term=short):
+            self.assertGreaterEqual(snapshot.day_count, 1)
+
     def test_sync_command_reports_phases_and_snapshots(self):
         AcademicPhase.objects.filter(term=self.term).delete()
         self.make_item(title='命令测试供给', created_at=timezone.now())

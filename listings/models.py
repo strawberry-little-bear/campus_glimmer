@@ -1912,7 +1912,18 @@ class AcademicPhase(models.Model):
 
     @property
     def end_date(self):
-        capped = min(self.end_offset, (self.term.ends_on - self.term.starts_on).days)
+        """阶段结束日，按学期长度截断。
+
+        截断要连开始日一起看。默认阶段计划铺到开学后第 125 天，而夏学期、冬学期或者一个被提
+        前结束的学期可能只有几十天：只按学期长度截断的话，开学第 98 天才开始的考试周会被截
+        到学期结束日之前，于是结束日早于开始日，`day_count` 算成负数——而 `AcademicTermSnapshot
+        .day_count` 这一列带 CHECK 约束，`sync_academic_calendar` 会在写快照时直接崩掉，整个
+        命令一次都跑不完。所以这里用 `max(start_offset, ...)` 兜住：阶段整体落在学期之外的，
+        结束日退到与开始日同一天，`day_count` 至少是 1。原先 121 天的秋季学期上四个阶段的取
+        值一个都没变，这个兜底只影响学期比阶段计划还短的情况。
+        """
+        term_length = (self.term.ends_on - self.term.starts_on).days
+        capped = max(self.start_offset, min(self.end_offset, term_length))
         return self.term.starts_on + timedelta(days=capped)
 
     def contains(self, day):
