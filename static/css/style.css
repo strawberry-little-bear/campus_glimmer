@@ -1102,6 +1102,18 @@ a { color: inherit; text-decoration: none; }
 .rating-quality-panel .ops-mini-stat { background: #fff; }
 .rating-quality-panel .ops-mini-stat strong { color: #8a6420; }
 .rating-quality-panel .badge { font-weight: 600; }
+.dispute-resolution-quality-panel .ops-table td { vertical-align: top; }
+/* 交易争议处理质量面板自成一组色相（青灰蓝）。它问的是「哪一类争议更容易被
+   驳回、证据什么时候到手上、处理意见写了没写」，是治理侧的质量反刍。它和
+   governance_sla 报的不是同一件事：那组报「处理得快不快」，这里报「判得公
+   不公平」；也不复用 moderation-rule-quality 的冷灰蓝底色——那组问的是四条
+   关键词规则拦得准不准，这里问的是人做的裁定公不公平，问题域不同，色相也
+   该分开。色相偏冷偏沉，因为这一栏报的多半是「被驳回的人不知道为什么」。 */
+.dispute-resolution-quality-panel { padding: 14px; border: 1px solid #c8d8dc; border-radius: 14px; background: linear-gradient(135deg, #f0f6f8, #fafcfd); color: #35474d; }
+.dispute-resolution-quality-panel p { color: #5c7076; }
+.dispute-resolution-quality-panel .ops-mini-stat { background: #fff; }
+.dispute-resolution-quality-panel .ops-mini-stat strong { color: #2c5a66; }
+.dispute-resolution-quality-panel .badge { font-weight: 600; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }

@@ -48,6 +48,7 @@ from .gift_application_queue import build_gift_application_queue
 from .moderation_rule_quality import build_moderation_rule_quality
 from .availability_watch_quality import build_availability_watch_quality
 from .rating_quality import build_rating_quality
+from .dispute_resolution_quality import build_dispute_resolution_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2202,6 +2203,7 @@ def operations_dashboard(request):
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     dashboard['rating_quality'] = build_rating_quality(days=days)
+    dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2354,6 +2356,7 @@ def operations_dashboard_export(request):
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     dashboard['rating_quality'] = build_rating_quality(days=days)
+    dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3917,6 +3920,165 @@ def operations_dashboard_export(request):
             row['label'], row['order_count'], row['rating_count'],
             row['rated_count'], row['rating_rate'],
             row['average'] if row['average'] is not None else '—',
+        ])
+
+    writer.writerow([])
+    dispute = dashboard['dispute_resolution_quality']
+    writer.writerow([
+        '交易争议处理得公不公平，第一次被运营读到', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', dispute['summary'],
+        '只读 OrderDispute 的 reason、status、created_at、resolved_at、resolution_note '
+        '长度，OrderDisputeEvidence 的 created_at，以及 Order 的 buyer / seller 判断发起方向，'
+        '不改写任何一条争议、任何一条证据、任何一份处理意见，'
+        '不读 detail、note 和处理意见的任何一个字符',
+    ])
+    writer.writerow([
+        '周期内已结案的争议', dispute['outcome']['closed_count'], '',
+        '只收 resolved / rejected；还在 open / reviewing 的是右删失样本，单独数出不混入',
+    ])
+    writer.writerow([
+        '驳回', dispute['outcome']['rejected_count'], '',
+        f"占 {dispute['outcome']['rejected_rate']}%",
+    ])
+    if dispute['outcome']['censored_count']:
+        writer.writerow([
+            '还在处理中', dispute['outcome']['censored_count'], '',
+            '右删失样本，不计入驳回率分母',
+        ])
+    if dispute['outcome']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '',
+            f"不足 {dispute['min_closed_disputes']} 条，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['哪一类争议更容易被驳回'])
+    writer.writerow(['争议类型', '已结案', '解决', '驳回', '驳回率（%）', '其中没带附件'])
+    for row in dispute['outcome']['rows']:
+        writer.writerow([
+            row['label'], row['closed_count'], row['resolved_count'],
+            row['rejected_count'], row['rejected_rate'], row['no_evidence_count'],
+        ])
+    writer.writerow([
+        '不报一个总的驳回率', dispute['outcome']['rejected_rate'], '个百分点',
+        '五种争议的举证难度完全不是一回事，平均成一个数之后，'
+        '运营第一反应是去查处理人，而不是去查是哪一类争议在涨',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['证据什么时候才到手上'])
+    writer.writerow(['提交间隔', '争议数', '占比（%）', '说明'])
+    for row in dispute['evidence']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['note']])
+    writer.writerow([
+        '中位 / P90 / 平均', dispute['evidence']['median_label'],
+        dispute['evidence']['p90_label'], dispute['evidence']['average_label'],
+        '按 OrderDisputeEvidence.created_at 减所属争议的 created_at 算，'
+        '只报最早一条附件的到达时刻',
+    ])
+    writer.writerow([
+        '带了附件的争议', dispute['evidence']['with_evidence_count'], '',
+        f"占 {dispute['evidence']['evidence_rate']}%，附件本来就是可选的，"
+        f"没带不是缺失数据",
+    ])
+    writer.writerow([
+        '附件总数', dispute['evidence']['attachment_count'], '',
+        '只报规模，不判断「证据够不够」——平台没有能力判断一段聊天记录'
+        '能不能证明商品与描述不符',
+    ])
+    if dispute['evidence']['after_close_count']:
+        writer.writerow([
+            '结案之后才补的附件', dispute['evidence']['after_close_count'], '',
+            f"占 {dispute['evidence']['after_close_rate']}%，没有参与这次裁定",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['带了附件的争议，是不是更不容易被驳回'])
+    writer.writerow(['分组', '已结案', '驳回', '驳回率（%）'])
+    for row in dispute['evidence_contrast']['rows']:
+        writer.writerow([
+            row['label'], row['closed_count'], row['rejected_count'], row['rejected_rate'],
+        ])
+    if dispute['evidence_contrast']['gap'] is not None:
+        writer.writerow([
+            '不带附件的驳回率减带附件的', dispute['evidence_contrast']['gap'], '个百分点',
+            '噪声门槛内不给方向' if dispute['evidence_contrast']['is_noise']
+            else '超出噪声门槛，但只是对照，不构成因果',
+        ])
+    if not dispute['evidence_contrast']['has_both_sides']:
+        writer.writerow([
+            '样本不足', '', '',
+            f"两组各至少 {dispute['evidence_contrast']['min_closed']} 条才给方向",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['争议是谁发起的'])
+    writer.writerow(['发起方', '发起数', '占比（%）', '已结案', '驳回', '驳回率（%）'])
+    for row in dispute['opener']['rows']:
+        writer.writerow([
+            row['label'], row['opened_count'], row['opened_rate'],
+            row['closed_count'], row['rejected_count'], row['rejected_rate'],
+        ])
+    writer.writerow([
+        '只报方向，不按用户聚合', '', '',
+        '不排名、不报任何人的用户名：方向分布报的是流程本身是否对双方可用，'
+        '不是谁难相处',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['处理意见写了没有'])
+    writer.writerow(['处理意见', '结案数', '占比（%）', '说明'])
+    for row in dispute['note']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row.get('note', '')])
+    writer.writerow([
+        '填写率', dispute['note']['with_note_count'], '',
+        f"占 {dispute['note']['fill_rate']}%，平均 {dispute['note']['average_length']} 字",
+    ])
+    writer.writerow([
+        '驳回却一个字都没写', dispute['note']['rejected_without_note_count'], '',
+        f"占没写处理意见的 {dispute['note']['rejected_without_note_rate']}%，"
+        f"双方只收到状态，不知道为什么",
+    ])
+
+    writer.writerow([])
+    writer.writerow([])
+    writer.writerow(['处理意见的长度分档'])
+    writer.writerow(['文字长度', '结案数', '占比（%）'])
+    for row in dispute['note']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['从发起到结案隔了多久'])
+    writer.writerow(['结案耗时', '争议数', '占比（%）'])
+    for row in dispute['resolution_latency']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+    writer.writerow([
+        '中位 / P90 / 平均', dispute['resolution_latency']['median_label'],
+        dispute['resolution_latency']['p90_label'], dispute['resolution_latency']['average_label'],
+    ])
+    if dispute['resolution_latency']['missing_resolved_at_count']:
+        writer.writerow([
+            '已结案但找不到处理时间', dispute['resolution_latency']['missing_resolved_at_count'], '',
+            '属于数据本身不完整，不计入耗时分布',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['结案最慢的几条争议'])
+    writer.writerow(['订单', '争议类型', '发起方', '结案耗时', '提交于'])
+    for row in dispute['slowest_rows']['rows']:
+        writer.writerow([
+            row['dispute'].order.id,
+            row['dispute'].get_reason_display(),
+            '买家' if row['dispute'].opened_by_id == row['dispute'].order.buyer_id else '卖家',
+            row['duration_label'],
+            row['dispute'].created_at.strftime('%Y-%m-%d %H:%M'),
+        ])
+    if dispute['slowest_rows']['row_total'] > dispute['slowest_rows']['row_limit']:
+        writer.writerow([
+            '清单最多列出', dispute['slowest_rows']['row_limit'], '条',
+            f"共 {dispute['slowest_rows']['row_total']} 条",
         ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
