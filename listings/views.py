@@ -5781,6 +5781,44 @@ def operations_dashboard_export(request):
             f"占该钟点发出量的 {round(point['opened'] / point['sent'] * 100, 1)}%"
             if point['sent'] else '本周期这个钟点没有私信',
         ])
+    trend = dashboard['chat_response_trend']
+    writer.writerow([])
+    writer.writerow(['私信响应时效跨周期对比'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', trend['period_days'],
+        '静默期（天）', trend['silent_after_days'],
+    ])
+    writer.writerow([
+        '时长阈值', f"较上期 {trend['latency_drift_factor']} 倍",
+        '比例阈值', f"{trend['trend_delta_points']} 个百分点",
+    ])
+    writer.writerow([
+        '中位时长样本门槛', trend['min_latency_sample'],
+        '比例分母门槛', trend['min_sent_sample'],
+    ])
+    writer.writerow([])
+    writer.writerow(['整体指标的跨周期对比'])
+    writer.writerow(['指标', '本周期', '上一周期', '变化', '方向', '说明'])
+    for row in trend['metric_rows']:
+        writer.writerow([
+            row['label'], row['current_label'], row['previous_label'],
+            row['delta_display'],
+            row['direction_label'] if row['has_direction'] else '只报数不判方向',
+            '时长按倍数判，比例按百分点判；任一侧样本不足就只报数字，不猜方向'
+            if row['has_direction'] else
+            'P90 与双向会话占比只报数：一封信躺半个月就能把 P90 抬起来，'
+            '而会话变得双向不等于更健康',
+        ])
+    writer.writerow([])
+    writer.writerow(['结论'])
+    writer.writerow([trend['summary']])
+    writer.writerow([
+        '两条曲线都按私信发出时刻归期，两侧窗口等长、都从本地午夜切，'
+        '与搜索趋势面板同一套口径；未打开按占本周期发出总量的比例判，'
+        '不按次数差判。本模块只报告，不改写任何一条私信、不调整静默期阈值、'
+        '不给任何人打回复速度分。',
+    ])
     sla = dashboard['governance_sla']
     writer.writerow([])
     writer.writerow(['治理队列处理时效'])

@@ -1004,6 +1004,44 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>响应时长按「第一次被标记为已读的时间−私信发出时间」计算，只统计带时间戳的样本；未读私信不计入时长分布，否则会把没回复当成零秒回复。本面板只给运营看，不对对话双方暴露「对方已读」，也不给任何人打回复速度分。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 chat-response-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Response trend</span><h2>私信响应时效跨周期对比</h2></div>
+        <span class="ops-panel-hint">周期 {{ chat_response_trend.period_days }} 天·与上一个等长周期比</span>
+    </div>
+    {% if chat_response_trend.has_data %}
+    <div class="chat-response-trend-summary">
+        <div><span>本周期发出</span><strong>{{ chat_response_trend.current.sent }}</strong><small>上一周期 {{ chat_response_trend.previous.sent }}</small></div>
+        <div><span>本周期打开率</span><strong>{% if chat_response_trend.current.open_rate != None %}{{ chat_response_trend.current.open_rate }}%{% else %}—{% endif %}</strong><small>上一周期 {% if chat_response_trend.previous.open_rate != None %}{{ chat_response_trend.previous.open_rate }}%{% else %}—{% endif %}</small></div>
+        <div><span>本周期中位打开</span><strong>{{ chat_response_trend.current.median_label }}</strong><small>上一周期 {{ chat_response_trend.previous.median_label }}</small></div>
+        <div{% if chat_response_trend.drivers %} class="chat-response-trend-warning"{% endif %}><span>有方向的变化</span><strong>{% if chat_response_trend.drivers %}是{% else %}否{% endif %}</strong><small>{% if chat_response_trend.drivers %}{% for row in chat_response_trend.drivers %}{{ row.label }}{% if not forloop.last %}、{% endif %}{% endfor %}{% else %}没有指标越过阈值{% endif %}</small></div>
+    </div>
+
+    <div class="chat-response-trend-reading mt-3">
+        <div class="chat-response-trend-block-heading"><strong>整体指标的跨周期对比</strong><span>时长按倍数判（{{ chat_response_trend.latency_drift_factor }} 倍），比例按百分点判（{{ chat_response_trend.trend_delta_points }} 个百分点）</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 chat-response-trend-table">
+                <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>变化</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in chat_response_trend.metric_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.current_label }}</td>
+                        <td>{{ row.previous_label }}</td>
+                        <td>{{ row.delta_display }}</td>
+                        <td>{% if row.has_direction %}<span class="chat-response-trend-direction" data-tone="{{ row.tone }}">{{ row.direction_label }}</span>{% else %}<span class="text-muted">只报数不判方向</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="chat-response-trend-note mb-0"><i class="bi bi-info-circle me-1"></i>{{ chat_response_trend.summary }}</p>
+        <p class="chat-response-trend-note mb-0">P90 与双向会话占比只报数不判方向：一封信躺半个月就能把 P90 抬起来，而会话变得双向不等于更健康——也可能是两个人为一件谁都不买的商品聊了很久。</p>
+        <p class="chat-response-trend-note mb-0">中位时长需要两侧各 {{ chat_response_trend.min_latency_sample }} 条带时间戳的样本，比例需要两侧各 {{ chat_response_trend.min_sent_sample }} 条私信；任一侧不足就只报数字，不猜方向。上一周期的打开时刻若在 read_at 上线前就发生过，那周期没有可比的时长，不是变快了。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">两个周期内都没有私信记录，发出第一条私信后这里会开始统计跨周期变化。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>两条曲线都按私信发出时刻归期，两侧窗口等长、都从本地午夜切，与搜索趋势面板同一套口径。未打开按「占本周期发出总量的比例」判，不按次数差判：次数是原始计数，量涨起来每条曲线都会跟着涨。本模块只报告，不改写任何一条私信、不调整静默期阈值、不给任何人打回复速度分。</div>
+</section>
 <section class="content-card ops-panel mb-4 order-stage-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Stage flow</span><h2>订单全链路阶段时长</h2></div>
