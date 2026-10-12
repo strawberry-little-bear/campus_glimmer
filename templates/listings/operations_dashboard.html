@@ -2293,6 +2293,101 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 saved-search-latency-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Saved search latency</span><h2>一条命中等了多久才送到</h2></div>
+        <span class="ops-panel-hint">命中时间与送达时间的差值，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-stopwatch me-1"></i>用户在「关注搜索」里存下一组条件，平台按日度或周度汇总推送命中的新商品。<code>SavedSearchMatch</code> 一直在写两个时间戳：<code>matched_at</code> 记这件商品什么时候命中这条关注条件，<code>notified_at</code> 记这条命中什么时候送达用户。写它们是为了让日度和周度汇总有个缓冲区——否则一周的命中会变成几十条近乎重复的通知。写完之后，<code>notified_at</code> 只被拿去筛「哪些还没发出去」，<code>matched_at</code> 只被拿去给缓冲区排序，<strong>两个字段的差值从来没有任何一行代码算过</strong>。运营侧能回答「发了多少条」「还有多少条没发」，回答不了「一条命中从产生到送达平均等了多久」「周度节奏是不是等得太久了」「这些等太久的命中，商品是不是早就卖掉了」——而这三个问题恰好是判断汇总节奏该不该调整的全部依据。</p>
+    {% if not saved_search_latency.has_data %}
+    <div class="empty-inline">{{ saved_search_latency.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内已送达</span><strong>{{ saved_search_latency.measured_total }}</strong><small>另有 {{ saved_search_latency.pending_count }} 条还等在缓冲区</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>日度中位等待</span><strong>{{ saved_search_latency.daily.median_label }}</strong><small>P90 {{ saved_search_latency.daily.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周度中位等待</span><strong>{{ saved_search_latency.weekly.median_label }}</strong><small>P90 {{ saved_search_latency.weekly.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>送达时已不可交易</span><strong>{{ saved_search_latency.stale_count }}</strong><small>按当前状态回看，<strong>偏高</strong></small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">日度汇总：等了多久才送到</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>等待时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in saved_search_latency.daily.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母只收<strong>已经送达</strong>的命中。还躺在缓冲区里的命中没有送达时刻，谈不上等了多久——那是右删失样本，单独数在上面，不丢也不混。等待时长一律<strong>按天分档，不按小时</strong>：一次汇总等待的时间尺度是天，报「平均等了 31 小时」对一个按周运转的节奏没有意义，而「平均等了 1.3 天」立刻能看出日度正常、周度偏慢。{% if saved_search_latency.daily.is_small_sample %}当前不足 {{ saved_search_latency.min_measured_matches }} 条，占比只作参考。{% endif %}</p>
+            <h3 class="h6 mb-3 mt-4">周度汇总：等了多久才送到</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>等待时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in saved_search_latency.weekly.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">日度和周度<strong>各用自己的一套阈值，不合成一个平均数</strong>：日度拖过一天是异常，周度拖过一周才值得看，合成一个平均数会把两者的差异抹平，而那正是要动作的地方。{% if saved_search_latency.weekly.is_small_sample %}当前不足 {{ saved_search_latency.min_measured_matches }} 条，占比只作参考。{% endif %}</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">等得越久，是不是越容易错过</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>等待档</th><th>条数</th><th>送达时已不可交易</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in saved_search_latency.daily.cross %}
+                        <tr>
+                            <td>日度 · {{ row.label }}</td><td>{{ row.count }}</td>
+                            <td>{% if row.stale_count is not None %}{{ row.stale_count }}{% else %}—{% endif %}</td>
+                            <td>{% if row.stale_rate is not None %}{{ row.stale_rate }}{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                        {% for row in saved_search_latency.weekly.cross %}
+                        <tr>
+                            <td>周度 · {{ row.label }}</td><td>{{ row.count }}</td>
+                            <td>{% if row.stale_count is not None %}{{ row.stale_count }}{% else %}—{% endif %}</td>
+                            <td>{% if row.stale_rate is not None %}{{ row.stale_rate }}{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">交叉<strong>按档看，不按总数看</strong>。想知道的是「等越久是不是越容易错过」，而这个问题只有逐档对照才答得出来：如果每一档的不可交易率都差不多，那等待就不是原因，该去查条件是不是太宽；如果后几档明显更高，那等待本身就是原因，该去调汇总节奏。<strong>这一栏系统性偏高</strong>：商品状态只能按当前状态回看，送达之后商品仍可能被下架或卖出，历史状态没有记录，所以一条发得很及时、但商品在送达之后才卖掉的命中也会被算进来。宁可高估——运营看到高估的数字会去核实，看到低估的数字会直接相信。</p>
+            <h3 class="h6 mb-3 mt-4">等得最久、商品又已经不可交易的命中</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>关注条件</th><th>商品</th><th>节奏</th><th>等了</th><th>送达时间</th></tr></thead>
+                    <tbody>
+                        {% for row in saved_search_latency.stale_rows %}
+                        <tr>
+                            <td>{{ row.saved_search_name }}</td>
+                            <td>{{ row.item_title }}</td>
+                            <td>{{ row.cadence_label }}</td>
+                            <td>{{ row.wait_label }}</td>
+                            <td>{{ row.notified_at|date:'Y-m-d H:i' }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5">当前周期没有等得久、商品又已不可交易的命中。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if saved_search_latency.stale_rows|length > saved_search_latency.stale_row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ saved_search_latency.stale_row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0">挑出来的口径是<strong>等得久、且商品当前已不可交易</strong>，等得越久的排在越前面。每行带上送达时间，因为要区分的是「这条通知送到的时候东西已经没了」和「东西是在这条通知送到之后才没的」——前者是节奏问题，后者只是正常的交易流转。清单是给「现在去核实」用的，不是给归档用的。</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-stopwatch me-1"></i>本模块只报告，<strong>不自动调整任何用户的汇总节奏</strong>：一条命中等了三周，可能是定时任务漏跑，可能是这一周没有新商品，也可能是这个用户的条件太宽——平台没有能力区分这三者，也就不该替任何一个用户改他的通知频率。不改 <code>SavedSearchMatch</code> 的任何字段、不清理失效命中、不重发通知、不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>

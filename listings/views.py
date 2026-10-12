@@ -42,6 +42,7 @@ from .return_handshake import (
 from .first_viewed import (
     NOISE_POINTS as FIRST_VIEWED_NOISE_POINTS, build_first_viewed,
 )
+from .saved_search_latency import build_saved_search_latency
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2190,6 +2191,7 @@ def operations_dashboard(request):
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
+    dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2336,6 +2338,7 @@ def operations_dashboard_export(request):
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
+    dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3297,6 +3300,96 @@ def operations_dashboard_export(request):
         '也不把统计写回任何记录。',
     ])
 
+
+    writer.writerow([])
+    latency = dashboard['saved_search_latency']
+    writer.writerow(['一条命中等了多久才送到', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', latency['summary'],
+        '只读 matched_at 与 notified_at，不改写任何一条命中、任何一件商品、'
+        '任何一个关注条件，也不把统计写回任何记录',
+    ])
+    writer.writerow([
+        '周期内已送达的命中', latency['measured_total'], '',
+        '分母只收已经送达的命中；即时节奏不算，它的两个时间戳差约等于零',
+    ])
+    writer.writerow([
+        '还等在缓冲区里的命中', latency['pending_count'], '',
+        '没有送达时刻，谈不上等了多久，是右删失样本，不计入任何等待分布',
+    ])
+    writer.writerow([
+        '送达时商品已不可交易', latency['stale_count'], '',
+        '按当前状态回看，送达之后才下架或卖掉的也会算进来，所以这一栏偏高',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['等待档', '条数', '占比（%）', '这一档说明什么', '该档里商品已不可交易', '该档不可交易占比（%）'])
+    for cadence in ('daily', 'weekly'):
+        stats = latency[cadence]
+        for row, cross in zip(stats['rows'], stats['cross']):
+            writer.writerow([
+                f"{stats['label']} · {row['label']}", row['count'], row['share'], row['hint'],
+                cross['stale_count'] if cross['stale_count'] is not None else '',
+                cross['stale_rate'] if cross['stale_rate'] is not None else '',
+            ])
+        writer.writerow([
+            f"{stats['label']} 中位 / P90", '', '',
+            f"{stats['median_label']} / {stats['p90_label']}",
+            stats['stale_count'], '',
+        ])
+        if stats['is_small_sample']:
+            writer.writerow([
+                f"{stats['label']} 样本不足", '', '', '',
+                f"不足 {latency['min_measured_matches']} 条，占比只作参考", '',
+            ])
+
+    writer.writerow([])
+    writer.writerow([
+        '等得最久、商品又已经不可交易的命中', '关注条件', '商品', '节奏',
+        '等了', '命中时间', '送达时间',
+    ])
+    if latency['stale_rows']:
+        for row in latency['stale_rows']:
+            writer.writerow([
+                row['saved_search_name'], '', row['item_title'], row['cadence_label'],
+                row['wait_label'],
+                row['matched_at'].strftime('%Y-%m-%d %H:%M'),
+                row['notified_at'].strftime('%Y-%m-%d %H:%M'),
+            ])
+    else:
+        writer.writerow([
+            '—', '当前周期没有等得久、商品又已不可交易的命中',
+            '', '', '', '', '',
+        ])
+    if latency['stale_row_total'] > latency['stale_row_limit']:
+        writer.writerow([
+            '—',
+            f"清单最多列 {latency['stale_row_limit']} 条，"
+            f"当前周期共 {latency['stale_row_total']} 条，完整的在数据库里",
+            '', '', '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '统计窗口按 matched_at 取，不按 notified_at：要回答的是「这段时间里产生的命中'
+        '等了多久才送到」，起点必须是命中产生。一条上个月命中、这个月才补送到的记录，'
+        '等的是上个月的那件事；按 notified_at 取会把它塞进最后一个周期，而那个周期的'
+        '其他记录都是当天产生的，混在一起两个数都不能用。'
+        '日度和周度各用自己的一套阈值，不合成一个平均数：日度拖过一天是异常，'
+        '周度拖过一周才值得看，合成一个平均数会把两者的差异抹平，而那正是要动作的地方。'
+        '时延和商品状态按档交叉，不按总数交叉：只有逐档对照才答得出「等越久是不是'
+        '越容易错过」——每一档的不可交易率都差不多，说明等待不是原因；'
+        '后几档明显更高，说明等待本身就是原因。'
+        '商品状态只能按当前状态回看，送达之后商品仍可能被下架或卖出，历史状态没有记录，'
+        '所以「送达时已不可交易」系统性偏高。宁可高估——运营看到高估的数字会去核实，'
+        '看到低估的数字会直接相信。'
+        '模块不判定「为什么慢了」：一条命中等了三周，可能是定时任务漏跑，'
+        '可能是这一周没有新商品，也可能是这个用户的条件太宽——平台没有能力区分这三者，'
+        '也就不该替任何一个用户改他的通知频率。'
+        '不调整任何用户的汇总节奏、不清理失效命中、不重发通知、'
+        '也不用统计结果做任何推荐排序。',
+    ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
     if dashboard['operational_alerts']:
