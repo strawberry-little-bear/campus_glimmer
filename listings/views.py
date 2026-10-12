@@ -32,6 +32,7 @@ from .search_position_quality import build_search_position_quality
 from .demand_match_quality import build_demand_match_quality
 from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .demand_opportunity_followups import build_demand_opportunity_followups
+from .meeting_attendance import build_meeting_attendance
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2176,6 +2177,7 @@ def operations_dashboard(request):
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
+    dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2318,6 +2320,7 @@ def operations_dashboard_export(request):
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
+    dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2671,6 +2674,157 @@ def operations_dashboard_export(request):
         '待处理清单不按统计周期过滤：周期开始之前就超期的那个任务，恰恰是最不该被藏起来的一件。'
         '这里只报告，不自动派单、不改任务状态、不改截止时间、不新增任何提醒；'
         '备注是跟进人写给自己的内部备忘，只数字数，不做切词、不聚类、不推断语义，也不公开任何一条原文。',
+    ])
+
+    attendance = dashboard['meeting_attendance']
+    writer.writerow([])
+    writer.writerow(['约好的那一次见面', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', attendance['summary'],
+        '只读 responded_at 与到场登记，不改写任何字段，也不自动判定爽约',
+    ])
+    writer.writerow([
+        '已过约定结束时间的确认预约', attendance['attendance_stats']['confirmed_ended_count'],
+        '还没到结束时间的约会谈不到「有没有人到」，单独数出来，不计入到场率分母',
+    ])
+    writer.writerow([
+        '还没到核对时间', attendance['attendance_stats']['still_open_count'],
+        '约定结束时间尚未到来的预约',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['响应与确认', '次数', '占比（%）', '口径说明'])
+    response_stats = attendance['response_stats']
+    writer.writerow([
+        '交付安排', response_stats['total'], '',
+        '周期内创建的交付时间安排',
+    ])
+    writer.writerow([
+        '得到回应', response_stats['responded_count'], response_stats['response_rate'],
+        '回应时间以 responded_at 为准，不用 updated_at——它也会在重新提议时被写',
+    ])
+    writer.writerow([
+        '仍未回应', response_stats['pending_count'],
+        response_stats['response_rate'] and round(100 - response_stats['response_rate'], 1) or 0,
+        '周期结束时仍在等待对方回应的安排',
+    ])
+    writer.writerow([
+        '回应后确认', response_stats['accepted_count'], response_stats['accept_rate'],
+        '以已回应的安排为分母',
+    ])
+    writer.writerow([
+        '回应后未接受', response_stats['declined_count'], '',
+        '对方看过这个时间，但选择重新协商',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['回应耗时', '安排数', '占比（%）'])
+    for row in response_stats['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+    writer.writerow([
+        '中位耗时', response_stats['median_label'], '',
+    ])
+    writer.writerow([
+        'P90 耗时', response_stats['p90_label'], '',
+    ])
+    writer.writerow([
+        '最快 / 最慢', f"{response_stats['fastest_label']} / {response_stats['slowest_label']}", '',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['到场情况', '次数', '占已结束确认预约（%）', '口径说明'])
+    attendance_stats = attendance['attendance_stats']
+    writer.writerow([
+        '买家到场', attendance_stats['buyer_arrived_count'],
+        attendance_stats['buyer_arrival_rate'],
+        '以已过约定结束时间的确认预约为分母',
+    ])
+    writer.writerow([
+        '卖家到场', attendance_stats['seller_arrived_count'],
+        attendance_stats['seller_arrival_rate'],
+        '同上',
+    ])
+    writer.writerow([
+        '双方都到场', attendance_stats['both_arrived_count'],
+        attendance_stats['both_arrival_rate'],
+        '这一行才是「约好了也见着了」',
+    ])
+    writer.writerow([
+        '只有一方到场', attendance_stats['one_sided_count'],
+        attendance_stats['one_sided_rate'],
+        '另一方在签到窗口内没有登记',
+    ])
+    writer.writerow([
+        '双方都没到场', attendance_stats['neither_arrived_count'], '',
+        '不等于爽约：爽约只能由用户提交异常，系统不自动判定',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['到场时间相对约定开始', '角色', '签到人数', '提前到', '迟到 15 分钟以上', '平均偏移', '最晚一次'])
+    for row in attendance_stats['lateness_rows']:
+        writer.writerow([
+            '迟到分档', row['role'], row['arrived_count'],
+            row['early_count'], row['late_count'],
+            row['average_offset_label'], row['worst_offset_label'],
+        ])
+    for row in attendance_stats['lateness_rows']:
+        for bucket in row['bucket_rows']:
+            writer.writerow([
+                bucket['label'], row['role'], bucket['count'], bucket['share'], '', '', '',
+            ])
+
+    writer.writerow([])
+    writer.writerow(['「对方未到场」与到场登记的对照', '条数', '占该类异常（%）', '口径说明'])
+    crosscheck = attendance['incident_crosscheck']
+    writer.writerow([
+        '该类异常合计', crosscheck['total'], '',
+        '只对照「对方未到场」，安全与其他类型不参与到场对照',
+    ])
+    writer.writerow([
+        '被指控方有到场登记', crosscheck['contradicted_count'], crosscheck['contradicted_rate'],
+        '不是判定谁说谎，而是该被运营看见的矛盾',
+    ])
+    writer.writerow([
+        '提交人到场、对方未登记', crosscheck['supported_count'], '',
+        '到场记录支持提交人的说法',
+    ])
+    writer.writerow([
+        '双方都没有到场登记', crosscheck['no_record_count'], '',
+        '没有记录可依，仍按既有流程核实',
+    ])
+    writer.writerow([
+        '其他类型异常', crosscheck['other_reason_count'], '',
+        '与到没到无关，不参与到场对照',
+    ])
+    if crosscheck['contradicted_rows']:
+        writer.writerow([
+            '待核实的矛盾', '商品', '提交人', '被指控方',
+            '被指控方到场登记', '提交人到场登记', '约定开始', '处理状态',
+        ])
+        for row in crosscheck['contradicted_rows']:
+            writer.writerow([
+                row['verdict_label'], row['item_title'], row['reporter'], row['accused'],
+                row['accused_arrived_label'], row['reporter_arrived_label'],
+                timezone.localtime(row['start_at']).strftime('%Y-%m-%d %H:%M'),
+                row['status_label'],
+            ])
+    else:
+        writer.writerow(['—', '当前没有「被指控方有到场登记」的未到场异常', '', '', '', '', '', ''])
+
+    writer.writerow([])
+    writer.writerow(['未接受原因的取值', '次数'])
+    decline_stats = attendance['decline_stats']
+    for row in decline_stats['reason_rows']:
+        writer.writerow([row['reason'], row['count']])
+    if not decline_stats['reason_rows']:
+        writer.writerow(['—', '当前周期没有被对方未接受的交付安排'])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '未接受原因这一列只有一个取值，因为这个字段唯一的写入路径是视图里的一句硬编码，'
+        '用户从来没有机会填它。如实报告它是个常量，比画一张 100% 的分布图要诚实。'
+        '这里只报告，不改签到窗口、不自动判定爽约、不新增提醒，也不把统计写回任何记录。',
     ])
 
     writer.writerow([])

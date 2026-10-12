@@ -1873,6 +1873,136 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>{{ demand_radar_phase_trend.summary }}每个阶段按任务自己的创建日归期，用的是学期历自己的区间，因此一个任务在这里所属的阶段与其余面板所说的一致。比较只取相邻两个学期的同一个阶段：逆季节的需求本就不同，把上个月当成上个学期比，会把季节性读成雷达在漂移。只在一个学期出现过的阶段不给方向。任务按自己的观察期结束时刻判定，不按 now。每个阶段格子各自要过 {{ demand_radar_phase_trend.min_judged_tasks }} 个有证据任务的门槛，门槛不会为了让表格好看而放开。阶段上的差值只说明走向，任务数少的阶段上的差值不算结论；这里也不排序、不改机会分。早于第一个学期开始配置或落在未划分阶段的任务分别落在“{{ demand_radar_phase_trend.no_term_label }}”和“{{ demand_radar_phase_trend.unassigned_phase_label }}”，不会被丢掉。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 meeting-attendance-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Handover reality</span><h2>约好的那一次见面</h2></div>
+        <span class="ops-panel-hint">响应时长与到场登记，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-people me-1"></i>交付预约一直在记两段时间：对方多久回应一个提议（<code>responded_at</code>），以及双方各自什么时候登记到场。四个字段全都有写入路径，而读取路径只有一处——订单详情页把它们显示给用户本人看。运营侧一条统计都没有：没有人知道提议交上去之后对方多久才理，也没有人知道约了时间的订单里到底有几个人真的到了现场。</p>
+    {% if not meeting_attendance.has_data %}
+    <div class="empty-inline">{{ meeting_attendance.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>得到回应</span><strong>{{ meeting_attendance.response_stats.responded_count }}</strong><small>共 {{ meeting_attendance.response_stats.total }} 次安排 · {{ meeting_attendance.response_stats.response_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>回应中位耗时</span><strong>{{ meeting_attendance.response_stats.median_label }}</strong><small>P90 {{ meeting_attendance.response_stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>双方都到场</span><strong>{{ meeting_attendance.attendance_stats.both_arrived_count }}</strong><small>占已结束确认预约 {{ meeting_attendance.attendance_stats.both_arrival_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>与到场记录矛盾的异常</span><strong>{{ meeting_attendance.incident_crosscheck.contradicted_count }}</strong><small>共 {{ meeting_attendance.incident_crosscheck.total }} 条未到场异常</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">对方多久回应一个提议</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>回应耗时</th><th>安排数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.response_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <table class="table table-sm align-middle ops-table mt-3 meeting-attendance-mini-table">
+                <tbody>
+                    <tr><th scope="row">回应后确认</th><td>{{ meeting_attendance.response_stats.accepted_count }}</td><td>{{ meeting_attendance.response_stats.accept_rate }}%</td></tr>
+                    <tr><th scope="row">回应后未接受</th><td>{{ meeting_attendance.response_stats.declined_count }}</td><td>&mdash;</td></tr>
+                    <tr><th scope="row">周期结束仍未回应</th><td>{{ meeting_attendance.response_stats.pending_count }}</td><td>&mdash;</td></tr>
+                </tbody>
+            </table>
+            <h3 class="h6 mb-3 mt-4">到场与迟到</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>角色</th><th>签到人数</th><th>到场率（%）</th><th>平均偏移</th><th>最晚一次</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.attendance_stats.lateness_rows %}
+                        <tr>
+                            <td>{{ row.role }}</td>
+                            <td>{{ row.arrived_count }}</td>
+                            <td>{{ row.arrival_rate }}</td>
+                            <td>{{ row.average_offset_label }}</td>
+                            <td>{{ row.worst_offset_label }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <table class="table table-sm align-middle ops-table mt-3 meeting-attendance-mini-table">
+                <tbody>
+                    <tr><th scope="row">双方都到场</th><td>{{ meeting_attendance.attendance_stats.both_arrived_count }}</td><td>{{ meeting_attendance.attendance_stats.both_arrival_rate }}%</td></tr>
+                    <tr><th scope="row">只有一方到场</th><td>{{ meeting_attendance.attendance_stats.one_sided_count }}</td><td>{{ meeting_attendance.attendance_stats.one_sided_rate }}%</td></tr>
+                    <tr><th scope="row">双方都没到场</th><td>{{ meeting_attendance.attendance_stats.neither_arrived_count }}</td><td>&mdash;</td></tr>
+                </tbody>
+            </table>
+            <h3 class="h6 mb-3 mt-4">迟到分档</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>相对约定开始</th><th>买家</th><th>卖家</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.attendance_stats.lateness_bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.buyer_count }}</td>
+                            <td>{{ row.seller_count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">「对方未到场」说得准吗</h3>
+            <p class="small text-muted">提交人说的是一句主观陈述，而签到记录是系统里另一方亲手留下的动作。两者对不上的那一条，不是要判定谁在说谎——平台没有能力也不该去判定——而是要被运营看见。</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>对照结果</th><th>条数</th><th>占该类异常（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td><span class="meeting-attendance-verdict meeting-attendance-verdict-contradicted">有到场登记</span></td><td>{{ meeting_attendance.incident_crosscheck.contradicted_count }}</td><td>{{ meeting_attendance.incident_crosscheck.contradicted_rate }}</td></tr>
+                        <tr><td><span class="meeting-attendance-verdict meeting-attendance-verdict-supported">支持提交人</span></td><td>{{ meeting_attendance.incident_crosscheck.supported_count }}</td><td>&mdash;</td></tr>
+                        <tr><td><span class="meeting-attendance-verdict meeting-attendance-verdict-no_record">无记录可依</span></td><td>{{ meeting_attendance.incident_crosscheck.no_record_count }}</td><td>&mdash;</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            {% if meeting_attendance.incident_crosscheck.contradicted_rows %}
+            <h3 class="h6 mb-3 mt-4">待核实的矛盾</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>商品</th><th>提交人</th><th>被指控方</th><th>被指控方到场登记</th><th>约定开始</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.incident_crosscheck.contradicted_rows %}
+                        <tr>
+                            <td><strong>{{ row.item_title }}</strong></td>
+                            <td>{{ row.reporter }}</td>
+                            <td>{{ row.accused }}</td>
+                            <td>{{ row.accused_arrived_label }}</td>
+                            <td>{{ row.start_at|date:'Y-m-d H:i' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if meeting_attendance.incident_crosscheck.contradicted_rows|length > meeting_attendance.incident_crosscheck.contradiction_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ meeting_attendance.incident_crosscheck.contradiction_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            {% endif %}
+            <h3 class="h6 mb-3 mt-4">未接受原因的取值</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>取值</th><th>次数</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.decline_stats.reason_rows %}
+                        <tr><td>{{ row.reason }}</td><td>{{ row.count }}</td></tr>
+                        {% empty %}
+                        <tr><td>（空）</td><td>0</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">{% if meeting_attendance.decline_stats.is_constant_value and meeting_attendance.decline_stats.declined_count %}当前只有一个取值——这个字段的写入路径是视图里的一句硬编码，用户从来没有机会填它。{% else %}被对方未接受的安排，当前还没有取值分布可言。{% endif %}</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>到场统计的分母只收"约定结束时间已经过去"的确认预约：还没到结束时间的约会谈不到"有没有人到"，把它算进分母会让到场率凭空变小，{{ meeting_attendance.attendance_stats.still_open_count }} 次还没到核对时间的预约已单独排除。双方都没到场不等于爽约——爽约只能由用户提交异常，系统不自动判定。这里只报告，不改签到窗口、不新增提醒、不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
