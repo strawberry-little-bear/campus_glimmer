@@ -5008,7 +5008,14 @@ def save_search(request):
         except IntegrityError:
             messages.error(request, '你已经有一个同名的关注搜索，请换一个名称。')
         else:
-            messages.success(request, f'已保存“{saved_search.name}”，有新商品匹配时会通知你。')
+            # Pointing at the management page matters: without it a user who
+            # saves a condition has no way back to change its cadence or pause it.
+            messages.success(
+                request,
+                f'已保存“{saved_search.name}”，有新商品匹配时会通知你。'
+                f'可以到「关注的搜索」里调整提醒节奏。',
+                extra_tags='saved-search-created',
+            )
     else:
         messages.error(request, '保存失败：' + '；'.join(error for errors in form.errors.values() for error in errors))
 
@@ -5040,7 +5047,32 @@ def _attach_saved_search_stats(saved_searches, *, user):
     for saved_search in saved_searches:
         saved_search.pending_match_count = pending_by_search.get(saved_search.pk, 0)
         saved_search.live_match_count = live_by_search.get(saved_search.pk, 0)
+        # live_match_count is a live re-evaluation of the current catalogue, so it
+        # can be handed back to the list page as a filter. pending_match_count
+        # counts buffered rows that may already be sold or expired, so it stays
+        # a plain number: linking it would promise items the page cannot show.
+        saved_search.live_match_url = _saved_search_filter_url(saved_search)
     return saved_searches
+
+
+def _saved_search_filter_url(saved_search):
+    """Return the item-list URL that re-runs this saved search's criteria."""
+    params = {}
+    if saved_search.query:
+        params['q'] = saved_search.query
+    if saved_search.condition:
+        params['condition'] = saved_search.condition
+    if saved_search.category_id:
+        params['category'] = saved_search.category_id
+    if saved_search.location_id:
+        params['location'] = saved_search.location_id
+    if saved_search.min_price is not None:
+        params['min_price'] = saved_search.min_price
+    if saved_search.max_price is not None:
+        params['max_price'] = saved_search.max_price
+    if not params:
+        return reverse('item_list')
+    return f"{reverse('item_list')}?{urlencode(params)}"
 
 
 @login_required
