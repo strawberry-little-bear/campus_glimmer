@@ -75,6 +75,7 @@ from .recommendations import get_recommendations
 from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
+from .opportunity_dismissal_quality import build_opportunity_dismissal_quality
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
@@ -2215,6 +2216,9 @@ def operations_dashboard(request):
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
+    dashboard['opportunity_dismissal_quality'] = (
+        build_opportunity_dismissal_quality(days=days)
+    )
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
@@ -2372,6 +2376,9 @@ def operations_dashboard_export(request):
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
+    dashboard['opportunity_dismissal_quality'] = (
+        build_opportunity_dismissal_quality(days=days)
+    )
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -5882,6 +5889,102 @@ def operations_dashboard_export(request):
         '复算还原的是点击那一刻的理由，不是推荐当时的理由。'
         '反馈率的分母是窗口内全部被点开过的商品，只低不高。'
         '本模块只报告，不调 +10、不调 0.8、不调 +8、不改任何一句理由文案。',
+    ])
+    dismissal = dashboard['opportunity_dismissal_quality']
+    writer.writerow([])
+    writer.writerow(['机会流上被按「不再显示」的机会'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', dismissal['period_days'],
+        '静默期（天）', dismissal['metrics']['silence_days'],
+        '分数档样本门槛', dismissal['metrics']['min_band_sample'],
+        '理由样本门槛', dismissal['metrics']['min_reason_sample'],
+        '噪声阈值（百分点）', dismissal['metrics']['noise_points'],
+    ])
+    writer.writerow(['整体'])    # 表格标题行
+    writer.writerow(['指标', '数值', '说明'])
+    writer.writerow([
+        '忽略总数', dismissal['metrics']['dismissal_total'],
+        '窗口内落库的「暂不展示」，归期按第一次按下的时刻',
+    ])
+    writer.writerow([
+        '今天仍能重算出分数', dismissal['metrics']['scored_total'],
+        '用户名下还有在售商品或活跃失物记录能匹配上',
+    ])
+    writer.writerow([
+        '已经匹配不上', dismissal['metrics']['unscored_total'],
+        '忽略之后把商品下架或记录过期了，仍计入规模',
+    ])
+    writer.writerow([
+        '重复忽略占比',
+        f"{dismissal['metrics']['repeat_share']}%"
+        if dismissal['metrics']['repeat_share'] is not None else '本周期没有忽略',
+        '同一条机会被同一个人按过不止一次；这是本模块唯一报的比例',
+    ])
+    writer.writerow([
+        '重复忽略行数', dismissal['metrics']['repeated_count'],
+        '判据是 expires_at 与 created_at 的距离落在 (30, 35] 天，间接证据',
+    ])
+    writer.writerow([])
+    writer.writerow(['按机会类型拆'])    # 表格标题行
+    writer.writerow(['类型', '忽略数', '涉及用户数', '人均忽略', '其中重复忽略'])
+    for row in dismissal['kind_rows']:
+        writer.writerow([
+            row['label'], row['dismissal_count'], row['user_count'],
+            row['per_user'] if row['per_user'] is not None else '本周期没有忽略',
+            row['repeated_count'],
+        ])
+    band_floor = dismissal['metrics']['min_band_sample']
+    reason_floor = dismissal['metrics']['min_reason_sample']
+    writer.writerow([])
+    writer.writerow(['按分数档拆'])    # 表格标题行
+    writer.writerow([
+        '类型', '分数档', '忽略数', '占本类型可打分忽略', '档内平均分', '样本是否够',
+    ])
+    for row in dismissal['band_rows']:
+        writer.writerow([
+            row['kind_label'], row['label'], row['dismissal_count'],
+            f"{row['share_of_kind']}%" if row['share_of_kind'] is not None else '没有可打分样本',
+            row['average_score'] if row['average_score'] is not None else '',
+            '够' if not row['is_small_sample'] else f'不足 {band_floor} 条',
+        ])
+    writer.writerow([])
+    writer.writerow(['按理由拆'])    # 表格标题行
+    writer.writerow(['类型', '理由', '忽略数', '占本类型可打分忽略', '平均分', '其中重复忽略', '样本是否够'])
+    for row in dismissal['reason_rows']:
+        if not row['dismissal_count']:
+            continue
+        writer.writerow([
+            row['kind_label'], row['label'], row['dismissal_count'],
+            f"{row['share_of_kind']}%",
+            row['average_score'],
+            row['repeated_count'],
+            '够' if not row['is_small_sample'] else f'不足 {reason_floor} 条',
+        ])
+    writer.writerow([])
+    writer.writerow(['重复忽略'])    # 表格标题行
+    writer.writerow(['类型', '忽略数', '重复忽略数', '重复忽略占比'])
+    for kind, row in dismissal['repeat_stats']['by_kind'].items():
+        writer.writerow([
+            row['label'], row['dismissal_count'], row['repeated_count'],
+            f"{row['repeat_share']}%" if row['repeat_share'] is not None else '本周期没有忽略',
+        ])
+    writer.writerow([])
+    writer.writerow(['结论'])
+    writer.writerow([dismissal['summary']])
+    for note in dismissal['recommendations']:
+        writer.writerow([note])
+    for kind in ('demand', 'lost_found'):
+        shape = dismissal['score_shape'].get(kind)
+        if shape and shape.get('has_comparison'):
+            writer.writerow([shape['summary']])
+    writer.writerow([
+        '本模块不报忽略率：分母（被展示过的机会）不可得，OpportunityDismissal 只记忽略'
+        '不记看过，机会流页面也不产生任何可反推的记录。按分数档和按理由两处的分子分母'
+        '都是忽略，报的是占比不是率。重复忽略是唯一敢报的比例，因为它有自己的分母。'
+        '分数在忽略时刻重算，走 _match_demand 与 score_lost_found_posts 自己，还原的是'
+        '「今天再进池」的分数，不是忽略那一刻的分数。本模块只报告，不改任何一行的 '
+        'expires_at、不改 30 天静默期、不动两个匹配器的任何常数、不按用户聚合。',
     ])
     sla = dashboard['governance_sla']
     writer.writerow([])

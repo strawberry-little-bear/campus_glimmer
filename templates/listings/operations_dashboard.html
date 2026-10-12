@@ -1088,6 +1088,96 @@
     {% else %}<div class="empty-inline mt-3">当前周期还没有推荐反馈，用户在首页推荐卡上点第一次「想看看」或「不感兴趣」后，这里会开始统计。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>按理由聚合，不按用户、不按商品：按用户是排名（隐私，也不是运营射程），按商品让被推一万次和一次不可比。理由是打分的可解释输出，也是运营唯一能动手改的东西。「想看看」之后有没有真的去看，只算表态之后 {{ recommendation_quality.metrics.followup_window_days }} 天内的浏览与下单——先看后点不算，超过窗口的浏览可能是用户在翻历史记录。本模块只报告，不改权重。</div>
 </section>
+<section class="content-card ops-panel mb-4 opportunity-dismissal-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Opportunity</span><h2>机会流上被按「不再显示」的机会</h2></div>
+        <span class="ops-panel-hint">周期 {{ opportunity_dismissal_quality.period_days }} 天·只报告不改静默期</span>
+    </div>
+    {% if opportunity_dismissal_quality.has_data %}
+    <div class="opportunity-dismissal-summary">
+        <div><span>忽略总数</span><strong>{{ opportunity_dismissal_quality.metrics.dismissal_total }}</strong><small>窗口内按过「暂不展示」</small></div>
+        <div><span>今天仍能重算分数</span><strong>{{ opportunity_dismissal_quality.metrics.scored_total }}</strong><small>还有在售商品能匹配上</small></div>
+        <div><span>已经匹配不上</span><strong>{{ opportunity_dismissal_quality.metrics.unscored_total }}</strong><small>之后把商品下架了</small></div>
+        <div><span>重复忽略占比</span><strong>{% if opportunity_dismissal_quality.metrics.repeat_share != None %}{{ opportunity_dismissal_quality.metrics.repeat_share }}%{% else %}—{% endif %}</strong><small>同一条被同一个人再按</small></div>
+    </div>
+
+    <div class="opportunity-dismissal-reading mt-3">
+        <div class="opportunity-dismissal-block-heading"><strong>按机会类型拆</strong><span>忽略的规模与结构</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>忽略数</th><th>涉及用户数</th><th>人均忽略</th><th>其中重复忽略</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.kind_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{{ row.user_count }}</td>
+                        <td>{% if row.per_user != None %}{{ row.per_user }}{% else %}—{% endif %}</td>
+                        <td>{{ row.repeated_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-dismissal-block-heading mt-3"><strong>按分数档拆</strong><span>一档要凑够 {{ opportunity_dismissal_quality.metrics.min_band_sample }} 条忽略才给方向</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>分数档</th><th>忽略数</th><th>占本类型可打分忽略</th><th>档内平均分</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.band_rows %}
+                    {% if row.dismissal_count %}
+                    <tr>
+                        <td>{{ row.kind_label }}</td>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{% if row.share_of_kind != None %}{{ row.share_of_kind }}%{% else %}—{% endif %}</td>
+                        <td>{% if row.average_score != None %}{{ row.average_score }}{% else %}—{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ opportunity_dismissal_quality.metrics.min_band_sample }} 条</span>{% else %}<span class="opportunity-dismissal-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-dismissal-block-heading mt-3"><strong>按理由拆</strong><span>理由在忽略时刻重算，走两个匹配器自己</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>理由</th><th>忽略数</th><th>占本类型可打分忽略</th><th>平均分</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.reason_rows %}
+                    {% if row.dismissal_count %}
+                    <tr>
+                        <td>{{ row.kind_label }}</td>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{{ row.share_of_kind }}%</td>
+                        <td>{{ row.average_score }}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ opportunity_dismissal_quality.metrics.min_reason_sample }} 条</span>{% else %}<span class="opportunity-dismissal-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="opportunity-dismissal-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ opportunity_dismissal_quality.summary }}</p>
+        {% for note in opportunity_dismissal_quality.recommendations %}
+        <p class="opportunity-dismissal-note mb-0">{{ note }}</p>
+        {% endfor %}
+        {% for kind, shape in opportunity_dismissal_quality.score_shape.items %}
+        {% if shape.has_comparison %}
+        <p class="opportunity-dismissal-note mb-0">{{ shape.summary }}</p>
+        {% endif %}
+        {% endfor %}
+        <p class="opportunity-dismissal-note mb-0">本面板<b>不报忽略率</b>：分母（被展示过的机会）不可得。<code>OpportunityDismissal</code> 只记忽略、不记看过，一条机会被渲染出来而用户什么也没点，库里一行都没有；机会流页面本身也不产生任何可反推的记录。所以按分数档和按理由两处的分子分母都是忽略，报的是忽略自己的形状，不是率。唯一报出来的比例是<b>重复忽略占比</b>，因为它有自己的分母（窗口内全部忽略）。</p>
+        <p class="opportunity-dismissal-note mb-0">重复忽略的判据是间接的：<code>OpportunityDismissal</code> 上有 <code>(user, demand)</code> 和 <code>(user, lost_found_post)</code> 两个无条件唯一约束，写入走 <code>update_or_create</code> 且 <code>defaults</code> 里只更 <code>expires_at</code>，所以同一个人第二次按「不再显示」不产生新行，只把旧行的 <code>expires_at</code> 往后推 {{ opportunity_dismissal_quality.metrics.silence_days }} 天，<code>created_at</code> 停在第一次按下的时刻。两列距离落在 (30, 35] 天即判为重复忽略。它数不到「第二次忽略恰好也落在第一次附近」的情形，也分不清「用户主动又按」和「别的东西更新了这一行」。</p>
+        <p class="opportunity-dismissal-note mb-0">分数在忽略时刻重算，走 <code>demand_matching._match_demand</code> 和 <code>lost_found_matching.score_lost_found_posts</code> 自己，不在运营模块里另写一套。复算取这个用户名下<b>当前在售</b>的商品或<b>活跃</b>的失物记录里分数最高的那一次匹配，还原的是「如果今天再进池，这条机会是多少分」，不是忽略那一刻的分数——用户之后可能把商品下架、降价、改了分类。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有人在机会流上按过「暂不展示」。用户第一次按下之后，这里会开始统计。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>按理由聚合，不按用户、不按商品：按用户是排名（隐私，也不是运营射程），按商品让被忽略一万次和一次不可比。理由是打分的可解释输出，也是运营唯一能动手改的东西。两条占比相差不满 {{ opportunity_dismissal_quality.metrics.noise_points }} 个百分点视为噪声。本模块只报告，不改任何一行的 <code>expires_at</code>、不改 {{ opportunity_dismissal_quality.metrics.silence_days }} 天静默期、不动两个匹配器的任何常数、不给任何人排名。</div>
+</section>
 <section class="content-card ops-panel mb-4 order-stage-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Stage flow</span><h2>订单全链路阶段时长</h2></div>
