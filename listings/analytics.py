@@ -36,6 +36,7 @@ from .demand_radar_hit_layers import build_demand_radar_hit_layers
 from .demand_radar_phase_trend import build_demand_radar_phase_trend
 from .opportunity_dismissal_quality import build_opportunity_dismissal_quality
 from .favorite_collection_quality import build_favorite_collection_quality
+from .academic_term_snapshot_quality import build_academic_term_snapshot_quality
 from .recommendation_quality import build_recommendation_quality
 
 
@@ -1630,6 +1631,9 @@ def build_operations_dashboard(days=30):
             days=days, now=now,
         ),
         'favorite_collection_quality': build_favorite_collection_quality(
+            days=days, now=now,
+        ),
+        'academic_term_snapshot_quality': build_academic_term_snapshot_quality(
             days=days, now=now,
         ),
         'recommendation_quality': build_recommendation_quality(days=days, now=now),

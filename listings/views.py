@@ -77,6 +77,7 @@ from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
 from .opportunity_dismissal_quality import build_opportunity_dismissal_quality
 from .favorite_collection_quality import build_favorite_collection_quality
+from .academic_term_snapshot_quality import build_academic_term_snapshot_quality
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
@@ -2223,6 +2224,9 @@ def operations_dashboard(request):
     dashboard['favorite_collection_quality'] = (
         build_favorite_collection_quality(days=days)
     )
+    dashboard['academic_term_snapshot_quality'] = (
+        build_academic_term_snapshot_quality(days=days)
+    )
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
@@ -2385,6 +2389,9 @@ def operations_dashboard_export(request):
     )
     dashboard['favorite_collection_quality'] = (
         build_favorite_collection_quality(days=days)
+    )
+    dashboard['academic_term_snapshot_quality'] = (
+        build_academic_term_snapshot_quality(days=days)
     )
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     metrics = dashboard['metrics']
@@ -6110,6 +6117,73 @@ def operations_dashboard_export(request):
         '独立：当前全部收藏、当前全部分组、当前有收藏的用户、窗口内新建。「当前」是快照'
         '不是窗口，和窗口内的新建规模分开报。本模块只报告，不改任何一条 Favorite.collection、'
         '不删分组、不改分组名、不预设任何分组名。',
+    ])
+    snapshot = dashboard['academic_term_snapshot_quality']
+    writer.writerow([])
+    writer.writerow(['学期阶段统计快照'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', snapshot['period_days'],
+        '过期门槛（天）', snapshot['metrics']['stale_threshold_days'],
+        '刷新中断门槛（天）', snapshot['metrics']['gap_threshold_days'],
+        '覆盖率提示线（%）', snapshot['metrics']['coverage_warn_percent'],
+    ])
+    writer.writerow(['整体'])    # 表格标题行
+    writer.writerow(['指标', '数值', '说明'])
+    writer.writerow([
+        '快照行数', snapshot['metrics']['row_total'],
+        '涉及学期数', snapshot['metrics']['term_total'],
+        '涉及阶段数', snapshot['metrics']['phase_key_total'],
+    ])
+    writer.writerow([
+        '启用中学期的应有阶段', snapshot['metrics']['expected_phase_total'],
+        '其中有对应快照的阶段', snapshot['metrics']['covered_phase_total'],
+        '覆盖率（%）',
+        '' if snapshot['metrics']['covered_share'] is None else snapshot['metrics']['covered_share'],
+    ])
+    writer.writerow([
+        '匹配键失效的孤儿行', snapshot['metrics']['orphan_total'],
+        '已停用学期留下的行', snapshot['metrics']['inactive_term_row_total'],
+        '孤儿不算停用残留，两者分开报',
+    ])
+    writer.writerow([
+        '结束过早的阶段（过期）', snapshot['metrics']['stale_total'],
+        '占全部快照（%）',
+        '' if snapshot['stale_rows']['stale_share'] is None else snapshot['stale_rows']['stale_share'],
+    ])
+    writer.writerow([
+        '周期内命令运行次数', snapshot['metrics']['command_run_total'],
+        '其中失败次数', snapshot['metrics']['command_failed_total'],
+    ])
+    writer.writerow([
+        '没被刷到的行', snapshot['metrics']['gap_total'],
+        '只在周期内有成功运行时才判，没有基准就没有「落后」',
+    ])
+    writer.writerow([])
+    writer.writerow(['结论'])
+    writer.writerow([snapshot['summary']])
+    for note in snapshot['recommendations']:
+        writer.writerow([note])
+    for row in snapshot['orphan_rows']['orphan_rows']:
+        writer.writerow([
+            f"孤儿行：{row['term_name']} {row['phase_label']}"
+            f"（{row['start_date']} 至 {row['end_date']}）",
+        ])
+    for row in snapshot['stale_rows']['stale_rows']:
+        writer.writerow([
+            f"过早结束：{row['term_name']} {row['phase_label']}"
+            f"（{row['end_date']} 结束，已过 {row['days_since_end']} 天）",
+        ])
+    writer.writerow([
+        '本模块只报「刷新陈旧度」，不报「内容陈旧度」：Django 的 update_or_create 会把 '
+        'auto_now 字段显式补进 update_fields（query.py 第 1002-1014 行），所以每次刷新都会推进 '
+        'refreshed_at，十个计数一个都没变也照推。拿它当内容变化时刻，会把一条早就不会再变的'
+        '阶段一直显示为刚刚更新。因此过期判据看 end_date，不看 refreshed_at。'
+        '孤儿行的判据是匹配键失效而不是学期停用：is_active 的 help_text 明写「历史数据保留」，'
+        '停用学期留下的行是设计如此，算进孤儿会把一条被写死的行为报成异常。'
+        '同理不报快照数与实时数的偏差——那是在给一个没人读的缓存做体检，要报先得给它读路径。'
+        '本模块只报告，不刷新任何快照、不删任何孤儿行、不改任何 starts_on、不删任何阶段、'
+        '不加迁移。',
     ])
     sla = dashboard['governance_sla']
     writer.writerow([])
