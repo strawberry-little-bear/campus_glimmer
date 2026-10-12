@@ -1067,6 +1067,17 @@ a { color: inherit; text-decoration: none; }
 .gift-application-queue-panel .ops-mini-stat { background: #fff; }
 .gift-application-queue-panel .ops-mini-stat strong { color: #4d4a33; }
 .gift-application-queue-panel .badge { font-weight: 600; }
+.moderation-rule-quality-panel .ops-table td { vertical-align: top; }
+/* 内容审核规则质量面板自成一组色相（冷灰蓝）。它问的是「四条关键词规则复核之后
+   判得准不准」，是治理侧的质量反刍，和商品举报、交易争议那几条队列的时效视图
+   （governance_sla）报的不是同一件事——那些报「处理得快不快」，这里报「拦得准
+   不准」；也不复用上面几组的底色，它们各有各的问题域。色相偏冷偏沉，因为这一栏
+   报的多半是「拦错了」和「该拦没拦」。 */
+.moderation-rule-quality-panel { padding: 14px; border: 1px solid #ccd6e0; border-radius: 14px; background: linear-gradient(135deg, #f2f6fa, #fbfcfe); color: #3f4a58; }
+.moderation-rule-quality-panel p { color: #64707f; }
+.moderation-rule-quality-panel .ops-mini-stat { background: #fff; }
+.moderation-rule-quality-panel .ops-mini-stat strong { color: #33465c; }
+.moderation-rule-quality-panel .badge { font-weight: 600; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }

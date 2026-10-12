@@ -35,6 +35,7 @@ from .models import (
     CommunityContribution, DemandPost, DemandResponse, Item, MutualAidFeedback,
     Order,
 )
+from chat_messages.models import ModerationEvent
 from .task_runs import normalise_metrics, record_task_run
 
 from datetime import timedelta
@@ -323,6 +324,22 @@ class DashboardExportColumnTests(TestCase):
                 run.metrics = normalise_metrics({'sent': 3})
             with record_task_run(name) as run:
                 run.metrics = normalise_metrics({'sent': 1})
+        # 内容审核面板铺够样本，否则它整块折成一句空态提示，四张表一张都不渲染。
+        reviewer = User.objects.create_user(username='column-reviewer')
+        now = timezone.now()
+        for index in range(3):
+            ModerationEvent.objects.create(
+                channel='comment', author=buyer, item=item,
+                content='被拦下的内容', matched_terms='外部链接',
+                risk_score=20, risk_level='low', status='dismissed',
+                reviewed_by=reviewer, reviewed_at=now - timedelta(days=1),
+            )
+            ModerationEvent.objects.create(
+                channel='private_message', author=buyer, item=item,
+                content='被拦下的内容', matched_terms='高风险交易、手机号',
+                risk_score=85, risk_level='high', status='confirmed',
+                reviewed_by=reviewer, reviewed_at=now - timedelta(days=2),
+            )
 
     def test_the_same_holds_once_the_panels_have_rows(self):
         # 空态只渲染九张表，这一条把数据铺满再比一次：结构要对上的不是空态文案，

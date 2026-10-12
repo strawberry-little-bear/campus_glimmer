@@ -45,6 +45,7 @@ from .first_viewed import (
 from .saved_search_latency import build_saved_search_latency
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
+from .moderation_rule_quality import build_moderation_rule_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2196,6 +2197,7 @@ def operations_dashboard(request):
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
+    dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2345,6 +2347,7 @@ def operations_dashboard_export(request):
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
+    dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3539,6 +3542,103 @@ def operations_dashboard_export(request):
         writer.writerow([
             '样本不足', '', '', '', '',
             f"不足 {gift['min_measured_applications']} 份，占比只作参考",
+        ])
+
+    writer.writerow([])
+    rule = dashboard['moderation_rule_quality']
+    writer.writerow([
+        '内容审核规则的误判与漏判，第一次被运营读到', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', rule['summary'],
+        '只读 matched_terms 拆出的规则名、risk_score 与 reviewed_at 减 created_at '
+        '的差值，不改写任何一条审核记录、不自动确认或放行、不改 _RULES 与权重、'
+        '不读 content 正文',
+    ])
+    writer.writerow([
+        '周期内复核完的记录', rule['stats']['measured_count'], '',
+        '分母只收 confirmed / dismissed 两种已经复核完的状态',
+    ])
+    writer.writerow([
+        '还挂在「待复核」的记录', rule['pending_count'], '',
+        '按 created_at 取窗口数出来，是右删失样本，不计入任何分布',
+    ])
+    writer.writerow([
+        '中位 / P90 / 平均复核时长', '', '',
+        f"{rule['stats']['median_label']} / {rule['stats']['p90_label']}"
+        f" / {rule['stats']['mean_label']}",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['四条规则，各自判得准不准'])
+    writer.writerow([
+        '规则', '权重', '命中', '确认违规', '误判放行', '误判率（%）',
+        '漏判条数', '漏判率（%）',
+    ])
+    for row in rule['rule_rows']:
+        writer.writerow([
+            row['rule_name'], row['weight'], row['hit_count'],
+            row['confirmed_count'], row['dismissed_count'],
+            '样本不足' if row['is_small_sample'] else row['false_positive_rate'],
+            row.get('missed_count', 0),
+            '未命中' if row['never_hit'] else (
+                '样本不足' if row['is_small_sample'] else row['false_negative_rate']
+            ),
+        ])
+
+    writer.writerow([])
+    writer.writerow(['从拦截到复核，隔了多久'])
+    writer.writerow(['复核时长', '条数', '占比（%）', '这一档说明什么'])
+    for row in rule['stats']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['hint']])
+
+    writer.writerow([])
+    writer.writerow(['分数段：高分的档是不是真的更容易确认违规'])
+    writer.writerow([
+        '分数段', '条数', '确认违规', '误判放行', '确认率（%）', '这一档是什么',
+    ])
+    for row in rule['score_rows']:
+        writer.writerow([
+            row['label'], row['count'], row['confirmed'], row['dismissed'],
+            '样本不足' if row['is_small_sample'] else row['confirmed_rate'],
+            row['hint'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['按渠道分开报：留言和私信'])
+    writer.writerow([
+        '渠道', '条数', '确认违规', '误判放行', '误判率（%）',
+    ])
+    for row in rule['channel_rows']:
+        writer.writerow([
+            row['channel_label'], row['count'], row['confirmed_count'],
+            row['dismissed_count'],
+            '样本不足' if row['is_small_sample'] else row['false_positive_rate'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['疑似漏判：确认违规，却只命中了轻规则'])
+    writer.writerow([
+        '疑似漏判的记录', '渠道', '风险等级', '分数', '命中的规则', '复核耗时',
+        '拦截于', '复核于',
+    ])
+    for row in rule['missed_rows']:
+        writer.writerow([
+            f"#{row['event_id']}", row['channel_label'],
+            row['risk_level_label'], row['risk_score'], row['rules'],
+            row['review_label'],
+            row['created_at'].strftime('%Y-%m-%d %H:%M'),
+            row['reviewed_at'].strftime('%Y-%m-%d %H:%M'),
+        ])
+    if rule['missed_row_total'] > rule['missed_row_limit']:
+        writer.writerow([
+            '清单最多列出', rule['missed_row_limit'], '条',
+            f"共 {rule['missed_row_total']} 条",
+        ])
+    if rule['stats']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '', '',
+            f"不足 {rule['min_measured_events']} 条，占比只作参考",
         ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
