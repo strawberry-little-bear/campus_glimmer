@@ -3393,5 +3393,149 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 demand-response-conversion-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Demand response conversion</span><h2>确认了求购响应之后，交易真的发生了吗</h2></div>
+        <span class="ops-panel-hint">点了确认之后，有多少真的变成了订单</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-person-check me-1"></i><code>DemandResponse</code> 是站内唯一一条「卖家拿在售商品去接一个学生写的需求」的记录。<code>accept</code> 那一刻写了四件事：响应改成 <code>accepted</code>、给响应人记一次贡献、<strong>求购改成 <code>fulfilled</code></strong>、同条求购下其余 <code>pending</code> 响应全部批量改成 <code>rejected</code> 并逐一通知，通知原文写着「请继续进入商品详情完成预约或领取申请」。<strong>确认之后，没有任何东西把这次确认和一笔订单连起来。</strong></p>
+    {% if not demand_response_conversion.has_data %}
+    <div class="empty-inline">{{ demand_response_conversion.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内确认的响应</span><strong>{{ demand_response_conversion.conversion.total }}</strong><small>涉及 {{ demand_response_conversion.conversion.demand_count }} 条求购</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>之后变成了订单</span><strong>{{ demand_response_conversion.conversion.conversion_rate }}%</strong><small>{{ demand_response_conversion.conversion.converted_count }} / {{ demand_response_conversion.conversion.total }} 条</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>订单最终成交</span><strong>{{ demand_response_conversion.dealt.dealt_rate }}%</strong><small>{{ demand_response_conversion.dealt.dealt_count }} / {{ demand_response_conversion.dealt.total }} 笔</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>从确认到下单（中位）</span><strong>{{ demand_response_conversion.latency.median_label }}</strong><small>P90 {{ demand_response_conversion.latency.p90_label }}</small></div></div>
+    </div>
+    {% if demand_response_conversion.conversion.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>确认响应不足 {{ demand_response_conversion.conversion.min_measured_responses }} 条，转化率只报数字不给方向。</p>
+    {% endif %}
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">确认之后，订单最后怎么样了</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>订单结局</th><th>笔数</th><th>占转化订单（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>已成交</td><td>{{ demand_response_conversion.dealt.dealt_count }}</td><td>{{ demand_response_conversion.dealt.dealt_rate }}</td></tr>
+                        <tr><td>被取消</td><td>{{ demand_response_conversion.dealt.cancelled_count }}</td><td>{{ demand_response_conversion.dealt.cancelled_rate }}</td></tr>
+                        <tr><td>还在进行中</td><td>{{ demand_response_conversion.dealt.still_open_count }}</td><td>{{ demand_response_conversion.dealt.still_open_rate }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>取消独立一类，不算成交也不算未成交。</strong>它是一次真的失败，而且失败在确认之后，比「没有订单」更值得被看见。<code>completed</code> 和 <code>returned</code> 都算成交——借用订单走到 <code>returned</code> 是一次完整的闭环。只报规模不猜原因：取消可能是卖家反悔、也可能是买家反悔、也可能是两个人谈崩了，订单事件时间线里的 <code>actor</code> 只说明谁按了那个按钮，不等于「谁造成的」。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从确认到下单，隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>间隔</th><th>订单数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_response_conversion.latency.bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if demand_response_conversion.latency.total %}{{ row.share }}{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>只报有订单的那些。</strong>没有订单的响应根本谈不上「隔了多久」，它是另一张表。中位 {{ demand_response_conversion.latency.median_label }}、P90 {{ demand_response_conversion.latency.p90_label }}、平均 {{ demand_response_conversion.latency.average_label }}。分档按小时起步而不按分钟：确认之后那段路是用户自己摸回去的，分钟级的抖动没有运营含义；而按天起步会把「当天」这档撑得很大，这档恰恰是最该被单独看见的。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">转化率按交易方式拆开</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>交易方式</th><th>已确认响应</th><th>变成了订单</th><th>转化率（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_response_conversion.trade_modes.rows %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong></td>
+                            <td>{{ row.total }}</td>
+                            <td>{{ row.converted_count }}</td>
+                            <td>{% if row.is_small_sample %}{{ row.conversion_rate }} <span class="badge text-bg-secondary">样本不足</span>{% else %}{{ row.conversion_rate }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>不按总数报。</strong>出售要看钱，免费和借用都不涉及付款，走完那段路的动力完全不同。合并会把两种体验平均成一个没有解释力的数。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">确认之后没有订单的，卡在哪</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>卡点</th><th>响应数</th><th>占未转化（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_response_conversion.blocked.rows %}
+                        <tr>
+                            <td>{{ row.label }}{% if row.key == 'still_walking' %} <span class="badge text-bg-warning">要看一眼</span>{% endif %}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if demand_response_conversion.blocked.total %}{{ row.share }}{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>「还在路上」这一类是真正要运营看一眼的。</strong>商品在、求购在、两边都没动，那次确认就这样悬着。<code>fulfilled</code> 故意不算进「求购那边已经不重要了」——它是 <code>accept</code> 当场写的，人人如此，算进来会让每一条未成交的响应都落进第二类。只收 <code>closed</code> / <code>expired</code>——发布者或系统主动结束的。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">响应说明写了没写</h3>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle ops-table">
+                            <thead><tr><th>文字长度</th><th>响应数</th><th>占比（%）</th></tr></thead>
+                            <tbody>
+                                {% for row in demand_response_conversion.message.length_rows %}
+                                <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if demand_response_conversion.message.filled_count %}{{ row.share }}{% else %}—{% endif %}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle ops-table">
+                            <thead><tr><th>组</th><th>响应数</th><th>转化率（%）</th></tr></thead>
+                            <tbody>
+                                <tr><td>写了说明</td><td>{{ demand_response_conversion.message.with_message_count }}</td><td>{{ demand_response_conversion.message.with_message_rate }}</td></tr>
+                                <tr><td>没写说明</td><td>{{ demand_response_conversion.message.without_message_count }}</td><td>{{ demand_response_conversion.message.without_message_rate }}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><code>message</code> 是自由文本，可能写着电话、微信、宿舍号。<strong>只报「写了没写」和长度，一个字符的内容都不读</strong>——不切词、不聚类、不推断语义。写了与没写相差 {{ demand_response_conversion.message.gap_points }} 个百分点，{% if demand_response_conversion.message.gap_is_meaningful %}差值超过了噪声阈值，可作为参考；{% else %}两组各至少 {{ demand_response_conversion.message.min_measured_responses }} 条才给方向，目前只报数字。{% endif %}<strong>而且这只是对照，不给因果</strong>——一个愿意写清楚「我这个还有发票和盒子」的卖家可能本来就更认真，平台没有能力把「说明起了作用」和「这个人本来就靠谱」分开。</p>
+        </div>
+    </div>
+    {% if demand_response_conversion.stuck_rows.row_total %}
+    <div class="mt-3">
+        <h3 class="h6 mb-3">确认之后悬着没下单的清单</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>响应商品</th><th>求购</th><th>确认于</th><th>卡点</th><th>说明字数</th></tr></thead>
+                <tbody>
+                    {% for row in demand_response_conversion.stuck_rows.rows %}
+                    <tr>
+                        <td>{{ row.response.item.title }}</td>
+                        <td>{{ row.response.demand.title }}</td>
+                        <td>{{ row.response.updated_at|date:'Y-m-d H:i' }}</td>
+                        <td>{% if row.blocked_reason == 'still_walking' %}<span class="badge text-bg-warning">{{ demand_response_conversion.blocked_labels.still_walking }}</span>{% else %}{{ row.blocked_label }}{% endif %}</td>
+                        <td>{{ row.response.message|length }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><strong>清单只带商品标题、求购标题、确认时刻和卡点类别，不带任何用户名。</strong>这份清单是给「现在去看看」用的，不是给「拌者」用的。其中 {{ demand_response_conversion.stuck_rows.still_walking_row_total }} 条属于「还在路上」。{% if demand_response_conversion.stuck_rows.row_total > demand_response_conversion.stuck_rows.row_limit %}清单最多列 {{ demand_response_conversion.stuck_rows.row_limit }} 条，完整的在导出里。{% endif %}</p>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不自动建订单、不改 <code>accept</code> 之后的任何通知文案、不把 <code>fulfilled</code> 的写入时机推到订单完成之后、不按用户做任何聚合或排名、不做「置疑似放鸽子」检测</strong>。<code>fulfilled</code> 这个词现在描述的是「有人点了确认」，不是「有人买到了」——把写入时机改到订单完成之后会让求购列表永远显示「寻找中」，而那些其实已经触达的需求会一次次被推给新的卖家。这个口径只让两个分居两处的数字第一次落到同一张表上。</div>
+    {% endif %}
+</section>
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

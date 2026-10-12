@@ -49,6 +49,10 @@ from .moderation_rule_quality import build_moderation_rule_quality
 from .availability_watch_quality import build_availability_watch_quality
 from .rating_quality import build_rating_quality
 from .dispute_resolution_quality import build_dispute_resolution_quality
+from .demand_response_conversion import (
+    NOISE_POINTS as DEMAND_RESPONSE_NOISE_POINTS,
+    build_demand_response_conversion,
+)
 from .lost_found_lead_quality import build_lost_found_lead_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
@@ -2206,6 +2210,7 @@ def operations_dashboard(request):
     dashboard['rating_quality'] = build_rating_quality(days=days)
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
+    dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2360,6 +2365,7 @@ def operations_dashboard_export(request):
     dashboard['rating_quality'] = build_rating_quality(days=days)
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
+    dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -4206,6 +4212,156 @@ def operations_dashboard_export(request):
         writer.writerow([
             '清单最多列出', lost_found['pending_rows']['row_limit'], '条', '',
             f"共 {lost_found['pending_rows']['row_total']} 条",
+        ])
+
+    conversion = dashboard['demand_response_conversion']
+    writer.writerow([])
+    writer.writerow([
+        '确认了求购响应之后，交易真的发生了吗', '数值', '说明',
+    ])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        conversion['summary'],
+        '只读 DemandResponse 的 status、updated_at、message 长度，'
+        'DemandPost 的 status，Item 的 is_available_now、trade_mode，'
+        '以及 Order 的 item_id、buyer_id、created_at、status，'
+        '不改写任何一条响应、任何一条求购、任何一笔订单，'
+        '不自动建订单、不把 fulfilled 的写入时机推到订单完成之后，'
+        '不按用户做任何聚合或排名',
+    ])
+    writer.writerow([
+        '周期内确认的求购响应', conversion['conversion']['total'], '',
+        '按 DemandResponse.updated_at 切窗口，即 accept 那一刻，'
+        'withdrawn 不进分母',
+    ])
+    writer.writerow([
+        '之后真的变成了订单', conversion['conversion']['converted_count'], '',
+        f"转化率 {conversion['conversion']['conversion_rate']}%，"
+        f"分母是已确认响应数",
+    ])
+    if conversion['conversion']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {conversion['conversion']['min_measured_responses']} 条，"
+            f"比例只作参考",
+        ])
+    writer.writerow([
+        '订单最后成交了', conversion['dealt']['dealt_count'], '',
+        f"占转化订单 {conversion['dealt']['dealt_rate']}%，"
+        f"completed 和 returned 都算成交",
+    ])
+    writer.writerow([
+        '订单被取消', conversion['dealt']['cancelled_count'], '',
+        f"占转化订单 {conversion['dealt']['cancelled_rate']}%，"
+        f"取消是确认之后的一次真失败，单独报",
+    ])
+    writer.writerow([
+        '订单还在进行中', conversion['dealt']['still_open_count'], '',
+        f"占转化订单 {conversion['dealt']['still_open_rate']}%",
+    ])
+    writer.writerow([
+        '涉及多少条求购', conversion['conversion']['demand_count'], '',
+        f"其中 {conversion['conversion']['demand_with_order_count']} 条求购"
+        f"名下出现了订单，两者不相等说明有并发确认",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['确认之后，订单最后怎么样了'])
+    writer.writerow(['订单结局', '笔数', '占转化订单（%）', '说明'])
+    writer.writerow([
+        '已成交', conversion['dealt']['dealt_count'],
+        conversion['dealt']['dealt_rate'],
+        'completed 和 returned 都算成交，借用走到 returned 是一次完整闭环',
+    ])
+    writer.writerow([
+        '被取消', conversion['dealt']['cancelled_count'],
+        conversion['dealt']['cancelled_rate'],
+        '确认之后的一次真失败，独立一类，只报规模不猜原因',
+    ])
+    writer.writerow([
+        '还在进行中', conversion['dealt']['still_open_count'],
+        conversion['dealt']['still_open_rate'], '周期结束时还没走完所属流程',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['从确认到下单，隔了多久'])
+    writer.writerow(['间隔', '订单数', '占比（%）', '说明'])
+    for row in conversion['latency']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['note']])
+    writer.writerow([
+        '中位 / P90 / 平均', conversion['latency']['median_label'],
+        conversion['latency']['p90_label'], conversion['latency']['average_label'],
+        '按 Order.created_at 减确认时刻算，只报有订单的那些',
+    ])
+    writer.writerow([
+        '当天内走完', conversion['latency']['same_day_count'], '',
+        f"占 {conversion['latency']['same_day_rate']}%",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['转化率按交易方式拆开'])
+    writer.writerow(['交易方式', '已确认响应', '变成了订单', '转化率（%）', '样本是否足够'])
+    for row in conversion['trade_modes']['rows']:
+        writer.writerow([
+            row['label'], row['total'], row['converted_count'],
+            row['conversion_rate'],
+            '' if not row['is_small_sample'] else
+            f"不足 {conversion['conversion']['min_measured_responses']} 条",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['确认之后没有订单的，卡在哪'])
+    writer.writerow(['卡点', '响应数', '占未转化（%）', '说明'])
+    for row in conversion['blocked']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], ''])
+    writer.writerow([
+        '卡点合计', conversion['blocked']['total'], '',
+        f"其中 {conversion['blocked']['still_walking_count']} 条"
+        f"（{conversion['blocked']['still_walking_rate']}%）是「还在路上」："
+        f"商品在、求购在、两边都没动",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['响应说明写了没写'])
+    writer.writerow(['文字长度', '响应数', '占填写了的（%）', '说明'])
+    for row in conversion['message']['length_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], ''])
+    writer.writerow([
+        '填写率', conversion['message']['filled_count'], '',
+        f"占 {conversion['message']['fill_rate']}%，平均 "
+        f"{conversion['message']['average_length']} 字，一个字符的内容都不读",
+    ])
+    writer.writerow([
+        '写了说明 vs 没写', conversion['message']['with_message_rate'], '',
+        f"没写的 {conversion['message']['without_message_rate']}%，"
+        f"相差 {conversion['message']['gap_points']} 个百分点",
+    ])
+    if not conversion['message']['is_measurable']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            '两组各需至少 12 条才给方向，差值不满 8 个百分点视为噪声',
+        ])
+    elif not conversion['message']['gap_is_meaningful']:
+        writer.writerow([
+            '差值视为噪声', '', '', '',
+            f"相差 {conversion['message']['gap_points']} 个百分点，"
+            f"不足 {DEMAND_RESPONSE_NOISE_POINTS} 个百分点的模块阈值，不给方向",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['确认之后悬着没下单的清单'])
+    writer.writerow(['响应商品', '求购', '确认于', '卡点', '响应说明字数'])
+    for row in conversion['stuck_rows']['rows']:
+        writer.writerow([
+            row.response.item.title, row.response.demand.title,
+            row.response.updated_at.strftime('%Y-%m-%d %H:%M'),
+            row.blocked_label,
+            len((row.response.message or '').strip()),
+        ])
+    if conversion['stuck_rows']['row_total'] > conversion['stuck_rows']['row_limit']:
+        writer.writerow([
+            '清单最多列出', conversion['stuck_rows']['row_limit'], '条', '',
+            f"共 {conversion['stuck_rows']['row_total']} 条",
         ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])

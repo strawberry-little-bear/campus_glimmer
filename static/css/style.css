@@ -1126,6 +1126,12 @@ a { color: inherit; text-decoration: none; }
 .lost-found-lead-panel .ops-mini-stat { background: #fff; }
 .lost-found-lead-panel .ops-mini-stat strong { color: #7a5c2e; }
 .lost-found-lead-panel .badge { font-weight: 600; }
+/* 求购响应转化面板自成一组色相（深紫红）。它问的是「确认了之后，交易真的发生了吗」，而站内所有其余关于求购的面板（需求雷达、匹配质量、机会跟进）报的都是「需求被发现了吗」，到确认就结束了；这里报的是确认之后那段没人接的路，所以色相也分开，不复用需求雷达的蓝。色相偏暖偏深，因为这一栏报的多半是「确认了，然后没有然后」——一次悬着的确认比一个低转化率更该被看见。 */
+.demand-response-conversion-panel { padding: 14px; border: 1px solid #e3cfd8; border-radius: 14px; background: linear-gradient(135deg, #fbf2f6, #fefafc); color: #5c3f4d; }
+.demand-response-conversion-panel p { color: #7d5c6b; }
+.demand-response-conversion-panel .ops-mini-stat { background: #fff; }
+.demand-response-conversion-panel .ops-mini-stat strong { color: #8c3a5e; }
+.demand-response-conversion-panel .badge { font-weight: 600; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
