@@ -809,6 +809,9 @@
     {% if academic_calendar.context.phase_note %}
     <div class="academic-calendar-note mt-3"><i class="bi bi-calendar3 me-1"></i>{{ academic_calendar.context.term_name }}{{ academic_calendar.context.phase_label }}：{{ academic_calendar.context.phase_note }}。</div>
     {% endif %}
+    <div class="academic-source-summary mt-3">
+        <i class="bi bi-database me-1"></i>本页 {{ academic_calendar.source.row_total }} 个阶段行里，<strong>{{ academic_calendar.source.snapshot_row_total }}</strong> 行读的是每周刷新的阶段快照，<strong>{{ academic_calendar.source.live_row_total }}</strong> 行是实时算的{% if academic_calendar.source.snapshot_share is not None %}，快照占 {{ academic_calendar.source.snapshot_share }}%{% endif %}。已结束阶段的计数早就封闭（四张业务表的 <code>created_at</code> 全是 <code>auto_now_add</code>，没有写入路径回头改它们），读快照与实时算在数值上一致；<strong>进行中的阶段一律实时算</strong>——快照最多是上周的，而当前阶段恰好是这块看板上唯一有人盯着的一行。
+    </div>
     {% for term in academic_calendar.terms %}
     <div class="academic-term-block mt-3">
         <div class="academic-term-heading">
@@ -819,7 +822,7 @@
         <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 academic-calendar-table"><thead><tr><th>阶段</th><th>区间</th><th>新增商品</th><th>新增求购</th><th>完成交易</th><th>搜索质量</th><th>供给趋势</th></tr></thead><tbody>
             {% for row in term.phases %}
             <tr class="{% if row.is_current %}academic-calendar-current{% endif %}">
-                <td><strong>{{ row.phase_label }}</strong>{% if row.is_current %}<small class="d-block text-muted">进行中 · 进度 {{ academic_calendar.context.progress_percent }}%</small>{% else %}<small class="d-block text-muted">{{ row.day_count }} 天</small>{% endif %}</td>
+                <td><strong>{{ row.phase_label }}</strong>{% if row.is_current %}<small class="d-block text-muted">进行中 · 进度 {{ academic_calendar.context.progress_percent }}%</small>{% else %}<small class="d-block text-muted">{{ row.day_count }} 天</small>{% endif %}<span class="academic-source academic-source-{{ row.source }}">{{ row.source_label }}</span></td>
                 <td>{{ row.start_date|date:'m-d' }} 至 {{ row.end_date|date:'m-d' }}</td>
                 <td><strong>{{ row.new_items }}</strong>{% if row.previous_phase_label %}<small class="d-block text-muted">较{{ row.previous_phase_label }} {% if row.delta_new_items > 0 %}+{% endif %}{{ row.delta_new_items }}</small>{% else %}<small class="d-block text-muted">学期首阶段</small>{% endif %}</td>
                 <td>{{ row.new_demands }}<small class="d-block text-muted">{% if row.previous_phase_label %}{% if row.delta_new_demands > 0 %}+{% endif %}{{ row.delta_new_demands }}{% else %}—{% endif %}</small></td>

@@ -4841,11 +4841,22 @@ def operations_dashboard_export(request):
         ])
     else:
         writer.writerow(['还没有配置学期日历，后台录入起止日期后这里会开始统计。'])
+    source = calendar['source']
+    writer.writerow([])
+    writer.writerow(['数据来源汇总', '读快照', '实时算', '合计', '快照占比（%）'])
+    writer.writerow([
+        '阶段行',
+        source['snapshot_row_total'],
+        source['live_row_total'],
+        source['row_total'],
+        '' if source['snapshot_share'] is None else source['snapshot_share'],
+    ])
     writer.writerow([])
     writer.writerow(['学期', '学期类型', '阶段', '开始', '结束', '天数', '进行中',
                      '新增商品', '新增求购', '完成交易', '新增预约',
                      '新增搜索', '无结果搜索', '无结果率（%）',
-                     '较上一阶段新增商品', '较上一阶段新增求购', '供给趋势', '求购趋势'])
+                     '较上一阶段新增商品', '较上一阶段新增求购', '供给趋势', '求购趋势',
+                     '数据来源', '来源说明'])
     if not calendar['has_terms'] or not calendar['terms']:
         writer.writerow(['当前没有可统计的学期阶段。'])
     else:
@@ -4870,6 +4881,8 @@ def operations_dashboard_export(request):
                     '' if not row['previous_phase_label'] else row['delta_new_demands'],
                     row['supply_trend_label'],
                     row['demand_trend_label'],
+                    row['source_label'],
+                    row['source_note'],
                 ])
     writer.writerow([])
     writer.writerow(['说明'])
@@ -4884,6 +4897,16 @@ def operations_dashboard_export(request):
     writer.writerow([
         '学期首阶段没有可比的上一阶段，差值留空；把它当成 0 会读成"没有增长"，'
         '而真实情况是根本没有参照。',
+    ])
+    writer.writerow([
+        '数据来源一列说明这一行的七个计数是读快照还是实时算。已结束阶段的计数已经'
+        '封闭（Item / DemandPost / Order / SearchQuery 的 created_at 全是 auto_now_add，'
+        '没有写入路径回头改它们），读每周刷新的快照与实时算在数值上一致；'
+        '进行中的阶段永远实时算，因为快照最多是上周的，而当前阶段是看板上唯一有人盯的一行。',
+    ])
+    writer.writerow([
+        '快照占比的分母是实际渲染出来的阶段行数。占比为空的含义是"一行快照都没读到"，'
+        '与 0% 不同：0% 会被读成"刷过了但一行都没命中"，而空值只说快照表还没有可用数据。',
     ])
     writer.writerow([
         '此处只报告，不修改学期日历、不按阶段调整任何商品的曝光或提醒策略。',

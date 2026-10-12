@@ -28,6 +28,16 @@ SUPPLY_TREND_LABELS = {
 }
 
 
+# 阶段计数在阶段结束之后就封闭了：Item / DemandPost / Order / SearchQuery 的
+# created_at 全是 auto_now_add，仓库里没有任何写入路径会回头改它们。所以一个结束
+# 日期已经过去的阶段，它的七个计数是定值，可以安全地读快照而不用重算。下面这组
+# 常量描述的是「读哪一份」的切分，以及面板上怎么标。
+SOURCE_LABELS = {
+    'snapshot': '读快照',
+    'live': '实时算',
+}
+
+
 def ensure_default_phases(term):
     """Fill a term with the default phase plan, keeping existing rows."""
     existing_offsets = set(term.phases.values_list('start_offset', flat=True))
@@ -198,6 +208,88 @@ def _phase_stat_payload(term, phase, *, now):
     }
 
 
+def _load_phase_snapshots(terms):
+    """按学期取回快照行，键是 (term_id, phase_key, start_date, end_date)。
+
+    键里带上 end_date 是有意的：改一次 `AcademicTerm.starts_on`，四个阶段的
+    start_date 会整体平移，旧行不会被更新而是被旁置成孤儿行，新键下另插一批新
+    行。用四元组当键，只有区间和当前 `AcademicPhase` 算出来完全一致的那一行
+    才会被读走——孤儿行的 start_date 对不上，自然落不到这个键上。
+    """
+    if not terms:
+        return {}
+    term_ids = [term.pk for term in terms]
+    rows = AcademicTermSnapshot.objects.filter(term_id__in=term_ids)
+    return {
+        (row.term_id, row.phase_key, row.start_date, row.end_date): row
+        for row in rows
+    }
+
+
+def _snapshot_payload(snapshot, *, term, phase, today):
+    """把一行快照摊成和 `_phase_stat_payload` 同形状的字典。
+
+    两份数据的形状必须一致，模板和 CSV 导出才能不分辨来源地读同一套键。任何
+    一处只有实时路径才算的派生量（`is_current`、`zero_result_rate`、趋势）都在
+    这里补上，而不是留给调用方分支处理——包括 `source_label` 和 `source_note`：
+    少一个键，模板就得为快照行单独写一条分支，而那正是这条读路径要避免的。
+    """
+    start = snapshot.start_date
+    end = snapshot.end_date
+    return {
+        'term_id': term.pk,
+        'term_name': term.name,
+        'phase_key': snapshot.phase_key,
+        'phase_label': snapshot.phase_label or phase.get_phase_display(),
+        'phase_note': phase.note,
+        'start_date': start,
+        'end_date': end,
+        'day_count': snapshot.day_count,
+        'is_current': start <= today <= end,
+        'new_items': snapshot.new_items,
+        'new_demands': snapshot.new_demands,
+        'new_orders': snapshot.new_orders,
+        'completed_orders': snapshot.completed_orders,
+        'new_searches': snapshot.new_searches,
+        'zero_result_searches': snapshot.zero_result_searches,
+        'source': 'snapshot',
+        'source_label': SOURCE_LABELS['snapshot'],
+        'source_note': (
+            '已结束阶段，计数已封闭，读每周刷新的快照'
+            if start < today
+            else '阶段已结束，读快照'
+        ),
+    }
+
+
+def _phase_row(term, phase, *, snapshots, now):
+    """一条阶段的统计行：能读快照就读，否则实时算。
+
+    判据不是 `refreshed_at`。上一轮已经查证 `update_or_create` 会把 `auto_now`
+    字段无条件补进 `update_fields`，所以每次刷新都推进它，十个计数一个都没变也
+    照推——拿它判断「这一行还新鲜吗」，会把一条两个月前就结束的阶段读成刚刚更
+    新。真正的判据是这一行的计数是否已经封闭，那由两条保证：阶段的结束日期已经
+    过去，且快照行的区间与当前 `AcademicPhase` 算出来的完全一致。
+
+    进行中的阶段永远实时算。它每小时都在长出新商品和新搜索，快照最多是上周的，
+    读出来会让运营看着一个正在变化的数字以为是新鲜的——而当前阶段恰好是看板上
+    唯一有人盯着的那一行。
+    """
+    today = now.date()
+    key = (term.pk, phase.phase, phase.start_date, phase.end_date)
+    snapshot = snapshots.get(key)
+    if snapshot is not None and phase.end_date < today:
+        payload = _snapshot_payload(snapshot, term=term, phase=phase, today=today)
+    else:
+        payload = _phase_stat_payload(term, phase, now=now)
+        payload['source'] = 'live'
+        payload['source_label'] = SOURCE_LABELS['live']
+        payload['source_note'] = (
+            '实时算' if snapshot is None else '阶段进行中，快照最多是上周的'
+        )
+    return payload
+
+
 def build_academic_calendar(*, day=None, limit_terms=3):
     """Build the phase breakdown for the current and nearby terms."""
     day = day or timezone.localdate()
@@ -213,16 +305,31 @@ def build_academic_calendar(*, day=None, limit_terms=3):
             'current': None,
             'context': academic_phase_context(day),
             'terms': [],
+            'source': {
+                'snapshot_row_total': 0,
+                'live_row_total': 0,
+                'row_total': 0,
+                'snapshot_share': None,
+            },
         }
 
+    snapshots = _load_phase_snapshots(terms)
+
     term_rows = []
+    snapshot_row_total = 0
+    live_row_total = 0
     for term in terms:
         phases = []
         for phase in term.phases.all():
-            phases.append(_phase_stat_payload(term, phase, now=now))
+            phases.append(_phase_row(term, phase, snapshots=snapshots, now=now))
         phases.sort(key=lambda row: row['start_date'])
         _annotate_phase_trends(phases)
         if phases:
+            for row in phases:
+                if row['source'] == 'snapshot':
+                    snapshot_row_total += 1
+                else:
+                    live_row_total += 1
             term_rows.append({
                 'term': term,
                 'term_name': term.name,
@@ -234,6 +341,7 @@ def build_academic_calendar(*, day=None, limit_terms=3):
             })
 
     current_term, current_phase = resolve_academic_phase(day)
+    row_total = snapshot_row_total + live_row_total
     return {
         'has_terms': True,
         'current': {
@@ -243,6 +351,15 @@ def build_academic_calendar(*, day=None, limit_terms=3):
         },
         'context': academic_phase_context(day),
         'terms': term_rows,
+        'source': {
+            'snapshot_row_total': snapshot_row_total,
+            'live_row_total': live_row_total,
+            'row_total': row_total,
+            'snapshot_share': (
+                round(snapshot_row_total / row_total * 100, 1)
+                if snapshot_row_total else None
+            ),
+        },
     }
 
 
