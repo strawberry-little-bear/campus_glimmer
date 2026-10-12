@@ -1114,6 +1114,18 @@ a { color: inherit; text-decoration: none; }
 .dispute-resolution-quality-panel .ops-mini-stat { background: #fff; }
 .dispute-resolution-quality-panel .ops-mini-stat strong { color: #2c5a66; }
 .dispute-resolution-quality-panel .badge { font-weight: 600; }
+/* 失物招领线索面板自成一组色相（暖灰褐）。它问的是「发布了有没有人理、确认了
+   有没有找回来」，是站内唯一一条不经过交易就完成的互助，和交易侧的争议、评价
+   都不是同一件事。它和 mutual-aid-feedback-panel 报的也不是同一件事：那组看互助
+   反馈这个环节本身的运转，把求购响应和失物线索并成一个总数；这里只看失物招领
+   这一条链路走通没有，所以色相也分开，不复用那组的绿。色相偏暖偏沉，因为这一栏
+   报的多半是「发布了，但没有人看见」，而「没有人提线索」这一档比任何数字都该被
+   看见。 */
+.lost-found-lead-panel { padding: 14px; border: 1px solid #e0d6c6; border-radius: 14px; background: linear-gradient(135deg, #faf6ef, #fffdf9); color: #5c5040; }
+.lost-found-lead-panel p { color: #7d6f5c; }
+.lost-found-lead-panel .ops-mini-stat { background: #fff; }
+.lost-found-lead-panel .ops-mini-stat strong { color: #7a5c2e; }
+.lost-found-lead-panel .badge { font-weight: 600; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }

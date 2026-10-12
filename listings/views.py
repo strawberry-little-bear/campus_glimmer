@@ -49,6 +49,7 @@ from .moderation_rule_quality import build_moderation_rule_quality
 from .availability_watch_quality import build_availability_watch_quality
 from .rating_quality import build_rating_quality
 from .dispute_resolution_quality import build_dispute_resolution_quality
+from .lost_found_lead_quality import build_lost_found_lead_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2204,6 +2205,7 @@ def operations_dashboard(request):
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     dashboard['rating_quality'] = build_rating_quality(days=days)
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
+    dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2357,6 +2359,7 @@ def operations_dashboard_export(request):
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     dashboard['rating_quality'] = build_rating_quality(days=days)
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
+    dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -4079,6 +4082,130 @@ def operations_dashboard_export(request):
         writer.writerow([
             '清单最多列出', dispute['slowest_rows']['row_limit'], '条',
             f"共 {dispute['slowest_rows']['row_total']} 条",
+        ])
+
+    writer.writerow([])
+    lost_found = dashboard['lost_found_lead_quality']
+    writer.writerow([
+        '失物招领的线索，有多少条走到了「已确认」', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', lost_found['summary'],
+        '只读 LostFoundPost 的 post_type、status、created_at、identifying_features '
+        '长度，LostFoundLead 的 status、created_at、message 长度，以及 '
+        'MutualAidFeedback 的 outcome（只认 lost_found_lead 来源），'
+        '不改写任何一条线索、任何一条记录、任何一份反馈，'
+        '不读 message 和 identifying_features 的任何一个字符',
+    ])
+    writer.writerow([
+        '周期内的失物招领记录', lost_found['lead_count']['total'], '',
+        '按 LostFoundPost.created_at 切窗口',
+    ])
+    writer.writerow([
+        '收到了线索的记录', lost_found['lead_count']['posts_with_lead_count'], '',
+        f"占 {lost_found['lead_count']['posts_with_lead_rate']}%，"
+        f"共 {lost_found['lead_count']['lead_count']} 条线索，"
+        f"平均 {lost_found['lead_count']['leads_per_post']} 条/记录",
+    ])
+    if lost_found['lead_count']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {lost_found['min_measured_posts']} 条，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['一条记录收到了几条线索'])
+    writer.writerow(['线索数', '记录数', '占比（%）', '说明'])
+    for row in lost_found['lead_count']['lead_count_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['note']])
+
+    writer.writerow([])
+    writer.writerow(['确认率按记录类型拆开'])
+    writer.writerow(['记录类型', '记录数', '线索数', '确认了线索的记录', '确认率（%）', '已标记匹配'])
+    for row in lost_found['confirm']['rows']:
+        writer.writerow([
+            row['label'], row['post_count'], row['lead_count'],
+            row['accepted_count'], row['confirm_rate'], row['matched_post_count'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['被驳回的线索，是发布者拒绝的还是顺带清掉的'])
+    writer.writerow(['线索结局', '线索数', '占全部线索（%）', '说明'])
+    for row in lost_found['rejection']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['note']])
+    writer.writerow([
+        '被驳回的线索合计', lost_found['rejection']['rejected_count'], '',
+        f"其中 {lost_found['rejection']['bulk_cleared_count']} 条"
+        f"（{lost_found['rejection']['bulk_cleared_share_of_rejected']}%）是另一条被确认时"
+        f"顺带清掉的，不是发布者拒绝的",
+    ])
+    writer.writerow([
+        '发布者真的拒绝过线索的记录', lost_found['rejection']['posts_with_rejection_count'], '',
+        f"占发起过线索的记录的 "
+        f"{lost_found['rejection']['posts_with_rejection_rate']}%，"
+        f"分母是 {lost_found['rejection']['posts_with_leads_count']} 条记录",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['发布者多久收到第一条线索'])
+    writer.writerow(['提交间隔', '记录数', '占比（%）', '说明'])
+    for row in lost_found['latency']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], ''])
+    writer.writerow([
+        '中位 / P90 / 平均', lost_found['latency']['median_label'],
+        lost_found['latency']['p90_label'], lost_found['latency']['average_label'],
+        '按 LostFoundLead.created_at 减所属记录的 created_at 算，只报最早那一条',
+    ])
+    writer.writerow([
+        '24 小时内收到第一条线索', lost_found['latency']['same_day_count'], '',
+        f"占 {lost_found['latency']['same_day_rate']}%，"
+        f"失物招领的时效窗口就在一天里",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['确认之后，东西找回来了没有'])
+    writer.writerow(['互助结果', '记录数', '占已提交反馈（%）', '说明'])
+    for row in lost_found['feedback']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], ''])
+    writer.writerow([
+        '确认了线索的记录', lost_found['feedback']['accepted_count'], '',
+        f"其中 {lost_found['feedback']['feedback_count']} 条提交了反馈"
+        f"（{lost_found['feedback']['feedback_rate']}%）",
+    ])
+    if lost_found['feedback']['without_feedback_count']:
+        writer.writerow([
+            '已确认但没回来填反馈', lost_found['feedback']['without_feedback_count'], '',
+            lost_found['feedback']['without_feedback_note'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['线索说明的长度分档'])
+    writer.writerow(['文字长度', '线索数', '占比（%）', '口径说明'])
+    for row in lost_found['message']['length_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], ''])
+    writer.writerow([
+        '填写率', lost_found['message']['filled_count'], '',
+        f"占 {lost_found['message']['fill_rate']}%，平均 "
+        f"{lost_found['message']['average_length']} 字，一个字符的内容都不读",
+    ])
+    writer.writerow([
+        '填了辨识特征的记录', lost_found['message']['feature_filled_count'], '',
+        f"占 {lost_found['message']['feature_fill_rate']}%，颜色品牌贴纸挂件是给双方核对的",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['还挂着没人处理的线索'])
+    writer.writerow(['记录', '线索提供者', '提交于', '记录发布于'])
+    for row in lost_found['pending_rows']['rows']:
+        writer.writerow([
+            row['post'].title, row['lead'].respondent.username,
+            row['lead'].created_at.strftime('%Y-%m-%d %H:%M'),
+            row['post'].created_at.strftime('%Y-%m-%d %H:%M'),
+        ])
+    if lost_found['pending_rows']['row_total'] > lost_found['pending_rows']['row_limit']:
+        writer.writerow([
+            '清单最多列出', lost_found['pending_rows']['row_limit'], '条', '',
+            f"共 {lost_found['pending_rows']['row_total']} 条",
         ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])

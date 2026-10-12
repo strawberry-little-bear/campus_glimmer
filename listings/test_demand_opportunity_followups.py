@@ -318,12 +318,21 @@ class StatusRowsTests(TestCase):
         self.location = CampusLocation.objects.create(name='状态地点')
 
     def make(self, status, due_at=None, note=''):
-        return DemandOpportunityTask.objects.create(
+        # 创建时间必须固定到 self.now 降底。DemandOpportunityTask.created_at 是
+        # auto_now_add，不能在 create() 里给，所以先建再回填。不固定的话它取的是真实增点：
+        # self.now 是当地中午，而真实时间可能已经走到下午，任务会因为 created_at 晚于统计窗口的右端而
+        # 被静默过滤掉，状态分布整张表就会全部数零。这样的测试在上午通、下午误，
+        # 一年里有半时间是翱的，因为它的失败取决于跑测试的时刻。
+        task = DemandOpportunityTask.objects.create(
             radar_key='status-%d' % DemandOpportunityTask.objects.count(),
             title='状态主题', category=self.category, location=self.location,
             level='medium', opportunity_score=5, created_by=self.staff,
             status=status, due_at=due_at, note=note,
         )
+        DemandOpportunityTask.objects.filter(pk=task.pk).update(
+            created_at=self.now - timedelta(days=1),
+        )
+        return task
 
     def test_every_status_gets_a_row_even_when_nobody_used_it(self):
         self.make('todo')
