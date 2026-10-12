@@ -76,6 +76,7 @@ from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
 from .opportunity_dismissal_quality import build_opportunity_dismissal_quality
+from .favorite_collection_quality import build_favorite_collection_quality
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
@@ -2219,6 +2220,9 @@ def operations_dashboard(request):
     dashboard['opportunity_dismissal_quality'] = (
         build_opportunity_dismissal_quality(days=days)
     )
+    dashboard['favorite_collection_quality'] = (
+        build_favorite_collection_quality(days=days)
+    )
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
@@ -2378,6 +2382,9 @@ def operations_dashboard_export(request):
     dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
     dashboard['opportunity_dismissal_quality'] = (
         build_opportunity_dismissal_quality(days=days)
+    )
+    dashboard['favorite_collection_quality'] = (
+        build_favorite_collection_quality(days=days)
     )
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     metrics = dashboard['metrics']
@@ -5985,6 +5992,124 @@ def operations_dashboard_export(request):
         '分数在忽略时刻重算，走 _match_demand 与 score_lost_found_posts 自己，还原的是'
         '「今天再进池」的分数，不是忽略那一刻的分数。本模块只报告，不改任何一行的 '
         'expires_at、不改 30 天静默期、不动两个匹配器的任何常数、不按用户聚合。',
+    ])
+    collection_quality = dashboard['favorite_collection_quality']
+    writer.writerow([])
+    writer.writerow(['用户建的心愿单分组'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', collection_quality['period_days'],
+        '空分组宽限期（天）', collection_quality['metrics']['empty_grace_days'],
+        '大小档样本门槛', collection_quality['metrics']['min_band_sample'],
+        '名字进榜的最少用户数', collection_quality['metrics']['min_name_sample'],
+        '噪声阈值（百分点）', collection_quality['metrics']['noise_points'],
+    ])
+    writer.writerow(['整体'])    # 表格标题行
+    writer.writerow(['指标', '数值', '说明'])
+    writer.writerow([
+        '窗口内新建分组', collection_quality['metrics']['window_collection_count'],
+        '按 FavoriteCollection.created_at 归期，这一列写进去就不再动',
+    ])
+    writer.writerow([
+        '窗口内新建收藏', collection_quality['metrics']['window_favorite_count'],
+        '按 Favorite.created_at 归期，同上',
+    ])
+    writer.writerow([
+        '当前分组总数', collection_quality['metrics']['group_total'],
+        '快照不是窗口：分组可被删（删完收藏变未分组），问的是现在有多少个',
+    ])
+    writer.writerow([
+        '当前收藏总数', collection_quality['metrics']['favorite_total'],
+        '快照不是窗口：收藏可被取消',
+    ])
+    writer.writerow([
+        '空分组数', collection_quality['metrics']['empty_group_total'],
+        '一条收藏都没有的分组，含刚建的',
+    ])
+    writer.writerow([
+        '早就空着的分组数', collection_quality['metrics']['stale_empty_total'],
+        f'建于 {collection_quality['metrics']['empty_grace_days']} 天之前仍是空分组，'
+        '这才是「建了不会用」的真信号',
+    ])
+    writer.writerow([])
+    writer.writerow(['分组大小分布'])    # 表格标题行
+    writer.writerow(['大小档', '分组数', '占全部分组'])
+    for row in collection_quality['scale_rows']:
+        writer.writerow([
+            row['label'], row['group_count'],
+            f"{row['share_of_groups']}%"
+            if row['share_of_groups'] is not None else '没有分组',
+        ])
+    writer.writerow([])
+    writer.writerow(['空分组'])    # 表格标题行
+    writer.writerow(['指标', '数值', '说明'])
+    empty = collection_quality['empty_rows']
+    writer.writerow([
+        '空分组占全部分组',
+        f"{empty['empty_share']}%" if empty['empty_share'] is not None else '没有分组',
+        '分母是全部分组，这是一个真正的比例',
+    ])
+    writer.writerow([
+        '早就空着的占空分组',
+        f"{empty['stale_share']}%" if empty['stale_share'] is not None else '没有空分组',
+        '分母是空分组自己，报的是空分组自己的形状',
+    ])
+    writer.writerow([
+        '早就空着的涉及用户数', empty['stale_user_count'],
+        '绝对量，不是比例',
+    ])
+    writer.writerow([])
+    writer.writerow(['分组渗透'])    # 表格标题行
+    writer.writerow(['指标', '数值', '说明'])
+    penetration = collection_quality['penetration']
+    writer.writerow([
+        '已归组收藏占全部收藏',
+        f"{penetration['grouped_favorite_share']}%"
+        if penetration['grouped_favorite_share'] is not None else '没有收藏',
+        '分母是全部收藏，未分组的收藏就是一条普通收藏',
+    ])
+    writer.writerow([
+        '建过分组的人占有收藏用户',
+        f"{penetration['collector_share']}%"
+        if penetration['collector_share'] is not None else '没有收藏',
+        '分母是有收藏的用户，分子是**有收藏且建过分组**的人：建分组不要求有收藏，'
+        '拿全部建分组的人当分子会让占比超过 100%',
+    ])
+    writer.writerow([
+        '只收藏、从没建过分组', penetration['favoriter_only_count'],
+        '有收藏的用户减去建过分组的人，绝对量',
+    ])
+    writer.writerow([
+        '建了分组、但没收藏', penetration['collector_only_count'],
+        'create_favorite_collection 只要求登录不要求有收藏，所以这批人存在；'
+        '他们用了分组功能但分组是空的，不该被渗透率吞掉',
+    ])
+    writer.writerow([])
+    writer.writerow(['分组名收敛'])    # 表格标题行
+    writer.writerow(['分组名', '使用用户数', '分组数', '收藏数', '平均大小'])
+    for row in collection_quality['name_rows']:
+        writer.writerow([
+            row['label'], row['user_count'], row['group_count'],
+            row['favorite_count'],
+            row['average_size'] if row['average_size'] is not None else '',
+        ])
+    writer.writerow([])
+    writer.writerow(['结论'])
+    writer.writerow([collection_quality['summary']])
+    for note in collection_quality['recommendations']:
+        writer.writerow([note])
+    if collection_quality['size_shape'].get('has_comparison'):
+        writer.writerow([collection_quality['size_shape']['summary']])
+    writer.writerow([
+        '本模块不报「先收藏后归类」：Favorite 没有 updated_at，'
+        'views.update_favorite_collection 走 save(update_fields=[collection])，模型里'
+        '也没有任何 auto_now 字段，所以归类时刻在库里不存在。窗口内新建的收藏读出来的 '
+        'collection 是今天读到的值，不是它创建时的值，报出来会被误读成「收藏时就归组率」。'
+        '同理不报分组改名频率（应用内没有改名路由，updated_at 只反映 admin 动过）和删分组'
+        '之后收藏去哪了（删分组只走 admin，删完的收藏和没归过类的长得一样）。四类分母各自'
+        '独立：当前全部收藏、当前全部分组、当前有收藏的用户、窗口内新建。「当前」是快照'
+        '不是窗口，和窗口内的新建规模分开报。本模块只报告，不改任何一条 Favorite.collection、'
+        '不删分组、不改分组名、不预设任何分组名。',
     ])
     sla = dashboard['governance_sla']
     writer.writerow([])

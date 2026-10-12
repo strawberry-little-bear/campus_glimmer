@@ -2666,3 +2666,18 @@ a { color: inherit; text-decoration: none; }
 .opportunity-dismissal-ok { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .73rem; color: #2f6a4f; background: #e8f4ec; white-space: nowrap; }
 .opportunity-dismissal-note { margin-top: 6px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
 @media (max-width: 575px) { .opportunity-dismissal-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.opportunity-dismissal-summary > div { min-height: 72px; padding: 11px; }.opportunity-dismissal-table td { white-space: normal; } }
+
+/* 心愿单分组质量面板：量「平台给了一个工具，这个工具好不好用」。配色和其余量自己的模块
+   保持一致，让看板上这一排面板读起来是同一套东西。 */
+.favorite-collection-panel .favorite-collection-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.favorite-collection-panel .favorite-collection-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.favorite-collection-panel .favorite-collection-summary span { color: #83938b; font-size: .71rem; }
+.favorite-collection-panel .favorite-collection-summary small { color: #9aa8a0; font-size: .69rem; }
+.favorite-collection-panel .favorite-collection-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; }
+.favorite-collection-block-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.favorite-collection-block-heading strong { color: #2f5344; font-size: .92rem; }
+.favorite-collection-block-heading span { color: #8b9a91; font-size: .74rem; }
+.favorite-collection-table td:nth-child(2), .favorite-collection-table td:nth-child(3), .favorite-collection-table td:nth-child(4), .favorite-collection-table td:nth-child(5) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.favorite-collection-ok { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .73rem; color: #2f6a4f; background: #e8f4ec; white-space: nowrap; }
+.favorite-collection-note { margin-top: 6px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
+@media (max-width: 575px) { .favorite-collection-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.favorite-collection-summary > div { min-height: 72px; padding: 11px; }.favorite-collection-table td { white-space: normal; } }
