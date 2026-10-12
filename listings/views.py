@@ -44,6 +44,7 @@ from .first_viewed import (
 )
 from .saved_search_latency import build_saved_search_latency
 from .campus_verification_friction import build_campus_verification_friction
+from .gift_application_queue import build_gift_application_queue
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2194,6 +2195,7 @@ def operations_dashboard(request):
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
+    dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2342,6 +2344,7 @@ def operations_dashboard_export(request):
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
+    dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3455,6 +3458,88 @@ def operations_dashboard_export(request):
                 row['token_issued_at'].strftime('%Y-%m-%d %H:%M'),
                 row['verified_at'].strftime('%Y-%m-%d %H:%M'),
             ])
+
+    writer.writerow([])
+    gift = dashboard['gift_application_queue']
+    writer.writerow(['免费领取的申请队列，第一次被运营读到', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', gift['summary'],
+        '只读 applicant_note 的填写情况与 decided_at 减 created_at 的差值，不改写任何'
+        '一条申请、不给卖家排序、不替卖家推荐申请人，也不把统计写回任何记录',
+    ])
+    writer.writerow([
+        '周期内处理完的申请', gift['stats']['measured_count'], '',
+        '分母只收 selected / rejected / withdrawn 三种已经处理完的状态',
+    ])
+    writer.writerow([
+        '还挂在「等待选择」的申请', gift['pending_count'], '',
+        '按 created_at 取窗口数出来，是右删失样本，不计入任何等待分布',
+    ])
+    writer.writerow([
+        '中位 / P90 / 平均处理时长', '', '',
+        f"{gift['stats']['median_label']} / {gift['stats']['p90_label']}"
+        f" / {gift['stats']['mean_label']}",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['队列长度', '商品数', '占比（%）', '这一档说明什么'])
+    for row in gift['queue_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['hint']])
+
+    writer.writerow([])
+    writer.writerow(['处理时长', '条数', '占比（%）', '这一档说明什么'])
+    for row in gift['stats']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['hint']])
+
+    writer.writerow([])
+    writer.writerow(['申请说明', '申请数', '占比（%）', '被选中', '选中率（%）'])
+    for row in gift['note']['rows']:
+        writer.writerow([
+            row['label'], row['count'], row['share'], row['selected_count'],
+            '样本不足' if row['is_small_sample'] else row['selected_rate'],
+        ])
+    if gift['note']['is_comparable']:
+        writer.writerow([
+            '两组选中率之差', '', '', gift['note']['difference'],
+            gift['note']['direction'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['分类', '申请数', '被选中', '选中率（%）'])
+    for row in gift['category_rows']:
+        writer.writerow([
+            row['category_name'], row['applications'],
+            row['selected_count'], row['selected_rate'],
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '队最长的免费商品', '分类', '队列长度', '被选中', '已撤回', '队列档位',
+    ])
+    for row in gift['item_rows']:
+        writer.writerow([
+            row['title'], row['category_name'], row['queue_length'],
+            row['selected_count'], row['withdrawn_count'], row['queue_label'],
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '被申请人自己撤回的申请', '申请人', '申请说明字数', '等了',
+        '提交申请', '撤回',
+    ])
+    for row in gift['withdrawn_rows']:
+        writer.writerow([
+            row['item_title'], row['applicant_username'],
+            row['note_length'] if row['note_length'] else '未填写',
+            row['decided_label'],
+            row['created_at'].strftime('%Y-%m-%d %H:%M'),
+            row['decided_at'].strftime('%Y-%m-%d %H:%M'),
+        ])
+    if gift['stats']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '', '',
+            f"不足 {gift['min_measured_applications']} 份，占比只作参考",
+        ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
     if dashboard['operational_alerts']:

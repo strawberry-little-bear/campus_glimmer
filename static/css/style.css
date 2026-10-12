@@ -1057,6 +1057,16 @@ a { color: inherit; text-decoration: none; }
 .campus-verification-friction-panel .ops-mini-stat { background: #fff; }
 .campus-verification-friction-panel .ops-mini-stat strong { color: #4d4470; }
 .campus-verification-friction-panel .badge { font-weight: 600; }
+.gift-application-queue-panel .ops-table td { vertical-align: top; }
+/* 免费领取申请队列面板自成一组色相（橄榄灰）。它问的是「一件免费商品收到多少份
+   申请、卖家隔了多久才决定」，是供给侧的一次竞争，和搜索之后的命中时延、注册之后
+   的认证摩擦、心动之后的考虑窗口都不是同一片，所以不用它们的底色；色相偏沉偏暖，
+   因为这一栏报的多半是「有人在等」。 */
+.gift-application-queue-panel { padding: 14px; border: 1px solid #e0dcc9; border-radius: 14px; background: linear-gradient(135deg, #f8f6ee, #fdfcf8); color: #57543f; }
+.gift-application-queue-panel p { color: #837e63; }
+.gift-application-queue-panel .ops-mini-stat { background: #fff; }
+.gift-application-queue-panel .ops-mini-stat strong { color: #4d4a33; }
+.gift-application-queue-panel .badge { font-weight: 600; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
