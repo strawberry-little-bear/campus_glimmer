@@ -1091,6 +1091,18 @@ a { color: inherit; text-decoration: none; }
 .availability-watch-quality-panel .ops-mini-stat strong { color: #6b4f34; }
 .availability-watch-quality-panel .badge { font-weight: 600; }
 
+/* 交易评价质量面板自成一组色相（暖琥珀）。它问的是「这笔交易有几个人被评价了、
+   多久才评、打了多少分」，是闭环之后的回声——交易走完了、双方各自给对方打一个
+   分，这里报的是这套五星制到底在采集什么。它和 reputation 报的不是同一件事：
+   那组报的是「这个卖家可不可信」，这里报的是「评价这个环节本身健不健康」。
+   色相取暖琥珀，因为评价是一笔交易留给另一笔交易的温度；一星那一行压深，因为
+   它是这套评价里唯一真正重要的信号，混进「低分」里会被摊薄。 */
+.rating-quality-panel { padding: 14px; border: 1px solid #ecd9b8; border-radius: 14px; background: linear-gradient(135deg, #fdf7ea, #fffdf8); color: #6b5433; }
+.rating-quality-panel p { color: #8a7351; }
+.rating-quality-panel .ops-mini-stat { background: #fff; }
+.rating-quality-panel .ops-mini-stat strong { color: #8a6420; }
+.rating-quality-panel .badge { font-weight: 600; }
+
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,

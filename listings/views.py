@@ -47,6 +47,7 @@ from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 from .moderation_rule_quality import build_moderation_rule_quality
 from .availability_watch_quality import build_availability_watch_quality
+from .rating_quality import build_rating_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2200,6 +2201,7 @@ def operations_dashboard(request):
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
+    dashboard['rating_quality'] = build_rating_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2351,6 +2353,7 @@ def operations_dashboard_export(request):
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
     dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
+    dashboard['rating_quality'] = build_rating_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3745,6 +3748,176 @@ def operations_dashboard_export(request):
         '送达时商品已不可交易', watch['delivery']['stale_count'], '',
         f"占 {watch['delivery']['stale_rate']}%，按当前状态回看，偏高",
     ])
+
+    writer.writerow([])
+    rating = dashboard['rating_quality']
+    writer.writerow([
+        '交易评价打了多少分，第一次被运营读到', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', rating['summary'],
+        '只读 Rating 的 score、comment 长度和 created_at，Order 的状态与创建时间，'
+        'OrderEvent 里 to_status 为 completed / returned 的完成时刻，'
+        '以及 MeetingIncident 的 status，不改写任何一条评价、不催评、'
+        '不把评价写回任何人的信誉分、不读评价正文',
+    ])
+    writer.writerow([
+        '周期内走完的交易', rating['coverage']['total'], '',
+        '只收 completed / returned；还挂着未完结状态的订单是右删失样本，单独数出不混入',
+    ])
+    writer.writerow([
+        '收到评价的交易', rating['coverage']['rated_count'], '',
+        f"占 {rating['coverage']['rating_rate']}%",
+    ])
+    writer.writerow([
+        '双方都评价', rating['coverage']['both_rated_count'], '',
+        f"占 {rating['coverage']['both_rated_rate']}%，唯一健康的形状",
+    ])
+    writer.writerow([
+        '只有一方评价', rating['coverage']['one_sided_count'], '',
+        f"占 {rating['coverage']['one_sided_rate']}%，另一个人再也不会回来评这笔交易",
+    ])
+    writer.writerow([
+        '双方都没评价', rating['coverage']['neither_rated_count'], '',
+        f"占 {rating['coverage']['neither_rated_rate']}%，这笔交易在评价体系里是隐形的",
+    ])
+    if rating['coverage']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {rating['min_measured_orders']} 笔，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['这笔交易有几个人被评价'])
+    writer.writerow(['评价人数', '交易数', '占比（%）', '说明'])
+    for row in rating['coverage']['rating_count_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['note']])
+
+    writer.writerow([])
+    writer.writerow(['这一方评没评，不能只看总数'])
+    writer.writerow(['方向', '交易数', '占比（%）', '口径说明'])
+    for key, label, count, share in (
+        ('buyer', '买家评了卖家', rating['coverage']['buyer_rated_count'],
+         rating['coverage']['buyer_rated_rate']),
+        ('seller', '卖家评了买家', rating['coverage']['seller_rated_count'],
+         rating['coverage']['seller_rated_rate']),
+        ('both', '双方都评', rating['coverage']['both_rated_count'],
+         rating['coverage']['both_rated_rate']),
+        ('one_sided', '只有一方评', rating['coverage']['one_sided_count'],
+         rating['coverage']['one_sided_rate']),
+        ('neither', '双方都没评', rating['coverage']['neither_rated_count'],
+         rating['coverage']['neither_rated_rate']),
+    ):
+        writer.writerow([
+            label, count,
+            share if rating['coverage']['total'] else '—',
+            '只要有一个人评了就算「有评价」，另一个人可能永远不评'
+            if key == 'one_sided' else
+            ('这笔交易在评价体系里是隐形的' if key == 'neither' else ''),
+        ])
+
+    writer.writerow([])
+    writer.writerow(['分打出来之后多久才提交'])
+    writer.writerow(['提交间隔', '评价数', '占比（%）', '说明'])
+    for row in rating['latency']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['note']])
+    writer.writerow([
+        '中位 / P90 / 平均', rating['latency']['median_label'],
+        rating['latency']['p90_label'], rating['latency']['average_label'],
+        '订单完成时刻取 OrderEvent 里 to_status 为 completed / returned 的那一条',
+    ])
+    writer.writerow([
+        '交易完成一个月以后才补的评价', rating['latency']['late_count'], '',
+        f"占 {rating['latency']['late_rate']}%，此时记忆已经很不可靠",
+    ])
+    if rating['latency']['missing_event_count']:
+        writer.writerow([
+            '找不到完成事件的评价', rating['latency']['missing_event_count'], '',
+            'OrderEvent 缺了这一笔，属于数据本身不完整，不计入时延分布',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['补得最晚的几笔评价'])
+    writer.writerow(['订单', '商品', '评价人', '分数', '提交间隔', '提交于'])
+    for row in rating['latency']['slowest_rows']:
+        writer.writerow([
+            row['order'].id, row['order'].item.title,
+            row['rating'].rater.username, f"{row['rating'].score} 星",
+            row['latency_label'],
+            row['rating'].created_at.strftime('%Y-%m-%d %H:%M'),
+        ])
+
+    writer.writerow([])
+    writer.writerow(['还没有人评价的交易'])
+    writer.writerow(['订单', '商品', '交易方式', '下单于'])
+    for row in rating['latency']['unrated_rows']:
+        writer.writerow([
+            row['order'].id, row['order'].item.title,
+            row['order'].item.get_trade_mode_display(),
+            row['order'].created_at.strftime('%Y-%m-%d %H:%M'),
+        ])
+    if rating['latency']['unrated_row_total'] > rating['latency']['unrated_row_limit']:
+        writer.writerow([
+            '清单最多列出', rating['latency']['unrated_row_limit'], '条', '',
+            f"共 {rating['latency']['unrated_row_total']} 笔",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['五星分布'])
+    writer.writerow(['分数', '评价数', '占比（%）', '口径说明'])
+    for row in rating['score']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], ''])
+    writer.writerow([
+        '均分', rating['score']['average'], '',
+        'Avg 已在卖家信誉摘要里报过，这里只作参照，不合成任何好评率',
+    ])
+    writer.writerow([
+        '两星及以下', rating['score']['low_count'], '',
+        f"占 {rating['score']['low_rate']}%，一星和二星是这套评价里唯一真正重要的信号",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['有交付异常的交易，打分是不是不一样'])
+    writer.writerow(['分组', '交易数', '评价数', '均分', '两星及以下占比（%）', '五星占比（%）'])
+    for row in rating['incident_contrast']['rows']:
+        writer.writerow([
+            row['label'], row['order_count'], row['rating_count'],
+            row['average'] if row['average'] is not None else '—',
+            row['low_rate'] if row['rating_count'] else '—',
+            row['top_rate'] if row['rating_count'] else '—',
+        ])
+    if rating['incident_contrast']['low_rate_gap'] is not None:
+        writer.writerow([
+            '两星及以下占比相差', rating['incident_contrast']['low_rate_gap'],
+            '个百分点',
+            '噪声门槛内不给方向' if rating['incident_contrast']['is_noise']
+            else '超出噪声门槛，但只是对照，不构成因果',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['评价里写了文字的有多少'])
+    writer.writerow(['文字长度', '评价数', '占比（%）', '口径说明'])
+    for row in rating['comment']['length_rows']:
+        writer.writerow([row['label'], row['count'], row['share'], ''])
+    writer.writerow([
+        '填写率', rating['comment']['filled_count'], '',
+        f"占 {rating['comment']['fill_rate']}%，平均 {rating['comment']['average_length']} 字",
+    ])
+    if rating['comment']['average_gap'] is not None:
+        writer.writerow([
+            '写了文字的平均分减没写的', rating['comment']['average_gap'], '分',
+            '噪声门槛内不给方向' if rating['comment']['is_noise'] else '超出噪声门槛',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['按交易方式拆开'])
+    writer.writerow(['交易方式', '交易数', '评价数', '收到评价的交易', '占比（%）', '均分'])
+    for row in rating['trade_mode']['rows']:
+        writer.writerow([
+            row['label'], row['order_count'], row['rating_count'],
+            row['rated_count'], row['rating_rate'],
+            row['average'] if row['average'] is not None else '—',
+        ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
     if dashboard['operational_alerts']:
