@@ -1048,6 +1048,15 @@ a { color: inherit; text-decoration: none; }
 .saved-search-latency-panel .ops-mini-stat { background: #fff; }
 .saved-search-latency-panel .ops-mini-stat strong { color: #2f5d6b; }
 .saved-search-latency-panel .badge { font-weight: 600; }
+.campus-verification-friction-panel .ops-table td { vertical-align: top; }
+/* 认证摩擦面板自成一组色相（紫灰）。它问的是「一封邮件发出去，用户隔了多久回来点」，
+   发生在注册之后、拿到可信标识之前，和搜索之后的命中时延、心动之后的考虑窗口
+   都不是同一片，所以不用它们的底色；色相偏暖偏沉，因为这一栏报的多半是「被拦了」。 */
+.campus-verification-friction-panel { padding: 14px; border: 1px solid #ddd6e6; border-radius: 14px; background: linear-gradient(135deg, #f7f4fb, #fdfcfe); color: #574f66; }
+.campus-verification-friction-panel p { color: #7d7590; }
+.campus-verification-friction-panel .ops-mini-stat { background: #fff; }
+.campus-verification-friction-panel .ops-mini-stat strong { color: #4d4470; }
+.campus-verification-friction-panel .badge { font-weight: 600; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }

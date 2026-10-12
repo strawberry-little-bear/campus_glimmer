@@ -43,6 +43,7 @@ from .first_viewed import (
     NOISE_POINTS as FIRST_VIEWED_NOISE_POINTS, build_first_viewed,
 )
 from .saved_search_latency import build_saved_search_latency
+from .campus_verification_friction import build_campus_verification_friction
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2192,6 +2193,7 @@ def operations_dashboard(request):
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
+    dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2339,6 +2341,7 @@ def operations_dashboard_export(request):
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
+    dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3390,6 +3393,68 @@ def operations_dashboard_export(request):
         '不调整任何用户的汇总节奏、不清理失效命中、不重发通知、'
         '也不用统计结果做任何推荐排序。',
     ])
+
+    writer.writerow([])
+    friction = dashboard['campus_verification_friction']
+    writer.writerow(['一封验证邮件，用户隔了多久才点开', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', friction['summary'],
+        '只读 token_issued_at 与 verified_at 的差值，不改写任何一条认证记录、'
+        '任何一个用户，也不把统计写回任何记录',
+    ])
+    writer.writerow([
+        '周期内认证成功', friction['stats']['measured_count'], '',
+        '分母只收已经认证成功的记录；未完成认证没有完成时刻，谈不上等了多久',
+    ])
+    writer.writerow([
+        '还挂在「待验证邮箱」的认证', friction['pending_count'], '',
+        '按 token_issued_at 取窗口数出来，是右删失样本，不计入任何耗时分布',
+    ])
+    writer.writerow([
+        '隔超过一天才点开', friction['slow_row_total'], '',
+        '多半是被当成垃圾邮件，或者用户已经忘了这回事，正是要核实的一批',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['等待档', '条数', '占比（%）', '这一档说明什么'])
+    for row in friction['stats']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '中位 / P90 / 平均', '', '',
+        f"{friction['stats']['median_label']} / {friction['stats']['p90_label']}"
+        f" / {friction['stats']['mean_label']}",
+    ])
+    if friction['stats']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {friction['min_measured_verifications']} 条，占比只作参考", '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '按域名看，是哪一类邮箱在慢', '学校 / 域名', '认证成功', '中位耗时',
+        '隔超过一天', '占比（%）', '是否值得核实',
+    ])
+    for row in friction['domain_rows']:
+        writer.writerow([
+            '', row['domain_name'], row['count'], row['median_label'],
+            row['slow_count'], row['slow_rate'],
+            '是' if row['slow_rate'] >= friction['slow_domain_points'] else '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '隔了超过一天才点开链接的记录', '用户', '校园邮箱', '学校 / 域名',
+        '等了', '邮件发出', '认证成功',
+    ])
+    if friction['slow_rows']:
+        for row in friction['slow_rows']:
+            writer.writerow([
+                '', row['username'], row['campus_email'], row['domain_name'],
+                row['elapsed_label'],
+                row['token_issued_at'].strftime('%Y-%m-%d %H:%M'),
+                row['verified_at'].strftime('%Y-%m-%d %H:%M'),
+            ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
     if dashboard['operational_alerts']:

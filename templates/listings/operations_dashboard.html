@@ -2388,6 +2388,90 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 campus-verification-friction-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Campus verification friction</span><h2>一封验证邮件，用户隔了多久才点开</h2></div>
+        <span class="ops-panel-hint">发邮件与点链接的时间戳差值，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-envelope-at me-1"></i>校园身份认证是这套系统里唯一一个「平台主动发一封邮件、然后等用户自己回来点链接」的闭环，而它是可信交易的入口：交易安全卡上「发布者已完成校园身份认证」这条正面信号、公开资料页上的认证标识，全靠它。<code>CampusVerification</code> 一直在写两个时间戳：<code>token_issued_at</code> 每次发送或重发验证邮件都会刷新，<code>verified_at</code> 在用户点开链接、令牌通过校验的那一刻写上。<code>token_issued_at</code> 唯一的读者是 <code>verify_campus_email</code> 里的 24 小时过期判断，<code>verified_at</code> 唯一的读者是 <code>is_verified</code> 属性和两处 <code>verified_at__isnull=False</code> 的筛选——<strong>两个字段的差值，从来没有任何一行代码算过</strong>。运营侧能回答「有多少人认证成功」，回答不了「认证这步卡不卡」「卡在哪一类邮箱」：一个点了两次「重新发送验证邮件」还没有认证成功的用户，和一个第一次收到邮件就点开的用户，在后台是同一个 <code>pending</code>，一模一样。</p>
+    {% if not campus_verification_friction.has_data %}
+    <div class="empty-inline">{{ campus_verification_friction.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内认证成功</span><strong>{{ campus_verification_friction.stats.measured_count }}</strong><small>另有 {{ campus_verification_friction.pending_count }} 条还挂在「待验证邮箱」</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>中位耗时</span><strong>{{ campus_verification_friction.stats.median_label }}</strong><small>P90 {{ campus_verification_friction.stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>平均耗时</span><strong>{{ campus_verification_friction.stats.mean_label }}</strong><small>分档口径见下，长尾拖高它</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>隔超过一天才点开</span><strong>{{ campus_verification_friction.slow_row_total }}</strong><small>已逐条列在下面，等得越久越靠前</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从收到邮件到点开链接，等了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>等待时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in campus_verification_friction.stats.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母只收<strong>已经认证成功</strong>的记录。还挂在 <code>pending</code> 上的认证没有完成时刻，谈不上等了多久——那是右删失样本，单独数在上面，不丢也不混。<code>unverified</code> 状态压根没有发过邮件，<code>token_issued_at</code> 是空的，算进去只会让耗时凭空变长。分档<strong>按分钟和小时切，不按秒</strong>：一次认证等待的时间尺度是分钟到小时，报「平均 3 分 12 秒」会让运营以为该去优化毫秒级的东西，而真正要动作的是「邮件有没有到」「链接好不好找」。{% if campus_verification_friction.stats.is_small_sample %}当前不足 {{ campus_verification_friction.min_measured_verifications }} 条，占比只作参考。{% endif %}</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">按域名看，是哪一类邮箱在慢</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>学校 / 域名</th><th>认证成功</th><th>中位耗时</th><th>隔超过一天</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in campus_verification_friction.domain_rows %}
+                        <tr>
+                            <td>{{ row.domain_name }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{{ row.median_label }}</td>
+                            <td>{{ row.slow_count }}</td>
+                            <td>{% if row.slow_rate >= campus_verification_friction.slow_domain_points %}<span class="badge text-bg-warning">{{ row.slow_rate }}</span>{% else %}{{ row.slow_rate }}{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5">当前周期没有按域名可分的认证记录。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if campus_verification_friction.domain_row_total > campus_verification_friction.domain_row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>域名最多列 {{ campus_verification_friction.domain_row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0"><strong>按域名分组，不按用户分组</strong>：同一个学校的校园邮箱，收件速度、垃圾邮件策略、学生查邮件的习惯都是同一个量级。按域名报，运营能看出「是某一类邮箱特别慢」还是「所有邮箱都慢」——前者是邮件服务商的问题，该去看发件域名和 IP 的信誉；后者是我们自己的文案或链接位置的问题。超过 {{ campus_verification_friction.slow_domain_points }} 个百分点才标黄：<strong>几个百分点的差距在这个样本量上是噪声</strong>，标黄是给「现在去核实」用的，不是给归档用的。慢的排在前面，样本量相同时才按域名名稳定。</p>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-4">隔了超过一天才点开链接的记录</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>用户</th><th>校园邮箱</th><th>学校 / 域名</th><th>等了</th><th>邮件发出</th><th>认证成功</th></tr></thead>
+            <tbody>
+                {% for row in campus_verification_friction.slow_rows %}
+                <tr>
+                    <td>{{ row.username }}</td>
+                    <td>{{ row.campus_email }}</td>
+                    <td>{{ row.domain_name }}</td>
+                    <td>{{ row.elapsed_label }}</td>
+                    <td>{{ row.token_issued_at|date:'Y-m-d H:i' }}</td>
+                    <td>{{ row.verified_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6">当前周期没有隔超过一天才认证成功的记录。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if campus_verification_friction.slow_row_total > campus_verification_friction.slow_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ campus_verification_friction.slow_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">每行带上邮件发出和认证成功两个时刻，因为要区分的是「用户真的隔了一天多才看到这封邮件」和「这条记录的时间戳被手工改过」——前者是该去核实收件情况的对象，后者是数据里的矛盾，本模块把它归到最短的一档，<strong>不让它把任何分布拖歪</strong>。重发次数只当参照：<code>token_issued_at</code> 会被重发覆盖，记录里只留着最后一封邮件的发出时间，前几次是什么时候发的没有留痕，所以这里不单独数「重发过几次」——那个数报不出来。</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-envelope-at me-1"></i>本模块只报告，<strong>不重发任何验证邮件、不改任何一条认证记录的状态</strong>：一个期末周的学生三天后才看到邮件，不是平台的错；一个把验证邮件当垃圾邮件拦掉的邮箱，也不是用户的错——平台没有能力区分这两者，也就不该替任何一方下结论。不改 <code>CampusVerification</code> 的任何字段、不清理过期令牌、不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
