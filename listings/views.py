@@ -46,6 +46,7 @@ from .saved_search_latency import build_saved_search_latency
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 from .moderation_rule_quality import build_moderation_rule_quality
+from .availability_watch_quality import build_availability_watch_quality
 from .search_rewrites import build_search_rewrite_candidates
 from .search_synonym_effect import build_search_synonym_effects
 from .demand_radar_outcome import build_demand_radar_outcomes
@@ -2198,6 +2199,7 @@ def operations_dashboard(request):
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
+    dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2348,6 +2350,7 @@ def operations_dashboard_export(request):
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
+    dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -3640,6 +3643,108 @@ def operations_dashboard_export(request):
             '样本不足', '', '', '', '',
             f"不足 {rule['min_measured_events']} 条，占比只作参考",
         ])
+
+    writer.writerow([])
+    watch = dashboard['availability_watch_quality']
+    writer.writerow([
+        '等一个有货的人等了多久，第一次被运营读到', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', watch['summary'],
+        '只读 ItemAvailabilityWatch 的 created_at、item 的 status / trade_mode / '
+        'category 和 Notification 的 is_read，不改写任何一条关注、不自动清理、'
+        '不补发通知、不读任何自由文本。消费即删除，所以「等到的人等了多久」'
+        '数不出来，本模块只报当前仍挂着的关注',
+    ])
+    writer.writerow([
+        '现在还挂着的关注', watch['stats']['measured_count'], '',
+        '按 created_at 取窗口，只收当前仍在等的；被取消和被消费的是右删失样本',
+    ])
+    writer.writerow([
+        '中位 / P90 / 平均等待', '', '',
+        f"{watch['stats']['median_label']} / {watch['stats']['p90_label']}"
+        f" / {watch['stats']['mean_label']}",
+    ])
+    writer.writerow([
+        '商品已不可交易的关注', watch['stats']['unavailable_count'], '',
+        f"占 {watch['stats']['unavailable_rate']}%，按当前状态回看，偏高",
+    ])
+    writer.writerow([
+        '死信', watch['stats']['dead_letter_count'], '',
+        '商品已恢复在售、关注却还挂着：这些人点了提醒、商品回来了、'
+        '却永远不会被通知',
+    ])
+    if watch['stats']['is_small_sample']:
+        writer.writerow([
+            '样本不足', '', '', '',
+            f"不足 {watch['min_measured_watches']} 条，占比只作参考",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['等得越久，是不是越可能是白等'])
+    writer.writerow([
+        '等了多久', '关注数', '占比（%）', '商品已不可交易', '占比（%）',
+    ])
+    shares = {row['label']: row['share'] for row in watch['stats']['rows']}
+    for row in watch['stats']['status_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            shares.get(row['label'], '—') if row['count'] else '—',
+            row['unavailable_count'] if row['count'] else '—',
+            row['unavailable_rate'] if row['unavailable_rate'] is not None else '—',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['一件商品上有多少人在等'])
+    writer.writerow(['关注数', '商品数', '占比（%）', '说明'])
+    for row in watch['item_watch_rows']:
+        writer.writerow([
+            row['label'], row['count'], row['share'], row['hint'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['死信：商品已经恢复在售，人却永远不会被通知'])
+    writer.writerow(['商品', '等了多久', '点下关注于'])
+    for row in watch['dead_letter_rows']:
+        writer.writerow([
+            row['item_title'], row['wait_label'],
+            row['created_at'].strftime('%Y-%m-%d %H:%M'),
+        ])
+    if watch['dead_letter_row_total'] > watch['dead_letter_row_limit']:
+        writer.writerow([
+            '清单最多列出', watch['dead_letter_row_limit'], '条',
+            f"共 {watch['dead_letter_row_total']} 条",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['白等：商品已经不可交易，人还在等'])
+    writer.writerow(['商品', '分类', '交易方式', '等了多久', '点下关注于'])
+    for row in watch['long_wait_rows']:
+        writer.writerow([
+            row['item_title'], row['category_name'], row['trade_mode_label'],
+            row['wait_label'], row['created_at'].strftime('%Y-%m-%d %H:%M'),
+        ])
+    if watch['long_wait_row_total'] > watch['long_wait_row_limit']:
+        writer.writerow([
+            '清单最多列出', watch['long_wait_row_limit'], '条',
+            f"共 {watch['long_wait_row_total']} 条",
+        ])
+
+    writer.writerow([])
+    writer.writerow(['有货提醒的触达质量'])
+    writer.writerow(['指标', '数值', '说明'])
+    writer.writerow([
+        '周期内送达', watch['delivery']['measured_count'], '',
+        'kind 为 item_available 的站内通知，不重复 notification_response 的时延统计',
+    ])
+    writer.writerow([
+        '已读', watch['delivery']['read_count'], '',
+        f"占 {watch['delivery']['read_rate']}%",
+    ])
+    writer.writerow([
+        '送达时商品已不可交易', watch['delivery']['stale_count'], '',
+        f"占 {watch['delivery']['stale_rate']}%，按当前状态回看，偏高",
+    ])
 
     writer.writerow(['运营提醒', '级别', '指标', '说明', '建议动作'])
     if dashboard['operational_alerts']:

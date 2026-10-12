@@ -2727,6 +2727,7 @@
     {% endif %}
 </section>
 
+
 <section class="content-card ops-panel mb-4 governance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
@@ -2776,6 +2777,104 @@
     {% endif %}
 
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。待处理清单不按统计周期过滤：周期开始前就超期的事项，恰恰是最不该被藏起来的那一件。</div>
+</section>
+<section class="content-card ops-panel mb-4 availability-watch-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Availability watch</span><h2>等一个有货的人等了多久，第一次被运营读到</h2></div>
+        <span class="ops-panel-hint">「有货时提醒我」现在还在等的人，等了多久了</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-bell me-1"></i><code>ItemAvailabilityWatch</code> 是站内唯一一条「用户主动表达想要、商品真的回来了、然后证据被删掉」的队列。模型只有 <code>user</code>、<code>item</code>、<code>created_at</code> 三个字段，<strong>唯一的消费路径在发出通知的那一刻就把记录删掉了</strong>——<code>availability.py</code> 的 <code>notify_item_available</code> 在一个事务里捞出这件商品的全部关注，逐条发通知，发成功就 <code>watch.delete()</code>。于是「从点下关注到商品真的回来隔了多久」这个分布，对已经等到的那批人数不出来，<strong>唯一的证据在通知发出的那一刻就被抹掉了，事后无法回补</strong>。本模块不报那个数，也不用一个近似值冒充它；它报的是当前还挂着的关注等了多久——那是存量不是流量，而存量才是现在能动作的那一批。</p>
+    {% if not availability_watch_quality.has_data %}
+    <div class="empty-inline">{{ availability_watch_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>现在还挂着的关注</span><strong>{{ availability_watch_quality.stats.measured_count }}</strong><small>最近 {{ availability_watch_quality.period_days }} 天点下的</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>中位等待</span><strong>{{ availability_watch_quality.stats.median_label }}</strong><small>P90 {{ availability_watch_quality.stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>商品已不可交易</span><strong>{{ availability_watch_quality.stats.unavailable_count }}</strong><small>占 {{ availability_watch_quality.stats.unavailable_rate }}%，按当前状态回看，偏高</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>死信</span><strong>{{ availability_watch_quality.stats.dead_letter_count }}</strong><small>商品回来了，人却永远不会被通知</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">等得越久，是不是越可能是白等</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>等了多久</th><th>关注数</th><th>占比（%）</th><th>商品已不可交易</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in availability_watch_quality.stats.status_rows %}
+                        <tr>
+                            <td>{{ row.label }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.count %}{% for r in availability_watch_quality.stats.rows %}{% if r.label == row.label %}{{ r.share }}{% endif %}{% endfor %}{% else %}—{% endif %}</td>
+                            <td>{% if row.count %}{{ row.unavailable_count }}{% else %}—{% endif %}</td>
+                            <td>{% if row.unavailable_rate is None %}—{% else %}{{ row.unavailable_rate }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>按档看商品状态，不按总数看。</strong>想知道的是「等越久是不是越可能是白等」，而这个问题只有逐档对照才答得出来：如果每一档的不可交易率都差不多，那等待本身就不是原因，是这批商品本来就容易卖掉。<strong>商品状态一律按当前状态回看</strong>——商品状态只记当前值，不记历史，所以这一栏系统性偏高：一条关注点下时商品在售、之后才被卖掉的也算进来。宁可高估，运营看到高估的数字会去核实，看到低估的数字会直接相信。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">一件商品上有多少人在等</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>关注数</th><th>商品数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                    <tbody>
+                        {% for row in availability_watch_quality.item_watch_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td>{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>分母是商品数，不是关注数。</strong>一件商品被八个人关注，按关注数走会在分布里出现八次，「竞争激烈」那一档被同一件商品撑起来，而它其实只是一件商品。这和免费领取申请队列的长度分布是同一个道理。</p>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-4">死信：商品已经恢复在售，人却永远不会被通知</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>商品</th><th>等了多久</th><th>点下关注于</th></tr></thead>
+            <tbody>
+                {% for row in availability_watch_quality.dead_letter_rows %}
+                <tr>
+                    <td><a href="{% url 'item_detail' row.item_id %}">{{ row.item_title }}</a></td>
+                    <td>{{ row.wait_label }}</td>
+                    <td>{{ row.created_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3">当前周期没有「商品回来了却没人知道」的关注。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if availability_watch_quality.dead_letter_row_total > availability_watch_quality.dead_letter_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ availability_watch_quality.dead_letter_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">判据是<strong>商品已经恢复在售、关注却还挂着</strong>：<code>item.is_available_now</code> 为真，而这条关注没有等到通知。它只有三个来源——用户关掉了「商品重新有货」这一类通知（此时 <code>create_notification</code> 返回 <code>None</code>，关注不被删除，从此挂在一件正在出售的商品上）、卖家编辑商品重新上架（<code>edit_item</code> 不走 <code>notify_item_available</code>）、双方确认归还（<code>confirm_return</code> 也不走）。<strong>这不是一个统计缺口，是一个静默的功能失效</strong>：用户点了一个按钮，得到一个「已设置」的成功反馈，然后什么都等不到。没有报错、没有日志、没有任何一行代码知道这件事发生过。</p>
+    <h3 class="h6 mb-3 mt-4">白等：商品已经不可交易，人还在等</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>商品</th><th>分类</th><th>交易方式</th><th>等了多久</th><th>点下关注于</th></tr></thead>
+            <tbody>
+                {% for row in availability_watch_quality.long_wait_rows %}
+                <tr>
+                    <td><a href="{% url 'item_detail' row.item_id %}">{{ row.item_title }}</a></td>
+                    <td>{{ row.category_name }}</td>
+                    <td>{{ row.trade_mode_label }}</td>
+                    <td>{{ row.wait_label }}</td>
+                    <td>{{ row.created_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前周期没有挂在已售出或已过期商品上的关注。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if availability_watch_quality.long_wait_row_total > availability_watch_quality.long_wait_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ availability_watch_quality.long_wait_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">死信是「商品回来了却没人知道」，这里是「商品还没回来，而人已经等了很久」。前者是平台的漏报，后者多半是白等——<strong>但卖家随时可能重新上架，平台没有能力替一个具体的人决定这条关注该不该继续挂着</strong>。只报规模和等了多久，不给方向。</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-bell me-1"></i>本模块只报告，<strong>不改 <code>notify_item_available</code> 的删除语义、不自动清理任何一条关注、不补发漏掉的通知、不给卖家看「有 N 个人在等」、不读任何自由文本</strong>。一次性提醒删掉关注是正确的业务行为，为一次统计去改一条正在跑的业务路径不划算；而给卖家看等待人数，是平台在改变卖家和等他的人之间的力量对比，要做也得单独设计。</div>
+    {% endif %}
 </section>
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

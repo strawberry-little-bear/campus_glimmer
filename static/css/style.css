@@ -1079,6 +1079,18 @@ a { color: inherit; text-decoration: none; }
 .moderation-rule-quality-panel .ops-mini-stat strong { color: #33465c; }
 .moderation-rule-quality-panel .badge { font-weight: 600; }
 
+/* 有货提醒关注质量面板自成一组色相（暖灰褐）。它问的是「点下关注的人等了多久、
+   有多少人永远等不到」，是需求侧的回声——用户主动表达想要、平台承诺东西回来了
+   告诉他，这里报的是这个承诺兑没兑现。它和 gift_application-queue 那组报的不是
+   同一件事：那组报的是「一份申请有没有被处理」，这里报的是「一次等待有没有被
+   回应」。色相偏暖，因为这一栏讲的是人在等，而等待是暖的；底色压暗，因为等不到
+   的那部分读起来不该轻快。 */
+.availability-watch-quality-panel { padding: 14px; border: 1px solid #e0d3c2; border-radius: 14px; background: linear-gradient(135deg, #faf6f0, #fdfcfa); color: #57493c; }
+.availability-watch-quality-panel p { color: #7a6a5c; }
+.availability-watch-quality-panel .ops-mini-stat { background: #fff; }
+.availability-watch-quality-panel .ops-mini-stat strong { color: #6b4f34; }
+.availability-watch-quality-panel .badge { font-weight: 600; }
+
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,
