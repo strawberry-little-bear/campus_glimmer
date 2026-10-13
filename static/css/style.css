@@ -1168,6 +1168,30 @@ a { color: inherit; text-decoration: none; }
    不用两种颜色——它们都不该被当成异常高亮，只是读的时候要能一眼分开。 */
 .demand-task-aging-panel .ops-table td:nth-child(3) { white-space: nowrap; }
 
+/* 延后通知回归面板自成一组色相（暖灰偏纸，压一层旧信感）。
+ * 为什么自成一套颜色：站内通知侧已有两块——通知处理时效面板的青蓝给「多久被处理」，
+ * 私信响应面板的绿给「聊起来了没有」，而这一栏报的是「用户说现在不方便之后怎么样了」。
+ * 它读的是 snoozed_until 与 read_at 之间的关系，不是通知本身的状态，也不是角标大小。
+ * 跟进任务接手等待已经取了冷灰蓝（那条线上的数字多半是「建了很久，没人碰」），这里不能再
+ * 用同一组冷色，否则两个面板在滚动时会读成同一件事。取一组偏暖的灰，和「暂时放一放」的
+ * 语气对上：这一栏的数字多半是「用户看过，只是现在不方便」。
+ * 注意不用红色：到点未读不是错误，只是沉默换了一种形式，用红色会让运营当成故障去处理。
+ * 也不用绿色：延后过的通知阅读率更高或更低都不值得庆祝——那是人的差别，不是平台的成绩。 */
+.notification-snooze-return-panel { padding: 14px; border: 1px solid #ddd3c4; border-radius: 14px; background: linear-gradient(135deg, #f7f3ea, #fdfbf7); color: #5b5245; }
+.notification-snooze-return-panel p { color: #6f6455; }
+.notification-snooze-return-panel .ops-mini-stat { background: #fff; }
+.notification-snooze-return-panel .ops-mini-stat strong { color: #6b5a3e; }
+.notification-snooze-return-panel .ops-mini-stat span,
+.notification-snooze-return-panel .ops-mini-stat small { color: #8a7f6d; }
+.notification-snooze-return-panel .table th { color: #5f5648; }
+.notification-snooze-return-panel .table td { vertical-align: top; }
+.notification-snooze-return-panel .badge { font-weight: 600; }
+.notification-snooze-return-panel .rewrite-candidate-footnote { color: #6f6455; }
+.notification-snooze-return-panel .ops-footer-note { color: #6f6455; }
+/* 五种结局里「到点之后仍未读」压暗而不是标红：它和「还在延后中」是同一条线的两端，
+   都不该被当成异常高亮，只是读的时候要能一眼分开。 */
+.notification-snooze-return-panel .ops-table td:first-child { white-space: nowrap; }
+
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,

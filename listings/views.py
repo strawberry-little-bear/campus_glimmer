@@ -33,6 +33,7 @@ from .demand_match_quality import build_demand_match_quality
 from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .demand_opportunity_followups import build_demand_opportunity_followups
 from .demand_task_aging import build_demand_task_aging
+from .notification_snooze_return import build_notification_snooze_return
 from .meeting_attendance import build_meeting_attendance
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2206,6 +2207,7 @@ def operations_dashboard(request):
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
+    dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2373,6 +2375,7 @@ def operations_dashboard_export(request):
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
+    dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2817,6 +2820,159 @@ def operations_dashboard_export(request):
         '负责人只作为一列出现，用来找到人，不用来比较人；空平台报「—」不报 0 天。',
     ])
 
+    snooze = dashboard['notification_snooze_return']
+    writer.writerow([])
+    writer.writerow(['延后的通知，延了之后回来了吗', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', snooze['summary'],
+        '延后期从处理时长里拆出来；只报告，不自动取消延后、不自动标记已读、不加迁移、不改写入路径',
+    ])
+    writer.writerow([
+        '周期发送', snooze['totals']['sent_total'],
+        '按 created_at 落在统计周期内筛',
+    ])
+    writer.writerow([
+        '被延后过', snooze['totals']['snoozed_total'] or 0,
+        (
+            f"占 {snooze['totals']['snoozed_rate']}%"
+            if snooze['totals']['snoozed_rate'] is not None else '—'
+        ),
+    ])
+    writer.writerow([])
+    writer.writerow(['结局', '条数', '占比（%）', '口径说明'])
+    outcome_notes = {
+        'still_snoozed': '用户说「现在不方便」，还没到回来的时刻',
+        'read_while_snoozed': '不等了，提前回来处理；还没到期就被一键已读的也落进这一档',
+        'read_after_return': '回来了，而且读了；到期之后被一键已读的，也会落进这一档',
+        'unread_after_return': '回来了，然后继续沉默——这是本模块最硬的一个数',
+        'read_without_timestamp': 'read_at 上线之前标记的老数据，如实报出来、不并进任何一档',
+    }
+    if not snooze['has_data']:
+        writer.writerow(['当前周期还没有通知数据，延后与回来需要先有通知存在。'])
+    else:
+        for row in snooze['totals']['outcome_rows']:
+            writer.writerow([
+                row['label'], row['count'], row['share'],
+                outcome_notes.get(row['key'], ''),
+            ])
+        writer.writerow([])
+        writer.writerow(['延后档位', '条数'])
+        for row in snooze['totals']['duration_rows']:
+            writer.writerow([row['label'], row['count']])
+    writer.writerow([])
+    writer.writerow(['回来之后多久被读', '条数', '口径说明'])
+    if not snooze['has_data']:
+        writer.writerow(['当前周期还没有通知数据。'])
+    else:
+        writer.writerow([
+            '到点之后才被读', snooze['return_lag']['read_after_return_count'],
+            '从 snoozed_until 起算，不从 created_at 起算',
+        ])
+        writer.writerow([
+            '中位数', snooze['return_lag']['median_label'],
+            '到期未读是右删失样本，单独数、不丢不混',
+        ])
+        writer.writerow([
+            'P90', snooze['return_lag']['p90_label'],
+            '取最近秩，也就是某次真实发生过的等待，不取插值',
+        ])
+        writer.writerow([
+            '至今没读', snooze['return_lag']['unread_after_return_count'],
+            '到期之后仍未读，不计入时长分布',
+        ])
+        writer.writerow([])
+        writer.writerow(['等了多久', '到点之后才被读'])
+        for row in snooze['return_lag']['bucket_rows']:
+            writer.writerow([row['label'], row['count']])
+    writer.writerow([])
+    writer.writerow(['把延后期从处理时长里拆出来', '中位数', '可信度'])
+    if not snooze['has_data']:
+        writer.writerow(['当前周期还没有通知数据，延后与回来需要先有通知存在。'])
+    else:
+        writer.writerow([
+            '含延期的处理时长', snooze['decomposed']['with_snooze_label'],
+            'notification_response 的口径：read_at - created_at',
+        ])
+        writer.writerow([
+            '扣掉延期的处理时长', snooze['decomposed']['without_snooze_label'],
+            '本模块的口径：read_at - snoozed_until，到期之后隔了多久被读',
+        ])
+        writer.writerow([
+            '用户主动要求的等待', snooze['decomposed']['requested_label'],
+            'snoozed_until - created_at，是下界：每次延后都会覆盖，前几次延掉的等待不在里面',
+        ])
+        writer.writerow([
+            '两者之差', snooze['decomposed']['gap_label'],
+            '三个数各有各的可信度，摆在一起看，不相加也不相减',
+        ])
+    writer.writerow([])
+    writer.writerow(['延后过 vs 从没延后过', '条数', '已读', '阅读率（%）'])
+    if not snooze['has_data']:
+        writer.writerow(['当前周期还没有通知数据，对照需要先有通知发生。'])
+    else:
+        writer.writerow([
+            '延后过（只收已有结论的）', snooze['contrast']['snoozed_total'],
+            snooze['contrast']['snoozed_read'], snooze['contrast']['snoozed_rate'],
+        ])
+        writer.writerow([
+            '从没延后过', snooze['contrast']['plain_total'],
+            snooze['contrast']['plain_read'], snooze['contrast']['plain_rate'],
+        ])
+        writer.writerow([
+            '差值（百分点）',
+            '—' if snooze['contrast']['gap_points'] is None else snooze['contrast']['gap_points'],
+            (
+                '两组各自不足样本下限，只报数字、不给方向'
+                if not snooze['contrast']['is_measurable']
+                else f"相差不足 {snooze['contrast']['noise_points']} 个百分点视为噪声，读不出方向"
+                if not snooze['contrast']['gap_is_meaningful']
+                else '已出噪声区间；这是人的差别，不是通知的差别'
+            ),
+            '', '',
+        ])
+    writer.writerow([])
+    writer.writerow(['通知类型', '周期发送', '被延后过', '到点之后仍未读', '还在延后中',
+                     '回来之后中位等待（天）', '样本是否够'])
+    if not snooze['has_data']:
+        writer.writerow(['当前周期还没有通知数据。'])
+    else:
+        for row in snooze['kind_rows']:
+            writer.writerow([
+                row['label'], row['sent'], row['snoozed'],
+                row['unread_after_return'], row['still_snoozed'],
+                '—' if row['median_days'] is None else row['median_days'],
+                f"不足 {snooze['min_bucket_sample']} 条" if row['is_small_sample'] else '够',
+            ])
+    writer.writerow([])
+    writer.writerow(['此刻（不按统计周期过滤）', '条数', '说明'])
+    writer.writerow([
+        '还在延后中', snooze['current']['still_snoozed_count'],
+        'snoozed_until 还没到',
+    ])
+    writer.writerow([
+        '到期未读', snooze['current']['overdue_count'],
+        '周期开始之前就到期未读的那一条，恰恰是最不该被藏起来的一件',
+    ])
+    writer.writerow([
+        '到期未读中位等待', snooze['current']['overdue_median_label'],
+        '从 snoozed_until 到现在',
+    ])
+    writer.writerow([
+        '到期未读最久等待', snooze['current']['overdue_max_days'],
+        '此刻全站最长的一条',
+    ])
+    for row in snooze['current']['overdue_kind_rows']:
+        writer.writerow(['到期未读集中在', row['label'], row['count']])
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '延后和未读是两种完全不同的沉默：未读是提醒没被看见，延后是提醒被看见了、被明确地推到以后。'
+        '把延后并进未读，未读率会虚高；把延后当成已处理，又会漏掉一批真的被搁置的事。'
+        '本模块只报告：不加迁移、不加字段、不改写入路径、不自动取消延后、不自动标记已读；'
+        'snoozed_until 每次延后都被覆盖，所以「延后过几次」在库里不存在，只报「当前有没有被延后」；'
+        '不列任何一条通知的原文，按通知类型聚合——通知内容是收发双方的私域内容；'
+        '不按用户排名，那是一份考勤表，不是一份看板。',
+    ])
     attendance = dashboard['meeting_attendance']
     writer.writerow([])
     writer.writerow(['约好的那一次见面', '数值', '说明'])
