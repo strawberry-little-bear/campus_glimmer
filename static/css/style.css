@@ -1060,6 +1060,22 @@ a { color: inherit; text-decoration: none; }
 .saved-search-quiet-window-panel .ops-mini-stat strong { color: #463a72; }
 .saved-search-quiet-window-panel .badge { font-weight: 600; }
 .saved-search-quiet-window-panel .search-rhythm-note { color: #5b5474; }
+.lost-found-matched-outcome-panel .ops-table td { vertical-align: top; }
+/* 失物招领终局面板自成一组色相（旧纸褐 / 档案纸）。它问的是「确认匹配之后，这条
+   记录现在停在哪一种终局里」，发生在 accept 之后、记录被关闭或过期之前，和命中时延、
+   临时静默、认证摩擦、免费领取队列都不是同一片，所以不用它们的底色。取旧纸褐是因
+   为失物招领的意象就是一张贴在公告栏上的纸：纸会黄、会积灰、会被忘在那里——
+   本模块报的正是「被忘在那里」的那一批，色温和意象对得上。不复用暮色蓝紫：那个报
+   「用户主动给一条通知按了暂停键」，报的是用户的一个当下动作；这个报「成功之后没
+   人回来收尾」，报的是一段时间的堆积，一个是事件、一个是沉淀，混用会把两件事读成
+   一件。不用红绿：这一栏没有对错判定，一条记录挂在 matched 上不是错误，只是没人收尾，
+   而收尾路径的缺失才是要动作的地方。 */
+.lost-found-matched-outcome-panel { padding: 14px; border: 1px solid #ddd2bd; border-radius: 14px; background: linear-gradient(135deg, #f7f2e7, #fdfbf6); color: #5c5040; }
+.lost-found-matched-outcome-panel p { color: #7d7060; }
+.lost-found-matched-outcome-panel .ops-mini-stat { background: #fff; }
+.lost-found-matched-outcome-panel .ops-mini-stat strong { color: #6b5433; }
+.lost-found-matched-outcome-panel .badge { font-weight: 600; }
+.lost-found-matched-outcome-panel .lost-found-outcome-note { color: #6b5c46; }
 .campus-verification-friction-panel .ops-table td { vertical-align: top; }
 /* 认证摩擦面板自成一组色相（紫灰）。它问的是「一封邮件发出去，用户隔了多久回来点」，
    发生在注册之后、拿到可信标识之前，和搜索之后的命中时延、心动之后的考虑窗口

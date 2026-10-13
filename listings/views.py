@@ -50,6 +50,7 @@ from .first_viewed import (
 )
 from .saved_search_latency import build_saved_search_latency
 from .saved_search_quiet_window import build_saved_search_quiet_window
+from .lost_found_matched_outcome import build_lost_found_matched_outcome
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
@@ -2225,6 +2226,7 @@ def operations_dashboard(request):
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
+    dashboard['lost_found_matched_outcome'] = build_lost_found_matched_outcome(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
@@ -2399,6 +2401,7 @@ def operations_dashboard_export(request):
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
+    dashboard['lost_found_matched_outcome'] = build_lost_found_matched_outcome(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
@@ -4595,6 +4598,135 @@ def operations_dashboard_export(request):
         '静默造成的等待和平台造成的等待必须分开，混进同一个分布，'
         '运营会把「用户主动暂停」读成「我们的任务又慢了」',
         '两套阈值不合成一个平均数',
+    ])
+
+    writer.writerow([])
+    matched = dashboard['lost_found_matched_outcome']
+    writer.writerow([u'失物招领确认匹配之后，记录停在哪一种终局里', u'数值', u'说明'])
+    writer.writerow([
+        u'口径与门槛', matched['summary'],
+        u'只读 status、matched_post、已确认线索与反馈，不改写任何一条记录、'
+        u'任何一条线索、任何一份反馈，也不把统计写回任何记录',
+    ])
+    writer.writerow([
+        u'统计过的匹配记录', matched['matched_total'], '',
+        u'现在 status == matched 的，加上历史上被匹配过的；不按统计周期过滤',
+    ])
+    for row in matched['outcome_rows']:
+        writer.writerow([
+            u'—', row['label'], row['post_count'],
+            u'—' if row['share'] is None else row['share'],
+            u'占比的分母是全部匹配记录，不是这一档自己',
+        ])
+    writer.writerow([
+        u'说明', '', '', '',
+        u'「已被发布者关闭」「已过期」「回到寻找中」三档在当前代码里都到不了：'
+        u'matched 是单向门，关闭、过期、编辑三处的前置条件都要求 status == active',
+    ])
+    writer.writerow([
+        u'仍标记已匹配', '', matched['outcome_rows'][0]['post_count'], '',
+        u'确认之后什么都不做是最自然的结局，这一栏不读成问题',
+    ])
+    writer.writerow([
+        u'其中截止时间已过', '', matched['overdue_stats']['measured_count'], '',
+        u'分母是「仍标记已匹配」这一档，不是全部匹配记录',
+    ])
+    writer.writerow([
+        u'没有截止时间的', '', matched['overdue_stats']['no_deadline_count'], '',
+        u'没有截止时间的记录谈不上过期，是右删失样本，不计入任何分布',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        u'挂了一个月的「已匹配」：截止时间已过，状态还没动',
+        u'档位', u'条数', u'占比（%）', u'这一档说明什么',
+    ])
+    for row in matched['overdue_stats']['rows']:
+        writer.writerow([
+            u'—', row['label'], row['count'],
+            u'—' if row['share'] is None else row['share'],
+            u'过期越久，越可能是发布者忘了回来收尾',
+        ])
+    writer.writerow([
+        u'说明', '', '', '',
+        u'三个档位互斥且完整，加起来等于分母；不报取消率——忘了和觉得没必要，'
+        u'观测数据分不开',
+        u'按天分档：失物招领的时间尺度是天',
+    ])
+    if matched['overdue_stats']['is_small_sample']:
+        writer.writerow([
+            u'样本不足', '', matched['overdue_stats']['measured_count'], '',
+            u"不足 {matched['min_bucket_sample']} 条，年龄结构只作参考",
+        ])
+
+    writer.writerow([])
+    counterpart = matched['counterpart_stats']
+    writer.writerow([u'匹配是双向的，另一条记录跟上了吗', u'数值', u'说明'])
+    writer.writerow([
+        u'填了关联记录的', counterpart['measured_count'], '',
+        u'accept 会把两边都置为 matched 并互填 matched_post',
+    ])
+    writer.writerow([
+        u'互为匹配', counterpart['mutual_count'], '',
+        u'—' if counterpart['mutual_rate'] is None else f"{counterpart['mutual_rate']}%",
+    ])
+    writer.writerow([
+        u'只有一边认这笔账', counterpart['one_sided_count'], '',
+        u'单边匹配不是 bug——用户可能删掉了自己那条记录，但它是直接证据',
+    ])
+    writer.writerow([
+        u'没有关联记录的', counterpart['no_counterpart_count'], '',
+        u'单独数，不算进双向性的分母',
+    ])
+    writer.writerow([
+        u'说明', '', '', '',
+        u'只报「两边是不是同一件事」，不报另一条记录是谁',
+        u'标题是自由文本，可能写着证件号，所以清单和这里都不出现标题',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        u'哪种终局的记录，还有人回来填反馈',
+        u'终局', u'已确认线索', u'提交反馈', u'提交率（%）',
+    ])
+    for row in matched['feedback']['rows']:
+        writer.writerow([
+            u'—', row['label'], row['accepted_count'], row['feedback_count'],
+            u'—' if row['feedback_rate'] is None else row['feedback_rate'],
+        ])
+    if not matched['feedback']['rows']:
+        writer.writerow([u'—', u'当前没有带已确认线索的匹配记录', '', '', ''])
+    writer.writerow([
+        u'说明', '', '', '',
+        u'分母是这一档里已有已确认线索的记录；没有已确认线索的不进分母',
+        u'只报终局维度，不重复 lost_found_lead_quality 的反馈维度结论',
+    ])
+
+    writer.writerow([])
+    listing = matched['list']
+    writer.writerow([
+        u'截止时间已过最久的那些记录', u'记录编号', u'记录类型', u'过期多久',
+        u'有另一条关联记录', u'提交过反馈',
+    ])
+    for row in listing['rows']:
+        writer.writerow([
+            u'—', row['post_id'], row['post_type_label'], row['overdue_label'],
+            u'有' if row['has_counterpart'] else '—',
+            u'有' if row['has_feedback'] else '—',
+        ])
+    if not listing['rows']:
+        writer.writerow([u'—', u'当前没有截止时间已过的匹配记录', '', '', '', ''])
+    if listing['row_total'] > listing['row_limit']:
+        writer.writerow([
+            u'—',
+            u"清单最多列 {listing['row_limit']} 条，当前共 {listing['row_total']} 条，"
+            u'完整的在数据库里',
+            '', '', '', '',
+        ])
+    writer.writerow([
+        u'说明', '', '', '', '',
+        u'清单是给「现在去核实」用的，不是给归档用的',
+        u'记录编号可以报，它是数字不是身份；标题和发布者都不报',
     ])
 
     writer.writerow([])
