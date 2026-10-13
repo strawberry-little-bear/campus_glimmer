@@ -2240,6 +2240,7 @@ def operations_dashboard(request):
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
+    dashboard['order_deadline_reminders'] = build_order_deadline_reminders(days=days)
     dashboard['opportunity_dismissal_quality'] = (
         build_opportunity_dismissal_quality(days=days)
     )
@@ -2416,6 +2417,7 @@ def operations_dashboard_export(request):
     dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
     dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
     dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
+    dashboard['order_deadline_reminders'] = build_order_deadline_reminders(days=days)
     dashboard['opportunity_dismissal_quality'] = (
         build_opportunity_dismissal_quality(days=days)
     )
@@ -4366,6 +4368,178 @@ def operations_dashboard_export(request):
         '不改确认码的生成与核对，也不把统计写回任何记录。',
     ])
 
+    writer.writerow([])
+    deadline_reminders = dashboard['order_deadline_reminders']
+    writer.writerow(['承诺的截止时间，和催过之后', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', deadline_reminders['summary'],
+        f"统计周期 {deadline_reminders['period_days']} 天；"
+        f"默认在截止前 {deadline_reminders['reminder_hours_default']} 小时提醒一次、"
+        f"下单后 {deadline_reminders['confirmation_timeout_hours']} 小时未确认自动释放；"
+        '两个数字都从写入路径读，看板不另设一套',
+    ])
+    writer.writerow([
+        '周期内确认了卖家的订单', deadline_reminders['confirm_stats']['total'], '',
+        '确认时刻只认 OrderEvent 里 to_status 为 confirmed 的最早一条，'
+        '不用 updated_at——那是 auto_now，每一次字段变动都会跟着走',
+    ])
+    writer.writerow([
+        '中位确认时长', deadline_reminders['confirm_stats']['median_label'], '',
+        '从下单那一刻算到确认那一刻，按订单的一生累计，不按统计周期切',
+    ])
+    writer.writerow([
+        '还挂在「待卖家确认」（周期内）', deadline_reminders['pending_in_window'], '',
+        '确认还没发生，根本谈不上花了多久——右删失样本，不进任何分母',
+    ])
+    writer.writerow([
+        '还挂在「待卖家确认」（全站）', deadline_reminders['pending_count'], '',
+        '同一口径，不按周期切：一笔跨越周期边界的等待不该被算成两段短的',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['确认花了多久', '笔数', '占比（%）', '口径说明'])
+    for row in deadline_reminders['confirm_stats']['bucket_rows']:
+        writer.writerow([
+            '', row['label'], row['count'],
+            '—' if row['share'] is None else row['share'], '',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['催过之后的四种结局', '笔数', '占比（%）', '这一档说明什么'])
+    reminder_stats = deadline_reminders['reminder_stats']
+    writer.writerow([
+        '提醒之后确认了', reminder_stats['confirmed_after'],
+        '—' if reminder_stats['confirmed_after_share'] is None else reminder_stats['confirmed_after_share'],
+        '最有信息量的一列：确认距截止还剩多少',
+    ])
+    writer.writerow([
+        '提醒之后仍被自动释放', reminder_stats['expired_after'],
+        '—' if reminder_stats['expired_after_share'] is None else reminder_stats['expired_after_share'],
+        '催了也没用——按事件备注里的「自动释放」认，不按状态猜',
+    ])
+    writer.writerow([
+        '提醒之后用户主动取消', reminder_stats['cancelled_by_user'], '',
+        '和承诺无关，单独数：取消是交易没继续，不是承诺没守住',
+    ])
+    writer.writerow([
+        '确认时刻取不到', reminder_stats['unmeasurable'], '',
+        '没有 confirmed 事件行，答不了催过之后多久确认——右删失样本，不进分档',
+    ])
+    writer.writerow([
+        '合计（收到过确认提醒）', reminder_stats['total'], '',
+        f"提醒时刻落在周期内才算；默认提前 {deadline_reminders['reminder_hours_default']} 小时发，发前判空、幂等",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['确认时距截止还剩多久', '笔数', '占比（%）', '这一档说明什么'])
+    for row in reminder_stats['margin_rows']:
+        writer.writerow([
+            '', row['label'], row['count'],
+            '—' if row['share'] is None else row['share'], row['note'],
+        ])
+    writer.writerow([
+        '', f"合计 {reminder_stats['confirmed_after']} 笔", '', '',
+        f"不足 {deadline_reminders['min_measured_orders']} 笔只报数字、不给方向；"
+        f"两档相差小于 {deadline_reminders['noise_points']} 个百分点视为噪声",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['借用侧催过之后', '笔数', '占比（%）', '这一档说明什么'])
+    borrow_stats = deadline_reminders['borrow_stats']
+    writer.writerow([
+        '归还提醒之后已归还', borrow_stats['returned'],
+        '—' if borrow_stats['returned_share'] is None else borrow_stats['returned_share'],
+        '距「预计归还」多久才真的归还',
+    ])
+    writer.writerow([
+        '归还提醒之后被取消', borrow_stats['cancelled'], '',
+        '它不是「没还」，它是「交易没有继续」',
+    ])
+    writer.writerow([
+        '归还登记或预计归还时间缺一个', borrow_stats['unmeasurable'], '',
+        '答不了「提前多久还」——右删失样本，不进分档',
+    ])
+    for row in borrow_stats['margin_rows']:
+        writer.writerow([
+            '', row['label'], row['count'],
+            '—' if row['share'] is None else row['share'], row['note'],
+        ])
+    writer.writerow([
+        '逾期通知发过仍未归还', deadline_reminders['overdue_still_borrowed'], '',
+        '这是催收阶梯的领域，这里只报规模，不动阶梯',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['台账加成拆开', '笔数', '口径说明'])
+    writer.writerow([
+        '预约确认提醒', deadline_reminders['confirmation_reminded_in_window'],
+        'process_order_timeouts 在截止前 6 小时发的那一批',
+    ])
+    writer.writerow([
+        '借用归还提醒', deadline_reminders['borrow_reminded_in_window'],
+        'process_borrow_due_notifications 在归还日前 6 小时发的那一批',
+    ])
+    writer.writerow([
+        '两者之和',
+        deadline_reminders['confirmation_reminded_in_window'] + deadline_reminders['borrow_reminded_in_window'],
+        'TaskRun.metrics 里的 reminded 就是这个数——它把两侧加成了一起，'
+        '所以调度负载涨了的时候，看板说不清是哪一侧在涨',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '催过之后仍被自动释放的订单', '订单号', '商品', '等足了多久', '催过',
+    ])
+    if deadline_reminders['release_rows']:
+        for row in deadline_reminders['release_rows']:
+            writer.writerow([
+                '', row['order_id'], row['item_title'], row['waited_label'],
+                '催过' if row['was_reminded'] else '没催过',
+            ])
+    else:
+        writer.writerow(['', '—', '当前周期没有催过之后仍被自动释放的订单', '', ''])
+    if len(deadline_reminders['release_rows']) > deadline_reminders['release_row_limit']:
+        writer.writerow([
+            '', '—', f"清单最多列 {deadline_reminders['release_row_limit']} 条，完整的在数据库里", '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '已过截止时间还挂着「待卖家确认」', '订单号', '商品', '已超时多久', '催过',
+    ])
+    if deadline_reminders['pending_rows']:
+        for row in deadline_reminders['pending_rows']:
+            writer.writerow([
+                '', row['order_id'], row['item_title'], row['overdue_label'],
+                '催过' if row['was_reminded'] else '没催过',
+            ])
+    else:
+        writer.writerow(['', '—', '当前周期没有已经超过截止时间还挂着的订单', '', ''])
+    if len(deadline_reminders['pending_rows']) > deadline_reminders['pending_row_limit']:
+        writer.writerow([
+            '', '—', f"清单最多列 {deadline_reminders['pending_row_limit']} 条，完整的在数据库里", '', '',
+        ])
+    writer.writerow([
+        '', '超时时长从截止时刻算到现在，不按统计周期切：「现在」不属于任何统计周期，'
+        '一笔跨越边界的等待按周期切开会被算成两段短的', '', '',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '「催过之后」的分母是周期内真的收到过提醒、且已经离开「待卖家确认」的订单。'
+        '四种结局分开报：提醒之后确认了、提醒之后仍被自动释放、提醒之后用户主动取消、'
+        '确认时刻取不到。合成一个「已提醒 N 笔」会把最有效的提醒和最无效的提醒混成一个'
+        '平均值——那正是运营最不该看的一个数。'
+        '自动释放和用户主动取消都表现为 cancelled，靠 OrderEvent 备注里有没有「自动释放」'
+        '区分：两者的运营动作完全相反，前者该查发布者是不是不上了，后者什么都不该做。'
+        '确认时刻只认 OrderEvent 的 confirmed，不用 updated_at。'
+        '借用侧单独取数：它有自己的状态终点（已归还）和自己的提醒字段，混在出售订单里会让'
+        '两边的「催过之后」互相污染。'
+        '本模块只报告，不改 process_order_timeouts 的触发条件、不调整 6 小时和 24 小时这两个'
+        '默认值、不自动推进任何一笔订单、不改催收阶梯、不新增提醒类型，'
+        '也不把统计写回任何记录。',
+    ])
     writer.writerow([])
     first_viewed = dashboard['first_viewed']
     writer.writerow(['从第一次心动到下一步', '数值', '说明'])

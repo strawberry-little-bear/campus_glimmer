@@ -1289,6 +1289,34 @@ a { color: inherit; text-decoration: none; }
 .notification-aggregation-quality-panel .rewrite-candidate-footnote { color: #655e75; }
 
 .notification-aggregation-quality-panel .ops-footer-note { color: #655e75; }
+/* 订单承诺截止时间与催收效果面板自成一组色相（石板蓝偏靛，压一层旧钟表感）。
+ * 为什么自成一套颜色：交付侧已有三块——当面交付握手是偏青的冷绿（#3f6b6b 一带），
+ * 归还握手是橄榄（#5b6b4a 一带），确认码是草绿（#426b53 一带），三块都偏暖或压在同
+ * 一个明度上，讲的是「见面之后那两下点完了没有」。这一栏不讲动作，讲的是「承诺与现实
+ * 的差」：两个截止时间写在那里，催了一次之后订单去了哪一种结局。它读的是
+ * confirmation_deadline 与确认时刻之间的距离，不是交付本身。
+ * 跟进任务接手等待取了冷灰蓝（那条线的数字多半是「建了很久，没人碰」），需求雷达命中
+ * 也占过蓝；这里取更冷、更亮的石板蓝并压一层靛灰（#3f4f63 一带），像一张被翻旧的
+ * 表格上盖的钟表印——「截止」「逾期」都是时间刻度，不是一个待处理的异常。滚动时和
+ * 左右两侧的交付三块、上方的接手等待都读不成同一件事。
+ * 注意不用红色：超时不是故障，是承诺与现实的差。用红色会让运营把「卖家 26 小时才确认」
+ * 当成事故去追，而它多半只是发布者晚上才打开后台。也不用绿色：确认得快不是平台的
+ * 成绩，催过之后确认了也不是——那是被催的那个人自己的选择。 */
+.order-deadline-panel { padding: 14px; border: 1px solid #cbd6e0; border-radius: 14px; background: linear-gradient(135deg, #f1f5f9, #fafcfe); color: #3f4f63; }
+.order-deadline-panel p { color: #5c6a7c; }
+.order-deadline-panel .ops-mini-stat { background: #fff; }
+.order-deadline-panel .ops-mini-stat strong { color: #34495e; }
+.order-deadline-panel .ops-mini-stat span,
+.order-deadline-panel .ops-mini-stat small { color: #78879a; }
+.order-deadline-panel .table th { color: #46566c; }
+.order-deadline-panel .table td { vertical-align: top; }
+.order-deadline-panel .badge { font-weight: 600; }
+.order-deadline-panel .rewrite-candidate-footnote { color: #4a5d75; }
+.order-deadline-panel .ops-footer-note { color: #5c6a7c; }
+/* 「催过」和「没催过」是两件不同的事，用深浅分开，不用两种颜色——两者都不该被当成
+   异常高亮，只是读的时候要能一眼分开：催过仍被释放的那一批，才是要去看的那一批。 */
+.order-deadline-panel .ops-table td:last-child { white-space: nowrap; }
+
 
 /* 分组那一列要放两行：组名加一行小字说明两组各自的含义。第一列不给 nowrap——
     这里的说明文字比版图面板长，压成一行会挤掉右侧六列数字。 */
