@@ -45,6 +45,9 @@ from .handoff_code_usage import (
 from .return_handshake import (
     NOISE_POINTS as RETURN_HANDSHAKE_NOISE_POINTS, build_return_handshake,
 )
+from .delivery_handshake import (
+    NOISE_POINTS as DELIVERY_HANDSHAKE_NOISE_POINTS, build_delivery_handshake,
+)
 from .first_viewed import (
     NOISE_POINTS as FIRST_VIEWED_NOISE_POINTS, build_first_viewed,
 )
@@ -2223,6 +2226,7 @@ def operations_dashboard(request):
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
+    dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
@@ -2398,6 +2402,7 @@ def operations_dashboard_export(request):
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
+    dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
@@ -4249,6 +4254,116 @@ def operations_dashboard_export(request):
         '本模块只报告，不改 confirm_return 的任何逻辑、不加超时、不自动推进任何一笔订单、'
         '不改催收阶梯的触发条件、不改 close_escalation 的调用点、不新增提醒类型，'
         '也不把统计写回任何记录。',
+    ])
+
+    writer.writerow([])
+    delivery_handshake = dashboard['delivery_handshake']
+    writer.writerow(['当面交付的那两下确认', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', delivery_handshake['summary'],
+        '只读 buyer_confirmed_at 与 seller_confirmed_at，不改写任何字段，'
+        '也不自动推进任何一笔订单',
+    ])
+    writer.writerow([
+        '还挂在当面交付的订单', delivery_handshake['pending_in_window'], '',
+        '握手还没结束，是右删失样本，不计入分母；按订单的一生累计，不按统计周期切',
+    ])
+    writer.writerow([
+        '全站还挂在当面交付的订单', delivery_handshake['pending_count'], '',
+        '同一口径，不按周期切：一笔跨越周期边界的等待不该被算成两段短的',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['两下是什么顺序', '笔数', '占比（%）', '中位间隔', '口径说明'])
+    for row in delivery_handshake['sequence_rows']:
+        writer.writerow([
+            row['label'], row['count'], row['share'], row['median_gap_label'],
+            '不足样本门槛，只报数字不给方向' if row['is_small_sample'] else '',
+        ])
+    writer.writerow([
+        '合计', sum(row['count'] for row in delivery_handshake['sequence_rows']), '', '',
+        '没有 DeliveryConfirmation 行的订单不进任何一档，但它仍在分母里',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['两下之间隔了多久', '笔数', '占比（%）', '口径说明'])
+    for row in delivery_handshake['gap_bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], ''])
+
+    writer.writerow([])
+    writer.writerow(['只有一方点过', '笔数', '占比（%）', '口径说明'])
+    hang_stats = delivery_handshake['hang_stats']
+    writer.writerow([
+        '只有一方点过的订单', hang_stats['total'], '', '',
+    ])
+    writer.writerow([
+        '买家点了、卖家没点', hang_stats['buyer_only'], hang_stats['buyer_only_share'], '',
+        '东西可能已经换手了，而订单还停在待当面交付',
+    ])
+    writer.writerow([
+        '卖家点了、买家没点', hang_stats['seller_only'], hang_stats['seller_only_share'], '',
+        '发布者说他给了东西，而买家还没确认——这不是安全问题，但它是一个事实',
+    ])
+    writer.writerow([
+        '中位挂起', '', hang_stats['median_hang_label'], '',
+        '从先点那一刻算到现在，不按统计周期切',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['挂了多久', '笔数', '占比（%）', '这一档说明什么'])
+    for row in hang_stats['bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], row['note']])
+
+    writer.writerow([])
+    writer.writerow(['两下间隔与订单结局的对照', '笔数', '做成', '做成率（%）', '口径说明'])
+    contrast = delivery_handshake['outcome_contrast']
+    writer.writerow([
+        '两下间隔在 1 小时内', contrast['fast_total'], contrast['fast_success'],
+        contrast['fast_rate'], '',
+    ])
+    writer.writerow([
+        '两下间隔超过 1 小时', contrast['slow_total'], contrast['slow_success'],
+        contrast['slow_rate'], '',
+    ])
+    writer.writerow([
+        '差值（百分点）', '', '',
+        '—' if contrast['gap_points'] is None else contrast['gap_points'],
+        '两组各自不足样本下限，只报数字、不给方向' if not contrast['is_measurable'] else '',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '只点了一半的订单', '订单号', '商品', '先点的一方', '挂了多久', '口径说明',
+    ])
+    if delivery_handshake['stalled_rows']:
+        for row in delivery_handshake['stalled_rows']:
+            writer.writerow([
+                row['order_id'], row['item_title'], row['first_side_label'],
+                row['hang_label'], '',
+            ])
+    else:
+        writer.writerow(['—', '当前周期没有只点了一半的交付订单', '', '', '', ''])
+    if delivery_handshake['stalled_rows'] and len(delivery_handshake['stalled_rows']) > delivery_handshake['stalled_row_limit']:
+        writer.writerow([
+            '—', f"清单最多列 {delivery_handshake['stalled_row_limit']} 条，完整的在数据库里",
+            '', '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '分母只收「已经离开待当面交付」的订单：走到了已完成、借用中、已归还，'
+        '或者带着一次真实的交付确认被取消；从没进入过当面交付就被取消的订单，'
+        '两下压根没开始，不算进来。还挂在本阶段的订单是右删失样本——握手还没有结束，'
+        '根本谈不上有没有点完——把它算进分母会让「只点一半」的比例凭空变浑，'
+        '这部分单独数出来，不丢也不混。'
+        '「双方同一秒」单独一档：它既不是买家先也不是卖家先，硬并进任何一边都会让顺序这一列失真。'
+        '挂起时长从先点那一刻算到现在，不按统计周期切：一笔跨越周期边界的等待，'
+        '按周期切开会被算成两段短的，而那正是最不该被切开的样本。'
+        '间隔与结局只做对照、不给因果：两下隔得近的订单更可能完成，'
+        '很可能只是因为双方本来就都更认真，平台没有能力把这两件事分开。'
+        '本模块只报告，不改 confirm_delivery 的任何逻辑、不自动补点、不新增提醒类型、'
+        '不改确认码的生成与核对，也不把统计写回任何记录。',
     ])
 
     writer.writerow([])
