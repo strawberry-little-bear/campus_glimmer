@@ -49,6 +49,7 @@ from .first_viewed import (
     NOISE_POINTS as FIRST_VIEWED_NOISE_POINTS, build_first_viewed,
 )
 from .saved_search_latency import build_saved_search_latency
+from .saved_search_quiet_window import build_saved_search_quiet_window
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
@@ -2223,6 +2224,7 @@ def operations_dashboard(request):
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
+    dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
@@ -2396,6 +2398,7 @@ def operations_dashboard_export(request):
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
+    dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
     dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
@@ -4468,6 +4471,130 @@ def operations_dashboard_export(request):
         '也就不该替任何一个用户改他的通知频率。'
         '不调整任何用户的汇总节奏、不清理失效命中、不重发通知、'
         '也不用统计结果做任何推荐排序。',
+    ])
+
+    writer.writerow([])
+    quiet = dashboard['saved_search_quiet_window']
+    writer.writerow(['关注搜索的临时静默：被用户主动推迟的那批命中', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', quiet['summary'],
+        '只读 quiet_until 与缓冲命中，不改写任何一条关注、任何一条命中、'
+        '任何一件商品，也不把统计写回任何记录',
+    ])
+    writer.writerow([
+        '正在静默', quiet['quiet_now_count'], '',
+        'quiet_until 是一个绝对时刻，还没到，写入路径继续跳过它',
+    ])
+    writer.writerow([
+        '静默已过期', quiet['quiet_expired_count'], '',
+        '时刻已过，写入路径不再跳过它，但它还留在字段里——不清空、也不再生效',
+    ])
+    writer.writerow([
+        '从没静默过', quiet['never_quiet_count'], '',
+        '没有按下过暂停键的关注，和按下过又清空的关注不是一回事',
+    ])
+    writer.writerow([
+        '静默中的关注压在缓冲区里的命中', quiet['buffered_now_count'], '',
+        '攒命中是暂停键的本意，这一栏不是问题',
+    ])
+    writer.writerow([
+        '早已过期的关注还压在缓冲区里的命中', quiet['buffered_expired_count'], '',
+        '这一栏才是问题：静默结束之后发送路径没接上',
+    ])
+    writer.writerow([
+        '静默时长', '报不了', '',
+        'quiet_until 只存结束时刻，站内没有任何字段记下用户什么时候按下暂停键；'
+        'updated_at 每次保存都被覆盖，而节奏表单每次都写这个字段，'
+        '所以它连「最后一次改动」都不是可靠信号。反推时长等于编数据，如实不报',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['这条关注此刻停在哪一档', '状态', '关注数', '占比（%）', '缓冲区命中', '其中商品已不可交易'])
+    for row in quiet['state_rows']:
+        writer.writerow([
+            '—', row['label'], row['search_count'],
+            '—' if row['share'] is None else row['share'],
+            row['buffered_count'], row['stale_buffered_count'],
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '占比的分母是全部关注，不是这一档自己——拿一档除一档永远得到 100%',
+        '商品状态按当前状态回看，所以这一栏系统性偏高',
+    ])
+
+    writer.writerow([])
+    for key, label in (('buffer_now', '正在静默'), ('buffer_expired', '静默已过期')):
+        stats = quiet[key]
+        writer.writerow(['静默期攒下的命中有多旧', '档位', '条数', '占比（%）', '这一档说明什么'])
+        writer.writerow([
+            f'{label} · 平均年龄', '', stats['measured_count'],
+            '—' if stats['stale_rate'] is None else stats['stale_rate'],
+            f"平均 {stats['mean_label']}，最早 {stats['oldest_label']}",
+        ])
+        for row in stats['rows']:
+            writer.writerow([
+                f'{label} · {row["label"]}', '', row['count'],
+                '—' if row['share'] is None else row['share'], row['hint'],
+            ])
+        if stats['is_small_sample']:
+            writer.writerow([
+                f'{label} · 样本不足', '', stats['measured_count'], '',
+                f"不足 {quiet['min_buffered_matches']} 条，年龄结构只作参考",
+            ])
+
+    writer.writerow([])
+    delivered = quiet['delivered']
+    writer.writerow(['静默结束之后，这条关注还活着吗', '关注条件', '节奏', '静默结束于', '暂停至今', '之后新命中', '缓冲区还剩'])
+    for row in delivered['rows']:
+        writer.writerow([
+            row['saved_search_name'], row['cadence_label'],
+            row['quiet_until'].strftime('%Y-%m-%d %H:%M'),
+            f"{row['expired_for_days']:.1f} 天",
+            row['later_hit_count'], row['buffered_count'],
+        ])
+    if not delivered['rows']:
+        writer.writerow(['—', '当前没有静默已过期的关注', '', '', '', '', ''])
+    if delivered['row_total'] > delivered['row_limit']:
+        writer.writerow([
+            '—',
+            f"清单最多列 {delivered['row_limit']} 条，"
+            f"当前共 {delivered['row_total']} 条，完整的在数据库里",
+            '', '', '', '', '',
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        f"共 {delivered['total']} 条静默已过期的关注，其中 {delivered['silent_count']} 条"
+        f"至今没有新的命中，{delivered['alive_count']} 条还有",
+        '—' if delivered['alive_rate'] is None else f"{delivered['alive_rate']}%",
+        '「暂停至今」的起点是静默结束，不是关注创建',
+    ])
+    writer.writerow([
+        '说明', '', '', '',
+        '只报「静默结束后还有没有新的命中」这一个事实，不报取消率——'
+        '取消关注可能只是用户已经找到了东西，和静默没有因果关系',
+        '不按用户排名，不报任何用户名、不列任何商品名',
+        '关注名称可以报，它是用户给自己条件起的名字，不是身份',
+    ])
+
+    writer.writerow(['正在静默的关注，缓冲区的年龄结构', '关注条件', '节奏', '缓冲命中', '最早一条', '静默至'])
+    wrote_row = False
+    for key, label in (('buffer_now', '正在静默'), ('buffer_expired', '静默已过期')):
+        for row in quiet[key]['search_rows']:
+            wrote_row = True
+            writer.writerow([
+                '—', f"{label} · {row['saved_search_name']}", row['cadence_label'],
+                row['buffered_count'], row['oldest_label'],
+                row['quiet_until'].strftime('%Y-%m-%d %H:%M'),
+            ])
+    if not wrote_row:
+        writer.writerow(['—', '两档静默关注此刻都没有压在缓冲区里的命中', '', '', '', ''])
+    writer.writerow([
+        '说明', '', '', '',
+        '只对「正在静默」和「早已过期」两档有意义；「从没静默过」的关注压在缓冲区里的'
+        '命中，成因是汇总节奏，那是 saved_search_latency 的题目',
+        '静默造成的等待和平台造成的等待必须分开，混进同一个分布，'
+        '运营会把「用户主动暂停」读成「我们的任务又慢了」',
+        '两套阈值不合成一个平均数',
     ])
 
     writer.writerow([])
