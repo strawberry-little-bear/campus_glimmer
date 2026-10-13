@@ -1150,6 +1150,116 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 report-resolution-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Report resolution quality</span><h2>商品举报处理得公不公平</h2></div>
+        <span class="ops-panel-hint">按举报原因拆驳回率，按结局拆意见填写率</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-shield-exclamation me-1"></i><code>Report</code> 是站内最早的治理队列，<code>reason</code> 与 <code>status</code> 一直在被读写，但从来没有按原因与结局拆开看过。四种举报原因的举证难度完全不是一回事，平均成一个总驳回率之后，这个数一旦波动，第一反应是去查处理人，而不是去查是哪一类举报在涨。<strong>而 <code>review_note</code> 此前只有两处读者：后台的搜索框和写入它的那行代码——一个字段被写、被搜，从来没被统计过。</strong></p>
+    {% if not report_resolution_quality.summary %}
+    <div class="empty-inline">当前周期还没有举报记录。</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内举报</span><strong>{{ report_resolution_quality.outcome.total_count }}</strong><small>已完结 {{ report_resolution_quality.outcome.closed_count }} 条</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>还在流程里</span><strong>{{ report_resolution_quality.outcome.open_count }}</strong><small>pending 与 reviewing</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>整体驳回率</span><strong>{% if report_resolution_quality.outcome.rejection_rate is None %}&mdash;{% else %}{{ report_resolution_quality.outcome.rejection_rate }}%{% endif %}</strong><small>分母是已完结的 {{ report_resolution_quality.outcome.closed_count }} 条</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>意见填写率</span><strong>{% if report_resolution_quality.note.fill_rate is None %}&mdash;{% else %}{{ report_resolution_quality.note.fill_rate }}%{% endif %}</strong><small>只数字节与空否，不读内容</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">驳回率按举报原因拆</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>举报原因</th><th>举报数</th><th>已完结</th><th>驳回数</th><th>驳回率</th><th>还在流程里</th></tr></thead>
+                    <tbody>
+                        {% for row in report_resolution_quality.reason_rows %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong>{% if row.is_empty %}<small class="d-block text-muted">这一类没人用</small>{% endif %}</td>
+                            <td>{{ row.total_count }}</td>
+                            <td>{{ row.closed_count }}</td>
+                            <td>{{ row.rejected_count }}</td>
+                            <td>{% if row.rejection_rate is None %}&mdash;{% else %}{{ row.rejection_rate }}%{% endif %}{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ report_resolution_quality.min_bucket_sample }} 条</small>{% endif %}</td>
+                            <td>{{ row.open_count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">行取自 <code>REASON_CHOICES</code> 与库里的并集：周期内一条都没有的原因也列出来——漏掉它，读者会以为这一类也是齐的。</div>
+            <h3 class="h6 mb-3 mt-4">被驳回的举报集中在哪</h3>
+            {% if report_resolution_quality.concentration.is_empty %}
+            <div class="empty-inline">当前周期没有被驳回的举报，集中度需要先有驳回发生。</div>
+            {% else %}
+            <div class="row g-3">
+                <div class="col-6 col-md-3"><div class="ops-mini-stat"><span>涉及商品</span><strong>{{ report_resolution_quality.concentration.item_count }}</strong><small>件</small></div></div>
+                <div class="col-6 col-md-3"><div class="ops-mini-stat"><span>涉及卖家</span><strong>{{ report_resolution_quality.concentration.seller_count }}</strong><small>位</small></div></div>
+                <div class="col-6 col-md-3"><div class="ops-mini-stat"><span>其中商品已不在售</span><strong>{{ report_resolution_quality.concentration.inactive_item_count }}</strong><small>件</small></div></div>
+                <div class="col-6 col-md-3"><div class="ops-mini-stat"><span>每件商品平均摊到</span><strong>{{ report_resolution_quality.concentration.items_per_report }}</strong><small>条驳回</small></div></div>
+            </div>
+            <div class="empty-inline">被驳回的 {{ report_resolution_quality.concentration.rejected_count }} 条指向 {{ report_resolution_quality.concentration.item_count }} 件商品，其中 {{ report_resolution_quality.concentration.repeat_item_count }} 件被多次举报且被驳回，单件最多 {{ report_resolution_quality.concentration.top_item_count }} 次。<strong>只报规模与形状，不列商品名、不列卖家名</strong>——一份「被驳回举报最多的商品榜」是一份公开处刑清单，不是看板。</div>
+            {% endif %}
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">审核意见写了没写</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>意见长度</th><th>条数</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in report_resolution_quality.note.bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-responsive mt-3">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>按结局拆</th><th>已完结</th><th>写过意见</th><th>填写率</th></tr></thead>
+                    <tbody>
+                        {% for row in report_resolution_quality.note.by_outcome %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong></td>
+                            <td>{{ row.closed_count }}</td>
+                            <td>{{ row.with_note_count }}</td>
+                            <td>{% if row.fill_rate is None %}&mdash;{% else %}{{ row.fill_rate }}%{% endif %}{% if row.closed_count < report_resolution_quality.min_bucket_sample %}<small class="d-block text-muted">不足样本下限</small>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">两档填写率相差 <strong>{% if report_resolution_quality.note.outcome_gap_points is None %}&mdash;{% else %}{{ report_resolution_quality.note.outcome_gap_points }}{% endif %}</strong> 个百分点。{% if report_resolution_quality.note.outcome_comparable %}被驳回的举报如果普遍不写意见，用户收到的是一个<strong>没有理由的拒绝</strong>——这是这套治理里最伤人的一种体验。{% else %}至少一侧不足样本下限，只报数字、不给方向。{% endif %}</div>
+            <h3 class="h6 mb-3 mt-4">举报人分布</h3>
+            {% if report_resolution_quality.reporters.is_empty %}
+            <div class="empty-inline">当前周期没有举报人，分布形状需要先有举报发生。</div>
+            {% else %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>举报次数</th><th>人数</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in report_resolution_quality.reporters.band_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">{{ report_resolution_quality.reporters.reporter_count }} 位举报人里 <strong>{{ report_resolution_quality.reporters.once_only_rate }}%</strong> 只举报过一次。绝大多数人只举报过一次，说明这条通道是<strong>应急</strong>性质的；有一批人反复在用，说明它是某些用户的<strong>常规</strong>手段。<strong>不排名、不报用户名</strong>——把「谁最爱举报」做成一张排行榜，平台就从仲裁者变成了一个记录谁难相处的小本子。</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里只报告：不加迁移、不改 <code>Report</code> 的任何字段、不改写入路径、不自动驳回或自动关单。不读 <code>detail</code> 与 <code>review_note</code> 的自由文本，只读长度与空否——意见写的是不是人话要解析自然语言，而长度与空否是结构事实。空分母报「—」不报 0：0 会被读成「写了，占比很小」，而事实是「没有样本」。不列商品名、不列卖家名、不列举报人，那不是看板，是公开处刑清单。集中度只报规模形状，不作「这几件有问题」的判定。不报「长度和驳回率的关系」——长意见是不是更难被申诉，观测数据里分不开：意见写得长可能只是这类举报本身复杂。</div>
+    {% if not report_resolution_quality.outcome.total_count %}
+    <div class="empty-inline mt-2">{{ report_resolution_quality.summary }}</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 campaign-analytics-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Campaign performance</span><h2>校园专题表现</h2></div>

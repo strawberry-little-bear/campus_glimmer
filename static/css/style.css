@@ -1254,6 +1254,33 @@ a { color: inherit; text-decoration: none; }
     这里的说明文字比版图面板长，压成一行会挤掉右侧六列数字。 */
 .notification-aggregation-quality-panel .ops-table td:first-child { min-width: 11rem; }
 
+/* Operations: report resolution quality（商品举报处理质量）
+   取赭石—陶土这一组暖色。举报是站内最早的治理队列，读者翻开这一节时心里已经有
+   一个预设立场（「是不是偏袒卖家」），暖色比冷色更接近「人来评判」的语气，不像
+   系统告警。刻意避开红绿两色：驳回与处理不是成功与失败，一条被驳回的举报完全可能
+   是举报本身不成立，用红绿读会让人先看颜色再看数。四周的面板已经占掉青蓝、绿、
+   暖灰、纸冷灰、紫、玫红、蓝灰、米、青灰，赭石是剩下最不打扰的一档。 */
+.report-resolution-quality-panel { padding: 14px; border: 1px solid #e0d3c4; border-radius: 14px; background: linear-gradient(135deg, #faf5ee, #fdfbf8); color: #6b5744; }
+
+.report-resolution-quality-panel p { color: #7a6552; }
+
+.report-resolution-quality-panel .ops-mini-stat { background: #fff; }
+
+.report-resolution-quality-panel .ops-mini-stat strong { color: #6a4f34; }
+
+.report-resolution-quality-panel .ops-mini-stat span,
+.report-resolution-quality-panel .ops-mini-stat small { color: #9a876f; }
+
+.report-resolution-quality-panel .table th { color: #6d563d; }
+
+.report-resolution-quality-panel .table td { vertical-align: top; }
+
+.report-resolution-quality-panel .ops-footer-note { color: #7a6552; }
+
+/* 举报原因那一列放两行：原因名加一行「这一类没人用」的小字。第一列同样不 nowrap，
+   右侧还有五列数字要占地方。 */
+.report-resolution-quality-panel .ops-table td:first-child { min-width: 9rem; }
+
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,

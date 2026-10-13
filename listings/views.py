@@ -36,6 +36,7 @@ from .demand_task_aging import build_demand_task_aging
 from .notification_snooze_return import build_notification_snooze_return
 from .notification_kind_coverage import build_notification_kind_coverage
 from .notification_aggregation_quality import build_notification_aggregation_quality
+from .report_resolution_quality import build_report_resolution_quality
 from .meeting_attendance import build_meeting_attendance
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2212,6 +2213,7 @@ def operations_dashboard(request):
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
+    dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2382,6 +2384,7 @@ def operations_dashboard_export(request):
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
+    dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -3171,6 +3174,143 @@ def operations_dashboard_export(request):
         '但它压着的事一件都没被处理；两组差距不归因给聚合，两组之间还差着类型的构成；'
         '不读 message 的语义，只报 target_url 的空值比例这个结构事实；'
         '不按用户排名，那是一份考勤表，不是一份看板。',
+    ])
+
+    quality = dashboard['report_resolution_quality']
+    writer.writerow([])
+    writer.writerow(['商品举报处理得公不公平', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', quality['summary'],
+        '只读 reason / status / review_note，不读 detail 的自由文本，也不改写任何一条举报',
+    ])
+    writer.writerow([
+        '周期内举报', quality['outcome']['total_count'], '按举报创建时间统计',
+    ])
+    writer.writerow([
+        '已完结', quality['outcome']['closed_count'],
+        f"处理 {quality['outcome']['resolved_count']} 条 · 驳回 {quality['outcome']['rejected_count']} 条",
+    ])
+    writer.writerow([
+        '还在流程里', quality['outcome']['open_count'], 'pending 与 reviewing 合计',
+    ])
+    writer.writerow([
+        '整体驳回率（%）',
+        '—' if quality['outcome']['rejection_rate'] is None else quality['outcome']['rejection_rate'],
+        f"分母是已完结的 {quality['outcome']['closed_count']} 条，少于 "
+        f"{quality['min_closed_reports']} 条只报数字",
+    ])
+    writer.writerow([])
+    writer.writerow(['驳回率按举报原因拆', '举报数', '已完结', '驳回数', '驳回率（%）', '还在流程里', '样本是否够'])
+    for row in quality['reason_rows']:
+        writer.writerow([
+            row['label'], row['total_count'], row['closed_count'], row['rejected_count'],
+            '—' if row['rejection_rate'] is None else row['rejection_rate'],
+            row['open_count'],
+            '这一档没有样本' if row['is_empty'] else (
+                f"不足 {quality['min_bucket_sample']} 条" if row['is_small_sample'] else '够'
+            ),
+        ])
+    writer.writerow([])
+    writer.writerow(['审核意见写了没写', '条数', '占比（%）', '口径说明'])
+    note = quality['note']
+    writer.writerow([
+        '已完结的举报', note['closed_count'], '',
+        '只统计已完结的：还在流程里的举报谈不到写不写意见',
+    ])
+    writer.writerow([
+        '写了意见', note['with_note_count'],
+        '—' if note['fill_rate'] is None else note['fill_rate'],
+        '只数字节与空否，一个字符内容都不读',
+    ])
+    writer.writerow([
+        '没写意见', note['without_note_count'],
+        '—' if note['fill_rate'] is None else round(100 - note['fill_rate'], 1),
+        '被驳回又没写意见，用户收到的是一个没有理由的拒绝',
+    ])
+    for row in note['by_outcome']:
+        writer.writerow([
+            f"其中：{row['label']}写过意见", row['with_note_count'],
+            '—' if row['fill_rate'] is None else row['fill_rate'],
+            f"已{row['label']} {row['closed_count']} 条"
+            + ('，不足样本下限只报数字'
+               if row['closed_count'] < quality['min_bucket_sample'] else ''),
+        ])
+    writer.writerow([
+        '两档填写率之差（百分点）',
+        '—' if note['outcome_gap_points'] is None else note['outcome_gap_points'],
+        '',
+        '两侧都过样本门槛才允许把它读成一个信号，否则只报数字' if note['outcome_comparable']
+        else '至少一侧不足样本下限，这个差不作结论',
+    ])
+    for row in note['bucket_rows']:
+        writer.writerow([
+            f"意见长度：{row['label']}", row['count'],
+            '—' if row['share'] is None else row['share'],
+            '长度只反映写没写细，不反映写得对不对',
+        ])
+    writer.writerow([])
+    writer.writerow(['被驳回的举报集中在哪', '数值', '口径说明'])
+    conc = quality['concentration']
+    if conc['is_empty']:
+        writer.writerow(['当前周期没有被驳回的举报，集中度需要先有驳回发生。'])
+    else:
+        writer.writerow([
+            '被驳回的举报', conc['rejected_count'], '只统计已完结且驳回的',
+        ])
+        writer.writerow([
+            '涉及商品', conc['item_count'], '只报规模，不列商品名',
+        ])
+        writer.writerow([
+            '涉及卖家', conc['seller_count'], '只报规模，不列卖家名',
+        ])
+        writer.writerow([
+            '其中商品已不在售', conc['inactive_item_count'],
+            '已预订 / 已售出 / 已过期；一件不在了的商品被举报，和一件正在卖的被举报是两件事',
+        ])
+        writer.writerow([
+            '被多次举报且被驳回的商品', conc['repeat_item_count'], '集中度大于 1 说明有几件在被反复举报',
+        ])
+        writer.writerow([
+            '单件商品最多被驳回几次', conc['top_item_count'], '同一件商品上的举报来自不同举报人才计',
+        ])
+        writer.writerow([
+            '每件被驳回商品平均摊到几条举报', conc['items_per_report'],
+            '接近 1 是一举报对一商品，明显大于 1 是反复举报',
+        ])
+    writer.writerow([])
+    writer.writerow(['举报人分布', '举报人数', '占比（%）', '口径说明'])
+    reporters = quality['reporters']
+    if reporters['is_empty']:
+        writer.writerow(['当前周期没有举报人，分布形状需要先有举报发生。'])
+    else:
+        writer.writerow([
+            '举报人数', reporters['reporter_count'], '', '按人去重后的数量',
+        ])
+        for row in reporters['band_rows']:
+            writer.writerow([
+                f"举报次数：{row['label']}", row['count'],
+                '—' if row['share'] is None else row['share'],
+                '形状比名次有用：绝大多数人只举报过一次，说明这条通道是应急性质的',
+            ])
+        writer.writerow([
+            '只举报过一次的人占比（%）',
+            '—' if reporters['once_only_rate'] is None else reporters['once_only_rate'], '',
+            '有一批人反复在用，说明它是某些用户的常规手段',
+        ])
+        writer.writerow([
+            '人均举报次数',
+            '—' if reporters['avg_count'] is None else reporters['avg_count'], '',
+            '受 UniqueConstraint 限制，不报「同一用户对同一商品的重复举报」——那个数恒为 0',
+        ])
+    writer.writerow([
+        '说明',
+        '商品举报是站内最早的治理队列，reason 与 status 一直被读写，但从来没有按原因与结局拆开看过：'
+        '整体驳回率一旦波动，第一反应是去查处理人，而不是去查是哪一类举报在涨。本模块只报告：'
+        '不加迁移、不改 Report 的任何字段、不改写入路径、不自动驳回或自动关单；'
+        '不读 detail 与 review_note 的自由文本，只读长度与空否；'
+        '空分母报「—」不报 0——0 会被读成「发了，占比很小」，而事实是「没有样本」；'
+        '不列商品名、不列卖家名、不列举报人，那不是看板，是公开处刑清单；'
+        '集中度只报规模形状，不作「这几件有问题」的判定。',
     ])
 
     attendance = dashboard['meeting_attendance']
