@@ -1309,6 +1309,38 @@ a { color: inherit; text-decoration: none; }
    「样本不足」。第一列同样不 nowrap，右侧还有四到五列数字要占地方。 */
 .meeting-incident-quality-panel .ops-table td:first-child { min-width: 9rem; }
 
+/* 内容审核结果通知：开关、触达与沉默。取的是「靛蓝偏紫」一档。
+   取它的理由：这是全站唯一一条「平台自己说话」的通知的面板，语气上要和周围两个
+   治理队列（举报质量赭石陶土、异常质量青碧松绿）都分开——那两个是仲裁者视角，
+   这张是平台对着一个具体的人说话，用偏冷的靛蓝比用陶土或松绿更贴。
+   四周的面板已经占掉青蓝、绿、暖灰、纸冷灰、紫、玫红、蓝灰、米、青灰、赭石、
+   青碧，靛蓝是剩下最不打扰的一档，又和举报质量、异常质量两个邻居都分得开。
+   刻意避开红绿两色：开关关着不是失败，用户关掉一个通知偏好是正当的私事，
+   用红绿读会让人先看颜色再看数，而这一张要读的恰恰是「沉默的形状」。 */
+.moderation-notice-preference-panel { padding: 14px; border: 1px solid #c3c7e2; border-radius: 14px; background: linear-gradient(135deg, #f1f2fb, #f8f9fd); color: #3d4266; }
+
+.moderation-notice-preference-panel p { color: #4d5178; }
+
+.moderation-notice-preference-panel .ops-mini-stat { background: #fff; }
+
+.moderation-notice-preference-panel .ops-mini-stat strong { color: #363b60; }
+
+.moderation-notice-preference-panel .ops-mini-stat span,
+.moderation-notice-preference-panel .ops-mini-stat small { color: #767ba3; }
+
+.moderation-notice-preference-panel .table th { color: #454a75; }
+
+.moderation-notice-preference-panel .table td { vertical-align: top; }
+
+.moderation-notice-preference-panel .ops-footer-note { color: #4d5178; }
+
+/* 触达表有七列，第一列放结论名，右侧六列都是计数。第一列留够两行小字的地方，
+   但不 nowrap——七列已经占满宽度，再固定第一列会把计数挤成竖排。 */
+.moderation-notice-preference-panel .ops-table td:first-child { min-width: 8rem; }
+
+/* 偏好四格与发言对照两表的首列都是标签，配一行说明小字。 */
+.moderation-notice-preference-panel .ops-table td:first-child small { color: #767ba3; }
+
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,

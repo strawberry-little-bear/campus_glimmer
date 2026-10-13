@@ -53,6 +53,7 @@ from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
 from .item_image_coverage import build_item_image_coverage
+from .moderation_notice_preference import build_moderation_notice_preference
 from .moderation_rule_quality import build_moderation_rule_quality
 from .availability_watch_quality import build_availability_watch_quality
 from .rating_quality import build_rating_quality
@@ -2216,6 +2217,7 @@ def operations_dashboard(request):
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
+    dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2388,6 +2390,7 @@ def operations_dashboard_export(request):
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
+    dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -3112,6 +3115,106 @@ def operations_dashboard_export(request):
         '不排名、不报任何人的用户名，那不是看板，是公开处刑清单；'
         '不把驳回率和处理人挂钩——按 reviewer 拆驳回率是一份考官成绩单。',
     ])
+    notice = dashboard['moderation_notice_preference']
+    writer.writerow([])
+    writer.writerow(['内容审核结果通知：开关、触达与沉默', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', notice['summary'],
+        '只读 ModerationEvent 的复核结论、NotificationPreference 的开关值和 '
+        'moderation_update 通知的已读标志，不读 content 与通知正文的自由文本，'
+        '也不改写任何一处写入路径',
+    ])
+    writer.writerow([
+        '周期内复核完', notice['outcome']['reviewed_count'],
+        '只收 confirmed 与 dismissed，pending 是右删失样本',
+    ])
+    writer.writerow([
+        '送到了作者眼前', notice['outcome']['delivered_count'],
+        f"占 {notice['outcome']['delivered_rate']}%"
+        if notice['outcome']['delivered_rate'] is not None else '空分母',
+    ])
+    writer.writerow([
+        '作者关掉了这一类', notice['outcome']['switch_off_count'],
+        'create_notification 在开关处静默返回，连通知行都不建',
+    ])
+    writer.writerow([
+        '作者已注销', notice['outcome']['missing_author_count'],
+        'author 是 SET_NULL，没有作者的复核结论谈不上送到谁眼前',
+    ])
+    if notice['has_data']:
+        writer.writerow([])
+        writer.writerow(['这条结论送到作者眼前了没有', '记录数', '送到了', '开关关着', '免打扰时段', '复核人是作者本人', '取不到偏好行'])
+        for row in notice['reach_rows']:
+            writer.writerow([
+                row['label'], row['total_count'], row['delivered'],
+                row['switch_off'], row['quiet_hours'],
+                row['self_authored'], row['no_preference_row'],
+            ])
+        writer.writerow([
+            '说明',
+            '四种没送到的成因分开数，不合成一个未送达率：合成之后，这个数会随「复核人'
+            '是不是内容作者」这种人极少的情况抖动，而那和用户有没有关开关毫无关系。',
+        ])
+        writer.writerow([])
+        writer.writerow(['通知发出去之后，读没读', '条数', '已读', '未读', '已读率（%）'])
+        for row in notice['read_rows']:
+            writer.writerow([
+                row['label'], row['sent_count'], row['read_count'],
+                row['unread_count'],
+                '—' if row['read_rate'] is None else row['read_rate'],
+            ])
+        baseline = notice['baseline_read_rate']
+        writer.writerow([
+            '同期全部通知', baseline['sent_count'], baseline['read_count'],
+            baseline['sent_count'] - baseline['read_count'],
+            '—' if baseline['read_rate'] is None else baseline['read_rate'],
+        ])
+        writer.writerow([
+            '说明',
+            '已读率按复核结论拆：确认违规和误判放行是两条情绪上完全不同的消息，'
+            '它们的已读率没有理由相同。最后一行是同期全部通知的整体已读率，'
+            '作对照分母——少了它，单看一类的已读率读不出「这一类是不是特别没人看」。',
+        ])
+    else:
+        writer.writerow(['当前周期没有复核完的记录，触达与已读都无从读起。'])
+    grid = notice['preference_grid']
+    writer.writerow([])
+    writer.writerow(['偏好开关四格', '人数', '说明'])
+    writer.writerow(['有内容被复核 · 开关开着', grid['reviewed_switch_on'], ''])
+    writer.writerow(['有内容被复核 · 开关关着', grid['reviewed_switch_off'], ''])
+    writer.writerow(['没内容被复核 · 开关开着', grid['unreviewed_switch_on'], ''])
+    writer.writerow(['没内容被复核 · 开关关着', grid['unreviewed_switch_off'], ''])
+    writer.writerow([
+        '说明',
+        '只报四格的人数，不报用户名、不排名，也不报任何两格之间的比值。'
+        '后两格的人没被复核过内容，他们关不关这个开关和「收到过审核结果」没有因果关系——'
+        '直接拿第二格比第四格，比出来的是两群不同的人，不是同一群人的两种选择。',
+    ])
+    if notice['activity']['has_data']:
+        writer.writerow([])
+        writer.writerow(['关掉之后，还在不在社区里说话', '关掉的一组', '开着的一组', '方向'])
+        for row in notice['activity']['rows']:
+            writer.writerow([
+                row['label'],
+                f"{row['off_count']} / {row['off_total']}",
+                f"{row['on_count']} / {row['on_total']}",
+                {
+                    'switch_off_higher': '关掉的一组更高',
+                    'switch_on_higher': '开着的一组更高',
+                    'same': '两组相同',
+                }.get(row['direction'], '样本不足，只报人数'),
+            ])
+        writer.writerow([
+            '说明',
+            '只报同期人群的对照形状，不作因果：关掉通知不会让人不说话，'
+            '收到一条「你违规了」也不会，两群人在发言率上的差可能只是'
+            '「常发言的人更在意审核结果」。方向只给三档，不给百分比差——'
+            '一个 3 个百分点和一个 30 个百分点在看板上长一样，给的指引却完全相反。'
+            '两群人都过 '
+            f"{notice['min_preference_users']} 人才给方向。",
+        ])
+    else:
+        writer.writerow(['当前周期关掉与开着两组人里有一组是空的，发言对照无从读起。'])
     attendance = dashboard['meeting_attendance']
 
     coverage = dashboard['notification_kind_coverage']
@@ -3570,6 +3673,106 @@ def operations_dashboard_export(request):
         '不排名、不报任何人的用户名，那不是看板，是公开处刑清单；'
         '不把驳回率和处理人挂钩——按 reviewer 拆驳回率是一份考官成绩单。',
     ])
+    notice = dashboard['moderation_notice_preference']
+    writer.writerow([])
+    writer.writerow(['内容审核结果通知：开关、触达与沉默', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', notice['summary'],
+        '只读 ModerationEvent 的复核结论、NotificationPreference 的开关值和 '
+        'moderation_update 通知的已读标志，不读 content 与通知正文的自由文本，'
+        '也不改写任何一处写入路径',
+    ])
+    writer.writerow([
+        '周期内复核完', notice['outcome']['reviewed_count'],
+        '只收 confirmed 与 dismissed，pending 是右删失样本',
+    ])
+    writer.writerow([
+        '送到了作者眼前', notice['outcome']['delivered_count'],
+        f"占 {notice['outcome']['delivered_rate']}%"
+        if notice['outcome']['delivered_rate'] is not None else '空分母',
+    ])
+    writer.writerow([
+        '作者关掉了这一类', notice['outcome']['switch_off_count'],
+        'create_notification 在开关处静默返回，连通知行都不建',
+    ])
+    writer.writerow([
+        '作者已注销', notice['outcome']['missing_author_count'],
+        'author 是 SET_NULL，没有作者的复核结论谈不上送到谁眼前',
+    ])
+    if notice['has_data']:
+        writer.writerow([])
+        writer.writerow(['这条结论送到作者眼前了没有', '记录数', '送到了', '开关关着', '免打扰时段', '复核人是作者本人', '取不到偏好行'])
+        for row in notice['reach_rows']:
+            writer.writerow([
+                row['label'], row['total_count'], row['delivered'],
+                row['switch_off'], row['quiet_hours'],
+                row['self_authored'], row['no_preference_row'],
+            ])
+        writer.writerow([
+            '说明',
+            '四种没送到的成因分开数，不合成一个未送达率：合成之后，这个数会随「复核人'
+            '是不是内容作者」这种人极少的情况抖动，而那和用户有没有关开关毫无关系。',
+        ])
+        writer.writerow([])
+        writer.writerow(['通知发出去之后，读没读', '条数', '已读', '未读', '已读率（%）'])
+        for row in notice['read_rows']:
+            writer.writerow([
+                row['label'], row['sent_count'], row['read_count'],
+                row['unread_count'],
+                '—' if row['read_rate'] is None else row['read_rate'],
+            ])
+        baseline = notice['baseline_read_rate']
+        writer.writerow([
+            '同期全部通知', baseline['sent_count'], baseline['read_count'],
+            baseline['sent_count'] - baseline['read_count'],
+            '—' if baseline['read_rate'] is None else baseline['read_rate'],
+        ])
+        writer.writerow([
+            '说明',
+            '已读率按复核结论拆：确认违规和误判放行是两条情绪上完全不同的消息，'
+            '它们的已读率没有理由相同。最后一行是同期全部通知的整体已读率，'
+            '作对照分母——少了它，单看一类的已读率读不出「这一类是不是特别没人看」。',
+        ])
+    else:
+        writer.writerow(['当前周期没有复核完的记录，触达与已读都无从读起。'])
+    grid = notice['preference_grid']
+    writer.writerow([])
+    writer.writerow(['偏好开关四格', '人数', '说明'])
+    writer.writerow(['有内容被复核 · 开关开着', grid['reviewed_switch_on'], ''])
+    writer.writerow(['有内容被复核 · 开关关着', grid['reviewed_switch_off'], ''])
+    writer.writerow(['没内容被复核 · 开关开着', grid['unreviewed_switch_on'], ''])
+    writer.writerow(['没内容被复核 · 开关关着', grid['unreviewed_switch_off'], ''])
+    writer.writerow([
+        '说明',
+        '只报四格的人数，不报用户名、不排名，也不报任何两格之间的比值。'
+        '后两格的人没被复核过内容，他们关不关这个开关和「收到过审核结果」没有因果关系——'
+        '直接拿第二格比第四格，比出来的是两群不同的人，不是同一群人的两种选择。',
+    ])
+    if notice['activity']['has_data']:
+        writer.writerow([])
+        writer.writerow(['关掉之后，还在不在社区里说话', '关掉的一组', '开着的一组', '方向'])
+        for row in notice['activity']['rows']:
+            writer.writerow([
+                row['label'],
+                f"{row['off_count']} / {row['off_total']}",
+                f"{row['on_count']} / {row['on_total']}",
+                {
+                    'switch_off_higher': '关掉的一组更高',
+                    'switch_on_higher': '开着的一组更高',
+                    'same': '两组相同',
+                }.get(row['direction'], '样本不足，只报人数'),
+            ])
+        writer.writerow([
+            '说明',
+            '只报同期人群的对照形状，不作因果：关掉通知不会让人不说话，'
+            '收到一条「你违规了」也不会，两群人在发言率上的差可能只是'
+            '「常发言的人更在意审核结果」。方向只给三档，不给百分比差——'
+            '一个 3 个百分点和一个 30 个百分点在看板上长一样，给的指引却完全相反。'
+            '两群人都过 '
+            f"{notice['min_preference_users']} 人才给方向。",
+        ])
+    else:
+        writer.writerow(['当前周期关掉与开着两组人里有一组是空的，发言对照无从读起。'])
     attendance = dashboard['meeting_attendance']
     writer.writerow([])
     writer.writerow(['约好的那一次见面', '数值', '说明'])
