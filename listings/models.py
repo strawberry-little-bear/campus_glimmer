@@ -234,6 +234,16 @@ class Favorite(models.Model):
         related_name='favorites', verbose_name='所属分组',
     )
     created_at = models.DateTimeField('收藏时间', auto_now_add=True)
+    # 这条收藏的分组最后一次发生变化的时刻，归进去和移出来都算。
+    #
+    # 刻意不是「首次归类的时刻」：`update_favorite_collection` 支持把
+    # collection_id 传空，也就是把一条收藏移出分组，而「用过又不用了」是比「从未
+    # 归类」更强的信号。刻意也不是 `auto_now`：那会在任何一次保存上刷新，包括
+    # 将来谁给这个模型加字段时的保存，于是事后归类会被误判成当场归类。
+    #
+    # 迁移前已经归了组的收藏这一列是 NULL，说明「归过类但不知道什么时候归的」，
+    # 既不是当场也不是事后。看板上单列一类，不混进任何分母。
+    grouped_at = models.DateTimeField('分组变化时间', null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -243,6 +253,35 @@ class Favorite(models.Model):
 
     def __str__(self):
         return f'{self.user.username}收藏了{self.item.title}'
+
+    def save(self, *args, **kwargs):
+        """分组发生变化时把 `grouped_at` 推到当前时刻。
+
+        写在模型层而不是视图层，是因为 `Favorite.collection` 有两条写入路径：
+        `views.update_favorite_collection` 和 Django admin 的 change 表单。只改视
+        图层，后台每改一条收藏就在库里留一个假数据——`grouped_at` 停在 NULL，
+        那条收藏会被读成「从未归类」，而它其实归过类。
+
+        判据是 `collection_id` 变了，不是 `collection` 实例变了：同一个分组被重新
+        赋值，`collection_id` 不变，那确实没有发生变化。
+
+        `update_fields` 要能接住：调用方显式列字段时，这一列不在列表里就不会被
+        写。所以检测到变化就把它追加进去——`update_fields` 为 None 时 Django 会
+        写全部字段，无需追加。
+        """
+        if self.pk:
+            previous = Favorite.objects.filter(pk=self.pk).values_list(
+                'collection_id', flat=True,
+            ).first()
+            if previous != self.collection_id:
+                self.grouped_at = timezone.now()
+                update_fields = kwargs.get('update_fields')
+                if update_fields is not None and 'grouped_at' not in update_fields:
+                    kwargs['update_fields'] = [*update_fields, 'grouped_at']
+        elif self.collection_id is not None:
+            # 新建时就带了分组（例如后台一次性建好）。此刻它就是归类时刻。
+            self.grouped_at = timezone.now()
+        super().save(*args, **kwargs)
 
 
 class ItemAvailabilityWatch(models.Model):

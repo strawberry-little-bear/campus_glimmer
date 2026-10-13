@@ -2119,6 +2119,9 @@ def update_favorite_collection(request, favorite_id):
                 FavoriteCollection, pk=collection_id, user=request.user,
             )
         favorite.collection = collection
+        # `grouped_at` 由 Favorite.save() 在 collection_id 变化时自己写下，这里
+        # 不用显式赋值。两条写入路径（这个视图和 Django admin）都靠它覆盖，见
+        # 模型上该字段的注释。
         favorite.save(update_fields=['collection'])
         messages.success(request, '已更新心愿单分组。')
     next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or ''

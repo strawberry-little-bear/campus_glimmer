@@ -61,9 +61,13 @@ class FavoriteCollectionAdmin(admin.ModelAdmin):
 
 @admin.register(Favorite)
 class FavoriteAdmin(admin.ModelAdmin):
-    list_display = ('user', 'item', 'collection', 'created_at')
+    list_display = ('user', 'item', 'collection', 'created_at', 'grouped_at')
     list_filter = ('collection', 'created_at')
     search_fields = ('user__username', 'item__title')
+    # `grouped_at` 由模型在 collection 变化时自己写，后台不手改：手改会让
+    # 「当场 / 事后」这个分界失去意义。只读，但看得见——运营排查「这条收藏什么
+    # 时候归的类」时要能读到它。
+    readonly_fields = ('grouped_at',)
 
 
 @admin.register(Report)

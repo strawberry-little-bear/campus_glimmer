@@ -19,17 +19,22 @@
 名、不动 `FavoriteCollectionForm` 的任何校验、不给任何用户排名、不预设任何分组名。几处口
 径上的取舍比数字本身更要紧。
 
-**本模块不报「先收藏后归类」，因为库里没有那个时刻。** 乍看这个问题能用
-`Favorite.created_at` 和某个「归类时刻」的差来回答，但 `Favorite` 没有 `updated_at`。
-`views.update_favorite_collection` 走的是 `favorite.save(update_fields=['collection'])`，
-模型里也没有任何 `auto_now` 字段，所以这次保存不刷新任何时间列。一条 60 天前收藏的商
-品，昨天被移进分组，它在这个库里的全部痕迹就是 `created_at = 60 天前`、
-`collection = 那个分组`。**它是什么时候被归类的，不存在。**
+**「先收藏后归类」现在报得了，前提是 `Favorite.grouped_at`。** 在那一列加上之前，这个
+数在库里不存在：`Favorite` 没有 `updated_at`，而 `views.update_favorite_collection` 走的
+是 `favorite.save(update_fields=['collection'])`，模型里也没有任何 `auto_now` 字段，所以
+这次保存不刷新任何时间列。一条 60 天前收藏的商品，昨天被移进分组，它在这个库里的全部痕
+迹就是 `created_at = 60 天前`、`collection = 那个分组`——**它是什么时候被归类的，不知
+道。**
 
-所以「窗口内新建的收藏里有多少条直接就归了类」这个数读不出来：一条窗口内新建的收藏，
+于是「窗口内新建的收藏里有多少条直接就归了类」这个数读不出来：一条窗口内新建的收藏，
 `collection` 是今天读到的值，不是它创建时的值。报出来会被读成「收藏时就归组率」，而它其
 实混着大量后来才移进去的收藏。报一个会被误读成另一个意思的数，比没有数字更糟——和
-`opportunity_dismissal_quality` 不报忽略率是同一条规矩。
+`opportunity_dismissal_quality` 当初不报忽略率是同一条规矩。
+
+`grouped_at` 补上之后那条规矩守住了，而这个数本身第一次可测。它记的是**这条收藏的分组
+最后一次发生变化的时刻**，归进去和移出来都算，由 `Favorite.save()` 在 `collection_id`
+变化时自己写。写在模型层而不是视图层，是因为 `collection` 有两条写入路径：这个视图和
+Django admin 的 change 表单，只改视图层会让后台每改一条收藏就留一个假数据。
 
 **同理不报「分组被改名 / 被整理的频率」。** `FavoriteCollection` 有 `updated_at`
 （`auto_now`），但应用内没有改名路由：`create_favorite_collection` 走 `get_or_create`，同
@@ -85,6 +90,14 @@ PERIOD_CHOICES = (
 # 周都想不起来往里放第一条，而几秒钟前刚建的分组当然还是空的——后者是良性解释，不能和
 # 前者混在一个数里。
 EMPTY_GROUP_GRACE_DAYS = 7
+
+# 收藏之后多久之内归类，算「当场归类」。取 60 分钟：一个真心想当场归组的用户，合
+# 理的路径是「看到商品 → 收藏 → 去心愿单整理」，这条路径花掉几分钟到半小时都正
+# 常，但不太可能花掉大半天还想得起刚才那条收藏该归哪。这个数没有理论依据，所以
+# 它必须出现在面板上——运营读不出「当场」和「事后」的分界在哪，这两个数就没有意
+# 义。和 `EMPTY_GROUP_GRACE_DAYS` 是同一条理由，但量的不是同一件事：那边是分组成
+# 立多久还算「刚建」，这边是归类距收藏多久还算「当场」。
+INSTANT_GROUPING_GRACE_MINUTES = 60
 
 # 一个分组大小档要凑够这么多分组，才允许对它下「这一档是主流用法」的判断。占比的分母只有
 # 个数时，一条收藏的改判就能把占比推动十几个百分点，那种数字拿去改引导只会把好的用法改坏。
@@ -337,6 +350,59 @@ def _build_penetration(favorite_total, favoriter_ids, collector_ids):
     }
 
 
+def _build_grouping_latency_rows(now):
+    """收藏是当场归类的，还是囤了一阵才整理的。
+
+    这一张表是本轮新增的，前提是 `Favorite.grouped_at` 那一列。在它之前，「先收藏
+    后归类」这个数在库里不存在——`Favorite` 没有 `updated_at`，而归类走的是
+    `save(update_fields=['collection'])`，不刷新任何时间列。所以窗口内新建的收藏读出
+    来的 `collection` 是今天读到的值，报出去会被读成「收藏时就归组率」，其实混着大量
+    后来才移进去的收藏。报一个会被误读成另一个意思的数，比没有数字更糟。
+
+    四分，不是三分：
+
+    - **当场归类**：`grouped_at` 与 `created_at` 的距离在宽限之内。用户收藏时心里
+      已经想好了这东西属于哪一类。
+    - **事后归类**：宽限之外才归的。先囤后理，分组是事后整理的工具。
+    - **从未归类**：`collection` 为空且 `grouped_at` 为空。分组功能没覆盖到它。
+    - **归过类又取消**：`collection` 为空但 `grouped_at` 不为空。`update_favorite_
+      collection` 支持把 collection_id 传空，也就是把收藏移出分组——这批人试过分组
+      又退回去，那是比「从未归类」更强的信号，说明分组对他们没有价值。
+
+    分母只收**窗口内新建的收藏**，不收全部收藏。「先收藏后归类」问的是一次行为的
+    时序，而全部收藏里混着迁移前归组的老数据（`grouped_at` 为 NULL，归类的时刻不
+    可知），把它们算进分母，事后归类的占比会被一批不知道时刻的收藏稀释。
+
+    迁移前归组的老数据单列成一类，不进任何分母。这不是样本不足——样本不足照实报数
+    字但压淡，数据不可知必须明确说「这个数不知道」，两件事的处理方式不同。
+    """
+    grace = timedelta(minutes=INSTANT_GROUPING_GRACE_MINUTES)
+    # 时间差在 Python 里算，不写 `extra()`：本项目支持 PostgreSQL，而两个时间戳相
+    # 减的 SQL 写法在各家数据库上不一样（SQLite 是 julianday，PostgreSQL 是直接减
+    # interval）。一次收藏的时序判断不值得为它绑死一个数据库。
+    stamped = Favorite.objects.filter(
+        created_at__isnull=False, grouped_at__isnull=False,
+    ).values_list('created_at', 'grouped_at')
+    instant = sum(1 for created_at, grouped_at in stamped
+                  if grouped_at - created_at <= grace)
+    grouped_ever = Favorite.objects.filter(grouped_at__isnull=False).count()
+    ungrouped_now = Favorite.objects.filter(
+        collection__isnull=True, grouped_at__isnull=True,
+    ).count()
+    released = Favorite.objects.filter(
+        collection__isnull=True, grouped_at__isnull=False,
+    ).count()
+    return {
+        'grace_minutes': INSTANT_GROUPING_GRACE_MINUTES,
+        'instant_total': instant,
+        'delayed_total': grouped_ever - instant,
+        'ungrouped_total': ungrouped_now,
+        'released_total': released,
+        'grouped_ever_total': grouped_ever,
+        'current_total': Favorite.objects.count(),
+    }
+
+
 def _build_name_rows(collections):
     """分组名的收敛形状：哪些名字被很多人用过。
 
@@ -377,7 +443,7 @@ def _build_name_rows(collections):
 
 
 def _recommendations(scale_rows, size_shape, empty_rows, penetration, name_rows,
-                     group_total):
+                     grouping_latency, group_total):
     """可以做什么，每一条都挂在替它说话的数字上。只报告，不改任何分组。"""
     notes = []
     if size_shape.get('has_comparison') and size_shape.get('kind') == 'skewed':
@@ -416,13 +482,44 @@ def _recommendations(scale_rows, size_shape, empty_rows, penetration, name_rows,
             '如果几个名字反复出现，说明站内缺一份预设分组名，让每个人都自己打一遍。但本'
             '模块只报告，不预设任何分组名。'
         )
+    latency = grouping_latency
+    if latency['grouped_ever_total'] >= MIN_BAND_SAMPLE:
+        # 分母是「归过类的收藏」而不是全部收藏：问的是「归了类的人是什么时候归
+        # 的」，没归过类的收藏回答不了这个问题。样本门槛借 MIN_BAND_SAMPLE 的
+        # 量级——几条收藏的形状读不出倾向，而这不是隐私线，是样本线。
+        instant_share = _share_or_none(
+            latency['instant_total'], latency['grouped_ever_total'],
+        )
+        if instant_share is not None:
+            if instant_share >= 50:
+                notes.append(
+                    f'归过类的收藏里有 {instant_share}% 是在 {latency["grace_minutes"]} '
+                    f'分钟内当场归的（{latency["instant_total"]}/'
+                    f'{latency["grouped_ever_total"]} 条）。用户收藏时心里已经想好了'
+                    '这东西属于哪一类——分组该出现在收藏动作的当场，而不是只留在心愿'
+                    '单页面上。但本模块只报告，不改收藏表单、不动页面结构。'
+                )
+            else:
+                notes.append(
+                    f'归过类的收藏里只有 {instant_share}% 是在 {latency["grace_minutes"]} '
+                    f'分钟内当场归的（{latency["instant_total"]}/'
+                    f'{latency["grouped_ever_total"]} 条），其余都是囤了一阵才整理的。'
+                    '分组对他们是事后整理的工具，不是收藏那一刻的分类——那么该补的是'
+                    '批量整理的入口，而不是在收藏表单里多加一个下拉。但本模块只报告，'
+                    '不改任何页面、不替任何人整理。'
+                )
+    if latency['released_total']:
+        notes.append(
+            f'有 {latency["released_total"]} 条收藏归过类又被移了出来。他们试过了分组'
+            '又退回去——这比「从未归类」是更强的信号，说明分组对他们没有价值。但本模块'
+            '只报告，不删任何分组、不改任何一条 Favorite.collection。'
+        )
     if not notes:
         if not group_total:
             notes.append('站内还没有任何心愿单分组。第一个分组建出来之后，这里会开始统计。')
         else:
             notes.append(
-                '分组的规模和形状没有明显背离，可继续观察更长的周期。本模块不报「先收藏'
-                '后归类」，因为 Favorite 没有 updated_at，归类时刻在库里不存在。'
+                '分组的规模和形状没有明显背离，可继续观察更长的周期。'
             )
     return notes
 
@@ -443,8 +540,10 @@ def build_favorite_collection_quality(days=30, now=None):
     empty_rows = _build_empty_rows(collections, now)
     penetration = _build_penetration(favorite_total, favoriter_ids, collector_ids)
     name_rows = _build_name_rows(collections)
+    grouping_latency = _build_grouping_latency_rows(now)
     recommendations = _recommendations(
-        scale_rows, size_shape, empty_rows, penetration, name_rows, group_total,
+        scale_rows, size_shape, empty_rows, penetration, name_rows,
+        grouping_latency, group_total,
     )
 
     total = len(collections)
@@ -471,11 +570,13 @@ def build_favorite_collection_quality(days=30, now=None):
             'min_band_sample': MIN_BAND_SAMPLE,
             'min_name_sample': MIN_NAME_SAMPLE,
             'noise_points': NOISE_POINTS,
+            'instant_grouping_grace_minutes': INSTANT_GROUPING_GRACE_MINUTES,
         },
         'scale_rows': scale_rows,
         'size_shape': size_shape,
         'empty_rows': empty_rows,
         'penetration': penetration,
         'name_rows': name_rows,
+        'grouping_latency': grouping_latency,
         'recommendations': recommendations,
     }

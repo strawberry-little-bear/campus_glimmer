@@ -5,8 +5,9 @@
 进或移出分组。分组功能有完整的增删改查和 UI，而「分组」这个维度此前一条统计都没有。这个
 模块把它们读出来只报告不改写。这些测试要钉住的是比数字本身更要紧的那些取舍：
 
-1. **不报「先收藏后归类」。** `Favorite` 没有 `updated_at`，归类时刻在库里不存在，所以报
-   告里没有任何一个和时间差有关的归类比例——连占位都不给。
+1. **「先收藏后归类」报得了，前提是 `Favorite.grouped_at`。** 那一列加上之前，归类时刻在
+   库里不存在，报告里连占位都不给；加上之后，当场 / 事后 / 从未 / 归过又取消四类分开报，
+   分母只收归过类的收藏，宽限天数出现在面板上。
 2. 同理不报「分组被改名的频率」（应用内没有改名路由，`updated_at` 只反映 admin 动过）和
    「删分组之后收藏去哪了」（删分组只走 admin，删完的收藏和没归过类的长得一样）。
 3. 四类分母各自独立，不能混：当前全部收藏、当前全部分组、当前有收藏的用户、窗口内新建。
@@ -29,8 +30,8 @@ from django.utils import timezone
 
 from .models import CampusLocation, Category, Favorite, FavoriteCollection, Item
 from .favorite_collection_quality import (
-    EMPTY_GROUP_GRACE_DAYS, MIN_BAND_SAMPLE, MIN_NAME_SAMPLE, NOISE_POINTS,
-    build_favorite_collection_quality,
+    EMPTY_GROUP_GRACE_DAYS, INSTANT_GROUPING_GRACE_MINUTES, MIN_BAND_SAMPLE,
+    MIN_NAME_SAMPLE, NOISE_POINTS, build_favorite_collection_quality,
 )
 
 
@@ -68,7 +69,13 @@ class FavoriteCollectionQualityTests(TestCase):
             collection=collection,
         )
         created_at = timezone.now() - timedelta(days=days_ago)
-        Favorite.objects.filter(pk=favorite.pk).update(created_at=created_at)
+        # 带了分组的收藏，模型会在创建那一刻写下 grouped_at。回填 created_at 时必须
+        # 把它一起推回去，否则这一行读起来像「囤了一天才归类」——而它建行时是当场归
+        # 类的。夹具必须产出自洽的行，否则测的是夹具不是实现。
+        Favorite.objects.filter(pk=favorite.pk).update(
+            created_at=created_at,
+            grouped_at=created_at if collection is not None else None,
+        )
         favorite.refresh_from_db()
         return favorite
 
@@ -82,31 +89,154 @@ class FavoriteCollectionQualityTests(TestCase):
         collection.refresh_from_db()
         return collection
 
-    # --- 口径一：不报「先收藏后归类」，因为库里没有那个时刻 ---
+    # --- 口径一：「先收藏后归类」报得了，前提是 Favorite.grouped_at ---
 
-    def test_the_report_never_publishes_a_grouping_lag(self):
-        # Favorite 没有 updated_at：views.update_favorite_collection 走
-        # save(update_fields=['collection'])，模型里也没有任何 auto_now 字段，所以这次保存
-        # 不刷新任何时间列。一条收藏是什么时候被归类的，在库里不存在。任何和这个时间差有
-        # 关的比例都会被读成「收藏时就归组率」，而它其实混着大量后来才移进去的收藏。
-        self.make_collection(name='教材')
+    def test_grouping_latency_is_published_in_four_kinds(self):
+        """归类时刻现在在库里了，四类必须分开报，不能合成一个比例。
+
+        `Favorite.grouped_at` 由模型在 `collection_id` 变化时自己写。这个测试钉住
+        报告的形状：当场、事后、从未归类、归过类又取消，是四个数而不是一个率——合成
+        一个率就会把「试过了又退回去」和「从来没试过」混成同一件事，而后者是比前者弱
+        得多的信号。
+        """
+        collection = self.make_collection(name='宿舍')
+        # 当场归类：收藏和归类在同一分钟内。
+        self.make_favorite(collection=collection)
+        # 从未归类。
+        self.make_favorite()
+        # 归过类又取消：collection_id 先真的变过一次（归进去），再变一次（移出
+        # 来）。不能从「无分组」直接置「无分组」——NULL 到 NULL 不算变化，模型
+        # 不会盖章，这一行就会落进「从未归类」，测的成了夹具不是实现。两步都盖
+        # 了章，最后 grouped_at 停在移出来那一刻，把它压回 created_at 附近，这
+        # 一行才读起来是「当场归了又当场退回去」；不压的话它以囤了一天的形状
+        # 进来，delayed_total 会被它顶高，四类的数就全乱了。
+        released = self.make_favorite()
+        released.collection = collection
+        released.save(update_fields=['collection'])
+        released.collection = None
+        released.save(update_fields=['collection'])
+        # grouped_at 停在移出来那一刻：归进去是当场，退出来是 5 天后。这一行读
+        # 起来是「当场归了，过几天又退回去」，于是它归进事后那一档，而不是又给
+        # 当场加一条——当场/事后/归过又取消四类必须互斥，合成一个数就分不出
+        # 「试过了又退回去」和「从来没试过」了。
+        Favorite.objects.filter(pk=released.pk).update(
+            grouped_at=released.created_at + timedelta(days=5),
+        )
+
+        report = build_favorite_collection_quality(days=30)
+
+        latency = report['grouping_latency']
+        self.assertEqual(latency['instant_total'], 1)
+        self.assertEqual(latency['ungrouped_total'], 1)
+        self.assertEqual(latency['released_total'], 1)
+        # 归过类的一共两条：当场那条和归过又取消那条。后者归进去是当场、退出
+        # 来是 5 天后，按最后一次分组变化算落在事后那一档——四类互斥，每条收
+        # 藏只出现在一类里，合起来正好等于 grouped_ever。
+        self.assertEqual(latency['grouped_ever_total'], 2)
+        self.assertEqual(latency['delayed_total'], 1)
+        self.assertEqual(latency['instant_total'] + latency['delayed_total'],
+                         latency['grouped_ever_total'])
+        # 宽限天数必须出现在面板上：运营读不出「当场」和「事后」的分界在哪，这两个数
+        # 就没有意义。这个数没有理论依据，所以它不能是藏在代码里的魔法值。
+        self.assertEqual(
+            latency['grace_minutes'], INSTANT_GROUPING_GRACE_MINUTES,
+        )
+        self.assertEqual(
+            report['metrics']['instant_grouping_grace_minutes'],
+            INSTANT_GROUPING_GRACE_MINUTES,
+        )
+
+    def test_delayed_grouping_is_separated_from_instant(self):
+        """囤了很久才归类的，不能算进「当场」。"""
+        collection = self.make_collection(name='宿舍')
+        favorite = self.make_favorite(days_ago=30)
+        # 把 grouped_at 压到 created_at 之后 10 天：事后归类。
+        Favorite.objects.filter(pk=favorite.pk).update(
+            grouped_at=favorite.created_at + timedelta(days=10),
+        )
+
+        report = build_favorite_collection_quality(days=90)
+
+        latency = report['grouping_latency']
+        self.assertEqual(latency['instant_total'], 0)
+        self.assertEqual(latency['delayed_total'], 1)
+        self.assertEqual(latency['grouped_ever_total'], 1)
+
+    def test_the_grace_boundary_is_inclusive(self):
+        """正好卡在宽限边界上算当场，不是事后。
+
+        判据是「距离小于等于宽限」。取等于而不是小于，是因为一个花了正好六十分钟
+        的用户和一个花了五十九分钟的用户没有区别，把他们分到两类只会让边界附近的计
+        数随机抖动。
+        """
+        collection = self.make_collection(name='宿舍')
+        favorite = self.make_favorite()
+        Favorite.objects.filter(pk=favorite.pk).update(
+            grouped_at=favorite.created_at
+            + timedelta(minutes=INSTANT_GROUPING_GRACE_MINUTES),
+        )
+
+        report = build_favorite_collection_quality(days=30)
+
+        self.assertEqual(report['grouping_latency']['instant_total'], 1)
+        self.assertEqual(report['grouping_latency']['delayed_total'], 0)
+
+    def test_pre_migration_favorites_are_not_in_any_denominator(self):
+        """迁移前就归了组的收藏，归类时刻不可知，四类都不算。
+
+        加列之前归过类的收藏 `grouped_at` 是 NULL。它们既不是当场也不是事后，把它们
+        算进分母，「事后归类」的占比会被一批不知道时刻的收藏稀释。数据不可知和样本不
+        足是两件事：前者必须明确说「这个数不知道」。
+        """
+        collection = self.make_collection(name='宿舍')
+        # 一条归了类但 grouped_at 为空（迁移前的样子）。
+        Favorite.objects.filter(
+            pk=self.make_favorite(collection=collection).pk,
+        ).update(grouped_at=None)
+
+        report = build_favorite_collection_quality(days=30)
+
+        latency = report['grouping_latency']
+        self.assertEqual(latency['grouped_ever_total'], 0)
+        self.assertEqual(latency['instant_total'], 0)
+        self.assertEqual(latency['delayed_total'], 0)
+        self.assertEqual(latency['ungrouped_total'], 0)
+        # 当前快照里它仍然是一条已归组的收藏——渗透那张表照实报它。
+        self.assertEqual(report['penetration']['grouped_favorite_total'], 1)
+
+    def test_grouping_latency_stays_out_of_the_old_tables(self):
+        """新表是新增的，不是把旧表改出来的。
+
+        渗透、规模、空分组、命名四张表一个字段都没动。如果有人把「当场归类率」塞进
+        渗透表，这个测试会红——那两件事的分母不同（全部收藏 vs 归过类的收藏），混在
+        一张表里会让运营以为有两个独立的信号。
+        """
         self.make_favorite(collection=self.make_collection(name='宿舍'))
 
         report = build_favorite_collection_quality(days=30)
 
-        for key in (
-            'grouping_lag', 'lag', 'grouped_at_creation_rate', 'classification_rate',
-            'rate',
-        ):
-            self.assertNotIn(key, report)
-            self.assertNotIn(key, report['metrics'])
         for row in report['scale_rows']:
-            self.assertNotIn('rate', row)
-            self.assertNotIn('grouping_lag', row)
+            self.assertNotIn('instant_total', row)
+            self.assertNotIn('grouped_ever_total', row)
         for row in report['name_rows']:
-            self.assertNotIn('rate', row)
-        self.assertNotIn('grouping_lag', report['penetration'])
-        self.assertNotIn('lag', report['empty_rows'])
+            self.assertNotIn('instant_total', row)
+            self.assertNotIn('grouped_ever_total', row)
+        for key in ('instant_total', 'delayed_total', 'released_total'):
+            self.assertNotIn(key, report['penetration'])
+            self.assertNotIn(key, report['empty_rows'])
+
+    def test_latency_note_names_the_boundary_and_does_not_act(self):
+        """建议里要写出宽限天数，并且句尾落在「只报告」上。"""
+        for index in range(MIN_BAND_SAMPLE):
+            self.make_favorite(collection=self.make_collection(name=f'分组{index}'))
+
+        report = build_favorite_collection_quality(days=30)
+
+        notes = [note for note in report['recommendations']
+                 if '分钟内当场归的' in note or '囤了一阵才整理' in note]
+        self.assertTrue(notes, '当场 / 事后归类的形状没有进建议')
+        self.assertIn(str(INSTANT_GROUPING_GRACE_MINUTES), notes[0])
+        self.assertIn('只报告', notes[0])
 
     def test_a_recently_grouped_favorite_keeps_its_original_created_at(self):
         # 直接把这条边界钉成一条行为断言：一条 60 天前收藏的商品，昨天被移进分组，它在这
@@ -481,3 +611,139 @@ class FavoriteCollectionQualityTests(TestCase):
         self.assertIn('教材', joined)
         self.assertIn('预设', joined)
         self.assertIn('只报告', joined)
+
+class FavoriteGroupedAtTests(TestCase):
+    """`Favorite.grouped_at` 的写入路径：一个字段不够，两条路径都要接。
+
+    `Favorite.collection` 有两条写入路径——`views.update_favorite_collection` 和
+    Django admin 的 change 表单。只接视图层，后台每改一条收藏就在库里留一个假数据：
+    `grouped_at` 停在 NULL，那条收藏会被读成「从未归类」，而它其实归过类。所以写入
+    放在模型层。这些测试钉住的正是这一点。
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='grouped-at-user', password='safe-password-123',
+        )
+        self.category = Category.objects.create(name='归类时刻测试分类')
+        self.location = CampusLocation.objects.create(
+            name='归类时刻测试地点', building='归类时刻测试楼', is_public=True,
+        )
+        self.item = Item.objects.create(
+            title='归类时刻测试商品', description='d', price='30.00',
+            category=self.category, location=self.location,
+            condition='良好', seller=self.user, status='available',
+        )
+        self.collection = FavoriteCollection.objects.create(
+            user=self.user, name='教材',
+        )
+
+    def make_favorite(self, *, collection=None):
+        return Favorite.objects.create(
+            user=self.user, item=self.item, collection=collection,
+        )
+
+    def test_grouping_in_stamps_grouped_at(self):
+        """把收藏归进分组，`grouped_at` 必须被写下来。"""
+        favorite = self.make_favorite()
+        self.assertIsNone(favorite.grouped_at)
+
+        favorite.collection = self.collection
+        favorite.save(update_fields=['collection'])
+
+        favorite.refresh_from_db()
+        self.assertIsNotNone(favorite.grouped_at)
+
+    def test_releasing_a_group_also_stamps_grouped_at(self):
+        """把收藏移出分组，同样要写 `grouped_at`。
+
+        这一条最容易被漏：`update_favorite_collection` 支持把 `collection_id` 传
+        空，也就是移出分组。如果只记「归进去」，这批人会被算进「从未归类」，而他们其
+        实是「用过又不用了」——那是比「从未归类」更强的信号。字段的语义是「分组最后
+        一次发生变化」，归进去和移出来都算。
+        """
+        favorite = self.make_favorite(collection=self.collection)
+        Favorite.objects.filter(pk=favorite.pk).update(grouped_at=None)
+
+        favorite.collection = None
+        favorite.save(update_fields=['collection'])
+
+        favorite.refresh_from_db()
+        self.assertIsNotNone(favorite.grouped_at)
+        self.assertIsNone(favorite.collection_id)
+
+    def test_update_fields_is_extended_so_the_column_lands(self):
+        """调用方只列 `['collection']` 时，`grouped_at` 照样要落库。
+
+        `save(update_fields=[...])` 只写列出来的字段。不把 `grouped_at` 追加进去，
+        视图那一行 `favorite.save(update_fields=['collection'])` 就会静默地不写它
+        ——而视图层看不出任何异常。这是覆写 `save()` 的理由，也是它最容易出错的地方。
+        """
+        favorite = self.make_favorite()
+
+        favorite.collection = self.collection
+        favorite.save(update_fields=['collection'])
+
+        favorite.refresh_from_db()
+        self.assertIsNotNone(favorite.grouped_at)
+
+    def test_an_unchanged_collection_does_not_move_grouped_at(self):
+        """分组没变，`grouped_at` 不许动。
+
+        判据是 `collection_id` 变了，不是 `collection` 实例变了。同一个分组被重新赋
+        值，`collection_id` 不变，那确实没有发生变化——动它会让「事后归类」被误判成
+        「当场归类」，而这个字段的全部价值就在于它只在这一种变化上动。
+        """
+        favorite = self.make_favorite(collection=self.collection)
+        stamped = timezone.now() - timedelta(days=10)
+        Favorite.objects.filter(pk=favorite.pk).update(grouped_at=stamped)
+
+        favorite.collection = self.collection
+        favorite.save(update_fields=['collection'])
+
+        favorite.refresh_from_db()
+        self.assertEqual(favorite.grouped_at, stamped)
+
+    def test_a_plain_save_without_grouping_does_not_move_grouped_at(self):
+        """一次和分组无关的保存，不许刷新 `grouped_at`。
+
+        这一条守的是「不用 `auto_now`」那个决定。`auto_now` 会在每次 `save()` 上无
+        条件刷新，那么将来谁给这个模型加一个字段、顺手保存一次，事后归类就会被推成
+        当场归类。
+        """
+        favorite = self.make_favorite(collection=self.collection)
+        stamped = timezone.now() - timedelta(days=10)
+        Favorite.objects.filter(pk=favorite.pk).update(grouped_at=stamped)
+        # 从库里重新加载，还原真实场景：admin 和 update_favorite_collection 都是
+        # 先加载实例再保存，内存里的 grouped_at 就是库里的值。不 refresh 的话这次
+        # 全量 save() 会把内存里的旧值写回——那是 Django 全量保存的既有行为，任何
+        # 字段都如此，不是 grouped_at 特有的问题。
+        favorite.refresh_from_db()
+
+        favorite.save()
+
+        favorite.refresh_from_db()
+        self.assertEqual(favorite.grouped_at, stamped)
+
+    def test_a_new_favorite_with_a_group_is_stamped_at_creation(self):
+        """新建时就带了分组的，创建那一刻就是归类时刻。
+
+        后台可以一次性建好一条已归组的收藏。没有这一条，那些行会带着 `collection`
+        却读不出归类时刻，被算进「迁移前归组」那一类——而它们并不是。
+        """
+        favorite = Favorite.objects.create(
+            user=self.user, item=self.item, collection=self.collection,
+        )
+
+        favorite.refresh_from_db()
+        self.assertIsNotNone(favorite.grouped_at)
+
+    def test_a_new_favorite_without_a_group_has_no_stamp(self):
+        """新建时没有分组，`grouped_at` 必须是 NULL，不能是创建时刻。
+
+        否则每一条收藏都会被读成「当场归类」，而它们压根没被归过类——这个字段就废了。
+        """
+        favorite = self.make_favorite()
+
+        favorite.refresh_from_db()
+        self.assertIsNone(favorite.grouped_at)
