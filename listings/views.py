@@ -32,6 +32,7 @@ from .search_position_quality import build_search_position_quality
 from .demand_match_quality import build_demand_match_quality
 from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .demand_opportunity_followups import build_demand_opportunity_followups
+from .demand_task_aging import build_demand_task_aging
 from .meeting_attendance import build_meeting_attendance
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2204,6 +2205,7 @@ def operations_dashboard(request):
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
+    dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2370,6 +2372,7 @@ def operations_dashboard_export(request):
     dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
+    dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2747,6 +2750,71 @@ def operations_dashboard_export(request):
         '待处理清单不按统计周期过滤：周期开始之前就超期的那个任务，恰恰是最不该被藏起来的一件。'
         '这里只报告，不自动派单、不改任务状态、不改截止时间、不新增任何提醒；'
         '备注是跟进人写给自己的内部备忘，只数字数，不做切词、不聚类、不推断语义，也不公开任何一条原文。',
+    ])
+
+    aging = dashboard['demand_task_aging']
+    writer.writerow([])
+    writer.writerow(['跟进任务的接手等待与停留', '数值', '说明'])
+    writer.writerow(['口径与门槛', aging['summary'], '接手时长只报上界，停留时长只报当前快照，两个口径不能相加或相减'])
+    writer.writerow(['有人接手', aging['handover']['handed_count'], f"占 {aging['handover']['handed_rate']}%"])
+    writer.writerow(['还没人接手', aging['handover']['waiting_count'], f"占 {aging['handover']['waiting_rate']}%"])
+    writer.writerow([
+        '没人接手的等待中位数（天）',
+        '—' if aging['handover']['waiting_median_days'] is None else aging['handover']['waiting_median_days'],
+        '没人碰过的任务 updated_at 停在 created_at，这一段可以直接读',
+    ])
+    writer.writerow([
+        '已接手的等待中位数（天）',
+        '—' if aging['handover']['handed_median_days'] is None else aging['handover']['handed_median_days'],
+        '只是上界：每一次改备注、改期限都会把它往后推，真实等待只会更长',
+    ])
+    writer.writerow([
+        '两组等待中位数之差（天）',
+        '—' if aging['handover']['gap_days'] is None else aging['handover']['gap_days'],
+        (
+            '两组各自不足样本下限，只报数字、不给方向'
+            if not aging['handover']['is_measurable']
+            else f"相差不足 {aging['handover']['noise_days']} 天视为噪声，读不出方向"
+            if not aging['handover']['gap_is_meaningful']
+            else '已出噪声区间，方向见看板'
+        ),
+    ])
+    writer.writerow([])
+    writer.writerow(['接手等待分档', '没人接手过', '已经有人接手'])
+    handed_by_label = {row['label']: row['count'] for row in aging['handover']['handed_bucket_rows']}
+    for row in aging['handover']['waiting_bucket_rows']:
+        writer.writerow([row['label'], row['count'], handed_by_label.get(row['label'], 0)])
+    writer.writerow([])
+    writer.writerow(['当前状态', '任务数', '中位停留（天）', '最久（天）', '样本是否够'])
+    for row in aging['residency']['rows']:
+        writer.writerow([
+            row['label'], row['task_count'],
+            '—' if row['median_days'] is None else row['median_days'],
+            row['max_days'],
+            f"不足 {aging['residency']['min_bucket_sample']} 条" if row['is_small_sample'] else '够',
+        ])
+    writer.writerow([])
+    writer.writerow(['最久没有活动的未闭环任务', '状态', '负责人', '多久没动（天）', '有期限', '备注（字）', '建任务时间'])
+    if aging['stale_rows']['rows']:
+        for row in aging['stale_rows']['rows']:
+            writer.writerow([
+                row['title'], row['status_label'], row['assigned_to'],
+                row['residency_days'], '有' if row['has_due'] else '无', row['note_length'],
+                row['created_at'].astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M'),
+            ])
+        writer.writerow([
+            '说明', f"这里列了 {aging['stale_rows']['row_limit']} 条，一共 {aging['stale_rows']['row_total']} 条",
+            '清单只按未闭环筛：已接手但停住的任务同样在列，那正是最该被点开看看的一件',
+            '', '', '', '',
+        ])
+    else:
+        writer.writerow(['—', '当前没有未闭环的跟进任务', '', '', '', '', ''])
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '待处理清单不按统计周期过滤：周期开始之前就没人管的那个任务，恰恰是最不该被藏起来的一件。'
+        '这里只报告，不自动派单、不改任务状态、不改截止时间、不新增任何提醒；'
+        '负责人只作为一列出现，用来找到人，不用来比较人；空平台报「—」不报 0 天。',
     ])
 
     attendance = dashboard['meeting_attendance']

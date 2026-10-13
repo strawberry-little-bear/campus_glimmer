@@ -1145,6 +1145,28 @@ a { color: inherit; text-decoration: none; }
 .item-image-coverage-panel .badge { font-weight: 600; }
 .item-image-coverage-panel .rewrite-candidate-footnote { color: #4e637d; }
 .item-image-coverage-panel .ops-footer-note { color: #5f6d7e; }
+/* 跟进任务接手等待与停留面板自成一组色相（灰蓝偏冷，压一层旧纸感）。
+ * 为什么自成一套颜色：站内所有关于跟进任务的面板（跟进任务期限与备注、需求雷达命中）
+ * 报的都是「这个环节有没有在跑」，而这一栏报的是「动作是什么时候发生的」——它读的是
+ * 表上那四个时间列之间的关系，不是任务本身的状态。需求雷达的蓝已经给了命中趋势，
+ * 求购响应转化的紫红给了确认之后那段路，会面到到的绿给了线下；这里取的是一组偏冷的
+ * 灰蓝，滚动时能和「还有没有人管」这件事对上：这一栏的数字多半是「建了很久，没人碰」。
+ * 注意不用红色：没人接手不代表错误，只代表等待，用红色会让运营当成故障去处理。
+ * 也不用绿色：这一栏没有任何一个方向值得被庆祝。 */
+.demand-task-aging-panel { padding: 14px; border: 1px solid #ccd6de; border-radius: 14px; background: linear-gradient(135deg, #f3f6f9, #fafbfd); color: #4b5764; }
+.demand-task-aging-panel p { color: #66748a; }
+.demand-task-aging-panel .ops-mini-stat { background: #fff; }
+.demand-task-aging-panel .ops-mini-stat strong { color: #3c5670; }
+.demand-task-aging-panel .ops-mini-stat span,
+.demand-task-aging-panel .ops-mini-stat small { color: #7b8899; }
+.demand-task-aging-panel .table th { color: #55647a; }
+.demand-task-aging-panel .table td { vertical-align: top; }
+.demand-task-aging-panel .badge { font-weight: 600; }
+.demand-task-aging-panel .rewrite-candidate-footnote { color: #4e637d; }
+.demand-task-aging-panel .ops-footer-note { color: #66748a; }
+/* 清单里「接手后停住」和「没人管」是两件不同的事，用两种深浅分开，
+   不用两种颜色——它们都不该被当成异常高亮，只是读的时候要能一眼分开。 */
+.demand-task-aging-panel .ops-table td:nth-child(3) { white-space: nowrap; }
 
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
