@@ -36,6 +36,7 @@ from .demand_opportunity_followups import build_demand_opportunity_followups
 from .demand_task_aging import build_demand_task_aging
 from .notification_snooze_return import build_notification_snooze_return
 from .notification_kind_coverage import build_notification_kind_coverage
+from .notification_preference_usage import build_notification_preference_usage
 from .notification_aggregation_quality import build_notification_aggregation_quality
 from .report_resolution_quality import build_report_resolution_quality
 from .meeting_incident_quality import build_meeting_incident_quality
@@ -2330,6 +2331,7 @@ def operations_dashboard(request):
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
+    dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
@@ -2510,6 +2512,7 @@ def operations_dashboard_export(request):
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
+    dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
@@ -3419,6 +3422,69 @@ def operations_dashboard_export(request):
         '都没有行为意义。这里只报告：不加迁移、不改 KIND_CHOICES、不改 NotificationPreference、'
         '不改表单字段列表；不按用户排名，那是一份考勤表，不是一份看板；'
         '不列任何一条通知的原文；空分母报「—」不报 0——0 会被读成「发了，占比很小」。',
+    ])
+    usage = dashboard['notification_preference_usage']
+    writer.writerow([])
+    writer.writerow(['通知偏好开关：25 个开关各自的形状', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', usage['summary'],
+        '开关名单从模型元数据现读，不硬编码；被开关挡掉的通知连一行都不建，'
+        '所以「关掉之后通知少了多少」不在本模块口径里',
+    ])
+    writer.writerow([
+        '有偏好行的用户', usage['coverage']['rows_total'],
+        'NotificationPreference 逐用户一行，get_or_create 出来，默认全开',
+    ])
+    writer.writerow([
+        '收到过通知却没有偏好行', usage['coverage']['users_without_row'],
+        '单列一格，不并入「开着」——否则「多少人碰过设置页」永远问不出来',
+    ])
+    writer.writerow([
+        '开着免打扰总闸', usage['quiet_hours']['on'],
+        'quiet_hours_enabled 不是通知类型，但和 25 个开关摆在同一张表单里',
+    ])
+    writer.writerow([
+        '关掉免打扰总闸', usage['quiet_hours']['off'],
+        '只压角标，不挡通知本身，通知中心里仍能打开',
+    ])
+    writer.writerow([])
+    writer.writerow(['按「关掉它有没有交易后果」分组', '开着', '关掉', '合计', '关闭占比（%）', '样本是否够'])
+    if not usage['by_group']:
+        writer.writerow(['当前平台还没有任何偏好行。'])
+    else:
+        for row in usage['by_group']:
+            writer.writerow([
+                row['label'], row['on'], row['off'], row['on'] + row['off'],
+                '—' if row['share'] is None else row['share'],
+                f"不足 {usage['min_preference_rows']} 行" if not row['has_enough_rows'] else '够',
+            ])
+    writer.writerow([
+        '说明',
+        '不合成一个全站关闭率：合成之后，「用户关掉了运营告警日报」和「用户关掉了新订单通知」'
+        '会读成同一件事，而前者是用户在减噪、后者可能让用户错过一笔成交。'
+        '四组各自要过 '
+        f"{usage['min_preference_rows']} 行才给占比。",
+    ])
+    writer.writerow([])
+    writer.writerow(['25 个开关逐个看', '分组', '开着', '关掉', '近期收到过的用户', '关着却仍收到过', '开着却没收到过', '样本是否够'])
+    if not usage['has_data']:
+        writer.writerow(['当前平台还没有任何偏好行。'])
+    else:
+        for row in usage['rows']:
+            writer.writerow([
+                row['field'], row['group_label'], row['on'], row['off'],
+                row['notified_users'], row['off_but_seen'], row['on_but_unseen'],
+                f"不足 {usage['min_preference_rows']} 行" if not row['has_enough_rows'] else '够',
+            ])
+    writer.writerow([
+        '说明',
+        '「关着却仍收到过」是这一节的观测对象：它只可能是窗口前收到的，或者汇总类通知'
+        '（operations_digest / opportunity_digest / saved_search_digest）在另一个时刻生成。'
+        '这一格很大，说明这个开关要么没接上、要么接的是一条用户没意识到的路径。'
+        '「开着却没收到过」不是漏报——一个从没被预约过的用户开着 order_created 是天经地义。'
+        '两格都只报人数，不报任何两格之间的比值。'
+        '本模块只报告：不加迁移、不加字段、不改 create_notification 的静默 return None、'
+        '不给任何人自动打开开关；不按用户排名、不输出用户名。',
     ])
     aggregation = dashboard['notification_aggregation_quality']
     writer.writerow([])
