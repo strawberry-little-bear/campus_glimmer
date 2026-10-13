@@ -3363,11 +3363,13 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([
         '没有名字的类型', coverage['current']['unnamed_count'],
-        '不在 KIND_CHOICES 里，用户在自己的通知中心里按类型筛不出它们',
+        '不在 KIND_CHOICES 里，用户在自己的通知中心里按类型筛不出它们；'
+        '上一轮的两种窟窿都已补上，现在是 0 且必须继续是 0',
     ])
     writer.writerow([
         '用户关不掉的开关', coverage['current']['unreachable_count'],
-        '模型上有、默认开着、真的在发，但不在偏好表单里，页面上没有那一行',
+        '模型上有、默认开着、真的在发，但不在偏好表单里，页面上没有那一行；'
+        '上一轮的两种窟窿都已补上，现在是 0 且必须继续是 0',
     ])
     writer.writerow([
         '周期内通知总数', coverage['current']['total_sent'],
@@ -3377,6 +3379,9 @@ def operations_dashboard_export(request):
     writer.writerow(['没有名字的类型', '周期发送', '被读', '占全部通知（%）', '样本是否够'])
     if not coverage['has_data']:
         writer.writerow(['当前周期还没有通知数据。'])
+    elif not coverage['unnamed_rows']:
+        # 差集空和「还没看」是两件事：前者是三个来源此刻对齐，后者是这一格没内容。
+        writer.writerow(['当前没有正在发送却没有名字的类型。'])
     else:
         for row in coverage['unnamed_rows']:
             writer.writerow([
@@ -3390,6 +3395,8 @@ def operations_dashboard_export(request):
     writer.writerow(['用户关不掉的开关', '周期发送', '被读', '占全部通知（%）', '样本是否够'])
     if not coverage['has_data']:
         writer.writerow(['当前周期还没有通知数据。'])
+    elif not coverage['unreachable_rows']:
+        writer.writerow(['当前每个类型的开关都在偏好页面上。'])
     else:
         for row in coverage['unreachable_rows']:
             writer.writerow([

@@ -11,16 +11,21 @@
 第二件是**一个正在被发送、却没有名字的类型**。``mutual_aid_feedback`` 在 ``views.py`` 的
 两处被真正发送，偏好表上有它的开关，而 ``KIND_CHOICES`` 里没有它。后果不止是看板上显示
 英文：``notification_list`` 的类型筛选器拿 ``KIND_CHOICES`` 当白名单，所以**这一类通知，
-用户在自己的通知中心里筛不出来**。测试要确认它落在「没有名字」那一行，且标签回退成英文
-键名——这正是 ``kind_labels.get(kind, kind)`` 的 fallback 第一次被触发。
+用户在自己的通知中心里筛不出来**。
 
 第三件是**一个用户关不掉的开关**。``meeting_incident`` 模型上有、默认开着、真的在发，而
-表单的 27 个字段里没有它。模板是 ``{% for field in form.visible_fields %}``，表单里没有的
-字段页面上就没有那一行。测试要确认它落在「用户关不掉」那一行，且它**有**偏好开关——少了
-这一列，「用户关不掉」和「连开关都没有」会被读成同一件事。
+表单的字段列表里没有它。模板是 ``{% for field in form.visible_fields %}``，表单里没有的
+字段页面上就没有那一行。
 
-本模块只报告：不加迁移、不改 ``KIND_CHOICES``、不改 ``NotificationPreference``、不改表单
-字段列表。那两个窟窿的修法各是一行代码，但那是修复，不是度量。
+**这两个窟窿已经在 ``notification-kind-gap-fix-design.md`` 那一轮补上**：一个补的是
+``KIND_CHOICES`` 里那一行数据层的名字，一个补的是 ``Meta.fields`` 里那一行表单层的暴露。
+两处都不改表结构，所以都不需要迁移；``create_notification`` 的偏好闸门一行都没动。补上
+之后三个来源对齐，差集变空——而这是修的自然结果，不是改口径改出来的：本模块的口径
+一行都没改。
+
+于是本模块的存在意义翻了个面：从「报窟窿」变成「守住对齐」。差集现在是空的，测试要钉住
+它是**空的**，而不是钉住它**有东西**。下一次有人新增一种通知类型却只改一处，该红的就是
+那一处——那时本模块重新有东西可报，而它的口径仍然不用改。
 """
 
 from datetime import timedelta
@@ -146,15 +151,20 @@ class LandscapeTests(TestCase):
             )
 
 
-class UnnamedKindTests(TestCase):
-    """没有名字的类型：``mutual_aid_feedback``。"""
+class NamedKindTests(TestCase):
+    """曾经的窟窿一：``mutual_aid_feedback`` 现在有名字，也不再落到差集里。"""
 
     def setUp(self):
         self.now = local_noon()
-        self.user = make_user('kind-unnamed-user')
+        self.user = make_user('kind-named-user')
 
-    def test_mutual_aid_feedback_is_sent_but_has_no_choice_label(self):
-        """一个正在被发送、正在被接收、正在被关掉的类型，在用户界面上没有名字。"""
+    def test_the_kind_that_used_to_have_no_label_is_now_named(self):
+        """一个正在被发送、正在被接收、正在被关掉的类型，现在有中文名。
+
+        它在 ``views.py`` 的两处被真正发送，偏好表上有它的开关，而 ``KIND_CHOICES`` 里
+        曾经没有它。现在有了——所以它不再落进「没有名字」那一行，规模与阅读情况照旧
+        从周期里如实统计。
+        """
         make_notification(
             self.user, kind='mutual_aid_feedback',
             created_at=self.now - timedelta(days=2), read_at=self.now - timedelta(days=1),
@@ -163,30 +173,25 @@ class UnnamedKindTests(TestCase):
 
         report = build_notification_kind_coverage(days=30, now=self.now)
         unnamed = {row['kind']: row for row in report['unnamed_rows']}
-        self.assertIn('mutual_aid_feedback', unnamed)
+        self.assertNotIn('mutual_aid_feedback', unnamed)
 
-        row = unnamed['mutual_aid_feedback']
-        self.assertEqual(row['label'], 'mutual_aid_feedback')
-        self.assertEqual(row['sent_count'], 1)
-        self.assertEqual(row['read_count'], 1)
-        self.assertTrue(row['sent_in_period'])
+        landscape = {row['kind']: row for row in report['landscape']}
+        self.assertEqual(landscape['mutual_aid_feedback']['label'], '互助完成反馈')
 
-    def test_the_unnamed_kind_falls_back_to_the_raw_key_as_its_label(self):
-        """``kind_labels.get(kind, kind)`` 的 fallback 第一次被触发。
+    def test_the_label_falls_back_no_more_because_the_kind_is_registered(self):
+        """``kind_labels.get(kind, kind)`` 的 fallback 不再为它触发。
 
-        这正是 ``notification_response`` 和 ``notification_snooze_return`` 里那句从未被
-        走到过的分支。看板上它会显示成英文键名，用户在自己的通知中心里也筛不出它。
+        ``notification_response`` 和 ``notification_snooze_return`` 都拿 ``KIND_CHOICES``
+        当标签表。选择项里有了这一行，运营看到的就是中文，不是英文键名。
         """
-        from .models import Notification
-
         make_notification(self.user, kind='mutual_aid_feedback',
                           created_at=self.now - timedelta(days=1))
 
         report = build_notification_kind_coverage(days=30, now=self.now)
-        row = next(r for r in report['unnamed_rows'] if r['kind'] == 'mutual_aid_feedback')
+        row = next(r for r in report['landscape'] if r['kind'] == 'mutual_aid_feedback')
 
-        self.assertNotIn('mutual_aid_feedback', dict(Notification.KIND_CHOICES))
-        self.assertEqual(row['label'], 'mutual_aid_feedback')
+        self.assertTrue(row['has_choice_label'])
+        self.assertEqual(row['label'], '互助完成反馈')
 
     def test_a_type_with_a_label_never_lands_in_the_unnamed_rows(self):
         make_notification(self.user, kind='order_created',
@@ -200,18 +205,18 @@ class UnnamedKindTests(TestCase):
         )
 
 
-class UnreachableSwitchTests(TestCase):
-    """用户关不掉的开关：``meeting_incident``。"""
+class ReachableSwitchTests(TestCase):
+    """曾经的窟窿二：``meeting_incident`` 的开关现在摆在偏好页面上。"""
 
     def setUp(self):
         self.now = local_noon()
-        self.user = make_user('kind-unreachable-user')
+        self.user = make_user('kind-reachable-user')
 
-    def test_meeting_incident_has_a_switch_that_is_not_in_the_form(self):
-        """用户收到了，但偏好页面上没有一个开关能关掉它。
+    def test_the_switch_that_used_to_be_unreachable_is_now_in_the_form(self):
+        """用户收到了，现在偏好页面上有一个开关能关掉它。
 
-        关键是它**有**偏好开关——少了这一列，「用户关不掉」和「连开关都没有」会被读成
-        同一件事，而这两件事的修法完全不同。
+        它**有**偏好开关这一列仍然要紧：「关不掉」和「连开关都没有」是两件事，修法也
+        完全不同——前者补一行表单暴露，后者要连模型字段一起加。
         """
         make_notification(
             self.user, kind='meeting_incident',
@@ -220,17 +225,13 @@ class UnreachableSwitchTests(TestCase):
 
         report = build_notification_kind_coverage(days=30, now=self.now)
         unreachable = {row['kind']: row for row in report['unreachable_rows']}
-        self.assertIn('meeting_incident', unreachable)
-
-        row = unreachable['meeting_incident']
-        self.assertEqual(row['sent_count'], 1)
-        self.assertTrue(row['sent_in_period'])
+        self.assertNotIn('meeting_incident', unreachable)
 
         landscape = {r['kind']: r for r in report['landscape']}
         incident = landscape['meeting_incident']
         self.assertTrue(incident['has_preference_switch'])
         self.assertTrue(incident['has_choice_label'])
-        self.assertFalse(incident['switch_in_form'])
+        self.assertTrue(incident['switch_in_form'])
 
     def test_every_other_sent_kind_is_reachable_from_the_form(self):
         """其余类型的开关都在用户手上，唯独交付预约异常是 Silent 的例外。"""
@@ -344,8 +345,12 @@ class SummaryTests(TestCase):
         report = build_notification_kind_coverage(days=30, now=self.now)
         self.assertIn('还没有通知数据', report['summary'])
 
-    def test_a_period_with_both_gaps_names_both_of_them(self):
-        """两个窟窿都要被点到名，一个都不漏。"""
+    def test_the_two_former_gaps_no_longer_appear_in_the_summary(self):
+        """曾经点名两个窟窿的那段话，现在说的是「三种表此刻是对齐的」。
+
+        这条位置上是本模块意义翻转最直接的一处：summary 从报窟窿翻到报对齐，
+        两个类型名都不该再出现在这句人话里。
+        """
         user = make_user('kind-summary-both')
         make_notification(user, kind='mutual_aid_feedback',
                           created_at=self.now - timedelta(days=1))
@@ -353,39 +358,40 @@ class SummaryTests(TestCase):
                           created_at=self.now - timedelta(days=1))
 
         report = build_notification_kind_coverage(days=30, now=self.now)
-        self.assertIn('没有中文名', report['summary'])
-        self.assertIn('不在偏好页面上', report['summary'])
+        self.assertIn('三种表此刻是对齐的', report['summary'])
+        self.assertNotIn('没有中文名', report['summary'])
+        self.assertNotIn('不在偏好页面上', report['summary'])
+        self.assertNotIn('mutual_aid_feedback', report['summary'])
+        self.assertNotIn('交付预约异常', report['summary'])
 
-    def test_the_two_gaps_are_code_facts_not_period_artifacts(self):
-        """两个窟窿是代码事实，跟这个周期发了什么、发了多少都无关。
+    def test_the_alignment_is_a_code_fact_not_a_period_artifact(self):
+        """对齐是代码事实，跟这个周期发了什么、发了多少都无关。
 
-        一开始这里写的是「一个两种窟窿都没有的周期，summary 应该说三种表是对齐的」。
-        那个预期不成立：只要 ``mutual_aid_feedback`` 不在 ``KIND_CHOICES`` 里、
-        ``meeting_incident`` 不在表单里，两个 gap 就恒在——这正是本模块要报的事，
-        换任何一个周期、发任何一种通知都绕不过去。所以改成钉住这条边界：
-        干净的周期照样报两个 gap，且报的是类型名，不是条数。
+        这一条原本钉的是反面：「两个 gap 恒在，换任何一个周期都绕不过去」。窟窿补上
+        之后恒在的变成了对齐本身——干净周期照样对齐，发过那两个类型的周期也照样对齐。
+        换周期、换类型都绕不过去，正是代码事实的形状。
         """
         user = make_user('kind-summary-clean')
         make_notification(user, kind='order_created',
                           created_at=self.now - timedelta(days=1))
 
         report = build_notification_kind_coverage(days=30, now=self.now)
-        self.assertNotIn('三种表此刻是对齐的', report['summary'])
-        self.assertIn('mutual_aid_feedback', report['summary'])
-        self.assertIn('交付预约异常', report['summary'])
+        self.assertIn('三种表此刻是对齐的', report['summary'])
+        self.assertEqual(report['unnamed_rows'], [])
+        self.assertEqual(report['unreachable_rows'], [])
 
-    def test_an_empty_period_still_reports_the_gaps_because_they_are_code_facts(self):
-        """一条通知都没有的周期，窟窿照样在——它们不是统计量。
+    def test_an_empty_period_stays_aligned_because_alignment_is_a_code_fact(self):
+        """一条通知都没有，版图照样是齐的——它不是统计量。
 
-        空平台的 summary 走「还没有通知数据」那一支，但两个 gap 的集合不变：
+        空平台的 summary 走「还没有通知数据」那一支，但两个差集集合不变：
         版图是从代码现读的，不依赖周期里有没有数据。
         """
         report = build_notification_kind_coverage(days=30, now=self.now)
         self.assertIn('还没有通知数据', report['summary'])
         unnamed = {row['kind'] for row in report['unnamed_rows']}
         unreachable = {row['kind'] for row in report['unreachable_rows']}
-        self.assertIn('mutual_aid_feedback', unnamed)
-        self.assertIn('meeting_incident', unreachable)
+        self.assertEqual(unnamed, set())
+        self.assertEqual(unreachable, set())
 
 
 class DashboardWiringTests(TestCase):
@@ -424,3 +430,5 @@ class DashboardWiringTests(TestCase):
         content = response.content.decode('utf-8-sig')
         self.assertIn('通知类型、偏好开关与用户手上的那一栏', content)
         self.assertIn('没有名字的类型', content)
+        # 两张差集表现在是空的，导出的兜底行要说的是「当前没有」。
+        self.assertIn('当前没有正在发送却没有名字的类型', content)

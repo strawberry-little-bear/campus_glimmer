@@ -968,13 +968,13 @@
 <section class="content-card ops-panel mb-4 notification-kind-coverage-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Kind coverage</span><h2>通知类型、偏好开关与用户手上的那一栏</h2></div>
-        <span class="ops-panel-hint">三个数本应相等，而它们不相等</span>
+        <span class="ops-panel-hint">三个数本应相等，现在它们相等了</span>
     </div>
-    <p class="search-rhythm-note mb-3"><i class="bi bi-diagram-3 me-1"></i>站内通知中心上线到现在，<code>Notification.KIND_CHOICES</code> 上有 {{ notification_kind_coverage.current.kind_total }} 种已登记的类型，<code>NotificationPreference</code> 上有自己的布尔开关，<code>NotificationPreferenceForm</code> 里又另有一份字段列表。这三个数本应相等，或者只差免打扰那一组。<strong>它们不相等——而每个表各自都是自洽的，所以差额一直被「看起来像」吃掉了。</strong>要看见它，得把三个数并排放，而不是各自数。本面板读的是三处代码事实：模型元数据、<code>KIND_CHOICES</code>、偏好表单字段，全部现读，不硬编码名单。</p>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-diagram-3 me-1"></i>站内通知中心上线到现在，<code>Notification.KIND_CHOICES</code> 上有 {{ notification_kind_coverage.current.kind_total }} 种已登记的类型，<code>NotificationPreference</code> 上有自己的布尔开关，<code>NotificationPreferenceForm</code> 里又另有一份字段列表。这三个数本应相等，或者只差免打扰那一组。<strong>它们一度不相等——而每个表各自都是自洽的，所以差额一直被「看起来像」吃掉了。</strong>两个方向的窟窿都已在「通知类型的两个窟窿补上」那一轮修掉，现在三张表是对齐的；要看见它，仍然得把三个数并排放，而不是各自数。本面板读的是三处代码事实：模型元数据、<code>KIND_CHOICES</code>、偏好表单字段，全部现读，不硬编码名单。</p>
     <div class="row g-3 mb-4">
         <div class="col-md-3"><div class="ops-mini-stat"><span>已登记类型</span><strong>{{ notification_kind_coverage.current.kind_total }}</strong><small>KIND_CHOICES 与偏好开关的并集</small></div></div>
-        <div class="col-md-3"><div class="ops-mini-stat"><span>没有名字的类型</span><strong>{{ notification_kind_coverage.current.unnamed_count }}</strong><small>不在 KIND_CHOICES 里</small></div></div>
-        <div class="col-md-3"><div class="ops-mini-stat"><span>用户关不掉的开关</span><strong>{{ notification_kind_coverage.current.unreachable_count }}</strong><small>不在偏好表单里</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>没有名字的类型</span><strong>{{ notification_kind_coverage.current.unnamed_count }}</strong><small>不在 KIND_CHOICES 里，上一轮的两种都已补上</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>用户关不掉的开关</span><strong>{{ notification_kind_coverage.current.unreachable_count }}</strong><small>不在偏好表单里，上一轮的两种都已补上</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>周期内通知总数</span><strong>{{ notification_kind_coverage.current.total_sent }}</strong><small>按 created_at 落在周期内筛</small></div></div>
     </div>
     <div class="row g-4">
@@ -1041,7 +1041,7 @@
         </table>
     </div>
     <div class="empty-inline">只统计发过的类型：一个从没被发送过的类型，它的开关开着或关着都不产生任何后果。开关状态按<strong>发过通知的接收人</strong>统计，不按全站用户——一个从没收过这一类通知的用户，他的开关开着或关着都没有行为意义。不按用户报、不排名、不报任何人的用户名：<strong>「谁关了哪一类」是一份考勤表，不是一份看板。</strong></div>
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里只报告：不加迁移、不改 <code>KIND_CHOICES</code>、不改 <code>NotificationPreference</code>、不改表单字段列表。那两个窟窿的修法各是一行代码，但那是修复，不是度量——修不修、什么时候修，是另一个决定。不报「偏好关闭让用户少收了多少条」：<code>create_notification</code> 在偏好关闭时直接 <code>return None</code>，被关掉的通知在库里一行都没有，那个数不存在。不把三个数的差解释成「设计疏漏」：为什么不等，代码里看不出来，只报差，不猜原因。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里只报告：不加迁移、不改 <code>KIND_CHOICES</code>、不改 <code>NotificationPreference</code>、不改表单字段列表。那两个窟窿已经在下一轮补上——一个补 <code>KIND_CHOICES</code> 里那一行名字，一个补表单字段里那一行暴露，两处都不改表结构，所以都没有迁移；补上之后差集变空，而这是修的结果，不是改口径改出来的。不报「偏好关闭让用户少收了多少条」：<code>create_notification</code> 在偏好关闭时直接 <code>return None</code>，被关掉的通知在库里一行都没有，那个数不存在。不把三个数的差解释成「设计疏漏」：为什么不等，代码里看不出来，只报差，不猜原因。</div>
     {% if not notification_kind_coverage.has_data %}
     <div class="empty-inline mt-2">{{ notification_kind_coverage.summary }}</div>
     {% endif %}

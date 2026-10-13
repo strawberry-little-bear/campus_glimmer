@@ -36,7 +36,7 @@ class NotificationPreferenceForm(forms.ModelForm):
         fields = [
             'order_created', 'gift_application', 'gift_application_status', 'order_status',
             'rating_received', 'message_received', 'comment_received', 'saved_search_match',
-            'item_available', 'item_expired', 'order_dispute',
+            'item_available', 'item_expired', 'order_dispute', 'meeting_incident',
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
             'lost_found_match', 'lost_found_lead', 'opportunity_digest', 'mutual_aid_feedback',

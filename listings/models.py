@@ -988,6 +988,7 @@ class Notification(models.Model):
         ('opportunity_digest', '互助机会摘要'),
         ('saved_search_digest', '关注搜索汇总提醒'),
         ('lifecycle_reminder', '商品生命周期提醒'),
+        ('mutual_aid_feedback', '互助完成反馈'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')

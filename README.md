@@ -1131,20 +1131,24 @@
   - 按通知类型聚合，不列任何一条通知的原文——通知内容是收发双方的私域内容。
   - 不按用户排名，那是一份考勤表，不是一份看板。
 - **通知类型、偏好开关与用户手上的那一栏**：`Notification.KIND_CHOICES`、`NotificationPreference` 的布尔开关、`NotificationPreferenceForm.Meta.fields` 各是一张表，三个数本应相等，或者只差免打扰那一组。
-  - 它们不相等——而每个表各自都是自洽的，所以差额一直被「看起来像」吃掉了。
+  - 它们一度不相等——而每个表各自都是自洽的，所以差额一直被「看起来像」吃掉了。
   - 要看见它，得把三个数并排放，而不是各自数。
   - 三个来源全部从代码现读（模型元数据、`KIND_CHOICES`、表单字段），不硬编码名单：硬编码的名单会和代码走散，而那正是这一栏要报的问题。
-- **两个窟窿分两张表报，因为它们问的不是同一件事**：一张问「用户收到的东西在看板上叫什么」，一张问「用户能不能对自己的通知说不」。
+  - 两个方向的窟窿都已在下一轮补上，三个表现在是对齐的；这一栏翻成了「守住对齐」——差集为空这件事本身由测试钉住，下次新增通知类型只改一处，红的就是那一处。
+- **两个方向的差集分两张表报，因为它们问的不是同一件事**：一张问「用户收到的东西在看板上叫什么」，一张问「用户能不能对自己的通知说不」。
 - **正在被发送却没有名字的类型（不在 `KIND_CHOICES` 里）**：它照样进来、照样进角标、照样能被点开，而 `notification_list` 的类型筛选器拿 `KIND_CHOICES` 当白名单，所以**用户在自己的通知中心里按类型筛不出它**。
   - 报规模与被读，不列清单——通知标题和内容是收发双方的私域内容。
+  - 这一种上一轮真的存在过（`mutual_aid_feedback`），已经补上；现在这张表是空的，而它必须继续是空的。
 - 用户关不掉的开关（模型上有、默认开着、真的在发，却不在偏好表单里）：偏好页模板是 `{% for field in form.visible_fields %}`，表单里没有的字段，页面上就没有那一行。
+  - 这一种上一轮也真的存在过（`meeting_incident`），已经补上；现在这张表也是空的。
   - 其余类型的开关全在，用户形成的心智是「这一页能管我的通知」，一个 Silent 的例外破坏的是这个心智本身。
 - 偏好的实际状态只统计周期内真的发过的类型，且按**发过通知的接收人**统计，不按全站用户：一个从没收过这一类通知的用户，他的开关开着或关着都没有行为意义。
   - 不按用户报、不排名、不报任何人的用户名——「谁关了哪一类」是一份考勤表，不是一份看板。
 - **不报「偏好关闭让用户少收了多少条」**：`create_notification` 在偏好关闭时直接 `return None`，被关掉的通知在库里一行都没有，那个数不存在。
   - 报一个拿不到的数，比不报更糟。
 - **这里只报告**：不加迁移、不改 `KIND_CHOICES`、不改 `NotificationPreference`、不改表单字段列表。
-  - 那两个窟窿的修法各是一行代码，但那是修复，不是度量。
+  - 那两个窟窿已经在 `notification-kind-gap-fix-design.md` 那一轮补上：一个补 `KIND_CHOICES` 里那一行数据层的名字，一个补 `Meta.fields` 里那一行表单层的暴露，两处都不改表结构，所以都没有迁移；`create_notification` 的偏好闸门一行都没动。
+  - 补上之后差集变空，这是修的自然结果，不是改口径改出来的——本模块的口径一行都没改，翻面的只是它报的内容。
   - 不把三个数的差解释成「设计疏漏」——为什么不等，代码里看不出来，只报差，不猜原因。
 - **通知聚合的质量**：合并掉的是打扰，还是信息。
   - `create_notification` 收到 `dedupe_key` 之后，会在 `dedupe_window_seconds` 窗口内找到同接收人、同类型、同键的**未读**行叠上去：`occurrence_count` 加一、覆盖 `message` 与 `target_url`、`title` 停在第一次。
@@ -1167,7 +1171,7 @@
   - 不统计 `dedupe_forever` 分支的效果差异——库里的行看不出它当初是哪条路径写进去的，报不出来，如实不报。
   - 不按用户排名，那是一份考勤表，不是一份看板。
 - **内容审核结果通知**：开关、触达与沉默。
-  - 站内 24 种通知，`NotificationPreference` 上有 26 个布尔开关，用户可以在设置页一项一项关掉，`create_notification` 也会老实读这些开关：关了就 `return None`，连一行 `Notification` 都不建。
+  - 站内 25 种通知，`NotificationPreference` 上有 25 个类型开关（外加免打扰那一组），用户可以在设置页一项一项关掉，`create_notification` 也会老实读这些开关：关了就 `return None`，连一行 `Notification` 都不建。
   - 而这些开关从来没有和任何结果对照过——四个通知模块都在按 `kind` 读 `Notification` 表，没有一个读过 `NotificationPreference` 的一行值。
   - 于是有一整类问题答不上来：**用户把某一类通知关掉之后，发生了什么？**`moderation_update`（内容审核结果）是这条线上最该被读的一类：它是站内唯一一条「平台自己判你了违规、然后通知你」的消息，其余 23 种讲的都是人和人之间的事。
   - 它也是唯一一条「关掉它没有任何交易后果」的通知——关掉 `order_status` 可能错过订单推进，关掉 `message_received` 可能错过买家的私信，而关掉它，你在站内的行为能力一分不少，只是从此不知道自己的留言或私信被判过什么。
@@ -1633,7 +1637,7 @@ campus_glimmer/
 | `search_combo_shift.py` | 筛选组合的跳周期交叉对比（分类×价格带，只报告） | 只报告 |
 | `notification_response.py` | 通知处理时效与触达质量统计 | 读写 |
 | `notification_snooze_return.py` | 延后的通知到期后是否回来：把用户主动要求的等待从处理时长里拆出来 | 读写 |
-| `notification_kind_coverage.py` | 通知类型的三张表对齐情况：KIND_CHOICES、偏好开关、表单字段现读对齐（只报告） | 只报告 |
+| `notification_kind_coverage.py` | 通知类型的三张表对齐情况：KIND_CHOICES、偏好开关、表单字段现读对齐，上一轮的两个窟窿已补上，现在差集为空、由测试守住（只报告） | 只报告 |
 | `notification_preference_usage.py` | 25 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
 | `notification_aggregation_quality.py` | 通知聚合的质量：被聚合过的行 vs 从没被聚合过的行，阅读率与处理时长对照（只报告） | 只报告 |
 | `report_resolution_quality.py` | 商品举报按原因的驳回率、审核意见填写情况、集中度与举报人分布（只报告） | 只报告 |
@@ -1698,7 +1702,7 @@ campus_glimmer/
 | `urls.py` | 应用路由：商品、订单、搜索、通知、运营看板与后台入口 | 只读 |
 | `views.py` | 商品、订单、搜索、通知和运营页面 | 读写 |
 
-### listings/ 的测试模块（98 个）
+### listings/ 的测试模块（99 个）
 
 <details>
 <summary>测试模块清单（98 个）</summary>
@@ -1760,7 +1764,8 @@ campus_glimmer/
 - **`test_mutual_aid_feedback.py`**：求购响应与失物线索的完成反馈闭环测试
 - **`test_mutual_aid_feedback_notes.py`**：补充说明只数字数与空否、不切词不聚类不读原文
 - **`test_notification_aggregation_quality.py`**：被聚合过的行与从没被聚合过的行，阅读率与处理时长对照
-- **`test_notification_kind_coverage.py`**：三张表对齐：KIND_CHOICES、偏好开关、表单字段现读对齐
+- **`test_notification_kind_gap_fix.py`**：三个来源此刻对齐且必须继续对齐、曾经的两种窟窿补上之后真的筛得出也真的关得掉、两个修法都没顺手改掉偏好闸门
+- **`test_notification_kind_coverage.py`**：三张表对齐：KIND_CHOICES、偏好开关、表单字段现读对齐，两个曾经的窟窿已从差集里消失
 - **`test_notification_preference_usage.py`**：开关名单从模型现读、归组无遗漏无重复、开着与关掉分开计数、无偏好行单列
 - **`test_notification_preference_usage_smoke.py`**：三个场景的看板与导出渲染——有偏好行、空平台、有通知却零偏好行
 - **`test_notification_quiet_hours.py`**：免打扰窗口、跨午夜和未读静默测试
@@ -1808,7 +1813,7 @@ campus_glimmer/
 ### docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（37 篇，按字典序）</summary>
+<summary>设计文档清单（38 篇，按字典序）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 - **`academic-term-snapshot-read-path-design.md`**：已结束读快照、进行中实时算，判据是计数是否封闭而不是 `refreshed_at`
@@ -1834,6 +1839,7 @@ campus_glimmer/
 - **`moderation-rule-quality-design.md`**：四条审核规则的误判率、漏判率与复核时效
 - **`notification-aggregation-quality-design.md`**：被聚合过的行与从没被聚合过的行，阅读率与时长对照
 - **`notification-kind-coverage-design.md`**：通知类型、偏好开关与表单字段三张表的对齐情况
+- **`notification-kind-gap-fix-design.md`**：两个曾经被诊断出的窟窿怎么补：一个补数据层的名字，一个补表单层的暴露，两处都不需迁移
 - **`notification-snooze-return-design.md`**：延后把处理慢拆成两半，到期后到底回不回来
 - **`opportunity-dismissal-quality-design.md`**：按过「不再显示」的机会的规模、理由与重复忽略
 - **`opportunity-impression-design.md`**：忽略率的分母为什么值得落库、曝光表的四条口径与「仍然报下界」的理由
@@ -2471,6 +2477,8 @@ CI 的目标不是替代本地验证，而是确保每个独立迭代至少满�
   - 接下来可以按商品分类、交易方式拆开看响应差异，以及把回复速度和成交两列放在同一张表里做相关性描述——回复速度是不是真的和成交相关，目前仍然只能把两列放在一起看。
   - 通知偏好那边，25 个开关各自的形状现在也读得到了：按「关掉它有没有交易后果」分四组报开着与关掉，被开关挡掉的通知连一行都不建，所以只报形状、不报效果。
   - 接下来要盯的是「关着却仍收到过」那一格——它很大就说明某个开关要么没接上、要么接的是一条用户没意识到的路径，那是一个具体的 bug，不是一条产品建议。
+  - 上一轮版图诊断出的两个窟窿也已经补上：`mutual_aid_feedback` 补上了 `KIND_CHOICES` 里的中文名（它此前连通知中心的类型下拉都进不去），`meeting_incident` 补上了偏好表单里的那一行（它此前用户收到了却没有任何开关能关掉）。两处都不改表结构，所以都没有迁移。
+    - 补完之后那个度量模块的差集变空，它的意义也从「报窟窿」翻成「守住对齐」：三个来源从此有一条测试钉着，下次有人新增通知类型只改一处，红的就是那一处。
 - **供需匹配**：继续完善求购匹配评分、匹配解释、价格参考和响应后的预约转化统计。
   - 当前已支持卖家响应、求购者确认、响应状态通知和互助完成反馈，也提供了面向卖家的互助机会流，商品详情还提供基于样本的价格区间提示。
 
