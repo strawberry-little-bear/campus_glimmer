@@ -5482,5 +5482,153 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 refresh-quota-drift-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Refresh quota drift</span><h2>刷新额度为什么是一次性的</h2></div>
+        <span class="ops-panel-hint">「本月刷新次数」这句话，和代码里真正生效的那条判据</span>
+    </div>
+    <p class="refresh-quota-drift-note mb-3"><i class="bi bi-arrow-clockwise me-1"></i><code>_refresh_state</code> 的第二条判据是 <code>refresh_count &gt;= MAX_REFRESH_PER_MONTH</code>（{{ refresh_quota_drift.max_refresh_per_month }}），常量名、文案和 <code>supply_lifecycle</code> 的英文 docstring 都写着「monthly」。但 <strong><code>refresh_count</code> 是从不清零的累计计数器</strong>——全仓没有任何一处把它写回 0。所以上限实际生效的口径是：<strong>这件商品发布至今最多刷新 {{ refresh_quota_drift.max_refresh_per_month }} 次</strong>，不是「本月」。</p>
+    {% if not refresh_quota_drift.has_data %}
+    <div class="empty-inline">{{ refresh_quota_drift.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>当前在售</span><strong>{{ refresh_quota_drift.quota.live_count }}</strong><small>分母，已下架与已成交单独数</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>额度已用尽</span><strong>{{ refresh_quota_drift.quota.exhausted_live_count }}</strong><small>占在售 {{ refresh_quota_drift.quota.exhausted_share }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat refresh-quota-drift-mini-stat-warning"><span>被累计口径吃掉</span><strong>{{ refresh_quota_drift.quota.drifted_count }}</strong><small>最后刷新已超 {{ refresh_quota_drift.quota_month_days }} 天</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>本周期撞墙</span><strong>{{ refresh_quota_drift.wall.hit_wall_count }}</strong><small>占周期内刷新 {{ refresh_quota_drift.wall.hit_wall_share }}%</small></div></div>
+    </div>
+    {% if refresh_quota_drift.quota.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>在售商品不足 {{ refresh_quota_drift.min_measured_items }} 件，占比只报数字不给方向。</p>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">在售商品里，额度卡在哪一档</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分组</th><th>商品数</th><th>占在售（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>在售商品（分母）</td><td>{{ refresh_quota_drift.quota.live_count }}</td><td>—</td></tr>
+                        <tr><td>额度已用尽</td><td>{{ refresh_quota_drift.quota.exhausted_live_count }}</td><td>{% if refresh_quota_drift.quota.exhausted_share is None %}—{% else %}{{ refresh_quota_drift.quota.exhausted_share }}{% endif %}</td></tr>
+                        <tr><td>其中：最后刷新在 {{ refresh_quota_drift.quota_month_days }} 天内</td><td>{{ refresh_quota_drift.quota.exhausted_fresh_count }}</td><td>—</td></tr>
+                        <tr><td>其中：被累计口径吃掉</td><td>{{ refresh_quota_drift.quota.drifted_count }}</td><td>{% if refresh_quota_drift.quota.drifted_share is None %}—{% else %}{{ refresh_quota_drift.quota.drifted_share }}{% endif %}</td></tr>
+                        <tr><td>非在售但额度也用尽</td><td>{{ refresh_quota_drift.quota.exhausted_ended_count }}</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>「本月 {{ refresh_quota_drift.max_refresh_per_month }} 次」这句话只对中间那一行成立。</strong>被累计口径吃掉的那些商品，这个月一次都没刷过——它们卡住的原因发生在上学期，文案却告诉它们本月用完了。已下架与已成交的商品虽然也可能额度用尽，但生命周期已结束，「还能不能刷新」对它们没有意义，所以单独数、不混进分母。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">额度用尽的商品，距上次刷新多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>距上次刷新</th><th>商品数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in refresh_quota_drift.since_refresh.bucket_rows %}
+                        <tr{% if forloop.counter0 >= 3 %} class="refresh-quota-drift-row-lie"{% endif %}>
+                            <td>{{ row.label }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr><td>超过一个月的合计</td><td>{{ refresh_quota_drift.since_refresh.over_month_count }}</td><td>{% if refresh_quota_drift.since_refresh.over_month_share is None %}—{% else %}{{ refresh_quota_drift.since_refresh.over_month_share }}{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>后三档就是「本月 {{ refresh_quota_drift.max_refresh_per_month }} 次」这句话说谎的范围</strong>，所以单独点出来，免得运营自己把三档加一遍。从未刷新过的商品不进这一档——它没有「距上次刷新」可言，把它的间隔记成「自发布起」会让 90 天以上那一档虚高，而那一档的运营含义会被稀释。</p>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">卡在 24 小时间隔上的商品</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>指标</th><th>数值</th></tr></thead>
+                    <tbody>
+                        <tr><td>在售商品（分母）</td><td>{{ refresh_quota_drift.cooldown.live_count }}</td></tr>
+                        <tr><td>卡在间隔上</td><td>{{ refresh_quota_drift.cooldown.cooldown_count }}</td></tr>
+                        <tr><td>占比（%）</td><td>{% if refresh_quota_drift.cooldown.cooldown_share is None %}—{% else %}{{ refresh_quota_drift.cooldown.cooldown_share }}{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>这条限流是对的，但必须和额度分开报。</strong>它按相对时间算、不吃累计口径，所以不会犯「本月」这个错；可用户在页面上看到的两句提示长得一模一样。混成一个数，运营就不知道该改哪一句。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">被累计口径吃掉的商品，现在什么状态</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>生命周期等级</th><th>商品数</th><th>占被吃掉（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in refresh_quota_drift.drifted_state.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">等级直接复用 <code>_level_for</code>，和卖家在自己页面上看到的是同一套。<strong>「沉底较久」那一档要的是补一次刷新机会，「等级正常」那一档什么都不用做</strong>——它们只是刷不动了。</p>
+        </div>
+    </div>
+
+    {% if refresh_quota_drift.drift_list.rows %}
+    <div class="mt-3">
+        <h3 class="h6 mb-3">被累计口径吃掉的商品清单</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>商品</th><th>刷新次数</th><th>距上次刷新（天）</th><th>沉底天数</th><th>生命周期等级</th><th>状态</th></tr></thead>
+                <tbody>
+                    {% for row in refresh_quota_drift.drift_list.rows %}
+                    <tr>
+                        <td>{{ row.title }}</td>
+                        <td>{{ row.refresh_count }}</td>
+                        <td>{{ row.since_refresh_days }}</td>
+                        <td>{{ row.age_days }}</td>
+                        <td>{{ row.level }}</td>
+                        <td>{{ row.status }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if refresh_quota_drift.drift_list.truncated %}
+        <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ refresh_quota_drift.drift_list.rows|length }} 条，按沉底天数从长到短排；完整的在导出里。</p>
+        {% endif %}
+        <p class="small text-muted mt-2 mb-0"><strong>按沉底天数排，不按刷新次数排</strong>——运营要先去处理搁得最久的那些，不是刷得最勤的那些。商品标题只取前 20 个字符：这份清单是给「现在去核实」用的，不是给归档用的。</p>
+    </div>
+    {% endif %}
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">本周期撞上额度墙的商品</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>指标</th><th>数值</th></tr></thead>
+                    <tbody>
+                        <tr><td>本周期刷新过的商品（分母）</td><td>{{ refresh_quota_drift.wall.refreshed_in_period }}</td></tr>
+                        <tr><td>其中撞上额度墙</td><td>{{ refresh_quota_drift.wall.hit_wall_count }}</td></tr>
+                        <tr><td>占比（%）</td><td>{% if refresh_quota_drift.wall.hit_wall_share is None %}—{% else %}{{ refresh_quota_drift.wall.hit_wall_share }}{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            {% if refresh_quota_drift.wall.is_small_sample %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>本周期刷新过的商品不足 {{ refresh_quota_drift.min_measured_items }} 件，占比只报数字不给方向。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0"><strong>这个数是精确的，理由有点巧。</strong>限流判据是 <code>&gt;= {{ refresh_quota_drift.max_refresh_per_month }}</code>，而 <code>refresh_count</code> 只会被加一，所以它最多到 {{ refresh_quota_drift.max_refresh_per_month }}、永远不可能到 {{ refresh_quota_drift.max_refresh_per_month|add:1 }}；于是 <code>count</code> 等于 {{ refresh_quota_drift.max_refresh_per_month }} 时，<code>last_refreshed_at</code> 就是撞墙那一刻，不需要一张刷新历史表。分母只收本周期刷新过的商品——一次都没刷过的商品不可能在本周期撞墙。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">为什么先看板、后改口径</h3>
+            <p class="refresh-quota-drift-why mb-0">改口径要二选一：加一张刷新历史表，或给商品加一个「上次清零时间」字段——两条都要迁移。而且<strong>改完全部历史累计达 {{ refresh_quota_drift.max_refresh_per_month }} 的商品会同时获得一次刷新机会</strong>，上限对存量商品失效整整一轮，那正是刷屏最该防住的时候。所以先把这个差量量出来：如果只有个位数，改一句话就够；如果是成百上千件沉底商品，那它值得一张刷新历史表。</p>
+        </div>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不改 <code>_refresh_state</code> 的任何一条判据、不清零 <code>refresh_count</code>、不加刷新历史表、不动那条「本月刷新次数已达上限」的文案</strong>，也不把统计写回任何记录。<code>supply_lifecycle</code> 已经报过「刷新额度已用尽的卖家有多少位」，这里不复述那个数，只报额度这件事本身在商品层面差了多少。</div>
+    {% endif %}
+</section>
+
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

@@ -40,6 +40,7 @@ from .report_resolution_quality import build_report_resolution_quality
 from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
+from .refresh_quota_drift import build_refresh_quota_drift
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
 )
@@ -2229,6 +2230,7 @@ def operations_dashboard(request):
     dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
+    dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -2407,6 +2409,7 @@ def operations_dashboard_export(request):
     dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
+    dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -6413,6 +6416,123 @@ def operations_dashboard_export(request):
         writer.writerow(['供给侧运营建议'])
         for recommendation in supply['recommendations']:
             writer.writerow([recommendation])
+
+    refresh = dashboard['refresh_quota_drift']
+    writer.writerow([])
+    writer.writerow(['刷新额度为什么是一次性的', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', refresh['summary'],
+        '只读 Item.refresh_count 与 last_refreshed_at，复用 _refresh_state 与 _level_for '
+        '的判据，不清零任何字段、不改任何一条限流、不动那条「本月」文案',
+    ])
+    writer.writerow([
+        '上限实际按什么算', '累计，不是按月',
+        f"refresh_count 从不清零，所以上限实际是「发布至今最多 "
+        f"{refresh['max_refresh_per_month']} 次」，而文案写的是「本月」",
+    ])
+    writer.writerow([
+        '在售商品', refresh['quota']['live_count'], '',
+        '分母。已下架、已成交的商品单独数，不混进来',
+    ])
+    writer.writerow([
+        '额度已用尽', refresh['quota']['exhausted_live_count'], '',
+        f"占在售 {refresh['quota']['exhausted_share']}%",
+    ])
+    writer.writerow([
+        '其中被累计口径吃掉', refresh['quota']['drifted_count'], '',
+        f"占已用尽 {refresh['quota']['drifted_share']}%，"
+        f"判据是最后一次刷新已超过 {refresh['quota_month_days']} 天",
+    ])
+    writer.writerow([
+        '非在售但额度用尽', refresh['quota']['exhausted_ended_count'], '',
+        '生命周期已结束，「还能不能刷」对它们没有意义，单独数',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['在售商品里，额度卡在哪一档'])
+    writer.writerow(['分组', '商品数', '占在售（%）'])
+    writer.writerow(['在售商品（分母）', refresh['quota']['live_count'], ''])
+    writer.writerow(['额度已用尽', refresh['quota']['exhausted_live_count'], refresh['quota']['exhausted_share']])
+    writer.writerow(['其中：最后刷新在 ' + str(refresh['quota_month_days']) + ' 天内', refresh['quota']['exhausted_fresh_count'], ''])
+    writer.writerow(['其中：被累计口径吃掉', refresh['quota']['drifted_count'], refresh['quota']['drifted_share']])
+    writer.writerow(['非在售但额度也用尽', refresh['quota']['exhausted_ended_count'], ''])
+
+    writer.writerow([])
+    writer.writerow(['本周期撞上额度墙的商品'])
+    writer.writerow(['指标', '数值', '口径说明'])
+    writer.writerow([
+        '本周期刷新过的商品', refresh['wall']['refreshed_in_period'], '',
+        '分母。本周期一次都没刷过的商品不可能本周期撞墙',
+    ])
+    writer.writerow([
+        '其中撞上额度墙', refresh['wall']['hit_wall_count'], '',
+        f"占 {refresh['wall']['hit_wall_share']}%",
+    ])
+    writer.writerow([
+        '这个数为什么精确', '', '',
+        '限流判据是 refresh_count >= 4，而 refresh_count 只会被加一，'
+        '所以它最多到 4、永远不可能到 5；于是 count 等于 4 时 '
+        'last_refreshed_at 就是撞墙那一刻，不需要历史表',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['额度用尽的商品，距上次刷新多久'])
+    writer.writerow(['距上次刷新', '商品数', '占额度用尽（%）'])
+    for row in refresh['since_refresh']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+    writer.writerow([
+        '超过一个月的合计', refresh['since_refresh']['over_month_count'],
+        refresh['since_refresh']['over_month_share'],
+        '这三档就是「本月 4 次」这句文案说谎的范围',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['卡在 24 小时间隔上的商品'])
+    writer.writerow(['指标', '数值', '口径说明'])
+    writer.writerow([
+        '在售商品', refresh['cooldown']['live_count'], '',
+        '分母',
+    ])
+    writer.writerow([
+        '卡在间隔上', refresh['cooldown']['cooldown_count'], '',
+        f"占 {refresh['cooldown']['cooldown_share']}%",
+    ])
+    writer.writerow([
+        '为什么要和额度分开报', '', '',
+        '两条限流给用户的提示长得一样，但这一条按相对时间算、不吃累计口径，'
+        '它不会犯「本月」这个错。运营要改的是另一条',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['被累计口径吃掉的商品，现在什么状态'])
+    writer.writerow(['生命周期等级', '商品数', '占被吃掉（%）'])
+    for row in refresh['drifted_state']['rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['被累计口径吃掉的商品清单'])
+    writer.writerow(['商品', '刷新次数', '距上次刷新（天）', '沉底天数', '生命周期等级'])
+    for row in refresh['drift_list']['rows']:
+        writer.writerow([
+            row['title'], row['refresh_count'], row['since_refresh_days'],
+            row['age_days'], row['level'],
+        ])
+    if not refresh['drift_list']['rows']:
+        writer.writerow(['—', '当前没有被累计口径吃掉的商品', '', '', ''])
+    if refresh['drift_list']['truncated']:
+        writer.writerow([
+            '—', f"清单最多列 {len(refresh['drift_list']['rows'])} 条，完整的在数据库里",
+            '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '本模块只报告，不改 _refresh_state 的任何一条判据、不清零 refresh_count、'
+        '不加刷新历史表、不动那条「本月刷新次数已达上限」的文案。'
+        '文案和代码不一致是真的，但先有数再决定改哪一边：如果只有个位数，'
+        '改一句话就够；如果是成百上千件沉底商品，那它值得一张刷新历史表。',
+    ])
 
     pulse = dashboard['campus_pulse']
     writer.writerow([])

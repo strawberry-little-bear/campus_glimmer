@@ -3008,3 +3008,61 @@ a { color: inherit; text-decoration: none; }
 /* 商品标题那一列说明文字比版图面板长，第一列不给 nowrap，但留一个下限，
    免得窄屏下被挤成一列竖排。 */
 .meeting-reschedule-panel .ops-table td:first-child { min-width: 8rem; }
+
+/* 刷新额度为什么是一次性的面板，自成一组色相（赭金偏暖，压一层陶土感）。
+ * 为什么自成一套颜色：供给侧这一排里，左侧供给侧生命周期是草绿（#7aa892 一带），
+ * 会面事件质量是青碧松绿（#2f5f52 一带），未读通知占了靛蓝偏紫（#3d4266 一带），
+ * 交付安排改期占了苔绿（#40584a 一带），求购响应转化占了深紫红（#5c3f4d 一带）。
+ * 这一栏讲的不是「商品维护得好不好」，也不是「安排改了几次」，而是一句文案和一条
+ * 限流判据之间差了多少——是口径本身在说谎。所以既不复用任何一个绿的色相（那是
+ * 「状态」的语义），也不复用蓝（那是「时间与节奏」的语义）。
+ * 取赭金：这个面板的主色要压得住「上限」这个词，而赭金在整张看板里读起来像一枚
+ * 用旧的计数器刻度，和「累计到 4 就停」这件事对得上。也不用红绿二色读「被累计
+ * 口径吃掉」——那不是故障，是口径和文案对不上，红绿会让运营去改一个没有错的
+ * 限流规则。
+ * 压一层陶土感是因为被累计口径吃掉的那批商品多半是沉了半个学期以上的：时间对
+ * 其中一方早就过去了，而计数器还停在上个学期那个数上。 */
+.refresh-quota-drift-panel { padding: 14px; border: 1px solid #e2d5c2; border-radius: 14px; background: linear-gradient(135deg, #faf5ec, #fdfbf6); color: #6b5333; }
+
+.refresh-quota-drift-panel p { color: #7d6a4d; }
+
+.refresh-quota-drift-panel .ops-mini-stat { background: #fff; }
+
+.refresh-quota-drift-panel .ops-mini-stat strong { color: #8a5a2b; font-variant-numeric: tabular-nums; }
+
+.refresh-quota-drift-panel .ops-mini-stat span,
+.refresh-quota-drift-panel .ops-mini-stat small { color: #9a876f; }
+
+/* 「被累计口径吃掉」这一格是整块面板真正要说的事，单独压一层底，
+   不靠加粗撑——运营扫过去时先看到的是这一格，不是旁边那三个数。 */
+.refresh-quota-drift-mini-stat-warning { border-color: #e6d2b4 !important; background: #fdf3d8 !important; }
+
+.refresh-quota-drift-mini-stat-warning strong { color: #8a6520 !important; }
+
+.refresh-quota-drift-panel .table th { color: #8a6a35; }
+
+.refresh-quota-drift-panel .badge { font-weight: 600; }
+
+/* 说谎的那三档整行压一线陶土，但不涂满——它们是分母的一部分，
+   不是坏行。涂满会让运营以为要把它们从统计里剔掉。 */
+.refresh-quota-drift-row-lie { background: #fdf6e8; }
+
+.refresh-quota-drift-note { margin-bottom: 12px; padding: 12px 14px; border: 1px solid #eadfc5; border-radius: 12px; background: #fdf8ec; color: #6b5a2e; font-size: .84rem; line-height: 1.7; }
+
+.refresh-quota-drift-why { color: #6b5333; font-size: .88rem; line-height: 1.75; }
+
+.refresh-quota-drift-panel .rewrite-candidate-footnote { color: #8a6a35; }
+
+.refresh-quota-drift-panel .ops-footer-note { color: #7d6a4d; }
+
+/* 「距上次刷新」那一列要按档位比着读，数字列收紧并给等宽，
+   免得 0.5 天和 30 天两行宽度跳。 */
+.refresh-quota-drift-panel .ops-table td:nth-child(2) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.refresh-quota-drift-panel .ops-table td:nth-child(3) { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+
+@media (max-width: 575px) {
+    .refresh-quota-drift-panel { padding: 12px; }
+
+    .refresh-quota-drift-panel .ops-table td:nth-child(3) { text-align: left; }
+}
