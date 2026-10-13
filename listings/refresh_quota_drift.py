@@ -167,6 +167,21 @@ def _is_drifted(item, *, now):
     return _quota_state(item, now=now)[1]
 
 
+def _sunk_days(item, *, now):
+    """距最近一次把商品顶回前排的天数，参考时刻用传进来的 `now`。
+
+    不能直接用 `Item.freshness_age_days`：那个属性内部读
+    `timezone.now()`，和本模块全程使用的 `now` 差几小时，
+    向下取整之后同一行里的 `since_refresh_days` 会和它差一天。两个数在
+    同一行里口径不一致，比两个数都错更糟——运营没法判断该信哪一个。
+
+    `last_active_at` 为空（从未刷新过）时记 0 天，和模型属性的保护一致。
+    """
+    if not item.last_active_at:
+        return 0
+    return int(max(_days_between(now, item.last_active_at), 0))
+
+
 def _build_quota_stats(items, *, now):
     """额度用尽的总量，以及其中被累计口径吃掉的份额。
 
@@ -321,9 +336,13 @@ def _build_drift_list(items, *, now):
     按 `last_active_days` 排，不按刷新次数排：运营要先去处理的是搁得最久的
     那些，不是刷得最勤的那些。标题只取前 20 个字符——清单是给「现在去核实」
     用的，不是给归档用的，原文不该整段进看板。
+
+    排序用的沉底天数和 `age_days` 那一列是同一个函数（`_sunk_days`），
+    参考时刻都是传进来的 `now`——排序和展示分成两个口径，是同一类错误的另一种
+    形状。
     """
     drifted = [item for item in items if _is_drifted(item, now=now)]
-    drifted.sort(key=lambda row: (-row.freshness_age_days, row.pk))
+    drifted.sort(key=lambda row: (-_sunk_days(row, now=now), row.pk))
     rows = []
     for item in drifted[:DRIFT_LIST_LIMIT]:
         rows.append({
@@ -331,7 +350,7 @@ def _build_drift_list(items, *, now):
             'title': item.title[:20],
             'refresh_count': item.refresh_count,
             'since_refresh_days': int(max(_days_between(now, item.last_refreshed_at), 0)),
-            'age_days': item.freshness_age_days,
+            'age_days': _sunk_days(item, now=now),
             'level': _level_for(item, now=now)[0],
             'status': item.status,
         })

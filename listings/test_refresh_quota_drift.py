@@ -175,9 +175,46 @@ class EvidenceTests(TestCase):
 
         这是整个模块的前提。如果哪天有人加了按月清零，这个测试会失败，而那时
         该做的是把模块改掉，不是把这个测试删掉。
+
+        判据是 AST，不是字符串匹配。字符串匹配会把两种正当写法误判成归零：
+        `filter(refresh_count=0, ...)` 是 ORM 查询参数，`relist_freshness` 靠
+        它找「从没刷新过的商品」，那边的沉底判据写成 `created_at` 正以此为
+        前提；测试夹具里的 `create(..., refresh_count=0, ...)` 建的是同一类
+        商品。两者都不是把线上数据归零，扫描规则必须显式容忍它们——所以只认
+        「把 refresh_count 写成 0」的两种形态：直接赋值，和写库方法的参数。
         """
+        import ast
         import io
         import os
+
+        # 这些方法会把关键字参数真的写进数据库。filter / exclude / create /
+        # get / bulk_create 是查询，不修改已有行，不算归零。
+        WRITE_METHODS = {'update', 'bulk_update', 'save', 'refresh_from_db'}
+
+        def resets_refresh_count(path):
+            try:
+                tree = ast.parse(
+                    io.open(path, encoding='utf-8', errors='ignore').read()
+                )
+            except SyntaxError:
+                return False
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if (isinstance(target, ast.Attribute)
+                                and target.attr == 'refresh_count'
+                                and isinstance(node.value, ast.Constant)
+                                and node.value.value == 0):
+                            return True
+                if isinstance(node, ast.Call):
+                    method = getattr(node.func, 'attr', '')
+                    if method in WRITE_METHODS:
+                        for keyword in node.keywords:
+                            if (keyword.arg == 'refresh_count'
+                                    and isinstance(keyword.value, ast.Constant)
+                                    and keyword.value.value == 0):
+                                return True
+            return False
 
         touched = []
         for root, dirs, files in os.walk('.'):
@@ -187,12 +224,12 @@ class EvidenceTests(TestCase):
                 if not name.endswith('.py'):
                     continue
                 path = os.path.join(root, name)
-                text = io.open(path, encoding='utf-8', errors='ignore').read()
                 if path.endswith('test_refresh_quota_drift.py'):
                     continue
-                if 'refresh_count=0' in text or 'refresh_count = 0' in text:
+                if resets_refresh_count(path):
                     touched.append(path)
         self.assertEqual(touched, [], '有人把 refresh_count 归零了，本模块的前提变了')
+
 
 
 class DenominatorTests(TestCase):
@@ -479,8 +516,10 @@ class DriftListTests(TestCase):
         report = build_refresh_quota_drift(days=30, now=self.now)
         rows = report['drift_list']['rows']
 
-        # age_days 走的是 freshness_age_days——距最近一次把商品顶回前排的天数
-        # （刷新优先），三件都刷过，所以都等于 60，而不是它们的发布年龄。
+        # age_days 走的是模块内的 _sunk_days——距最近一次把商品顶回前排的天数
+        # （刷新优先），参考时刻是传进来的 now。三件都刷过，所以都等于 60，
+        # 而不是它们的发布年龄。同一行里的 since_refresh_days 也是 60：两个数
+        # 必须同源，否则同一行里两个口径不一致，比两个数都错更糟。
         self.assertEqual([row['age_days'] for row in rows], [60, 60, 60])
         self.assertEqual(report['drift_list']['total_count'], 3)
         self.assertFalse(report['drift_list']['truncated'])

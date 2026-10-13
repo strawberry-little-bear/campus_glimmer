@@ -536,6 +536,7 @@
   - 但用户在页面上看到的两句提示长得一模一样，混成一个数，运营就不知道该改哪一句。
 - 被累计口径吃掉的商品按生命周期等级再分一档，等级直接复用 `_level_for`，和卖家在自己页面上看到的是同一套：「沉底较久」那一档要的是补一次刷新机会，「等级正常」那一档什么都不用做——它们只是刷不动了。
 - 清单按沉底天数排，不按刷新次数排，商品标题只取前 20 个字符，最多 20 条：这份清单是给「现在去核实」用的，不是给归档用的。
+  - 同一行里的「沉底天数」和「距上次刷新」必须是同一个参考时刻。早先这两列一个用模块的 `now`、一个用模型属性私取的 `timezone.now()`，同一行能差一天，后来统一成模块内的 `_sunk_days`。
 - 本模块只报告，不改 `_refresh_state` 的任何一条判据、不清零 `refresh_count`、不加刷新历史表、不动那条「本月刷新次数已达上限」的文案，也不把统计写回任何记录。
   - `supply_lifecycle` 已经报过「刷新额度已用尽的卖家有多少位」，这里不复述那个数，只报额度这件事本身在商品层面差了多少。
 - **重新上架的那件商品，为什么一回来就沉底**：`edit_item` 的重新上架分支只改 `status`，不碰 `last_refreshed_at`，也不碰 `refresh_count`——而 `freshness_age_days` 读的正是 `last_refreshed_at or created_at`。
@@ -1784,7 +1785,7 @@ campus_glimmer/
 - **`test_recommendation_dashboard_smoke.py`**：看板面板与 CSV 在新字段下都能渲染，不报 KeyError
 - **`test_recommendation_impression_write.py`**：首页渲染一次落一行「被看见」，reason_key 不改变渲染输出
 - **`test_recommendation_quality.py`**：反馈率分母只收点开过的、正负比例分母只收有反馈的、复算理由与服务同函数、改口带 60 秒容差、样本不足不给方向与看板导出测试
-- **`test_refresh_quota_drift.py`**：刷新额度累计口径与升级限制测试
+- **`test_refresh_quota_drift.py`**：刷新额度累计口径与升级限制测试，沉底天数和同一行的距上次刷新同源，归零扫描按 AST 判
 - **`test_relist_freshness.py`**：重新上架新鲜度欠账的判据、分母、额度与无互动测试
 - **`test_report_resolution_quality.py`**：驳回率按 reason 拆、意见只读长度与空否、不把驳回率和处理人挂钩
 - **`test_return_handshake.py`**：归还双方确认的顺序、间隔与只点一半，只报告不改写
@@ -1813,7 +1814,7 @@ campus_glimmer/
 ### docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（38 篇，按字典序）</summary>
+<summary>设计文档清单（39 篇，按字典序）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 - **`academic-term-snapshot-read-path-design.md`**：已结束读快照、进行中实时算，判据是计数是否封闭而不是 `refreshed_at`
@@ -1824,6 +1825,7 @@ campus_glimmer/
 - **`meeting-reschedule-design.md`**：改期计数的四条损失与「一次谈成是主档」的口径
 - **`report-resolution-quality-design.md`**：商品举报按 reason 拆驳回率，意见只读长度，不把驳回率和处理人挂钩
 - **`refresh-quota-drift-design.md`**：刷新额度累计计数器的四条证据与「先看板后改口径」的取舍
+- **`refresh-quota-drift-fixups-design.md`**：两个挂了很久的测试失败，一个同一行两个口径，一个扫描把查询参数当归零
 - **`relist-freshness-design.md`**：新鲜度欠账的四条证据与「先看板后改口径」的三条路
 - **`demand-response-conversion-design.md`**：确认求购响应之后交易真的发生了吗，分母是已确认响应数
 - **`demand-task-aging-design.md`**：跟进任务派出去之后有人接手吗，两支两个式子
