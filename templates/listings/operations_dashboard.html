@@ -5366,5 +5366,121 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 meeting-reschedule-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Meeting reschedule</span><h2>一次交付安排被改了几次才定下来</h2></div>
+        <span class="ops-panel-hint">「改期」这一侧第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-arrow-repeat me-1"></i><code>MeetingAppointment</code> 是 <code>OneToOneField(order)</code>——一笔订单最多一条安排，摆在那是「当前这一版」。<code>propose_meeting</code> 对同一笔订单第二次提交时走 <code>if not created:</code> 分支：把 <code>proposed_by</code>、<code>start_at</code>、<code>end_at</code>、<code>location</code> 全部改写，<code>status</code> 打回 <code>pending</code>。<strong>前几版被原地覆盖，没有版本表。</strong>唯一能证明「改过」的，是 <code>OrderEvent</code> 里那句 <code>更新了交付时间安排，等待对方确认</code>——所以这个模块报的是<strong>下界</strong>，不是精确次数。</p>
+    {% if not meeting_reschedule.has_data %}
+    <div class="empty-inline">{{ meeting_reschedule.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>排过交付时间</span><strong>{{ meeting_reschedule.reschedule_stats.total }}</strong><small>周期内已安排的订单</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>一次谈成</span><strong>{{ meeting_reschedule.reschedule_stats.settled_once_rate }}%</strong><small>{{ meeting_reschedule.reschedule_stats.settled_once_count }} / {{ meeting_reschedule.reschedule_stats.total }} 笔</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>改过两次以上</span><strong>{{ meeting_reschedule.reschedule_stats.changed_thrice_or_more_rate }}%</strong><small>{{ meeting_reschedule.reschedule_stats.changed_thrice_or_more_count }} 笔</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>最多改过几次</span><strong>{{ meeting_reschedule.reschedule_stats.max_label }}</strong><small>报的是下界</small></div></div>
+    </div>
+    {% if meeting_reschedule.reschedule_stats.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>已安排订单不足 {{ meeting_reschedule.reschedule_stats.min_measured_orders }} 笔，占比只报数字不给方向。</p>
+    {% endif %}
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">改了几次才定下来</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>改期次数</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_reschedule.reschedule_stats.bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>「一次谈成」是主档，不是补集。</strong>平台关心的恰恰是有多少安排根本不用改。改过两次以上是最难谈的一批：一个时间对其中一方一直不合适，而另一方一直在迁就——这类订单是交付异常的高发地，该在排期推荐之外单独看。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">改过的 vs 一次谈成的：对方多久回应</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分组</th><th>中位耗时</th><th>已回应条数</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_reschedule.response_contrast.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.median_label }}</td>
+                            <td>{{ row.total }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if meeting_reschedule.response_contrast.both_measured %}
+            <p class="small text-muted mt-2 mb-0">两组相差 <strong>{{ meeting_reschedule.response_contrast.gap_points }}%</strong>，{% if meeting_reschedule.response_contrast.gap_is_meaningful %}超过了 {{ meeting_reschedule.response_contrast.noise_points }} 个百分点的噪声阈值，可作为参考；{% else %}在噪声范围内，只报数字。{% endif %}<strong>这只是对照，不给因果</strong>——改期多的订单可能本来就是难谈的商品（便宜的热门货、描述含糊的二手物），平台没有能力把「难谈所以改期」和「改期所以难谈」分开。</p>
+            {% else %}
+            <p class="small text-muted mt-2 mb-0">两组各自至少 {{ meeting_reschedule.response_contrast.min_measured_orders }} 条已回应样本才给方向，目前不足，暂只报数字。响应时长只认 <code>responded_at</code> 减 <code>created_at</code>：<code>updated_at</code> 也会在改期时被写，拿它算会让「多久回应」和「多久改主意」混在一起——那正是这个模块要分开的两件事。</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">改期时地点换没换</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>地点</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>可比对的订单</td><td>{{ meeting_reschedule.location_stats.measurable_count }}</td><td>—</td></tr>
+                        <tr><td>地点也换了的</td><td>{{ meeting_reschedule.location_stats.shifted_count }}</td><td>{% if meeting_reschedule.location_stats.shift_rate is None %}—{% else %}{{ meeting_reschedule.location_stats.shift_rate }}{% endif %}</td></tr>
+                        <tr><td>两边都没地点</td><td>{{ meeting_reschedule.location_stats.both_missing_count }}</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>只能和「当前这一版」比。</strong>前几版的地点被 <code>propose_meeting</code> 的 update 分支原地覆盖了，库里没有，所以「地点改过几次」这个问题平台答不了。这里报的是「最后一次改期时，地点和现在这一版不一样」——改时间是「这个点我没空」，改地点是「这个点我不去」，两件事的运营动作完全不同。两边都没地点的订单答不了换没换，单独数，不并进「没换」。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">最后一版是谁提的</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>角色</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>买家提的</td><td>{{ meeting_reschedule.role_stats.buyer_count }}</td><td>{% if meeting_reschedule.role_stats.buyer_share is None %}—{% else %}{{ meeting_reschedule.role_stats.buyer_share }}{% endif %}</td></tr>
+                        <tr><td>卖家提的</td><td>{{ meeting_reschedule.role_stats.seller_count }}</td><td>{% if meeting_reschedule.role_stats.seller_share is None %}—{% else %}{{ meeting_reschedule.role_stats.seller_share }}{% endif %}</td></tr>
+                        <tr><td>提议人已删除</td><td>{{ meeting_reschedule.role_stats.unknown_count }}</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><code>proposed_by</code> 在改期时被改写，所以能报的只是「最后一版是谁提的」，<strong>不是「谁提的次数多」</strong>——后者需要版本表，而平台没有。<strong>只按角色分，不按用户名、不排名、不列是谁。</strong>一份「谁在反复改期」的清单是考勤表，不是运营数据，而它最可能的用法就是去找人，那正是这个看板不该做的事。</p>
+        </div>
+    </div>
+    {% if meeting_reschedule.reschedule_rows %}
+    <div class="mt-3">
+        <h3 class="h6 mb-3">改过两次以上的订单</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>订单号</th><th>商品</th><th>改过几次</th><th>最后一版归谁</th><th>当前安排</th></tr></thead>
+                <tbody>
+                    {% for row in meeting_reschedule.reschedule_rows %}
+                    <tr>
+                        <td>{{ row.order_id }}</td>
+                        <td>{{ row.item_title }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{{ row.proposed_by_role }}</td>
+                        <td>{{ row.start_at|date:'Y-m-d H:i' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><strong>清单只带订单号、商品标题、改期次数、角色和当前安排，不带任何用户名。</strong>这份清单是给「现在去看看」用的。{% if meeting_reschedule.reschedule_rows|length > meeting_reschedule.reschedule_row_limit %}清单最多列 {{ meeting_reschedule.reschedule_row_limit }} 条，完整的在导出里。{% endif %}</p>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不改 <code>propose_meeting</code> 的 update 分支、不引入版本表、不加字段、不自动改任何一条交付安排、不自动重发通知、不按用户做任何聚合或排名、不改 <code>meeting_scheduling</code> 的推荐逻辑</strong>，也不把统计写回任何记录。<code>meeting_attendance</code> 已经报过响应时长的总体中位数和到场率，这里不复述那两个数，只报「改过 vs 一次谈成」的对照；两边的分档上界刻意保持一致，否则运营会以为其中一个看板是错的。</div>
+    {% endif %}
+</section>
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

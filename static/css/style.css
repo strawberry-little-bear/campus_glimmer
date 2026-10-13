@@ -2966,3 +2966,45 @@ a { color: inherit; text-decoration: none; }
 .snapshot-quality-ok { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .73rem; color: #2f6a4f; background: #e8f4ec; white-space: nowrap; }
 .snapshot-quality-note { margin-top: 6px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
 @media (max-width: 575px) { .snapshot-quality-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .snapshot-quality-summary > div { min-height: 72px; padding: 11px; } .snapshot-quality-table td { white-space: normal; } }
+
+
+/* 交付安排改期面板自成一组色相（苔绿偏冷，压一层铜锈感）。
+ * 为什么自成一套颜色：交付侧这一排已经有四块——当面交付握手是偏青的冷绿
+ * （#3f6b6b 一带），归还握手是橄榄（#5b6b4a 一带），确认码是草绿（#426b53 一带），
+ * 承诺截止时间是石板蓝偏靛（#3f4f63 一带）。前四块讲的都是「见面前后那两下点完了
+ * 没有」，是动作有没有发生；这一栏不讲动作，讲的是「一个时间和地点被改了几次才
+ * 定下来」——它读的是同一条安排被原地覆盖过几次，是协商过程的反复。
+ * 会面事件质量已经占了青碧松绿（#2f5f52 一带）讲治理队列，未读通知占了靛蓝偏紫
+ * （#3d4266 一带）讲提醒本身，这里都不复用。
+ * 取苔绿而不是前四块里任何一种绿：苔绿比草绿冷、比橄榄沉，滚动时和「一次谈成」
+ * 这个主档对得上——平台关心的恰恰是有多少安排根本不用改。也不用红绿二色读「改过
+ * 几次」：改期不是对错判定，一次都没改和改了四次都不是故障，只是这一笔好不好谈。
+ * 压一层铜锈感是因为这一栏报的多半是反复：改过两次以上是最难谈的一批，一个时间
+ * 对其中一方一直不合适，而另一方一直在迁就。 */
+.meeting-reschedule-panel { padding: 14px; border: 1px solid #c6d2c8; border-radius: 14px; background: linear-gradient(135deg, #f0f5f1, #fafcfb); color: #40584a; }
+
+.meeting-reschedule-panel p { color: #5d7566; }
+
+.meeting-reschedule-panel .ops-mini-stat { background: #fff; }
+
+.meeting-reschedule-panel .ops-mini-stat strong { color: #2f6a4f; }
+
+.meeting-reschedule-panel .ops-mini-stat span,
+.meeting-reschedule-panel .ops-mini-stat small { color: #7b8f81; }
+
+.meeting-reschedule-panel .table th { color: #47614f; }
+
+.meeting-reschedule-panel .table td { vertical-align: top; }
+
+.meeting-reschedule-panel .badge { font-weight: 600; }
+
+.meeting-reschedule-panel .rewrite-candidate-footnote { color: #4a6b57; }
+
+.meeting-reschedule-panel .ops-footer-note { color: #5d7566; }
+
+/* 清单里「当前安排」那一列是时间戳，压成一行读起来才像一行安排。 */
+.meeting-reschedule-panel .ops-table td:last-child { white-space: nowrap; }
+
+/* 商品标题那一列说明文字比版图面板长，第一列不给 nowrap，但留一个下限，
+   免得窄屏下被挤成一列竖排。 */
+.meeting-reschedule-panel .ops-table td:first-child { min-width: 8rem; }

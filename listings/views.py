@@ -39,6 +39,7 @@ from .notification_aggregation_quality import build_notification_aggregation_qua
 from .report_resolution_quality import build_report_resolution_quality
 from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
+from .meeting_reschedule import build_meeting_reschedule
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
 )
@@ -58,6 +59,9 @@ from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
 from .item_image_coverage import build_item_image_coverage
+# 订单承诺截止与催收效果：第八轮接面板时漏了这一行 import，看板整页 500。
+# 测试当时只跑新模块自己的用例，没有渲染过看板，所以它一路绿着上了 main。
+from .order_deadline_reminders import build_order_deadline_reminders
 from .moderation_notice_preference import build_moderation_notice_preference
 from .moderation_rule_quality import build_moderation_rule_quality
 from .availability_watch_quality import build_availability_watch_quality
@@ -2224,6 +2228,7 @@ def operations_dashboard(request):
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
     dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
+    dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -2401,6 +2406,7 @@ def operations_dashboard_export(request):
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
     dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
+    dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -4276,7 +4282,8 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['两下是什么顺序', '笔数', '占比（%）', '中位间隔', '口径说明'])
+    writer.writerow(['两下是什么顺序，中间隔了多久'])
+    writer.writerow(['顺序', '笔数', '占比（%）', '中位间隔', '口径说明'])
     for row in delivery_handshake['sequence_rows']:
         writer.writerow([
             row['label'], row['count'], row['share'], row['median_gap_label'],
@@ -4288,12 +4295,14 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['两下之间隔了多久', '笔数', '占比（%）', '口径说明'])
+    writer.writerow(['两下之间隔了多久'])
+    writer.writerow(['间隔', '笔数', '占比（%）', '口径说明'])
     for row in delivery_handshake['gap_bucket_rows']:
         writer.writerow(['', row['label'], row['count'], row['share'], ''])
 
     writer.writerow([])
-    writer.writerow(['只有一方点过', '笔数', '占比（%）', '口径说明'])
+    writer.writerow(['只点了一半的订单'])
+    writer.writerow(['情况', '笔数', '占比（%）', '口径说明'])
     hang_stats = delivery_handshake['hang_stats']
     writer.writerow([
         '只有一方点过的订单', hang_stats['total'], '', '',
@@ -4317,7 +4326,8 @@ def operations_dashboard_export(request):
         writer.writerow(['', row['label'], row['count'], row['share'], row['note']])
 
     writer.writerow([])
-    writer.writerow(['两下间隔与订单结局的对照', '笔数', '做成', '做成率（%）', '口径说明'])
+    writer.writerow(['间隔与结局的对照'])
+    writer.writerow(['两下间隔', '笔数', '做成', '做成率（%）', '口径说明'])
     contrast = delivery_handshake['outcome_contrast']
     writer.writerow([
         '两下间隔在 1 小时内', contrast['fast_total'], contrast['fast_success'],
@@ -4334,9 +4344,8 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow([
-        '只点了一半的订单', '订单号', '商品', '先点的一方', '挂了多久', '口径说明',
-    ])
+    writer.writerow(['只点了一半的订单清单'])
+    writer.writerow(['订单号', '商品', '先点的一方', '挂了多久', '口径说明'])
     if delivery_handshake['stalled_rows']:
         for row in delivery_handshake['stalled_rows']:
             writer.writerow([
@@ -4397,7 +4406,8 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['确认花了多久', '笔数', '占比（%）', '口径说明'])
+    writer.writerow(['从下单到卖家确认花了多久'])
+    writer.writerow(['确认时长', '笔数', '占比（%）', '口径说明'])
     for row in deadline_reminders['confirm_stats']['bucket_rows']:
         writer.writerow([
             '', row['label'], row['count'],
@@ -4431,7 +4441,8 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['确认时距截止还剩多久', '笔数', '占比（%）', '这一档说明什么'])
+    writer.writerow(['确认的时候，距截止还剩多少'])
+    writer.writerow(['距截止还剩', '笔数', '占比（%）', '这一档说明什么'])
     for row in reminder_stats['margin_rows']:
         writer.writerow([
             '', row['label'], row['count'],
@@ -4444,7 +4455,8 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['借用侧催过之后', '笔数', '占比（%）', '这一档说明什么'])
+    writer.writerow(['借用侧：催过之后提前多久还'])
+    writer.writerow(['距预计归还', '笔数', '占比（%）', '这一档说明什么'])
     borrow_stats = deadline_reminders['borrow_stats']
     writer.writerow([
         '归还提醒之后已归还', borrow_stats['returned'],
@@ -4504,9 +4516,8 @@ def operations_dashboard_export(request):
         ])
 
     writer.writerow([])
-    writer.writerow([
-        '已过截止时间还挂着「待卖家确认」', '订单号', '商品', '已超时多久', '催过',
-    ])
+    writer.writerow(['已过截止时间，还挂在「待卖家确认」'])
+    writer.writerow(['订单号', '商品', '已超时多久', '催过'])
     if deadline_reminders['pending_rows']:
         for row in deadline_reminders['pending_rows']:
             writer.writerow([
@@ -4539,6 +4550,128 @@ def operations_dashboard_export(request):
         '本模块只报告，不改 process_order_timeouts 的触发条件、不调整 6 小时和 24 小时这两个'
         '默认值、不自动推进任何一笔订单、不改催收阶梯、不新增提醒类型，'
         '也不把统计写回任何记录。',
+    ])
+    writer.writerow([])
+    reschedule = dashboard['meeting_reschedule']
+    writer.writerow(['一次交付安排被改了几次才定下来', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', reschedule['summary'],
+        '改期次数从 OrderEvent 里那句「更新了交付时间安排，等待对方确认」反推，'
+        '报的是下界：MeetingAppointment 是 OneToOneField(order)，'
+        '前几版被原地覆盖，没有版本表；OrderEvent 上线之前的改动没有痕迹',
+    ])
+    writer.writerow([
+        '周期内排过交付时间的订单', reschedule['reschedule_stats']['total'], '',
+        '分母只收已经有了一条安排的订单；连一次都没约上的订单谈不到改期，'
+        '单独数出来，属于订单阶段流的领域',
+    ])
+    writer.writerow([
+        '一次谈成', reschedule['reschedule_stats']['settled_once_count'],
+        reschedule['reschedule_stats']['settled_once_rate'],
+        '0 次改期。它是这一列的主档，不是补集——平台关心的恰恰是'
+        '「有多少安排根本不用改」',
+    ])
+    writer.writerow([
+        '改过一次以上', reschedule['reschedule_stats']['changed_count'],
+        reschedule['reschedule_stats']['changed_rate'],
+        '双方至少有一方改过一次主意',
+    ])
+    writer.writerow([
+        '其中改过两次以上', reschedule['reschedule_stats']['changed_thrice_or_more_count'],
+        reschedule['reschedule_stats']['changed_thrice_or_more_rate'],
+        '最难谈的一批：一个时间对其中一方一直不合适，而另一方一直在迁就',
+    ])
+    writer.writerow([
+        '最多改过几次', reschedule['reschedule_stats']['max_label'], '',
+        '同一笔订单的改期痕迹条数，报下界',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['改了几次才定下来', '笔数', '占比（%）', '这一档说明什么'])
+    for row in reschedule['reschedule_stats']['bucket_rows']:
+        writer.writerow(['', row['label'], row['count'], row['share'], ''])
+
+    writer.writerow([])
+    writer.writerow(['改过的 vs 一次谈成的：对方多久回应', '中位耗时', '已回应条数', '口径说明'])
+    for row in reschedule['response_contrast']['rows']:
+        writer.writerow([
+            '', row['label'], row['median_label'], row['total'],
+            '响应时长只认 responded_at 减 created_at；updated_at 也会在改期时被写，'
+            '拿它算会让「多久回应」和「多久改主意」混在一起',
+        ])
+    writer.writerow([
+        '', '两组相差', reschedule['response_contrast']['gap_points'], '',
+        f"两组各自至少 {reschedule['response_contrast']['min_measured_orders']} 条"
+        f"才给方向，差值小于 {reschedule['response_contrast']['noise_points']} "
+        f"个百分点视为噪声；这只是对照，不给因果——改期多的订单可能本来就是难谈的商品",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['改期时地点换没换', '笔数', '占比（%）', '这一档说明什么'])
+    location_stats = reschedule['location_stats']
+    writer.writerow([
+        '', '可比对的订单', location_stats['measurable_count'], '',
+        '分母是改过期、且订单和安排两边都有地点的订单',
+    ])
+    writer.writerow([
+        '', '地点也换了的', location_stats['shifted_count'],
+        location_stats['shift_rate'],
+        '只能和「当前这一版」比：前几版的地点被原地覆盖了，库里没有。'
+        '所以这一节报的是「最后一次改期时地点和现在这一版不一样」，'
+        '不是「地点改过几次」——后者平台答不了',
+    ])
+    writer.writerow([
+        '', '两边都没地点', location_stats['both_missing_count'], '',
+        '答不了换没换，单独数，不并进「没换」',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['最后一版是谁提的', '笔数', '占比（%）', '这一档说明什么'])
+    role_stats = reschedule['role_stats']
+    writer.writerow([
+        '', '买家提的', role_stats['buyer_count'], role_stats['buyer_share'],
+        'proposed_by 在改期时被改写，所以能报的只是「最后一版是谁提的」，'
+        '不是「谁提的次数多」——后者需要版本表，而平台没有',
+    ])
+    writer.writerow([
+        '', '卖家提的', role_stats['seller_count'], role_stats['seller_share'],
+        '只按角色分，不按用户名、不排名、不列是谁：一份「谁在反复改期」的清单'
+        '是考勤表，不是运营数据',
+    ])
+    writer.writerow(['', '提议人已删除', role_stats['unknown_count'], '', ''])
+
+    writer.writerow([])
+    writer.writerow([
+        '改过两次以上的订单', '订单号', '商品', '改过几次', '最后一版归谁',
+    ])
+    if reschedule['reschedule_rows']:
+        for row in reschedule['reschedule_rows']:
+            writer.writerow([
+                '', row['order_id'], row['item_title'], row['count'],
+                row['proposed_by_role'],
+            ])
+    else:
+        writer.writerow(['', '—', '当前周期没有改过两次以上的交付安排', '', ''])
+    if len(reschedule['reschedule_rows']) > reschedule['reschedule_row_limit']:
+        writer.writerow([
+            '', '—', f"清单最多列 {reschedule['reschedule_row_limit']} 条，完整的在数据库里", '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '改期次数是下界，不是精确值：MeetingAppointment 是 OneToOneField(order)，'
+        'propose_meeting 对同一笔订单第二次提交时把时间、地点、提议人原地覆盖，'
+        'status 打回 pending，前几版不在任何表里。唯一能证明「改过」的是 OrderEvent '
+        '里那句备注，所以 OrderEvent 上线之前的改动没有痕迹，会被算成一次谈成；'
+        '备注是自由文本，按子串匹配，那句话一旦被改，这里会静默少算。'
+        '匹配必须写全「更新了」三个字——第一次提交写的是「提出了新的…」，'
+        '只多一个字，少写一个字就会把第一次提议也算成一次改期。'
+        '响应时长和 meeting_attendance 用同一组分档上界：两边读的是同一类字段，'
+        '尺度不一致会让运营以为其中一个看板是错的。'
+        '本模块只报告，不改 propose_meeting 的 update 分支、不引入版本表、不加字段、'
+        '不自动改任何一条交付安排、不自动重发通知、不按用户做任何聚合或排名、'
+        '不改 meeting_scheduling 的推荐逻辑，也不把统计写回任何记录。',
     ])
     writer.writerow([])
     first_viewed = dashboard['first_viewed']
