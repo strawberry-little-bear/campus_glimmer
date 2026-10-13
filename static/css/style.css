@@ -3066,3 +3066,61 @@ a { color: inherit; text-decoration: none; }
 
     .refresh-quota-drift-panel .ops-table td:nth-child(3) { text-align: left; }
 }
+
+
+/* 重新上架的那件商品，为什么一回来就沉底的面板，自成一组色相（冷钢青，
+ * 压一层石板灰）。为什么自成一套颜色：供给侧这一排里，左侧刷新额度是
+ * 赭金（#6b5333 一带），供给侧生命周期是草绿（#7aa892 一带），会面事件
+ * 质量是青碧松绿（#2f5f52 一带），交付安排改期是苔绿（#40584a 一带），
+ * 求购响应转化是深紫红（#5c3f4d 一带）。
+ * 这一栏讲的不是「上限是多少」，也不是「安排改了几次」，而是一件商品的
+ * 时间已经过去了、而系统里记它的那个字段没有跟着过去。所以既不复用任何
+ * 一个绿的色相（那是「状态」的语义），也不复用赭金（那是「计数器」的
+ * 语义）——刷新额度那一栏才是一枚计数器，这一栏是一段被漏掉的时间。
+ * 取冷钢青：它在整张看板里读起来像一块没人擦过的石板，和「沉底」这件事
+ * 对得上，又不会像红绿那样让运营去改一个没有错的写入路径。
+ * 「彻底没有互动」那一行压一线石板色但不涂满——它是分母的一部分，不是
+ * 坏行；涂满会让运营以为要把它们从统计里剔掉，而它们恰恰是最该被推动的
+ * 那一批。 */
+.relist-freshness-panel { padding: 14px; border: 1px solid #ccd8de; border-radius: 14px; background: linear-gradient(135deg, #f2f7f9, #fbfdfe); color: #3a4f5c; }
+
+.relist-freshness-panel p { color: #4e6572; }
+
+.relist-freshness-panel .ops-mini-stat { background: #fff; }
+
+.relist-freshness-panel .ops-mini-stat strong { color: #2f4b58; font-variant-numeric: tabular-nums; }
+
+.relist-freshness-panel .ops-mini-stat span,
+.relist-freshness-panel .ops-mini-stat small { color: #7a8f9a; }
+
+/* 「带着新鲜度欠账」这一格是整块面板真正要说的事，单独压一层底，
+   不靠加粗撑——运营扫过去时先看到的是这一格，不是旁边那三个数。 */
+.relist-freshness-mini-stat-warning { border-color: #b9ccd6 !important; background: #e8f2f6 !important; }
+
+.relist-freshness-mini-stat-warning strong { color: #2c4a58 !important; }
+
+.relist-freshness-panel .table th { color: #44606e; }
+
+.relist-freshness-panel .badge { font-weight: 600; }
+
+.relist-freshness-row-lie { background: #eef4f7; }
+
+.relist-freshness-note { margin-bottom: 12px; padding: 12px 14px; border: 1px solid #c9d9e1; border-radius: 12px; background: #eef5f8; color: #3a5563; font-size: .84rem; line-height: 1.7; }
+
+.relist-freshness-why { color: #3a4f5c; font-size: .88rem; line-height: 1.75; }
+
+.relist-freshness-panel .rewrite-candidate-footnote { color: #44606e; }
+
+.relist-freshness-panel .ops-footer-note { color: #4e6572; }
+
+/* 「距发布」和「刷新次数」两列要按行比着读，数字列收紧并给等宽，
+   免得 45 天和 400 天两行宽度跳。 */
+.relist-freshness-panel .ops-table td:nth-child(3) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.relist-freshness-panel .ops-table td:nth-child(4) { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+
+@media (max-width: 575px) {
+    .relist-freshness-panel { padding: 12px; }
+
+    .relist-freshness-panel .ops-table td:nth-child(4) { text-align: left; }
+}

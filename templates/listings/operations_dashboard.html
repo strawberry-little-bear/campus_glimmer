@@ -5629,6 +5629,119 @@
     {% endif %}
 </section>
 
+<section class="ops-panel relist-freshness-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Relist freshness</span><h2>重新上架的那件商品，为什么一回来就沉底</h2></div>
+        <span class="ops-panel-hint">编辑延长截止时间重新上架，没有重置新鲜度</span>
+    </div>
+    <p class="relist-freshness-note mb-3"><i class="bi bi-arrow-counterclockwise me-1"></i><code>freshness_age_days</code> 读的是 <code>last_refreshed_at or created_at</code>，而 <code>last_refreshed_at</code> 只在 <code>refresh_item</code> 里被写入。<code>edit_item</code> 的重新上架分支只改 <code>status</code>，<strong>不碰新鲜度、不碰刷新次数</strong>。所以重新上架这个动作在系统里没有留下任何时间戳，一件上学期发布、这学期重新上架的商品，一回到在售列表就带着整个假期的欠账，<code>_level_for</code> 直接判「沉底较久」。</p>
+    {% if not relist_freshness.has_data %}
+    <div class="empty-inline">{{ relist_freshness.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>带着截止时间在售</span><strong>{{ relist_freshness.denominator.deadline_live_count }}</strong><small>分母，无截止时间的商品没有重新上架这个动作</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat relist-freshness-mini-stat-warning"><span>带着新鲜度欠账</span><strong>{{ relist_freshness.denominator.drifted_count }}</strong><small>占带着截止时间在售 {{ relist_freshness.drifted_share }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>现在就能刷新</span><strong>{{ relist_freshness.quota.ready_count }}</strong><small>额度没用尽、间隔也没占着，一刷就灵</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>彻底没有互动</span><strong>{{ relist_freshness.engagement.silent_count }}</strong><small>无浏览无收藏无成交，刷新救不回来</small></div></div>
+    </div>
+    {% if relist_freshness.arrears.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>在售商品不足 {{ relist_freshness.min_measured_items }} 件，占比只报数字不给方向。</p>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">欠账商品欠了多少天</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>距发布</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in relist_freshness.arrears.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">第一档的下界就是 <code>STALE_DAYS</code>（{{ relist_freshness.stale_days }} 天），和生命周期诊断、供给侧看板是同一个数。判据里限定了 <code>refresh_count == 0</code>，所以 <code>last_refreshed_at</code> 必为空，欠账天数就等于距发布天数。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">刷新额度对这批商品是不是空的</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>已刷新次数</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in relist_freshness.quota.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>这是本模块最要紧的一组。</strong>判据限定了从没刷新过，所以第一档必然等于全部——4 次额度一次没用过，24 小时间隔也没占着。<strong>问题最好解决的一批商品，恰好也是系统最没提醒过的那一批。</strong></p>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">欠账商品现在的生命周期等级</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>生命周期等级</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in relist_freshness.levels.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">等级不是本模块自己算的，从 <code>lifecycle_diagnostics._level_for</code> 原样复用——判据只允许有一份。供给侧看板报过「发布超 45 天无互动」的总量，但把三种情况混进了一个数字：一直沉底的、重新上架过的、发布时设了很长截止时间的。第三种不需要运营介入，前两种要做的动作完全不同。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">欠账商品里还有没有互动</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分组</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>仍有浏览、收藏或成交</td><td>{{ relist_freshness.engagement.engaged_count }}</td><td>{% if relist_freshness.engagement.engaged_share is None %}—{% else %}{{ relist_freshness.engagement.engaged_share }}{% endif %}</td></tr>
+                        <tr class="relist-freshness-row-lie"><td>三者皆无</td><td>{{ relist_freshness.engagement.silent_count }}</td><td>{% if relist_freshness.engagement.silent_share is None %}—{% else %}{{ relist_freshness.engagement.silent_share }}{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>「一刷就灵」不能套到全部欠账商品上。</strong>三者皆无的那部分，刷回去也只是让一件没人看的商品再沉一次，需要的是重新拍照或降价。取消的订单不算互动——取消是失败，不是需求。</p>
+        </div>
+    </div>
+
+    <h3 class="h6 mb-3 mt-2">带着新鲜度欠账的商品清单</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>商品</th><th>分类</th><th>距发布（天）</th><th>刷新次数</th><th>生命周期等级</th></tr></thead>
+            <tbody>
+                {% for row in relist_freshness.drift_list.rows %}
+                <tr>
+                    <td>{{ row.item.title }}</td>
+                    <td>{{ row.category_label }}</td>
+                    <td>{{ row.arrears_days }}</td>
+                    <td>{{ row.refresh_count }}</td>
+                    <td>{{ row.level_label }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前没有带着新鲜度欠账的在售商品。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if relist_freshness.drift_list.truncated %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>带着新鲜度欠账的商品共 {{ relist_freshness.drift_list.total_count }} 件，以上只列 {{ relist_freshness.drift_list.limit }} 件。</p>
+    {% endif %}
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">为什么先看板、后改口径</h3>
+            <p class="relist-freshness-why mb-0">改口径有三条路，每条都有代价：重新上架时重置 <code>last_refreshed_at</code> 等于送一次刷新，还绕过了额度；加一个 <code>relisted_at</code> 字段要迁移，且所有历史商品这一列都是 NULL，得先决定 NULL 时回落到哪；让 <code>_level_for</code> 认这一档改的是等级语义，供给侧看板的计数会跟着变，运营手里的历史数字对不上。<strong>三条都值得做，但先得知道规模。</strong>如果只有十几件，在卖家编辑页加一句「重新上架不会让商品回到前排，需要刷新」就够；如果是成百上千件，那它值得一个字段。</p>
+        </div>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不在重新上架时重置 <code>last_refreshed_at</code>、不给重新上架记时间戳、不加字段、不改 <code>_level_for</code> 的等级判据、不自动帮卖家刷新</strong>。刻意没有推断「它是否重新上架过」——重新上架不留时间戳，而 <code>expires_at</code> 在未来这个信号新发布的商品也会有。这里报的是<strong>新鲜度欠账</strong>这个可观测量，不是重新上架这个不可观测量。</div>
+    {% endif %}
+</section>
 
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

@@ -41,6 +41,7 @@ from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
 from .refresh_quota_drift import build_refresh_quota_drift
+from .relist_freshness import build_relist_freshness
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
 )
@@ -2231,6 +2232,7 @@ def operations_dashboard(request):
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
     dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
+    dashboard['relist_freshness'] = build_relist_freshness(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -2410,6 +2412,7 @@ def operations_dashboard_export(request):
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
     dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
+    dashboard['relist_freshness'] = build_relist_freshness(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -6532,6 +6535,92 @@ def operations_dashboard_export(request):
         '不加刷新历史表、不动那条「本月刷新次数已达上限」的文案。'
         '文案和代码不一致是真的，但先有数再决定改哪一边：如果只有个位数，'
         '改一句话就够；如果是成百上千件沉底商品，那它值得一张刷新历史表。',
+    ])
+
+    relist = dashboard['relist_freshness']
+    writer.writerow([])
+    writer.writerow(['重新上架的那件商品，为什么一回来就沉底', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', relist['summary'],
+        '只读 Item.status、expires_at、created_at、refresh_count 与 last_refreshed_at，'
+        '复用 _level_for 与 _refresh_state 的判据，不在重新上架时重置任何字段',
+    ])
+    writer.writerow([
+        '沉底天数门槛', relist['stale_days'], '',
+        '复用 lifecycle_diagnostics 的 STALE_DAYS，判据只允许有一份',
+    ])
+    writer.writerow([
+        '在售商品', relist['denominator']['live_count'], '',
+        '其中带着未来截止时间的才进本模块分母',
+    ])
+    writer.writerow([
+        '带着未来截止时间在售', relist['denominator']['deadline_live_count'], '',
+        '分母。没有截止时间的商品永远走不到 expire_items，也就没有重新上架这个动作',
+    ])
+    writer.writerow([
+        '其中带着新鲜度欠账', relist['denominator']['drifted_count'], '',
+        f"占 {relist['drifted_share']}%",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['欠账商品欠了多少天'])
+    writer.writerow(['距发布', '商品数', '占欠账（%）'])
+    for row in relist['arrears']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['欠账商品现在的生命周期等级'])
+    writer.writerow(['生命周期等级', '商品数', '占欠账（%）'])
+    for row in relist['levels']['rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['刷新额度对这批商品是不是空的'])
+    writer.writerow(['已刷新次数', '商品数', '占欠账（%）'])
+    for row in relist['quota']['bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+    writer.writerow([
+        '现在就能刷新', relist['quota']['ready_count'], relist['quota']['ready_share'],
+        '额度没用尽、24 小时间隔也没占着，一刷就灵',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['欠账商品里还有没有互动'])
+    writer.writerow(['指标', '数值', '口径说明'])
+    writer.writerow([
+        '仍有浏览收藏或成交', relist['engagement']['engaged_count'],
+        relist['engagement']['engaged_share'], '三者有其一即算有互动',
+    ])
+    writer.writerow([
+        '三者皆无', relist['engagement']['silent_count'],
+        relist['engagement']['silent_share'],
+        '这部分连刷新都救不回来，刷回去也只是再沉一次，需要的是重新拍照或降价',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['带着新鲜度欠账的商品清单'])
+    writer.writerow(['商品', '分类', '距发布（天）', '刷新次数', '生命周期等级'])
+    for row in relist['drift_list']['rows']:
+        writer.writerow([
+            row.item.title, row.category_label, row.arrears_days,
+            row.refresh_count, row.level_label,
+        ])
+    if not relist['drift_list']['rows']:
+        writer.writerow(['—', '当前没有带着新鲜度欠账的在售商品', '', '', ''])
+    if relist['drift_list']['truncated']:
+        writer.writerow([
+            '—', f"清单最多列 {relist['drift_list']['limit']} 条，完整的在数据库里",
+            '', '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '本模块只报告，不在重新上架时重置 last_refreshed_at、不给重新上架记时间戳、'
+        '不加字段、不改 _level_for 的等级判据、不自动帮卖家刷新。'
+        '重新上架这个动作在系统里没有留下任何时间戳，而 expires_at 在未来这个信号'
+        '新发布的商品也会有，所以本模块报的是新鲜度欠账这个可观测量，'
+        '不是重新上架这个不可观测量。',
     ])
 
     pulse = dashboard['campus_pulse']
