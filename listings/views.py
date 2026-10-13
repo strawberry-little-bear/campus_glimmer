@@ -37,6 +37,7 @@ from .notification_snooze_return import build_notification_snooze_return
 from .notification_kind_coverage import build_notification_kind_coverage
 from .notification_aggregation_quality import build_notification_aggregation_quality
 from .report_resolution_quality import build_report_resolution_quality
+from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2214,6 +2215,7 @@ def operations_dashboard(request):
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
+    dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2385,6 +2387,7 @@ def operations_dashboard_export(request):
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
+    dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2982,6 +2985,133 @@ def operations_dashboard_export(request):
         '不列任何一条通知的原文，按通知类型聚合——通知内容是收发双方的私域内容；'
         '不按用户排名，那是一份考勤表，不是一份看板。',
     ])
+    incident = dashboard['meeting_incident_quality']
+    writer.writerow([])
+    writer.writerow(['交付预约异常处理得公不公平', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', incident['summary'],
+        '只读 reason / status / resolution_note 与订单双方身份，不读 detail 的自由文本，'
+        '也不改写任何一条异常',
+    ])
+    writer.writerow([
+        '周期内异常', incident['outcome']['total_count'], '按异常提交时间统计',
+    ])
+    writer.writerow([
+        '已完结', incident['outcome']['closed_count'],
+        f"确认 {incident['outcome']['resolved_count']} 条 · 驳回 "
+        f"{incident['outcome']['rejected_count']} 条",
+    ])
+    writer.writerow([
+        '还在流程里', incident['outcome']['open_count'], 'open 与 reviewing 合计',
+    ])
+    writer.writerow([
+        '整体驳回率（%）',
+        '—' if incident['outcome']['rejection_rate'] is None else incident['outcome']['rejection_rate'],
+        f"分母是已完结的 {incident['outcome']['closed_count']} 条，少于 "
+        f"{incident['min_closed_incidents']} 条只报数字",
+    ])
+    writer.writerow([])
+    writer.writerow(['驳回率按异常类型拆', '异常数', '已完结', '驳回数', '驳回率（%）', '还在流程里', '样本是否够'])
+    for row in incident['reason_rows']:
+        writer.writerow([
+            row['label'], row['total_count'], row['closed_count'], row['rejected_count'],
+            '—' if row['rejection_rate'] is None else row['rejection_rate'],
+            row['open_count'],
+            '这一档没有样本' if row['is_empty'] else (
+                f"不足 {incident['min_bucket_sample']} 条" if row['is_small_sample'] else '够'
+            ),
+        ])
+    writer.writerow([])
+    writer.writerow(['处理意见写了没写', '条数', '占比（%）', '口径说明'])
+    note = incident['note']
+    writer.writerow([
+        '已完结的异常', note['closed_count'], '',
+        '只统计已完结的：还在流程里的异常谈不到写不写意见',
+    ])
+    writer.writerow([
+        '写了意见', note['with_note_count'],
+        '—' if note['fill_rate'] is None else note['fill_rate'],
+        '只数字节与空否，一个字符内容都不读',
+    ])
+    writer.writerow([
+        '没写意见', note['without_note_count'],
+        '—' if note['fill_rate'] is None else round(100 - note['fill_rate'], 1),
+        '被驳回又没写意见，提交人收到的是一个没有理由的驳回',
+    ])
+    for row in note['by_outcome']:
+        writer.writerow([
+            f"其中：{row['label']}写过意见", row['with_note_count'],
+            '—' if row['fill_rate'] is None else row['fill_rate'],
+            f"已{row['label']} {row['closed_count']} 条"
+            + ('，不足样本下限只报数字'
+               if row['closed_count'] < incident['min_bucket_sample'] else ''),
+        ])
+    writer.writerow([
+        '两档填写率之差（百分点）',
+        '—' if note['outcome_gap_points'] is None else note['outcome_gap_points'],
+        '',
+        '两侧都过样本门槛才允许把它读成一个信号，否则只报数字' if note['outcome_comparable']
+        else '至少一侧不足样本下限，这个差不作结论',
+    ])
+    for row in note['bucket_rows']:
+        writer.writerow([
+            f"意见长度：{row['label']}", row['count'],
+            '—' if row['share'] is None else row['share'],
+            '长度只反映写没写细，不反映写得对不对',
+        ])
+    writer.writerow([])
+    writer.writerow(['是谁在报谁', '异常数', '已完结', '驳回数', '驳回率（%）', '样本是否够'])
+    for row in incident['direction']['rows']:
+        writer.writerow([
+            row['label'], row['total_count'], row['closed_count'], row['rejected_count'],
+            '—' if row['rejection_rate'] is None else row['rejection_rate'],
+            '这一档没有样本' if row['is_empty'] else (
+                f"不足 {incident['min_bucket_sample']} 条" if row['is_small_sample'] else '够'
+            ),
+        ])
+    writer.writerow([
+        '两侧驳回率之差（百分点）',
+        '—' if incident['direction']['gap_points'] is None else incident['direction']['gap_points'],
+        '', '',
+        '两侧都过样本门槛才允许把它读成一个信号，且必须同时报两侧总量' if incident['direction']['comparable']
+        else '至少一侧不足样本下限，这个差不作结论',
+    ])
+    writer.writerow([])
+    writer.writerow(['提交人分布', '提交人数', '占比（%）', '口径说明'])
+    reporters = incident['reporters']
+    if reporters['is_empty']:
+        writer.writerow(['当前周期没有提交人，分布形状需要先有异常发生。'])
+    else:
+        writer.writerow([
+            '提交人数', reporters['reporter_count'], '', '按人去重后的数量',
+        ])
+        for row in reporters['band_rows']:
+            writer.writerow([
+                f"提交次数：{row['label']}", row['count'],
+                '—' if row['share'] is None else row['share'],
+                '形状比名次有用：绝大多数人只报过一次，说明这条通道是应急性质的',
+            ])
+        writer.writerow([
+            '只报过一次的人占比（%）',
+            '—' if reporters['once_only_rate'] is None else reporters['once_only_rate'], '',
+            '有一批人反复在用，说明它是某些用户的常规手段',
+        ])
+        writer.writerow([
+            '人均提交次数',
+            '—' if reporters['avg_count'] is None else reporters['avg_count'], '',
+            '受 OneToOneField(appointment) 限制，不报「同一场约会里双方各报一次」——那个数恒为 0',
+        ])
+    writer.writerow([
+        '说明',
+        '交付预约异常是站内唯一一条直指线下人身安全的申诉，reason 与 status 一直被读写，'
+        '但从来没有按类型与结局拆开看过：整体驳回率一旦波动，第一反应是去查处理人，'
+        '而不是去查是哪一类异常在涨。本模块只报告：'
+        '不加迁移、不改 MeetingIncident 的任何字段、不改写入路径、不自动驳回或自动关单；'
+        '不读 detail 与 resolution_note 的自由文本，只读长度与空否；'
+        '空分母报「—」不报 0——0 会被读成「发了，占比很小」，而事实是「没有样本」；'
+        '不排名、不报任何人的用户名，那不是看板，是公开处刑清单；'
+        '不把驳回率和处理人挂钩——按 reviewer 拆驳回率是一份考官成绩单。',
+    ])
     attendance = dashboard['meeting_attendance']
 
     coverage = dashboard['notification_kind_coverage']
@@ -3313,6 +3443,133 @@ def operations_dashboard_export(request):
         '集中度只报规模形状，不作「这几件有问题」的判定。',
     ])
 
+    incident = dashboard['meeting_incident_quality']
+    writer.writerow([])
+    writer.writerow(['交付预约异常处理得公不公平', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', incident['summary'],
+        '只读 reason / status / resolution_note 与订单双方身份，不读 detail 的自由文本，'
+        '也不改写任何一条异常',
+    ])
+    writer.writerow([
+        '周期内异常', incident['outcome']['total_count'], '按异常提交时间统计',
+    ])
+    writer.writerow([
+        '已完结', incident['outcome']['closed_count'],
+        f"确认 {incident['outcome']['resolved_count']} 条 · 驳回 "
+        f"{incident['outcome']['rejected_count']} 条",
+    ])
+    writer.writerow([
+        '还在流程里', incident['outcome']['open_count'], 'open 与 reviewing 合计',
+    ])
+    writer.writerow([
+        '整体驳回率（%）',
+        '—' if incident['outcome']['rejection_rate'] is None else incident['outcome']['rejection_rate'],
+        f"分母是已完结的 {incident['outcome']['closed_count']} 条，少于 "
+        f"{incident['min_closed_incidents']} 条只报数字",
+    ])
+    writer.writerow([])
+    writer.writerow(['驳回率按异常类型拆', '异常数', '已完结', '驳回数', '驳回率（%）', '还在流程里', '样本是否够'])
+    for row in incident['reason_rows']:
+        writer.writerow([
+            row['label'], row['total_count'], row['closed_count'], row['rejected_count'],
+            '—' if row['rejection_rate'] is None else row['rejection_rate'],
+            row['open_count'],
+            '这一档没有样本' if row['is_empty'] else (
+                f"不足 {incident['min_bucket_sample']} 条" if row['is_small_sample'] else '够'
+            ),
+        ])
+    writer.writerow([])
+    writer.writerow(['处理意见写了没写', '条数', '占比（%）', '口径说明'])
+    note = incident['note']
+    writer.writerow([
+        '已完结的异常', note['closed_count'], '',
+        '只统计已完结的：还在流程里的异常谈不到写不写意见',
+    ])
+    writer.writerow([
+        '写了意见', note['with_note_count'],
+        '—' if note['fill_rate'] is None else note['fill_rate'],
+        '只数字节与空否，一个字符内容都不读',
+    ])
+    writer.writerow([
+        '没写意见', note['without_note_count'],
+        '—' if note['fill_rate'] is None else round(100 - note['fill_rate'], 1),
+        '被驳回又没写意见，提交人收到的是一个没有理由的驳回',
+    ])
+    for row in note['by_outcome']:
+        writer.writerow([
+            f"其中：{row['label']}写过意见", row['with_note_count'],
+            '—' if row['fill_rate'] is None else row['fill_rate'],
+            f"已{row['label']} {row['closed_count']} 条"
+            + ('，不足样本下限只报数字'
+               if row['closed_count'] < incident['min_bucket_sample'] else ''),
+        ])
+    writer.writerow([
+        '两档填写率之差（百分点）',
+        '—' if note['outcome_gap_points'] is None else note['outcome_gap_points'],
+        '',
+        '两侧都过样本门槛才允许把它读成一个信号，否则只报数字' if note['outcome_comparable']
+        else '至少一侧不足样本下限，这个差不作结论',
+    ])
+    for row in note['bucket_rows']:
+        writer.writerow([
+            f"意见长度：{row['label']}", row['count'],
+            '—' if row['share'] is None else row['share'],
+            '长度只反映写没写细，不反映写得对不对',
+        ])
+    writer.writerow([])
+    writer.writerow(['是谁在报谁', '异常数', '已完结', '驳回数', '驳回率（%）', '样本是否够'])
+    for row in incident['direction']['rows']:
+        writer.writerow([
+            row['label'], row['total_count'], row['closed_count'], row['rejected_count'],
+            '—' if row['rejection_rate'] is None else row['rejection_rate'],
+            '这一档没有样本' if row['is_empty'] else (
+                f"不足 {incident['min_bucket_sample']} 条" if row['is_small_sample'] else '够'
+            ),
+        ])
+    writer.writerow([
+        '两侧驳回率之差（百分点）',
+        '—' if incident['direction']['gap_points'] is None else incident['direction']['gap_points'],
+        '', '',
+        '两侧都过样本门槛才允许把它读成一个信号，且必须同时报两侧总量' if incident['direction']['comparable']
+        else '至少一侧不足样本下限，这个差不作结论',
+    ])
+    writer.writerow([])
+    writer.writerow(['提交人分布', '提交人数', '占比（%）', '口径说明'])
+    reporters = incident['reporters']
+    if reporters['is_empty']:
+        writer.writerow(['当前周期没有提交人，分布形状需要先有异常发生。'])
+    else:
+        writer.writerow([
+            '提交人数', reporters['reporter_count'], '', '按人去重后的数量',
+        ])
+        for row in reporters['band_rows']:
+            writer.writerow([
+                f"提交次数：{row['label']}", row['count'],
+                '—' if row['share'] is None else row['share'],
+                '形状比名次有用：绝大多数人只报过一次，说明这条通道是应急性质的',
+            ])
+        writer.writerow([
+            '只报过一次的人占比（%）',
+            '—' if reporters['once_only_rate'] is None else reporters['once_only_rate'], '',
+            '有一批人反复在用，说明它是某些用户的常规手段',
+        ])
+        writer.writerow([
+            '人均提交次数',
+            '—' if reporters['avg_count'] is None else reporters['avg_count'], '',
+            '受 OneToOneField(appointment) 限制，不报「同一场约会里双方各报一次」——那个数恒为 0',
+        ])
+    writer.writerow([
+        '说明',
+        '交付预约异常是站内唯一一条直指线下人身安全的申诉，reason 与 status 一直被读写，'
+        '但从来没有按类型与结局拆开看过：整体驳回率一旦波动，第一反应是去查处理人，'
+        '而不是去查是哪一类异常在涨。本模块只报告：'
+        '不加迁移、不改 MeetingIncident 的任何字段、不改写入路径、不自动驳回或自动关单；'
+        '不读 detail 与 resolution_note 的自由文本，只读长度与空否；'
+        '空分母报「—」不报 0——0 会被读成「发了，占比很小」，而事实是「没有样本」；'
+        '不排名、不报任何人的用户名，那不是看板，是公开处刑清单；'
+        '不把驳回率和处理人挂钩——按 reviewer 拆驳回率是一份考官成绩单。',
+    ])
     attendance = dashboard['meeting_attendance']
     writer.writerow([])
     writer.writerow(['约好的那一次见面', '数值', '说明'])

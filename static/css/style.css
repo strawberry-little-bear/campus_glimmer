@@ -1281,6 +1281,34 @@ a { color: inherit; text-decoration: none; }
    右侧还有五列数字要占地方。 */
 .report-resolution-quality-panel .ops-table td:first-child { min-width: 9rem; }
 
+/* Operations: meeting incident quality（交付预约异常处理质量）
+   取青碧—松绿这一组冷色。异常是站内唯一一条直指线下安全的申诉，读者翻开这一节时
+   关心的不是「运营干得好不好」，而是「线下那一次见面有没有人管」——冷色比暖色更接近
+   「平台在处理一件正事」的语气。刻意避开红绿两色：驳回与确认不是成功与失败，一条被
+   驳回的异常完全可能是指控本身不成立，用红绿读会让人先看颜色再看数。四周的面板已经
+   占掉青蓝、绿、暖灰、纸冷灰、紫、玫红、蓝灰、米、青灰、赭石，青碧是剩下最不打扰的一档，
+   又和它旁边的举报质量（赭石陶土）分得开——两条都是治理队列，靠色相区分比靠标题区分更快。 */
+.meeting-incident-quality-panel { padding: 14px; border: 1px solid #b9d3c8; border-radius: 14px; background: linear-gradient(135deg, #eef6f1, #f7fbf9); color: #33544a; }
+
+.meeting-incident-quality-panel p { color: #3f6357; }
+
+.meeting-incident-quality-panel .ops-mini-stat { background: #fff; }
+
+.meeting-incident-quality-panel .ops-mini-stat strong { color: #2c5f4d; }
+
+.meeting-incident-quality-panel .ops-mini-stat span,
+.meeting-incident-quality-panel .ops-mini-stat small { color: #6f9184; }
+
+.meeting-incident-quality-panel .table th { color: #3d6152; }
+
+.meeting-incident-quality-panel .table td { vertical-align: top; }
+
+.meeting-incident-quality-panel .ops-footer-note { color: #3f6357; }
+
+/* 异常类型与提交方向两列都放得下两行小字：类型名加一行「这一类没人用」，方向名加一行
+   「样本不足」。第一列同样不 nowrap，右侧还有四到五列数字要占地方。 */
+.meeting-incident-quality-panel .ops-table td:first-child { min-width: 9rem; }
+
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,
