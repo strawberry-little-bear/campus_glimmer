@@ -965,6 +965,88 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 notification-kind-coverage-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Kind coverage</span><h2>通知类型、偏好开关与用户手上的那一栏</h2></div>
+        <span class="ops-panel-hint">三个数本应相等，而它们不相等</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-diagram-3 me-1"></i>站内通知中心上线到现在，<code>Notification.KIND_CHOICES</code> 上有 {{ notification_kind_coverage.current.kind_total }} 种已登记的类型，<code>NotificationPreference</code> 上有自己的布尔开关，<code>NotificationPreferenceForm</code> 里又另有一份字段列表。这三个数本应相等，或者只差免打扰那一组。<strong>它们不相等——而每个表各自都是自洽的，所以差额一直被「看起来像」吃掉了。</strong>要看见它，得把三个数并排放，而不是各自数。本面板读的是三处代码事实：模型元数据、<code>KIND_CHOICES</code>、偏好表单字段，全部现读，不硬编码名单。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已登记类型</span><strong>{{ notification_kind_coverage.current.kind_total }}</strong><small>KIND_CHOICES 与偏好开关的并集</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>没有名字的类型</span><strong>{{ notification_kind_coverage.current.unnamed_count }}</strong><small>不在 KIND_CHOICES 里</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>用户关不掉的开关</span><strong>{{ notification_kind_coverage.current.unreachable_count }}</strong><small>不在偏好表单里</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内通知总数</span><strong>{{ notification_kind_coverage.current.total_sent }}</strong><small>按 created_at 落在周期内筛</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">没有名字的类型</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>类型</th><th>周期发送</th><th>被读</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_kind_coverage.unnamed_rows %}
+                        <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                            <td><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.kind }}</small></td>
+                            <td>{{ row.sent_count }}</td>
+                            <td>{{ row.read_count }}</td>
+                            <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-muted">当前没有正在发送却没有名字的类型。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">后果不止是看板上显示英文：<code>notification_list</code> 的类型筛选器拿 <code>KIND_CHOICES</code> 当白名单，<strong>这一类通知，用户在自己的通知中心里按类型筛不出来。</strong>它照样进来、照样进角标、照样能被点开，但类型下拉里没有它。</div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">用户关不掉的开关</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>类型</th><th>周期发送</th><th>被读</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_kind_coverage.unreachable_rows %}
+                        <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                            <td><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.kind }}</small></td>
+                            <td>{{ row.sent_count }}</td>
+                            <td>{{ row.read_count }}</td>
+                            <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-muted">当前每个类型的开关都在偏好页面上。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">偏好页模板是 <code>{% templatetag openblock %} for field in form.visible_fields {% templatetag closeblock %}</code>，表单里没有的字段，页面上就没有那一行。其余类型的开关全在，用户形成的心智是「这一页能管我的通知」——<strong>一个 Silent 的例外破坏的是这个心智本身。</strong></div>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-2">周期内真的发过的类型，偏好的实际状态</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>类型</th><th>接收人数</th><th>周期发送</th><th>关掉了</th><th>关闭率</th></tr></thead>
+            <tbody>
+                {% for row in notification_kind_coverage.preference_rows %}
+                <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                    <td><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.kind }}</small></td>
+                    <td>{{ row.recipient_count }}</td>
+                    <td>{{ row.sent_count }}</td>
+                    <td>{{ row.switched_off }}</td>
+                    <td>{{ row.switched_off_rate }}%</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-muted">周期内没有发送记录，偏好状态需要先有通知发生。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="empty-inline">只统计发过的类型：一个从没被发送过的类型，它的开关开着或关着都不产生任何后果。开关状态按<strong>发过通知的接收人</strong>统计，不按全站用户——一个从没收过这一类通知的用户，他的开关开着或关着都没有行为意义。不按用户报、不排名、不报任何人的用户名：<strong>「谁关了哪一类」是一份考勤表，不是一份看板。</strong></div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里只报告：不加迁移、不改 <code>KIND_CHOICES</code>、不改 <code>NotificationPreference</code>、不改表单字段列表。那两个窟窿的修法各是一行代码，但那是修复，不是度量——修不修、什么时候修，是另一个决定。不报「偏好关闭让用户少收了多少条」：<code>create_notification</code> 在偏好关闭时直接 <code>return None</code>，被关掉的通知在库里一行都没有，那个数不存在。不把三个数的差解释成「设计疏漏」：为什么不等，代码里看不出来，只报差，不猜原因。</div>
+    {% if not notification_kind_coverage.has_data %}
+    <div class="empty-inline mt-2">{{ notification_kind_coverage.summary }}</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 campaign-analytics-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Campaign performance</span><h2>校园专题表现</h2></div>

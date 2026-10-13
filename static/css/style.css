@@ -1192,6 +1192,30 @@ a { color: inherit; text-decoration: none; }
    都不该被当成异常高亮，只是读的时候要能一眼分开。 */
 .notification-snooze-return-panel .ops-table td:first-child { white-space: nowrap; }
 
+/* 通知类型版图面板自成一组色相（冷灰偏纸，像一张摊开的表格）。
+ * 为什么自成一套颜色：站内通知侧已有三块——通知处理时效面板的青蓝给「多久被处理」，
+ * 私信响应面板的绿给「聊起来了没有」，延后通知回归面板的暖灰给「用户说现在不方便之后
+ * 怎么样了」。这一栏报的不是通知本身的状态，而是三处代码事实之间差了多少：模型元数据、
+ * KIND_CHOICES、偏好表单字段。它是一个「对齐检查」，不是一条业务曲线。
+ * 跟进任务接手等待已经取了冷灰蓝，但那一栏的数字多半是「建了很久，没人碰」，是一条
+ * 线上的时间；这里取更接近纸的冷灰、偏中性，读起来像一张被摊开核对的表，而不是一条
+ * 会涨会跌的曲线。滚动时两个面板不会读成同一件事。
+ * 注意不用红色：两个窟窿都不是故障，是两张表各走了一步，用红色会让运营当成事故去处理。
+ * 也不用绿色：三种表对齐是代码的默认状态，不是平台的成绩。 */
+.notification-kind-coverage-panel { padding: 14px; border: 1px solid #d2d9de; border-radius: 14px; background: linear-gradient(135deg, #f1f5f8, #fafcfd); color: #4d5a63; }
+.notification-kind-coverage-panel p { color: #61707a; }
+.notification-kind-coverage-panel .ops-mini-stat { background: #fff; }
+.notification-kind-coverage-panel .ops-mini-stat strong { color: #40525e; }
+.notification-kind-coverage-panel .ops-mini-stat span,
+.notification-kind-coverage-panel .ops-mini-stat small { color: #7d8b96; }
+.notification-kind-coverage-panel .table th { color: #4f5f6a; }
+.notification-kind-coverage-panel .table td { vertical-align: top; }
+.notification-kind-coverage-panel .badge { font-weight: 600; }
+.notification-kind-coverage-panel .rewrite-candidate-footnote { color: #61707a; }
+.notification-kind-coverage-panel .ops-footer-note { color: #61707a; }
+/* 两张表并排放，第一列的类型名压暗到可以并读，但不当成异常高亮——
+   它们是这栏唯一的主角，压暗的是「占比」那一列上的小样本。 */
+.notification-kind-coverage-panel .ops-table td:first-child { white-space: nowrap; }
 .meeting-attendance-mini-table th,
 .handoff-code-mini-table th { width: 9.5rem; color: #718178; font-weight: 600; white-space: nowrap; }
 .meeting-attendance-mini-table td,

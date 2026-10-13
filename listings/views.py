@@ -34,6 +34,7 @@ from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .demand_opportunity_followups import build_demand_opportunity_followups
 from .demand_task_aging import build_demand_task_aging
 from .notification_snooze_return import build_notification_snooze_return
+from .notification_kind_coverage import build_notification_kind_coverage
 from .meeting_attendance import build_meeting_attendance
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2208,6 +2209,7 @@ def operations_dashboard(request):
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
+    dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2376,6 +2378,7 @@ def operations_dashboard_export(request):
     dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
+    dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2972,6 +2975,81 @@ def operations_dashboard_export(request):
         'snoozed_until 每次延后都被覆盖，所以「延后过几次」在库里不存在，只报「当前有没有被延后」；'
         '不列任何一条通知的原文，按通知类型聚合——通知内容是收发双方的私域内容；'
         '不按用户排名，那是一份考勤表，不是一份看板。',
+    ])
+    attendance = dashboard['meeting_attendance']
+
+    coverage = dashboard['notification_kind_coverage']
+    writer.writerow([])
+    writer.writerow(['通知类型、偏好开关与用户手上的那一栏', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', coverage['summary'],
+        '三个来源（模型元数据、KIND_CHOICES、偏好表单字段）全部从代码现读，不硬编码名单',
+    ])
+    writer.writerow([
+        '已登记的通知类型', coverage['current']['kind_total'],
+        'KIND_CHOICES 与偏好开关的并集，不是只报其中一边',
+    ])
+    writer.writerow([
+        '没有名字的类型', coverage['current']['unnamed_count'],
+        '不在 KIND_CHOICES 里，用户在自己的通知中心里按类型筛不出它们',
+    ])
+    writer.writerow([
+        '用户关不掉的开关', coverage['current']['unreachable_count'],
+        '模型上有、默认开着、真的在发，但不在偏好表单里，页面上没有那一行',
+    ])
+    writer.writerow([
+        '周期内通知总数', coverage['current']['total_sent'],
+        '按 created_at 落在统计周期内筛',
+    ])
+    writer.writerow([])
+    writer.writerow(['没有名字的类型', '周期发送', '被读', '占全部通知（%）', '样本是否够'])
+    if not coverage['has_data']:
+        writer.writerow(['当前周期还没有通知数据。'])
+    else:
+        for row in coverage['unnamed_rows']:
+            writer.writerow([
+                row['label'],
+                row['sent_count'] if row['sent_in_period'] else '—',
+                row['read_count'] if row['sent_in_period'] else '—',
+                '—' if row['share'] is None else row['share'],
+                f"不足 {coverage['min_bucket_sample']} 条" if row['is_small_sample'] else '够',
+            ])
+    writer.writerow([])
+    writer.writerow(['用户关不掉的开关', '周期发送', '被读', '占全部通知（%）', '样本是否够'])
+    if not coverage['has_data']:
+        writer.writerow(['当前周期还没有通知数据。'])
+    else:
+        for row in coverage['unreachable_rows']:
+            writer.writerow([
+                row['label'],
+                row['sent_count'] if row['sent_in_period'] else '—',
+                row['read_count'] if row['sent_in_period'] else '—',
+                '—' if row['share'] is None else row['share'],
+                f"不足 {coverage['min_bucket_sample']} 条" if row['is_small_sample'] else '够',
+            ])
+    writer.writerow([])
+    writer.writerow(['周期内真的发过的类型，偏好的实际状态', '接收人数', '周期发送', '关掉了', '关闭率（%）', '样本是否够'])
+    if not coverage['preference_rows']:
+        writer.writerow(['周期内没有发送记录，或接收人不足样本门槛，暂不判断偏好状态。'])
+    else:
+        for row in coverage['preference_rows']:
+            writer.writerow([
+                row['label'], row['recipient_count'], row['sent_count'],
+                row['switched_off'], row['switched_off_rate'],
+                f"不足 {coverage['min_bucket_sample']} 人" if row['is_small_sample'] else '够',
+            ])
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '三个数本应相等，而它们不相等：KIND_CHOICES、NotificationPreference 的布尔开关、'
+        'NotificationPreferenceForm.Meta.fields 各是一张表，各自都自洽，差额一直被「看起来像」吃掉了。'
+        '要看见它，得把三个数并排放，而不是各自数。'
+        '「没有名字」问的是用户收到的东西在看板上叫什么，「关不掉」问的是用户能不能对自己的通知说不，'
+        '两者问的不是同一件事，所以分两张表报，不相加也不相减。'
+        '开关状态按发过通知的接收人统计，不按全站用户：一个从没收过这一类通知的用户，他的开关开着或关着'
+        '都没有行为意义。这里只报告：不加迁移、不改 KIND_CHOICES、不改 NotificationPreference、'
+        '不改表单字段列表；不按用户排名，那是一份考勤表，不是一份看板；'
+        '不列任何一条通知的原文；空分母报「—」不报 0——0 会被读成「发了，占比很小」。',
     ])
     attendance = dashboard['meeting_attendance']
     writer.writerow([])
