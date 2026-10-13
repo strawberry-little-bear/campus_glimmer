@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
 """冒烟：确认通知偏好开关面板与 CSV 都能渲染/导出，不报 KeyError。
 
-这一节的关键不在「能打开」，而在两个只在渲染期才会炸的形状：
+这一节的关键不在「能打开」，而在三个只在渲染期才会炸的形状：
 
 1. 模板里用 `{{ notification_preference_usage.rows|length }}` 报开关个数，空平台时
    `rows` 是空列表，`|length` 给 0——所以摘要里那句「其余 N 个」会变成负数，
    页面照样渲染，只是文案变成一句错话；
-2. `by_group` 空列表走 `{% empty %}` 分支，`share` 为 None 走 `&mdash;` 分支。
+2. `by_group` 空列表走 `{% empty %}` 分支，`share` 为 None 走 `&mdash;` 分支；
+3. 导出的那一行标题必须和面板的 `<h3>` 是同一个数。空平台时面板渲染「0 个开关逐个看」
+   而导出写死「25 个」，屏幕和下载件就是两句话——`test_dashboard_export_columns`
+   的三个失败全是这一处造成的。
 """
+import re
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
@@ -82,6 +87,15 @@ class NotificationPreferenceUsageSmokeTests(TestCase):
         self.assertEqual(export.status_code, 200)
         text = export.content.decode('utf-8-sig')
         self.assertIn('当前平台还没有任何偏好行', text)
+        # 屏幕和下载件必须是同一句话：面板的 <h3> 由 rows|length 算出来，空平台是 0。
+        # 导出这边曾经写死 25，于是同一个标题在两处不一致——这里把那条线守住。
+        subheads = re.findall(r'<h3[^>]*>(.*?)</h3>', response.content.decode('utf-8'), re.S)
+        panel_subhead = next(
+            (re.sub(r'<[^>]+>', '', s).strip() for s in subheads if '个开关逐个看' in s),
+            None,
+        )
+        self.assertIsNotNone(panel_subhead)
+        self.assertIn(panel_subhead, text)
 
     def test_dashboard_and_export_render_with_notifications_but_no_preference_rows(self):
         # 收到过通知却一条偏好行都没有：覆盖「没有偏好行的用户」那一格，

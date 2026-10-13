@@ -3435,7 +3435,7 @@ def operations_dashboard_export(request):
     ])
     usage = dashboard['notification_preference_usage']
     writer.writerow([])
-    writer.writerow(['通知偏好开关：25 个开关各自的形状', '数值', '说明'])
+    writer.writerow([f"通知偏好开关：{usage['field_total']} 个开关各自的形状", '数值', '说明'])
     writer.writerow([
         '口径与门槛', usage['summary'],
         '开关名单从模型元数据现读，不硬编码；被开关挡掉的通知连一行都不建，'
@@ -3476,7 +3476,7 @@ def operations_dashboard_export(request):
         f"{usage['min_preference_rows']} 行才给占比。",
     ])
     writer.writerow([])
-    writer.writerow(['25 个开关逐个看', '分组', '开着', '关掉', '近期收到过的用户', '关着却仍收到过', '开着却没收到过', '样本是否够'])
+    writer.writerow([f"{len(usage['rows'])} 个开关逐个看", '分组', '开着', '关掉', '近期收到过的用户', '关着却仍收到过', '开着却没收到过', '样本是否够'])
     if not usage['has_data']:
         writer.writerow(['当前平台还没有任何偏好行。'])
     else:
