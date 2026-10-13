@@ -1,4 +1,5 @@
 import csv
+import logging
 import mimetypes
 import secrets
 from decimal import Decimal, InvalidOperation
@@ -88,7 +89,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
@@ -112,6 +113,9 @@ from .saved_search_digest import deliver_buffered_saved_search_matches
 from .transaction_safety import build_transaction_safety
 from chat_messages.models import ModerationEvent, PrivateMessage
 from accounts.models import CampusVerification
+
+logger = logging.getLogger(__name__)
+
 
 
 def _favorite_ids(request):
@@ -1914,10 +1918,52 @@ def circular_impact_report(request):
     })
 
 
+def _record_opportunity_impressions(user, opportunities):
+    """把这一屏被渲染出去的机会，一次性写进 `OpportunityImpression`。
+
+    这是 `opportunity_dismissal_quality` 报忽略率所缺的那个分母。忽略表只记「忽略」、
+    不记「看过」，一条机会被渲染出来而用户什么也没点，库里一行都没有，所以「窗口内被展示
+    过的机会」一直不可得，那个模块只能报忽略自己的形状。
+
+    三处口径，逐条都是为了让分母和分子说的是同一件事：
+
+    - **只有成功渲染了才写。** 没有机会可渲染时这里拿到的是空列表，一次 insert 都不发。
+    - **每次渲染一行，不去重。** 同一条机会在不同时刻被渲染给同一个人是两次独立的展示，
+      去重会让分母变小、忽略率虚高。这正是它和 `OpportunityDismissal` 上那两个无条件
+      唯一约束的区别：忽略该折叠，展示不该。
+    - **一次 `bulk_create`。** 一屏最多 12 条，一次渲染就是一次 round-trip，不随用户在售
+      商品数增长；也不为这个面板多跑任何一次 select。
+
+    失败不致命：曝光写不进去，页面照常渲染，只是这一次展示进不了分母。用
+    `transaction.TransactionManagementError` 之外的所有异常兜住，是因为这里跑在请求里，
+    一次写入失败不该把整页机会流变成 500。
+    """
+    rows = []
+    for opportunity in opportunities:
+        rows.append(OpportunityImpression(
+            user=user,
+            kind=opportunity['kind'],
+            demand_id=opportunity['target'].id if opportunity['kind'] == 'demand' else None,
+            lost_found_post_id=(
+                opportunity['target'].id if opportunity['kind'] == 'lost_found' else None
+            ),
+            shown_at=timezone.now(),
+        ))
+    if not rows:
+        return
+    try:
+        OpportunityImpression.objects.bulk_create(rows, batch_size=32)
+    except Exception:
+        # 只报告、不影响用户：写不进去的分母只是让这一周期的忽略率偏低，见 docstring。
+        logger.exception('记录互助机会展示失败：用户 %s，%d 条机会', user.pk, len(rows))
+
+
 @login_required
 def opportunity_feed(request):
+    feed = build_opportunity_feed(request.user)
+    _record_opportunity_impressions(request.user, feed['opportunities'])
     return render(request, 'listings/opportunity_feed.html', {
-        'feed': build_opportunity_feed(request.user),
+        'feed': feed,
         'title': '校园互助机会',
     })
 
@@ -7921,6 +7967,54 @@ def operations_dashboard_export(request):
             f"{row['repeat_share']}%" if row['repeat_share'] is not None else '本周期没有忽略',
         ])
     writer.writerow([])
+    writer.writerow(['忽略率：分母来自 OpportunityImpression'])    # 表格标题行
+    writer.writerow(['指标', '数值', '说明'])
+    rate = dismissal['dismissal_rate']
+    writer.writerow([
+        '窗口内第一次被看见的机会', rate['denominator'],
+        '按（用户, 机会类型, 目标）去重，只看窗口内最早那次展示',
+    ])
+    writer.writerow([
+        '其中被按了「不再显示」', rate['numerator'],
+        '分子要求该机会在窗口内至少被展示过一次',
+    ])
+    writer.writerow([
+        '忽略率（%）',
+        f"{rate['rate']}%" if rate['rate'] is not None else '分母为空，报 None 不报 0',
+        '下界，只低不高：窗口外看到、窗口内才按按钮的忽略进不了分子',
+    ])
+    writer.writerow([
+        '分母样本是否够',
+        '够' if not rate['is_small_sample'] else f"不足 {dismissal['metrics']['min_impressions']} 条",
+        '不足时只报数字不给方向',
+    ])
+    writer.writerow([
+        '窗口内展示总行数', dismissal['metrics']['impression_total'],
+        '一行一次渲染，不去重：展示不该折叠',
+    ])
+    writer.writerow([
+        '渲染过不止一次的机会',
+        sum(
+            1 for row in dismissal['rate_rows']
+            if not row.get('is_unscored') and row['shown_count'] > 1
+        ),
+        '与重复忽略是一对正交读数：展示了 5 次只忽略 1 次是在忍',
+    ])
+    writer.writerow([])
+    writer.writerow(['按分数档的忽略率'])    # 表格标题行
+    writer.writerow([
+        '类型', '分数档', '被看见次数', '其中被忽略', '忽略率（%）', '渲染过不止一次',
+    ])
+    for row in dismissal['rate_rows']:
+        writer.writerow([
+            row['kind_label'],
+            row['label'],
+            row['shown_count'],
+            row['dismissal_count'],
+            f"{row['dismissal_rate']}%" if row['dismissal_rate'] is not None else '',
+            row['repeat_show_count'],
+        ])
+    writer.writerow([])
     writer.writerow(['结论'])
     writer.writerow([dismissal['summary']])
     for note in dismissal['recommendations']:
@@ -7930,9 +8024,11 @@ def operations_dashboard_export(request):
         if shape and shape.get('has_comparison'):
             writer.writerow([shape['summary']])
     writer.writerow([
-        '本模块不报忽略率：分母（被展示过的机会）不可得，OpportunityDismissal 只记忽略'
-        '不记看过，机会流页面也不产生任何可反推的记录。按分数档和按理由两处的分子分母'
-        '都是忽略，报的是占比不是率。重复忽略是唯一敢报的比例，因为它有自己的分母。'
+        '忽略率的分母从这一轮起真正落库：OpportunityImpression 在 views.opportunity_feed '
+        '每次渲染时写一行，一次 bulk_create。它刻意不设（用户, 目标）唯一约束——忽略该折叠，'
+        '展示不该，折叠会让分母变小、忽略率虚高。分母只数窗口内第一次被看见的（用户, 机会），'
+        '分子要求该机会在窗口内至少被展示过一次；这个数仍然是下界，只低不高。空分母报 None '
+        '不报 0，分母不足 24 条只报数字不给方向。历史数据不回填，曝光表自上线起才开始积累。'
         '分数在忽略时刻重算，走 _match_demand 与 score_lost_found_posts 自己，还原的是'
         '「今天再进池」的分数，不是忽略那一刻的分数。本模块只报告，不改任何一行的 '
         'expires_at、不改 30 天静默期、不动两个匹配器的任何常数、不按用户聚合。',

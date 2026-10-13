@@ -1640,6 +1640,75 @@ class OpportunityDismissal(models.Model):
         return f'{self.user.username} · 暂不展示 · {target}'
 
 
+class OpportunityImpression(models.Model):
+    """一条互助机会被渲染给了某个用户——忽略率的分母。
+
+    `OpportunityDismissal` 只记「忽略」，不记「看过」：一条机会被渲染出来、用户什么也
+    没点，忽略表里一行都没有，所以「窗口内被展示过的机会」这个数一直不可得，
+    `opportunity_dismissal_quality` 因此只报忽略自己的形状、不报忽略率。
+
+    本表把「被看见」这件事真正落库。写入点在 `views.opportunity_feed`：一次请求把这一屏
+    的机会渲染出去，就把这一屏的事实用一次 `bulk_create` 写进来。一屏最多 12 条，所以
+    一次渲染最多 12 行，插入成本是固定的、不随用户在售商品数增长。
+
+    **刻意不设 `(user, demand)` / `(user, lost_found_post)` 唯一约束。**
+    `OpportunityDismissal` 上有两个无条件唯一约束，因为「忽略」在业务上就该折叠成一
+    行；「展示」不是——同一条机会在不同时刻被渲染给同一个人是两次独立的展示，折叠会让
+    分母变小，而分母变小会让忽略率虚高。这里每次渲染一行。
+
+    **不回填历史数据。** 本表从落库那一刻起才开始积累，之前的周期没有分母，那些周期的
+    忽略率是 `None` 而不是 0。
+    """
+
+    KIND_CHOICES = (
+        ('demand', '校园求购'),
+        ('lost_found', '失物招领'),
+    )
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='opportunity_impressions',
+        verbose_name='用户',
+    )
+    kind = models.CharField('机会类型', max_length=20, choices=KIND_CHOICES)
+    demand = models.ForeignKey(
+        'DemandPost', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='opportunity_impressions', verbose_name='求购信息',
+    )
+    lost_found_post = models.ForeignKey(
+        LostFoundPost, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='opportunity_impressions', verbose_name='失物招领记录',
+    )
+    shown_at = models.DateTimeField('展示时间', db_index=True)
+
+    class Meta:
+        verbose_name = '互助机会展示记录'
+        verbose_name_plural = '互助机会展示记录'
+        ordering = ['-shown_at']
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind='demand', demand__isnull=False, lost_found_post__isnull=True)
+                    | models.Q(kind='lost_found', demand__isnull=True, lost_found_post__isnull=False)
+                ),
+                name='opportunity_impression_target_matches_kind',
+            ),
+        ]
+        indexes = [
+            # 忽略率的分母查询按 (kind, shown_at) 扫窗口，再按 target 分组。
+            models.Index(fields=['kind', 'shown_at'], name='opp_imp_kind_shown_idx'),
+            models.Index(fields=['user', 'shown_at'], name='opp_imp_user_shown_idx'),
+            models.Index(fields=['demand', 'shown_at'], name='opp_imp_demand_shown_idx'),
+            models.Index(
+                fields=['lost_found_post', 'shown_at'],
+                name='opp_imp_lf_shown_idx',
+            ),
+        ]
+
+    def __str__(self):
+        target = self.demand or self.lost_found_post
+        return f'{self.user.username} · 看到过 · {target}'
+
+
 class LostFoundLead(models.Model):
     """A private lead sent in response to a lost-and-found post."""
 

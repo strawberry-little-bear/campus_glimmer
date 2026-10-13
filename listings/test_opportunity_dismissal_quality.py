@@ -5,8 +5,9 @@
 「暂不展示」落一行 `OpportunityDismissal`，读路径只有机会流自己。这个模块把这些忽略读出
 来只报告不改写。这些测试要钉住的是比数字本身更要紧的那些取舍：
 
-1. **不报忽略率。** 分母（展示过的机会）不可得，所以报告里没有任何一个「忽略率」字
-   段——连占位都不给。
+1. **报忽略率，分母来自 `OpportunityImpression`。** 早期版本的分母（展示过的机会）不
+   可得，那时报告里没有任何一个「忽略率」字段。展示表落库之后率第一次可测，且它仍然只
+   报下界——先在周期外看到、周期内才按按钮的那些忽略进不了分子。
 2. 归期按 `created_at`，重复忽略的判据是 `expires_at` 和 `created_at` 的距离。
 3. 按 `kind` 拆、按分数档拆、按理由拆，三处的分子分母都是忽略，报的是占比不是率。
 4. 重复忽略是本模块唯一敢报出来的比例，因为它有自己的分母（窗口内全部忽略）。
@@ -14,6 +15,9 @@
 6. 样本不足或占比相差不满噪声线时只报数字，不给方向。
 7. 空平台不报 0%，也不报 0 条以外的任何形状。
 8. 只报告：不改 `expires_at`、不删行、不动两个匹配器的任何常数。
+9. **忽略率的分母只数窗口内第一次被看见的对。** 一条机会在窗口外就被看见过、窗口内又
+   被看见，分母只计第一次；分母重复计而分子不重复计会让率虚低。
+10. **忽略率报下界。** 分子要求「这条忽略对应的机会在窗口内至少被展示过一次」。
 """
 
 from datetime import timedelta
@@ -24,9 +28,12 @@ from django.utils import timezone
 
 from .demand_matching import _match_demand
 from .lost_found_matching import score_lost_found_posts
-from .models import CampusLocation, Category, DemandPost, Item, LostFoundPost, OpportunityDismissal
+from .models import (
+    CampusLocation, Category, DemandPost, Item, LostFoundPost, OpportunityDismissal,
+    OpportunityImpression,
+)
 from .opportunity_dismissal_quality import (
-    MIN_BAND_SAMPLE, MIN_REASON_SAMPLE, NOISE_POINTS, SILENCE_DAYS,
+    MIN_BAND_SAMPLE, MIN_IMPRESSIONS, MIN_REASON_SAMPLE, NOISE_POINTS, SILENCE_DAYS,
     build_opportunity_dismissal_quality,
 )
 
@@ -95,6 +102,25 @@ class OpportunityDismissalQualityTests(TestCase):
         dismissal.refresh_from_db()
         return dismissal
 
+    def make_impression(self, *, kind='demand', target=None, days_ago=1, seller=None,
+                        shown_times=1):
+        """建 `shown_times` 行展示记录，默认都是同一天、同一个人、同一条机会。
+
+        `shown_times > 1` 用来测 `repeat_show_count`：一条机会被渲染过不止一次。`shown_at`
+        显式回填，因为统计窗口按它切，建行时拿到的是真实墙上时间，不回填会让这些行落在窗口
+        右端之外。
+        """
+        target = target or self.make_demand()
+        rows = []
+        for index in range(shown_times):
+            rows.append(OpportunityImpression(
+                user=seller or self.seller, kind=kind,
+                demand=target if kind == 'demand' else None,
+                lost_found_post=None if kind == 'demand' else target,
+                shown_at=timezone.now() - timedelta(days=days_ago, minutes=index),
+            ))
+        return OpportunityImpression.objects.bulk_create(rows, batch_size=32)
+
     def make_lost_found_pair(self):
         """建一对方向相反的失物招领记录，返回「别人的那条」作为忽略目标。"""
         mine = LostFoundPost.objects.create(
@@ -111,27 +137,150 @@ class OpportunityDismissalQualityTests(TestCase):
         )
         return mine, theirs
 
-    # --- 分母：本模块不报忽略率 ---
+    # --- 分母：忽略率来自展示表 ---
 
-    def test_the_report_never_publishes_a_dismissal_rate(self):
-        # 分母（展示过的机会）不可得：OpportunityDismissal 只记忽略不记看过，机会流页面
-        # 也不产生任何可反推的记录。所以报告里没有任何一个「率」字段，连占位都不给——
-        # 报一个用页面构造当分母的估算率，会让运营以为自己量过，那比没有数字更糟。
-        self.make_dismissal()
+    def test_dismissal_rate_is_measured_from_impressions_not_estimated(self):
+        # 忽略率的分母来自 OpportunityImpression，不是用页面构造估的。一条机会被看见、
+        # 又被按了不再显示，率就是 100%；分母为空时报 None 而不是 0。
+        item = self.make_item()
+        demand = self.make_demand()
+        self.make_impression(target=demand)
+        self.make_dismissal(target=demand)
+
+        report = build_opportunity_dismissal_quality(days=30)
+        rate = report['dismissal_rate']
+
+        self.assertEqual(rate['denominator'], 1)
+        self.assertEqual(rate['numerator'], 1)
+        self.assertEqual(rate['rate'], 100.0)
+
+    def test_dismissal_rate_is_none_when_nothing_was_shown(self):
+        # 窗口内一条展示都没有，忽略率不存在，不是零。这是「空分母报 None」的契约。
+        demand = self.make_demand()
+        self.make_dismissal(target=demand)
 
         report = build_opportunity_dismissal_quality(days=30)
 
-        for key in ('dismissal_rate', 'ignore_rate', 'rate'):
-            self.assertNotIn(key, report)
-            self.assertNotIn(key, report['metrics'])
-            self.assertNotIn(key, report['repeat_stats'])
-        for row in report['kind_rows']:
-            self.assertNotIn('dismissal_rate', row)
-        for row in report['band_rows']:
-            self.assertNotIn('dismissal_rate', row)
-            self.assertNotIn('rate', row)
-        for row in report['reason_rows']:
-            self.assertNotIn('dismissal_rate', row)
+        self.assertIsNone(report['dismissal_rate']['rate'])
+        self.assertEqual(report['dismissal_rate']['denominator'], 0)
+
+    def test_rate_denominator_counts_only_first_seen_in_window(self):
+        # 同一条机会被渲染三次，分母只计一次——折叠会让分母变小、忽略率虚高。三次渲染的
+        # 事实仍然完整保留在 shown_count / repeat_show_count 里。
+        item = self.make_item()
+        demand = self.make_demand()
+        self.make_impression(target=demand, shown_times=3)
+        self.make_dismissal(target=demand)
+
+        report = build_opportunity_dismissal_quality(days=30)
+        rate = report['dismissal_rate']
+
+        self.assertEqual(rate['denominator'], 1)
+        self.assertEqual(rate['rate'], 100.0)
+        row = next(
+            row for row in report['rate_rows']
+            if row['kind'] == 'demand' and row['shown_count']
+        )
+        self.assertEqual(row['repeat_show_count'], 1)
+
+    def test_rate_numerator_requires_an_in_window_impression(self):
+        # 窗口外被看见、窗口内才按按钮的那条忽略进不了分子：它没有窗口内的分母，算进去
+        # 会让率虚高。这里展示发生在 40 天前（窗口外），忽略发生在窗口内。
+        item = self.make_item()
+        demand = self.make_demand()
+        self.make_impression(target=demand, days_ago=40)
+        self.make_dismissal(target=demand, days_ago=1)
+
+        report = build_opportunity_dismissal_quality(days=30)
+        rate = report['dismissal_rate']
+
+        self.assertEqual(rate['denominator'], 0)
+        self.assertEqual(rate['numerator'], 0)
+        self.assertIsNone(rate['rate'])
+
+    def test_rate_is_a_lower_bound_and_says_so(self):
+        # 率报出来的是下界：一条机会在窗口内被看见，用户在窗口外先看到过它才按按钮，
+        # 分母计它、分子不计它。这个方向必须写在面板上，所以 summary 里要有「下界」。
+        item = self.make_item()
+        demand = self.make_demand()
+        self.make_impression(target=demand, days_ago=2)
+        self.make_dismissal(target=demand, days_ago=1)
+
+        report = build_opportunity_dismissal_quality(days=30)
+
+        self.assertTrue(report['summary'])
+        self.assertIn('下界', report['recommendations'][-1] if report['recommendations'] else '')
+
+    def test_small_sample_rate_reports_numbers_without_direction(self):
+        # 分母不足 MIN_IMPRESSIONS 时只报数字、不给方向。这里只有 1 次展示，所以
+        # is_small_sample 为真、has_direction 为假，但数字本身照报。
+        item = self.make_item()
+        demand = self.make_demand()
+        self.make_impression(target=demand)
+        self.make_dismissal(target=demand)
+
+        report = build_opportunity_dismissal_quality(days=30)
+        rate = report['dismissal_rate']
+
+        self.assertTrue(rate['is_small_sample'])
+        self.assertFalse(rate['has_direction'])
+        self.assertEqual(rate['rate'], 100.0)
+        self.assertIn(str(MIN_IMPRESSIONS), report['summary'])
+
+    def test_rate_rows_split_by_band_with_impressions_as_denominator(self):
+        # 按分数档拆的忽略率：分母是这一档被看见的次数，分子是被忽略的次数。上一轮这里
+        # 只能报「这一档占全部忽略的比例」（形状），这一轮报的是真正的率。
+        demand = self.make_demand()
+        for index in range(MIN_BAND_SAMPLE + 1):
+            seller = User.objects.create_user(username=f'rate-seller-{index}')
+            self.make_item(title=f'忽略率商品 {index}', seller=seller)
+            self.make_impression(target=demand, seller=seller)
+        # 其中两条被忽略。
+        self.make_dismissal(target=demand, seller=User.objects.get(username='rate-seller-0'))
+        self.make_dismissal(target=demand, seller=User.objects.get(username='rate-seller-1'))
+
+        report = build_opportunity_dismissal_quality(days=30)
+        row = next(
+            row for row in report['rate_rows']
+            if row['kind'] == 'demand' and row['shown_count'] == MIN_BAND_SAMPLE + 1
+        )
+
+        self.assertEqual(row['shown_count'], MIN_BAND_SAMPLE + 1)
+        self.assertEqual(row['dismissal_count'], 2)
+        self.assertAlmostEqual(row['dismissal_rate'], round(2 / (MIN_BAND_SAMPLE + 1) * 100, 1))
+        self.assertFalse(row['is_small_sample'])
+
+    def test_repeat_show_count_counts_opportunities_shown_more_than_once(self):
+        # repeat_show_count 是重复忽略的正交读数：一条机会被渲染过不止一次。展示了 5 次
+        # 只忽略 1 次是用户在忍，展示了 5 次忽略 3 次是静默期对该用户无效。
+        demand = self.make_demand()
+        self.make_impression(target=demand, shown_times=5)
+
+        report = build_opportunity_dismissal_quality(days=30)
+        row = next(
+            row for row in report['rate_rows']
+            if row['kind'] == 'demand' and row['shown_count']
+        )
+
+        self.assertEqual(row['repeat_show_count'], 1)
+        self.assertEqual(row['dismissal_count'], 0)
+
+    def test_rate_rows_report_none_not_zero_for_empty_bands(self):
+        # 一个分数档一次都没被看见，它的忽略率是 None，不是 0。空平台报 0% 会被读成
+        # 「这一档没有机会被忽略」，而真相是这一档根本没出现过。
+        report = build_opportunity_dismissal_quality(days=30)
+
+        for row in report['rate_rows']:
+            if not row['shown_count']:
+                self.assertIsNone(row['dismissal_rate'])
+
+    def test_rate_shape_compares_rates_not_shares(self):
+        # 按分数档读出来的形状比的是率（分母是展示），不是占比。两个 kind 分开读。
+        report = build_opportunity_dismissal_quality(days=30)
+
+        for kind in ('demand', 'lost_found'):
+            self.assertIn(kind, report['rate_shape'])
+            self.assertIn('has_comparison', report['rate_shape'][kind])
 
     def test_band_and_reason_shares_are_shapes_not_rates(self):
         # 按分数档和按理由拆开的两处，分子分母都是忽略：share_of_kind 是「这一档占全部
