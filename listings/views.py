@@ -89,7 +89,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
@@ -131,11 +131,13 @@ def home(request):
     categories = Category.objects.annotate(available_count=Count('items', filter=active_item_filter))
     locations = CampusLocation.objects.filter(is_active=True).annotate(available_count=Count('items', filter=active_item_filter))
     recent_items = Item.objects.available().select_related('category', 'seller', 'location').prefetch_related('images')[:8]
+    recommendations = get_recommendations(request.user, limit=8)
+    _record_recommendation_impressions(request.user, recommendations)
     context = {
         'categories': categories,
         'locations': locations,
         'recent_items': recent_items,
-        'recommendations': get_recommendations(request.user, limit=8),
+        'recommendations': recommendations,
         'favorite_ids': _favorite_ids(request),
         'stats': {
             'items': Item.objects.available().count(),
@@ -144,6 +146,63 @@ def home(request):
         },
     }
     return render(request, 'listings/home.html', context)
+
+
+def _record_recommendation_impressions(user, recommendations):
+    """把首页这一屏被渲染出去的推荐卡，一次性写进 `RecommendationImpression`。
+
+    这是 `recommendation_quality` 报反馈率所缺的那个分母。反馈表只记「表了态」、
+    不记「看过」：一张卡被渲染出来而用户什么也没点，库里一行都没有，所以反馈率只能
+    拿 `BrowsingHistory` 反推一个下界——一件从搜索点进去的商品也占分母，却没有推荐
+    卡可点。本表把「被看见」这件事真正落库，见
+    `docs/recommendation-impression-design.md`。
+
+    与 `_record_opportunity_impressions` 共用一套骨架，两处差别都是业务前提决定的：
+
+    - **`reason_key` 与 `score` 跟着一起落库。** 机会流那边刻意不存，因为那边的分数
+      在忽略时刻要重算（双向匹配，同一条机会不同时刻进池分数会变），存一份「当时的
+      分数」只会得到一份永远对不齐的数据；首页这边 `Recommendation` 是 frozen
+      dataclass，理由和分数在渲染那一刻就已经算出来了，跟着 `item` 一起在内存里，
+      落库是零成本的。存了它，「当时挂这句话的卡，用户点了吗」第一次有了推荐当时的
+      分母。
+    - **匿名访客也写。** 首页「为你挑选」对没登录的人照常渲染（模板只把标题换成
+      「校园里正在被关注」、把两个反馈按钮收起来，卡照常出），所以匿名用户的看见同
+      样要落库，`user` 存 null。否则首页最大的那部分流量整块不在分母里，反馈率会变
+      成一个只有登录用户才配被统计的数。
+
+    四处口径，逐条都是为了让分母和分子说的是同一件事：
+
+    - **只有成功渲染了才写。** 没有推荐可渲染时这里拿到的是空列表，一次 insert 都
+      不发。
+    - **每次渲染一行，不去重。** 同一件商品在不同时刻被渲染给同一个人是两次独立的
+      看见，去重会让分母变小、反馈率虚高。这正是它和 `RecommendationFeedback` 上
+      `unique_recommendation_feedback` 的区别：表态该折叠，看见不该。
+    - **一次 `bulk_create`。** 一屏最多 8 张（`get_recommendations` 的 `limit=8`），
+      一次渲染就是一次 round-trip，不随商品总数增长；也不为这个面板多跑任何一次
+      select。
+    - **失败不致命。** 曝光写不进去，页面照常渲染，只是这一屏的看见进不了分母。用
+      `transaction.TransactionManagementError` 之外的所有异常兜住，是因为这里跑在
+      请求里，一次写入失败不该把整页首页变成 500。
+    """
+    # 匿名访客照常写，`user` 存 null。`request.user` 在没登录时是 AnonymousUser，直接
+    # 赋给外键会抛 ValueError，所以这里先落成 None。
+    user_id = user.pk if user.is_authenticated else None
+    rows = []
+    for position, recommendation in enumerate(recommendations, start=1):
+        rows.append(RecommendationImpression(
+            user_id=user_id,
+            item=recommendation.item,
+            reason_key=recommendation.reason_key,
+            score=recommendation.score,
+            position=position,
+        ))
+    if not rows:
+        return
+    try:
+        RecommendationImpression.objects.bulk_create(rows, batch_size=32)
+    except Exception:
+        # 只报告、不影响用户：写不进去的分母只是让这一周期的反馈率偏低，见 docstring。
+        logger.exception('记录首页推荐展示失败：用户 %s，%d 张卡', user.pk, len(rows))
 
 
 def _parse_price(value):
@@ -7838,6 +7897,9 @@ def operations_dashboard_export(request):
     writer.writerow([
         '反馈后动作窗口（天）', quality['metrics']['followup_window_days'],
     ])
+    writer.writerow([
+        '曝光样本门槛（次被看见）', quality['metrics']['min_recommendation_impressions'],
+    ])
     writer.writerow(['整体'])    # 表格标题行
     writer.writerow(['指标', '数值', '说明'])
     loop = quality['feedback_loop']
@@ -7854,12 +7916,13 @@ def operations_dashboard_export(request):
         '先「想看」后「不感兴趣」的行数，一次改口算一条',
     ])
     writer.writerow([
-        '被点开过的商品', loop['viewed_recommendations'],
-        '反馈率的分母：窗口内全部被点开过的商品，不和反馈取交集',
+        '被看见的卡', loop['viewed_recommendations'],
+        '反馈率的分母：窗口内第一次被看见的（用户, 商品）对，来自 RecommendationImpression，不和反馈取交集',
     ])
     writer.writerow([
-        '反馈率', f"{loop['feedback_rate']}%" if loop['feedback_rate'] is not None else '本周期没有被点开过的商品',
-        '这是反馈率的下界，只低不高：从搜索点进去的商品也占分母却没有推荐卡可点',
+        '反馈率', f"{loop['feedback_rate']}%" if loop['feedback_rate'] is not None else '本周期没有被看见过的卡',
+        '分母自本轮起真正落库（首页每次渲染写一行 RecommendationImpression），此前只能拿 BrowsingHistory '
+        '反推、报的是下界；现在仍是下界、只低不高，偏低来源见「按推荐当时的理由」一节的说明',
     ])
     writer.writerow([])
     writer.writerow(['按理由拆'])    # 表格标题行
@@ -7875,6 +7938,34 @@ def operations_dashboard_export(request):
             '够' if not row['is_small_sample'] else f"不足 {quality['metrics']['min_reason_feedback']} 条",
         ])
     writer.writerow([])
+    writer.writerow(['按推荐当时的理由'])
+    writer.writerow([
+        '这一层读的是推荐那一刻挂在卡上的理由（渲染时随卡一起落库），问「当时挂这句话的卡，'
+        '用户点了吗」；上面「按理由拆」读的是反馈时刻重算的理由，问「这句理由今天还成立吗」。'
+        '两问不能混：用户点完按钮又去收藏、又去浏览，会让后一句滑走，前一句不会。',
+    ])
+    writer.writerow(['当时的理由', '被看见', '被点开', '反馈率', '样本是否够'])
+    for row in quality['reason_impression_rows']:
+        if not row['shown_count']:
+            continue
+        writer.writerow([
+            row['label'], row['shown_count'], row['feedback_count'],
+            f"{row['feedback_rate']}%" if row['feedback_rate'] is not None else '没有看见',
+            '够' if not row['is_small_sample']
+            else f"不足 {quality['metrics']['min_recommendation_impressions']} 次",
+        ])
+    writer.writerow([])
+    writer.writerow(['按推荐当时的分数档'])
+    writer.writerow([
+        '档位边界照三个可解释的加分取（+10 反馈匹配、+8 分类匹配、+5 地点匹配），不按分数等分。'
+        '只报规模不报反馈率：分数是五部分相加的结果，两个同分的商品可能一个靠新鲜度一个靠分类。',
+    ])
+    writer.writerow(['分数档', '被看见'])
+    for row in quality['score_bands']:
+        if not row['shown_count']:
+            continue
+        writer.writerow([row['label'], row['shown_count']])
+    writer.writerow([])
     writer.writerow(['结论'])
     writer.writerow([quality['summary']])
     for note in quality['recommendations']:
@@ -7884,7 +7975,9 @@ def operations_dashboard_export(request):
         '复算里的 feedback_match 取「改过口」，因为只表过一次态的行，'
         '点击本身就是入集合的那个动作，「你标记过想看」那一刻还没生效。'
         '复算还原的是点击那一刻的理由，不是推荐当时的理由。'
-        '反馈率的分母是窗口内全部被点开过的商品，只低不高。'
+        '反馈率的分母是窗口内第一次被看见的卡，来自 RecommendationImpression，仍是下界：'
+        '反馈的 updated_at 可能在窗口外、按钮的动机可能来自窗口外那次看见、'
+        '曝光表自上线起才开始积累。'
         '本模块只报告，不调 +10、不调 0.8、不调 +8、不改任何一句理由文案。',
     ])
     dismissal = dashboard['opportunity_dismissal_quality']

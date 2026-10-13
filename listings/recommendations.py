@@ -13,6 +13,10 @@ class Recommendation:
     item: Item
     reason: str
     score: float
+    # 这句理由的稳定 key，与 reason 是同一句话的两种形态：reason 给人看，reason_key
+    # 给运营面板按它分组用。文案会改，key 不改——拿文案当分组键，改一句文案历史行
+    # 就全部归错组。见 docs/recommendation-impression-design.md 第 4 节。
+    reason_key: str = ''
 
 
 # 五句理由，顺序与打分检查它们的顺序一致。导出成常量，是为了让运营面板读到
@@ -133,7 +137,12 @@ class RecommendationService:
                 favorite_count=item.favorite_count,
             )
             recommendations.append(
-                Recommendation(item=item, reason=REASON_LABELS[reason_key], score=score)
+                Recommendation(
+                    item=item,
+                    reason=REASON_LABELS[reason_key],
+                    score=score,
+                    reason_key=reason_key,
+                )
             )
 
         recommendations.sort(key=lambda recommendation: (-recommendation.score, -recommendation.item.created_at.timestamp()))

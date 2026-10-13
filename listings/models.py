@@ -891,6 +891,77 @@ class RecommendationFeedback(models.Model):
         return f'{self.user.username} · {self.item.title} · {self.get_action_display()}'
 
 
+class RecommendationImpression(models.Model):
+    """首页「为你挑选」渲染出的一张卡被某个用户看见了——推荐反馈率真正的分母。
+
+    `RecommendationFeedback` 只记「表了态」，不记「看过」：一张卡被渲染出来、用户什
+    么也没点，反馈表里一行都没有。`recommendation_quality` 因此只能用
+    `BrowsingHistory` 反推一个下界——一件从搜索点进去的商品也占分母，却没有推荐卡
+    可点，反馈率只能报「只低不高」。本表把「被看见」这件事本身落库。
+
+    写入点只有一处，`views.home`：一次首页渲染把这一屏的卡写进来，最多 8 行
+    （`get_recommendations` 的 `limit=8`），一次 `bulk_create`，插入成本固定、不随
+    商品总数增长，也不多任何一次 select。
+
+    **存 `reason_key` 和 `score` 是这张表和 `OpportunityImpression` 最大的区别。**
+    机会流那边刻意不存，因为那边的分数在忽略时刻要重算（双向匹配，同一条机会不同
+    时刻进池分数会变），存一份「当时的分数」只会得到一份永远对不齐的数据；首页这边
+    `Recommendation` 是 frozen dataclass，`reason` 和 `score` 在渲染那一刻就已经算
+    出来了，跟着 `item` 一起在内存里，落库是零成本的。存了它，「当时挂这句话的卡，
+    用户点了吗」第一次有了推荐当时的分母。见 docs/recommendation-impression-design.md
+    第 2 节。
+
+    **刻意不设 `(user, item)` 唯一约束。** `RecommendationFeedback` 上有，因为表态
+    该折叠；「看见」不该——同一件商品在不同时刻被渲染给同一个人是两次独立的看见，
+    折叠会让分母变小、反馈率虚高。这里每次渲染一行。
+
+    **`user` 允许为 null。** 首页「为你挑选」对匿名用户也渲染——模板只是把标题换成
+    「校园里正在被被关注」、把两个反馈按钮收起来，卡照常出。所以匿名用户的看见同样
+    要落库，否则首页最大的那部分流量（没登录的人）整块不在分母里，反馈率会被算成一
+    个只有登录用户才配被统计的数。`on_delete=SET_NULL` 而不是 `CASCADE`：账号注销
+    之后那些看见仍然发生过，只是再也归不到一个具体的人。
+
+    **不回填历史数据。** 本表从落库那一刻起才开始积累，此前周期的反馈率是 `None`
+    而不是 0。
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='recommendation_impressions', verbose_name='用户',
+    )
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE, related_name='recommendation_impressions',
+        verbose_name='商品',
+    )
+    # 渲染那一刻这句卡挂的理由，取 recommendations.REASONS 里的一个 key。存 key 不存
+    # 中文文案：文案会改，key 不改，拿文案当分组键会在改文案的那一天让历史行全部归
+    # 错组。
+    reason_key = models.CharField('推荐理由', max_length=40, db_index=True)
+    # 渲染那一刻这件商品的推荐分数。零成本带出来，因为 Recommendation 里已经有它。
+    score = models.FloatField('推荐分数', default=0)
+    # 这一屏里的第几张卡，从 1 起算。照 SearchImpression 的做法：位置是排序的输出，
+    # 单独存一列，将来要问「第几位更容易被点」时不用重算。
+    position = models.PositiveIntegerField('展示位置', default=0)
+    created_at = models.DateTimeField('看见时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '首页推荐曝光'
+        verbose_name_plural = '首页推荐曝光'
+        ordering = ['-created_at']
+        indexes = [
+            # 反馈率的分母查询按 (user, item) 判「第一次被看见」，再按 reason_key 分组。
+            models.Index(fields=['user', 'item'], name='rec_imp_user_item_idx'),
+            # 按理由拆的反馈率按 (reason_key, created_at) 扫窗口。
+            models.Index(fields=['reason_key', 'created_at'], name='rec_imp_reason_seen_idx'),
+            # 按分数档拆的曝光规模按 (created_at) 扫窗口后按 score 分档。
+            models.Index(fields=['created_at'], name='rec_imp_seen_idx'),
+        ]
+
+    def __str__(self):
+        who = self.user.username if self.user else '未登录访客'
+        return f'{who} · 看到过 · {self.item.title}'
+
+
 class Notification(models.Model):
     KIND_CHOICES = (
         ('order_created', '新的交易预约'),

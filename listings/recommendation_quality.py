@@ -18,11 +18,11 @@
 
 所以这个模块回答四个问题，四个分母：
 
-1. **推荐卡收到了多少反馈。** 反馈率本身是第一个数字。分母是窗口内全部被点开过的
-   (用户, 商品) 对，直接数 `BrowsingHistory`——不加曝光表，首页不该为一个运营面板
-   多一次 insert。零反馈不是「用户满意」，是这套卡没有引起任何反应。这个分母比真实
-   的展示次数只低不高：一件从搜索点进去的商品也占了分母，却没有推荐卡可点，所以反馈
-   率报出来的是**下界**，只低不高。
+1. **推荐卡收到了多少反馈。** 反馈率本身是第一个数字。从本轮起分母真正落库了：
+   `views.home` 每次渲染首页推荐卡都写一行 `RecommendationImpression`，「被看见」
+   这件事本身第一次进了库，反馈率从一个下界变成一个测量（仍是下界，理由见下）。
+   在此之前分母只能拿 `BrowsingHistory` 反推——一件从搜索点进去的商品也占了分母，
+   却没有推荐卡可点。零反馈不是「用户满意」，是这套卡没有引起任何反应。
 2. **正负反馈的比例。** 「想看看」除以全部反馈。分母只收有过反馈的推荐，不收展示数：
    拿展示数当分母会把「没人看」混进「看了不喜欢」。
 3. **按理由拆。** 五句理由各自的正负比例。这是唯一能指向具体改动的切分——「你标记过
@@ -33,6 +33,13 @@
 
 四处的口径取舍比数字本身更要紧，面板上和导出里都要原样带到：
 
+- **曝光表记的是推荐当时的理由，复算记的是反馈时刻的理由，两个都要。**
+  `RecommendationImpression` 落库时带着 `reason_key` 和 `score`，因为
+  `Recommendation` 是 frozen dataclass、这两样东西在渲染那一刻就已经算出来了，跟着
+  `item` 一起在内存里，落库是零成本的（机会流那边刻意不存，因为它的分数在忽略时刻
+  要重算，存一份「当时的分数」只会得到一份永远对不齐的数据）。于是「当时挂这句话
+  的卡，用户点了吗」有了推荐当时的分母；而复算回答的是另一问——「这句理由今天还
+  成立吗」。两问不能混，面板和导出里都原样带到。
 - **理由在反馈时刻重算。** `RecommendationFeedback` 不存理由，而理由由分数决定、每次
   请求重算。复算走 `recommendations.recommendation_reason_key`——同一个函数，不能在
   运营模块里另写一套。边界：重算的理由不等于推荐当时的理由，用户之后又收藏或浏览会
@@ -57,7 +64,9 @@ from datetime import datetime, timedelta
 from django.db.models import Count, Q
 from django.utils import timezone
 
-from .models import BrowsingHistory, Favorite, Item, Order, RecommendationFeedback
+from .models import (
+    BrowsingHistory, Favorite, Item, Order, RecommendationFeedback, RecommendationImpression,
+)
 from .recommendations import REASON_LABELS, REASONS, recommendation_reason_key
 
 # 统计窗口的可选天数，和看板其他模块保持一致。
@@ -84,6 +93,13 @@ FOLLOWUP_WINDOW_DAYS = 7
 # 改口单独统计的门槛。改口数是「推得太频繁」最硬的证据，但它也是一个低频事件，样本
 # 太少时报出来只是噪声，所以和理由门槛同一个量级。
 MIN_SWITCH_SAMPLE = 12
+
+# 反馈率的分母（窗口内第一次被看见的推荐卡）不足这么多张时，率只报数字、不给方向。
+# 取 24 而不是 12：率比占比更敏感，一条反馈在 12 条分母上就是 8 个百分点，在 24 条上
+# 才 4 个。与 `opportunity_dismissal_quality.MIN_IMPRESSIONS` 同一个量级、同一个理由
+# ——那边上一轮刚为忽略率立过同样的门槛。与上面的 `MIN_REASON_FEEDBACK` 分开立：前者
+# 是曝光门槛，后者是反馈门槛，复用一个会让「够不够样本」这件事在两张表上含义不同。
+MIN_RECOMMENDATION_IMPRESSIONS = 24
 
 # 按 action 读的理由标签顺序，与 `RecommendationFeedback.ACTION_CHOICES` 一致。
 INTERESTED_ACTION = 'interested'
@@ -281,30 +297,137 @@ def _build_feedback_loop(reason_rows):
         'dismissed_total': dismissed_total,
         'positive_rate': positive_rate,
         'switched_total': switched_total,
-        # 反馈率的分母是窗口内全部被点开过的商品，用 BrowsingHistory 数，不和反馈
-        # 取交集。这个数字在 `build_recommendation_quality` 里填，因为它要读浏览表
-        # 而不是反馈表。
+        # 反馈率的分母是窗口内第一次被看见的 (用户, 商品) 对，从
+        # `RecommendationImpression` 数，不和反馈取交集。这个数字在
+        # `build_recommendation_quality` 里填，因为它要读曝光表而不是反馈表。
         'viewed_recommendations': None,
         # 一件都没被点开过时，反馈率不存在——报 0% 会把「没人看」算成「看了不喜欢」。
         'feedback_rate': None,
     }
 
 
-def _viewed_items_in_window(start, now):
-    """窗口内被点开过的商品数，反馈率的分母。
+# 推荐分数的分档边界，照三个可解释的加分取：+10（反馈匹配）、+8（分类匹配）、+5
+# （地点匹配）。不按分数等分——运营能动手改的就是这三个常数，按它们分档才问得出
+# 「+10 这一档把多少商品推上了首页」。上界一档是开区间兜底，见 `_build_score_bands`。
+SCORE_BANDS = (
+    (0, 5, '0-5 分（新鲜度与热度）'),
+    (5, 8, '5-8 分（地点匹配）'),
+    (8, 10, '8-10 分（分类匹配）'),
+    (10, 13, '10-13 分（反馈匹配）'),
+)
 
-    数 `BrowsingHistory` 在窗口里去重后的 (用户, 商品) 对数。**不**拿反馈的表单过
-    滤：拿反馈过滤会让分母只剩「被推荐、被点开、还表过态」的那几件，反馈率恒为
-    100%——正是设计文档明令禁止的「拿反馈数当反馈率的分母，这个数字就不存在了」。
-    一件被点开过、用户什么按钮都没按的商品，也必须占一个分母。
 
-    这个分母只低不高：一件从搜索点进去的商品也占了分母，却没有推荐卡可点。真正的分
-    母要一张曝光表才数得出来，而本模块不加曝光表（首页不该为一个运营面板多一次
-    insert）。所以反馈率是**反馈率的下界**，只低不高，面板和导出里都要这么写。
+def _first_seen_recommendations(start, now):
+    """窗口内第一次被看见的 (用户, 商品) 对，反馈率真正的分母。
+
+    数 `RecommendationImpression` 在窗口内去重后的 (用户, 商品) 对数。这一轮之前分
+    母只能拿 `BrowsingHistory` 反推——一件从搜索点进去的商品也占分母，却没有推荐卡
+    可点，所以反馈率报出来的是下界；现在「被看见」这件事本身落了库，见
+    `docs/recommendation-impression-design.md`。
+
+    三条口径，逐条都是为了让分母和分子说的是同一件事：
+
+    - **去重只发生在算「第一次被看见」的那一刻。** 一件商品在窗口内被渲染了五
+      次，它只占一个分母。反过来不去重会让分母重复计、分子不重复计，率会虚低。
+    - **不设 (用户, 商品) 唯一约束，所以这里必须自己去重。** `RecommendationFeedback`
+      上有唯一约束因为表态该折叠；`RecommendationImpression` 上没有，因为「看见」不
+      该折叠——同一个人在不同时刻看见同一件卡是两次独立的看见。
+    - **只数登录用户的看见。** 推荐服务对匿名用户返回空列表，首页推荐卡整栏不渲染，
+      所以库里本来就不存在匿名行。
+
+    仍是下界，只低不高，三种偏低来源：
+
+    1. `RecommendationFeedback.updated_at` 可能在窗口外（用户很早就表过态、窗口内又
+       点了一次），按「反馈时刻归期」它进不了分子，分母照算；
+    2. 一件商品在窗口内被看见、用户在窗口内才按按钮，但按钮的动机来自窗口外那次看
+       见——这种情形分子算不到、分母照算；
+    3. 曝光表自本轮起才开始积累，窗口跨过上线时刻的周期，前半段的分母是缺的。
+
+    方向是可接受的：**虚高的反馈率会让运营以为推荐在惹恼用户，虚低只会让人保守。**
+    空分母报 `None`，不报 0——一周一张卡都没渲染过，反馈率不存在，不是零。
     """
-    return BrowsingHistory.objects.filter(
-        last_viewed_at__gte=start, last_viewed_at__lte=now,
+    return RecommendationImpression.objects.filter(
+        created_at__gte=start, created_at__lte=now,
     ).values('user_id', 'item_id').distinct().count()
+
+
+def _build_reason_impression_rows(start, now):
+    """按推荐当时的理由拆曝光与反馈：五句理由各自被看见了多少张、其中多少张被点了。
+
+    这是本轮真正的新读数。`reason_rows` 那一层报的是**反馈时刻重算**的理由，回答
+    「这句理由今天还成立吗」；这一层报的是**曝光当时**的理由（`Recommendation`
+    在渲染那一刻就带着 `reason_key`，落库是零成本的），回答「当时挂这句话的卡，用
+    户口点了吗」。两问不能混：前者会因为用户之后又收藏、又浏览而漂移，后者不会。
+
+    只报有曝光的理由：一句理由一次都没被渲染过，它在这一层不存在，不是零。
+
+    分子的口径与整体一致——这条反馈对应的商品在窗口内至少被展示过一次，见
+    `_first_seen_recommendations`。
+    """
+    impressions = list(
+        RecommendationImpression.objects.filter(
+            created_at__gte=start, created_at__lte=now,
+        ).values('user_id', 'item_id', 'reason_key')
+    )
+    if not impressions:
+        return []
+
+    seen_pairs = {(row['user_id'], row['item_id']) for row in impressions}
+    feedback_pairs = set(
+        RecommendationFeedback.objects.filter(
+            updated_at__gte=start, updated_at__lte=now,
+        ).values_list('user_id', 'item_id')
+    ) & seen_pairs
+
+    by_reason = {}
+    for row in impressions:
+        by_reason.setdefault(row['reason_key'], set()).add((row['user_id'], row['item_id']))
+    rows = []
+    for key in REASONS:
+        pairs = by_reason.get(key, set())
+        feedback_count = len(pairs & feedback_pairs)
+        rows.append({
+            'key': key,
+            'label': _reason_label(key),
+            'shown_count': len(pairs),
+            'feedback_count': feedback_count,
+            # 空分母报 None 不报 0：一句理由一张卡都没渲染过，反馈率不存在。
+            'feedback_rate': (
+                _percent(feedback_count, len(pairs)) if pairs else None
+            ),
+            'is_small_sample': len(pairs) < MIN_RECOMMENDATION_IMPRESSIONS,
+        })
+    return rows
+
+
+def _build_score_bands(start, now):
+    """按推荐当时的分数档拆曝光规模：这套打分今天在把什么样的商品推上首页。
+
+    分数五部分：新鲜度（最多 4）、被收藏数（最多 8）、「想看看」+10、分类匹配 +8、
+    地点匹配 +5。档位边界照这三个可解释的加分取，不按分数等分——运营能动手改的就
+    是这三个常数，按它们分档才问得出「+10 这一档推了多少东西上来」。
+
+    只报规模不报反馈率：分数档不是理由，一句「8 分档的反馈率更高」说明不了任何可
+    改的东西（分数是五部分相加的结果，两个同分的商品可能一个靠新鲜度一个靠分类）。
+    要按分数问率，得先有「这条反馈当时的分数」，那是另一个模块的事。
+    """
+    scores = list(
+        RecommendationImpression.objects.filter(
+            created_at__gte=start, created_at__lte=now,
+        ).values_list('score', flat=True)
+    )
+    rows = []
+    for low, high, label in SCORE_BANDS:
+        shown_count = sum(1 for score in scores if low <= score < high)
+        rows.append({
+            'label': label,
+            'shown_count': shown_count,
+        })
+    # 兜底档：超过最高档上界的分数（`+10 +8 +5 +8 +4` 的理论上限是 35，真实数据不可
+    # 能到，但分档要覆盖到，否则最后一段会凭空消失）。
+    overflow = sum(1 for score in scores if score >= SCORE_BANDS[-1][1])
+    rows.append({'label': f'{SCORE_BANDS[-1][1]} 分及以上', 'shown_count': overflow})
+    return rows
 
 
 def _build_measured_reasons(reason_rows):
@@ -353,7 +476,7 @@ def _build_measured_reasons(reason_rows):
     }
 
 
-def _recommendations(reason_rows, measured, feedback_loop):
+def _recommendations(reason_rows, measured, feedback_loop, reason_impression_rows):
     """可以做什么，每一条都挂在替它说话的数字上。只报告，不改权重。"""
     notes = []
     # 最差的那句理由值得点名，不管是 rising 还是 weak：rising 是「有几句明显好、
@@ -370,6 +493,36 @@ def _recommendations(reason_rows, measured, feedback_loop):
             f'而{shape}（{measured["strongest_label"]} '
             f'{measured["strongest_rate"]}%）。它指向一个具体的权重或文案，'
             '但本模块只报告，不改 recommendations.py 里的任何常数。'
+        )
+    # 按推荐当时的理由挑一句最值得看的：它比反馈时刻复算的理由更硬——分母是渲染那
+    # 一刻真的挂在那张卡上的那句话，不随用户之后的收藏、浏览漂移。样本不足时不点名，
+    # 见 `is_small_sample`。
+    # 样本够的理由都进候选，**包括零反馈的**：一张卡都没被点开正是最弱的那种形状，
+    # 把它筛掉只会留下「有几张被点开」的理由，最该被点名的那一句反而消失。样本不够的
+    # 不进——24 条分母都凑不到时，0% 和 100% 都只是一两次渲染的偶然。
+    impression_measured = [
+        row for row in reason_impression_rows
+        if not row['is_small_sample'] and row['shown_count']
+    ]
+    if impression_measured:
+        # 挑最弱的那一句，文案按率的方向分开写：率低时说「只有几张被点开」，率高时
+        # 说「几乎张张被点开」。共用一句「只有 N 张被点开（100%）」会在最好的一句上
+        # 写出一个自相矛盾的数——读的人会以为自己看错了，转而怀疑整张表。
+        weakest = min(impression_measured, key=lambda row: row['feedback_rate'])
+        if weakest['feedback_rate'] < 50:
+            shape = (
+                f"当时的 {weakest['shown_count']} 张卡里只有 "
+                f"{weakest['feedback_count']} 张被点开（{weakest['feedback_rate']}%）"
+            )
+        else:
+            shape = (
+                f"当时的 {weakest['shown_count']} 张卡里有 "
+                f"{weakest['feedback_count']} 张被点开（{weakest['feedback_rate']}%）"
+            )
+        notes.append(
+            f"「{weakest['label']}」{shape}，是五句理由里最弱的一句。"
+            '这个分母是推荐那一刻的，不随用户之后的收藏、浏览漂移——'
+            '按理由拆的那张表量的是反馈时刻重算的理由，两问不能混。'
         )
     if feedback_loop['switched_total'] >= MIN_SWITCH_SAMPLE:
         rate = _percent(feedback_loop['switched_total'], feedback_loop['feedback_total'])
@@ -443,23 +596,33 @@ def build_recommendation_quality(days=30, now=None):
 
     reason_rows = _build_reason_rows(feedbacks, now)
     feedback_loop = _build_feedback_loop(reason_rows)
-    # 展示数用 BrowsingHistory 反推：不加曝光表，首页不该为一个运营面板多一次
-    # insert，而这个 insert 要写在渲染八张卡的事务里。反推数不到「展示了没点开」
-    # 的那部分，所以反馈率的分母是「被推荐且被点开过的」，不是「被推荐过的」。
-    viewed_recommendations = _viewed_items_in_window(start, now)
+    # 反馈率的分母自本轮起真正落库：首页每次渲染推荐卡都写一行
+    # `RecommendationImpression`，「被看见」这件事本身进了库，不再拿 BrowsingHistory
+    # 反推。反推那一版报的是下界（一件从搜索点进去的商品也占分母，却没有推荐卡可
+    # 点）；落库之后仍是下界，但偏低的来源只剩三种，见 `_first_seen_recommendations`。
+    viewed_recommendations = _first_seen_recommendations(start, now)
     feedback_loop['viewed_recommendations'] = viewed_recommendations
     if viewed_recommendations:
         feedback_loop['feedback_rate'] = _percent(
             feedback_loop['feedback_total'], viewed_recommendations,
         )
     measured = _build_measured_reasons(reason_rows)
-    recommendations = _recommendations(reason_rows, measured, feedback_loop)
+    # 按推荐当时的理由拆曝光，以及按分数档拆曝光规模。两层都只读曝光表，一条反馈都
+    # 不需要，所以周期里一张卡都没渲染过时它们是空的——空平台报空，不报 0。
+    reason_impression_rows = _build_reason_impression_rows(start, now)
+    score_bands = _build_score_bands(start, now)
+    recommendations = _recommendations(
+        reason_rows, measured, feedback_loop, reason_impression_rows,
+    )
 
     return {
         'period_days': days,
         'period_start': start,
         'period_end': now,
-        'has_data': bool(feedbacks),
+        # 有反馈或有曝光都算有数据：曝光表先于反馈表积累（用户先看见、后才可能点
+        # 按钮），一个刚上线、只渲染过首页还没人按过按钮的周期也要能在面板上读到
+        # 「已经被看见多少张、其中零张被点」。
+        'has_data': bool(feedbacks) or bool(reason_impression_rows),
         'summary': measured['summary'],
         'metrics': {
             'feedback_total': feedback_loop['feedback_total'],
@@ -468,8 +631,13 @@ def build_recommendation_quality(days=30, now=None):
             'min_reason_feedback': MIN_REASON_FEEDBACK,
             'reason_noise_points': REASON_NOISE_POINTS,
             'followup_window_days': FOLLOWUP_WINDOW_DAYS,
+            # 曝光门槛与反馈门槛分开立，面板上两个数都要显示，否则「样本够不够」会
+            # 被读成同一个意思。
+            'min_recommendation_impressions': MIN_RECOMMENDATION_IMPRESSIONS,
         },
         'reason_rows': reason_rows,
+        'reason_impression_rows': reason_impression_rows,
+        'score_bands': score_bands,
         'measured': measured,
         'feedback_loop': feedback_loop,
         'recommendations': recommendations,

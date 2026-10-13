@@ -1776,7 +1776,8 @@
         <div><span>反馈总数</span><strong>{{ recommendation_quality.feedback_loop.feedback_total }}</strong><small>分母是有过反馈的推荐</small></div>
         <div><span>正反馈比例</span><strong>{% if recommendation_quality.feedback_loop.positive_rate != None %}{{ recommendation_quality.feedback_loop.positive_rate }}%{% else %}—{% endif %}</strong><small>「想看看」除以全部反馈</small></div>
         <div><span>改口数</span><strong>{{ recommendation_quality.feedback_loop.switched_total }}</strong><small>先想看后不感兴趣</small></div>
-        <div><span>反馈率</span><strong>{% if recommendation_quality.feedback_loop.feedback_rate != None %}{{ recommendation_quality.feedback_loop.feedback_rate }}%{% else %}—{% endif %}</strong><small>下界，只低不高</small></div>
+        <div><span>被看见的卡</span><strong>{{ recommendation_quality.feedback_loop.viewed_recommendations }}</strong><small>窗口内第一次被看见</small></div>
+        <div><span>反馈率</span><strong>{% if recommendation_quality.feedback_loop.feedback_rate != None %}{{ recommendation_quality.feedback_loop.feedback_rate }}%{% else %}—{% endif %}</strong><small>分母已落库，仍是下界</small></div>
     </div>
 
     <div class="recommendation-quality-reading mt-3">
@@ -1801,15 +1802,50 @@
                 </tbody>
             </table>
         </div>
+        <div class="recommendation-quality-block-heading mt-3"><strong>按推荐当时的理由</strong><span>一张卡要凑够 {{ recommendation_quality.metrics.min_recommendation_impressions }} 次被看见才给方向</span></div>
+        <p class="recommendation-quality-note mb-0">这一层读的是<strong>推荐那一刻</strong>挂在那张卡上的理由：`Recommendation` 在渲染时就把理由和分数算好了，`views.home` 把它们跟着卡一起写进 `RecommendationImpression`，落库是零成本的。上面「按理由拆」那一层读的是<strong>反馈时刻重算</strong>的理由——两句回答的不是同一个问题：这一层问「当时挂这句话的卡，用户点了吗」，那一层问「这句理由今天还成立吗」。用户点完按钮又去收藏、又去浏览，会让后一句滑走，前一句不会。</p>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+                <thead><tr><th>当时的理由</th><th>被看见</th><th>被点开</th><th>反馈率</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_quality.reason_impression_rows %}
+                    {% if row.shown_count %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.shown_count }}</td>
+                        <td>{{ row.feedback_count }}</td>
+                        <td>{% if row.feedback_rate != None %}{{ row.feedback_rate }}%{% else %}—{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ recommendation_quality.metrics.min_recommendation_impressions }} 次</span>{% else %}<span class="recommendation-quality-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="recommendation-quality-block-heading mt-3"><strong>按推荐当时的分数档</strong><span>这套打分今天在把什么样的商品推上首页</span></div>
+        <p class="recommendation-quality-note mb-0">档位边界照三个可解释的加分取（+10 反馈匹配、+8 分类匹配、+5 地点匹配），不按分数等分——运营能动手改的就是这三个常数。只报规模不报反馈率：分数是五部分相加的结果，两个同分的商品可能一个靠新鲜度一个靠分类，「这一档的反馈率更高」说明不了任何可改的东西。</p>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+                <thead><tr><th>分数档</th><th>被看见</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_quality.score_bands %}
+                    {% if row.shown_count %}
+                    <tr><td><strong>{{ row.label }}</strong></td><td>{{ row.shown_count }}</td></tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         <p class="recommendation-quality-note mb-0"><i class="bi bi-info-circle me-1"></i>{{ recommendation_quality.summary }}</p>
         {% for note in recommendation_quality.recommendations %}
         <p class="recommendation-quality-note mb-0">{{ note }}</p>
         {% endfor %}
         <p class="recommendation-quality-note mb-0">理由按反馈时刻重算，走 <code>recommendations.py</code> 的 <code>recommendation_reason_key</code>，首页渲染的那句话和面板按它归组的那句话是同一句。复算里的「你标记过想看」只对改过口的行生效：只表过一次态的行，点击本身就是入集合的那个动作，那句话在点击那一刻还没出现。复算还原的是点击那一刻的理由，不是推荐当时的理由——用户在那之后又收藏或浏览过的东西会改变它。</p>
-        <p class="recommendation-quality-note mb-0">反馈率的分母是窗口内<b>全部</b>被点开过的商品，不和反馈取交集：取交集会让反馈率恒为 100%，这个数字就不存在了。它只低不高——一件从搜索点进去的商品也占了分母，却没有推荐卡可点；真正的分母要一张曝光表才数得出来，而首页不该为一个运营面板多一次 insert。</p>
+        <p class="recommendation-quality-note mb-0">反馈率的分母从这一轮起真正落库：首页每次渲染推荐卡都写一行 `RecommendationImpression`，「被看见」这件事本身进了库，不再拿 `BrowsingHistory` 反推。此前反推的分母是窗口内<b>全部</b>被点开过的商品，一件从搜索点进去的商品也占分母、却没有推荐卡可点，所以反馈率只能报下界。现在仍是下界、只低不高，但偏低的来源只剩三种：反馈的 `updated_at` 可能在窗口外；按钮的动机可能来自窗口外那次看见；曝光表自上线起才开始积累，跨过上线时刻的周期前半段分母是缺的。不和反馈取交集——取交集会让反馈率恒为 100%，这个数字就不存在了。空分母报「—」不报 0%：一周一张卡都没渲染过，反馈率不存在，不是零。</p>
+        <p class="recommendation-quality-note mb-0">匿名访客的看见也计入分母（`user` 存 null）：首页「为你挑选」对没登录的人照常渲染，只是标题换成「校园里正在被关注」、反馈按钮收起来。不记他们，首页最大的那部分流量就整块不在分母里，反馈率会变成一个只有登录用户才配被统计的数。账号注销后那些看见仍然算数——`user` 取 `SET_NULL`，发生过的看见不该跟着账号一起消失。</p>
         <p class="recommendation-quality-note mb-0">两条理由的正反馈比例相差不满 {{ recommendation_quality.metrics.reason_noise_points }} 个百分点视为噪声，同一个量级的理由之间的这点差别，运营看不出来、也动不了手。本面板只报告，不调 +10、不调 0.8、不调 +8、不改任何一句理由文案、不把负反馈的商品加进黑名单。</p>
     </div>
-    {% else %}<div class="empty-inline mt-3">当前周期还没有推荐反馈，用户在首页推荐卡上点第一次「想看看」或「不感兴趣」后，这里会开始统计。</div>{% endif %}
+    {% else %}<div class="empty-inline mt-3">当前周期既没有推荐反馈、也没有首页推荐曝光——推荐卡一次都没被渲染过。用户打开首页看到「为你挑选」那一栏、或在卡上点第一次「想看看」「不感兴趣」后，这里会开始统计。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>按理由聚合，不按用户、不按商品：按用户是排名（隐私，也不是运营射程），按商品让被推一万次和一次不可比。理由是打分的可解释输出，也是运营唯一能动手改的东西。「想看看」之后有没有真的去看，只算表态之后 {{ recommendation_quality.metrics.followup_window_days }} 天内的浏览与下单——先看后点不算，超过窗口的浏览可能是用户在翻历史记录。本模块只报告，不改权重。</div>
 </section>
 <section class="content-card ops-panel mb-4 opportunity-dismissal-panel">
