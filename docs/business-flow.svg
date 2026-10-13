@@ -1,28 +1,93 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" role="img" aria-labelledby="title desc">
-  <title id="title">拾光校园交易闭环</title>
-  <desc id="desc">展示用户从发现商品到沟通、预约、交付确认和评价的校园交易流程。</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850" role="img" aria-labelledby="title desc">
+  <title id="title">校园交易闭环</title>
+  <desc id="desc">从发现商品到完成交易，按交易方式分成三条路，另有求购匹配和失物招领两条并行支线。</desc>
   <defs>
-    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#fffaf2"/><stop offset="1" stop-color="#eff8ff"/></linearGradient>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#f7fbff"/><stop offset="1" stop-color="#eef8f3"/></linearGradient>
     <linearGradient id="node" x1="0" x2="1"><stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#0f766e"/></linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="5" stdDeviation="8" flood-color="#15304a" flood-opacity=".13"/></filter>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#698398"/></marker>
     <style>
-      .heading{font:700 24px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#16324a}.label{font:700 17px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#16324a}.small{font:14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#526d80}.number{font:700 15px 'Segoe UI',sans-serif;fill:#fff}.line{stroke:#698398;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+      .heading{font:700 24px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#16324a}.label{font:700 17px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#16324a}.small{font:14px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#526d80}.num{font:700 15px 'Segoe UI',sans-serif;fill:#fff}.line{stroke:#698398;stroke-width:2.5;fill:none;marker-end:url(#arrow)}.pill{font:700 15px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#fff}.faint{font:13px 'Segoe UI','Microsoft YaHei',sans-serif;fill:#d9eaf6}
     </style>
   </defs>
-  <rect width="1200" height="620" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="850" rx="28" fill="url(#bg)"/>
   <text x="60" y="62" class="heading">校园交易闭环</text>
-  <text x="60" y="91" class="small">从“看到一件商品”到“完成一次可回看的交易”，每一步都对应明确的业务状态</text>
-
-  <g filter="url(#shadow)"><rect x="60" y="150" width="180" height="130" rx="22" fill="#fff" stroke="#f5c46c"/><circle cx="95" cy="185" r="16" fill="#f59e0b"/><text x="95" y="191" text-anchor="middle" class="number">1</text><text x="150" y="190" text-anchor="middle" class="label">发现</text><text x="150" y="225" text-anchor="middle" class="small">首页 · 分类 · 地点</text><text x="150" y="250" text-anchor="middle" class="small">搜索 · 推荐</text></g>
-  <g filter="url(#shadow)"><rect x="285" y="150" width="180" height="130" rx="22" fill="#fff" stroke="#c8dba8"/><circle cx="320" cy="185" r="16" fill="#65a30d"/><text x="320" y="191" text-anchor="middle" class="number">2</text><text x="375" y="190" text-anchor="middle" class="label">了解</text><text x="375" y="225" text-anchor="middle" class="small">图片 · 描述 · 成色</text><text x="375" y="250" text-anchor="middle" class="small">卖家 · 地点 · 留言</text></g>
-  <g filter="url(#shadow)"><rect x="510" y="150" width="180" height="130" rx="22" fill="#fff" stroke="#99cbd8"/><circle cx="545" cy="185" r="16" fill="#0891b2"/><text x="545" y="191" text-anchor="middle" class="number">3</text><text x="600" y="190" text-anchor="middle" class="label">沟通</text><text x="600" y="225" text-anchor="middle" class="small">公开留言</text><text x="600" y="250" text-anchor="middle" class="small">站内私信 · 议价</text></g>
-  <g filter="url(#shadow)"><rect x="735" y="150" width="180" height="130" rx="22" fill="#fff" stroke="#a9bde5"/><circle cx="770" cy="185" r="16" fill="#2563eb"/><text x="770" y="191" text-anchor="middle" class="number">4</text><text x="825" y="190" text-anchor="middle" class="label">预约</text><text x="825" y="225" text-anchor="middle" class="small">状态校验 · 事务</text><text x="825" y="250" text-anchor="middle" class="small">订单事件 · 通知</text></g>
-  <g filter="url(#shadow)"><rect x="960" y="150" width="180" height="130" rx="22" fill="#fff" stroke="#c3a9dd"/><circle cx="995" cy="185" r="16" fill="#7c3aed"/><text x="995" y="191" text-anchor="middle" class="number">5</text><text x="1050" y="190" text-anchor="middle" class="label">交付</text><text x="1050" y="225" text-anchor="middle" class="small">线下交接</text><text x="1050" y="250" text-anchor="middle" class="small">双方确认</text></g>
-  <line x1="240" y1="215" x2="285" y2="215" class="line"/><line x1="465" y1="215" x2="510" y2="215" class="line"/><line x1="690" y1="215" x2="735" y2="215" class="line"/><line x1="915" y1="215" x2="960" y2="215" class="line"/>
-
-  <g filter="url(#shadow)"><rect x="240" y="385" width="250" height="110" rx="20" fill="#173b56"/><text x="365" y="425" text-anchor="middle" fill="#fff" class="label">反馈与评价</text><text x="365" y="456" text-anchor="middle" fill="#d9eaf6" class="small">完成交易后留下评价</text><text x="365" y="478" text-anchor="middle" fill="#d9eaf6" class="small">异常时进入争议处理</text></g>
-  <g filter="url(#shadow)"><rect x="710" y="385" width="250" height="110" rx="20" fill="#173b56"/><text x="835" y="425" text-anchor="middle" fill="#fff" class="label">运营与治理</text><text x="835" y="456" text-anchor="middle" fill="#d9eaf6" class="small">行为聚合 · 漏斗 · 告警</text><text x="835" y="478" text-anchor="middle" fill="#d9eaf6" class="small">举报 · 审核 · 日报</text></g>
-  <path d="M1050 280 C1050 345 835 340 835 385" class="line"/><path d="M710 440 C620 540 470 540 365 495" class="line"/>
-  <text x="600" y="570" text-anchor="middle" class="small">每一次行为都会尽量留下可追踪的记录，既服务当前用户，也为后续运营和产品迭代提供依据</text>
+  <text x="60" y="91" class="small">从「看到一件商品」到「完成一次可回看的交易」，每一步都对应明确的业务状态</text>
+  <g filter="url(#shadow)"><rect x="60" y="122" width="260" height="30" rx="15" fill="url(#node)" stroke="none"/></g>  <text x="190" y="142" text-anchor="middle" class="pill">主链路 · 从心动到成交</text>
+  <g filter="url(#shadow)"><rect x="60" y="165" width="165" height="130" rx="20" fill="#fff" stroke="#f5c46c"/></g>
+  <circle cx="94" cy="203" r="16" fill="#f59e0b"/>
+  <text x="94" y="208" text-anchor="middle" class="num">1</text>
+  <text x="155" y="209" text-anchor="middle" class="label">发现</text>
+  <text x="142" y="243" text-anchor="middle" class="small">首页 · 分类 · 地点</text>
+  <text x="142" y="265" text-anchor="middle" class="small">搜索 · 推荐 · 机会流</text>
+  <g filter="url(#shadow)"><rect x="250" y="165" width="165" height="130" rx="20" fill="#fff" stroke="#c8dba8"/></g>
+  <circle cx="284" cy="203" r="16" fill="#65a30d"/>
+  <text x="284" y="208" text-anchor="middle" class="num">2</text>
+  <text x="345" y="209" text-anchor="middle" class="label">了解</text>
+  <text x="332" y="243" text-anchor="middle" class="small">图片 · 描述 · 成色</text>
+  <text x="332" y="265" text-anchor="middle" class="small">卖家 · 地点 · 留言</text>
+  <g filter="url(#shadow)"><rect x="440" y="165" width="165" height="130" rx="20" fill="#fff" stroke="#99cbd8"/></g>
+  <circle cx="474" cy="203" r="16" fill="#0891b2"/>
+  <text x="474" y="208" text-anchor="middle" class="num">3</text>
+  <text x="535" y="209" text-anchor="middle" class="label">沟通</text>
+  <text x="522" y="243" text-anchor="middle" class="small">公开留言</text>
+  <text x="522" y="265" text-anchor="middle" class="small">站内私信 · 议价</text>
+  <g filter="url(#shadow)"><rect x="630" y="165" width="165" height="130" rx="20" fill="#fff" stroke="#a9bde5"/></g>
+  <circle cx="664" cy="203" r="16" fill="#2563eb"/>
+  <text x="664" y="208" text-anchor="middle" class="num">4</text>
+  <text x="725" y="209" text-anchor="middle" class="label">预约</text>
+  <text x="712" y="243" text-anchor="middle" class="small">状态校验 · 事务锁</text>
+  <text x="712" y="265" text-anchor="middle" class="small">订单事件 · 通知</text>
+  <g filter="url(#shadow)"><rect x="820" y="165" width="165" height="130" rx="20" fill="#fff" stroke="#c3a9dd"/></g>
+  <circle cx="854" cy="203" r="16" fill="#7c3aed"/>
+  <text x="854" y="208" text-anchor="middle" class="num">5</text>
+  <text x="915" y="209" text-anchor="middle" class="label">交付</text>
+  <text x="902" y="243" text-anchor="middle" class="small">线下交接</text>
+  <text x="902" y="265" text-anchor="middle" class="small">双方两次确认</text>
+  <g filter="url(#shadow)"><rect x="1010" y="165" width="165" height="130" rx="20" fill="#fff" stroke="#8fd0c4"/></g>
+  <circle cx="1044" cy="203" r="16" fill="#0f766e"/>
+  <text x="1044" y="208" text-anchor="middle" class="num">6</text>
+  <text x="1105" y="209" text-anchor="middle" class="label">反馈</text>
+  <text x="1092" y="243" text-anchor="middle" class="small">评价 · 争议 · 举报</text>
+  <text x="1092" y="265" text-anchor="middle" class="small">借用逾期三级催收</text>
+  <line x1="225" y1="230" x2="250" y2="230" class="line"/>
+  <line x1="415" y1="230" x2="440" y2="230" class="line"/>
+  <line x1="605" y1="230" x2="630" y2="230" class="line"/>
+  <line x1="795" y1="230" x2="820" y2="230" class="line"/>
+  <line x1="985" y1="230" x2="1010" y2="230" class="line"/>
+  <g filter="url(#shadow)"><rect x="60" y="310" width="300" height="30" rx="15" fill="url(#node)" stroke="none"/></g>  <text x="210" y="330" text-anchor="middle" class="pill">预约之后 · 三种交易方式各走各的路</text>
+  <path d="M1082 295 L1082 352 L970 352" class="line"/>
+  <line x1="230" y1="352" x2="230" y2="372" class="line"/>
+  <line x1="600" y1="352" x2="600" y2="372" class="line"/>
+  <line x1="970" y1="352" x2="970" y2="372" class="line"/>
+  <g filter="url(#shadow)"><rect x="60" y="372" width="340" height="145" rx="20" fill="#fff" stroke="#b6d1e5"/></g>
+  <text x="84" y="406" class="label">出售</text>
+  <text x="84" y="434" class="small">当面交接 → 双方两次确认 → 成交</text>
+  <text x="84" y="456" class="small">交易结束后进入评价，异常时发起争议或举报</text>
+  <g filter="url(#shadow)"><rect x="430" y="372" width="340" height="145" rx="20" fill="#fff" stroke="#b6d1e5"/></g>
+  <text x="454" y="406" class="label">免费赠送</text>
+  <text x="454" y="434" class="small">领取申请队列 → 发布者查看说明与领取地点</text>
+  <text x="454" y="456" class="small">选中一位后生成正式订单，其余申请收到结果通知</text>
+  <text x="454" y="478" class="small">申请人可以在发布者处理前撤回</text>
+  <g filter="url(#shadow)"><rect x="800" y="372" width="340" height="145" rx="20" fill="#fff" stroke="#b6d1e5"/></g>
+  <text x="824" y="406" class="label">限期借用</text>
+  <text x="824" y="434" class="small">交付确认后进入借用中，成交价固定为 0 元</text>
+  <text x="824" y="456" class="small">到期前提醒，逾期后进入三级催收阶梯</text>
+  <text x="824" y="478" class="small">借用者登记、发布者确认，两次握手后归还</text>
+  <text x="824" y="500" class="small">押金记录随订单留存，可再次进入新的借用周期</text>
+  <g filter="url(#shadow)"><rect x="60" y="545" width="240" height="30" rx="15" fill="url(#node)" stroke="none"/></g>  <text x="180" y="565" text-anchor="middle" class="pill">两条并行的校园协作支线</text>
+  <g filter="url(#shadow)"><rect x="60" y="594" width="520" height="140" rx="20" fill="#fff" stroke="#b6d1e5"/></g>
+  <text x="84" y="628" class="label">求购匹配</text>
+  <text x="84" y="656" class="small">发布求购 → 新商品按分类、地点、预算和关键词匹配</text>
+  <text x="84" y="678" class="small">卖家从匹配结果一键响应，补充成色与交付时间说明</text>
+  <text x="84" y="700" class="small">求购者查看分数与依据，确认或拒绝，也可以撤回</text>
+  <text x="84" y="722" class="small">确认之后才进入商品页完成正式交易</text>
+  <g filter="url(#shadow)"><rect x="620" y="594" width="520" height="140" rx="20" fill="#fff" stroke="#b6d1e5"/></g>
+  <text x="644" y="628" class="label">失物招领</text>
+  <text x="644" y="656" class="small">发布丢失或拾到记录，填写分类、地点、时间与辨识特征</text>
+  <text x="644" y="678" class="small">规则评分匹配，展示分数与依据，例如分类或地点一致</text>
+  <text x="644" y="700" class="small">提交私密线索，或关联自己发布的另一条相反类型记录</text>
+  <text x="644" y="722" class="small">发布者确认匹配后，双方进入已匹配并用站内通知继续沟通</text>
+  <g filter="url(#shadow)"><rect x="60" y="762" width="1100" height="68" rx="20" fill="#173b56"/></g>
+  <text x="600" y="802" text-anchor="middle" class="faint">每一次行为都会尽量留下可追踪的记录，既服务当前用户，也为后续运营和产品迭代提供依据</text>
 </svg>
