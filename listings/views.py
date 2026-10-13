@@ -35,6 +35,7 @@ from .demand_opportunity_followups import build_demand_opportunity_followups
 from .demand_task_aging import build_demand_task_aging
 from .notification_snooze_return import build_notification_snooze_return
 from .notification_kind_coverage import build_notification_kind_coverage
+from .notification_aggregation_quality import build_notification_aggregation_quality
 from .meeting_attendance import build_meeting_attendance
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2210,6 +2211,7 @@ def operations_dashboard(request):
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
+    dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -2379,6 +2381,7 @@ def operations_dashboard_export(request):
     dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
+    dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
@@ -3051,6 +3054,125 @@ def operations_dashboard_export(request):
         '不改表单字段列表；不按用户排名，那是一份考勤表，不是一份看板；'
         '不列任何一条通知的原文；空分母报「—」不报 0——0 会被读成「发了，占比很小」。',
     ])
+    aggregation = dashboard['notification_aggregation_quality']
+    writer.writerow([])
+    writer.writerow(['通知聚合的质量：合并掉的是打扰，还是信息', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', aggregation['summary'],
+        '只统计带聚合键的通知；空档报「—」不报 0——0 会被读成「发了没人读」，而事实是「没有样本」',
+    ])
+    writer.writerow([
+        '周期内带键的通知行', aggregation['current']['keyed_row_count'],
+        'dedupe_key 为空的通知走的是一条不查重的路径，不参与本模块的对照',
+    ])
+    writer.writerow([
+        '承载的事件数', aggregation['current']['event_count'],
+        '各行 occurrence_count 之和',
+    ])
+    writer.writerow([
+        '被合并掉的事件数', aggregation['current']['compressed_event_count'],
+        '事件数减行数；这一个数已经在 analytics 的压缩率里，这里只作分母说明',
+    ])
+    writer.writerow([
+        '聚合率（%）',
+        '—' if aggregation['current']['aggregation_rate'] is None else aggregation['current']['aggregation_rate'],
+        '合并掉的事件占全部事件的比例',
+    ])
+    writer.writerow([
+        '被聚合过的行', aggregation['current']['merged_row_count'],
+        'occurrence_count 大于 1 的行',
+    ])
+    writer.writerow([])
+    writer.writerow(['聚合次数分档', '条数', '已读', '阅读率（%）', '平均跨度', '口径说明'])
+    if not aggregation['has_data']:
+        writer.writerow(['当前周期还没有带聚合键的通知，分档需要先有通知发生。'])
+    else:
+        for row in aggregation['occurrence_bands']:
+            writer.writerow([
+                row['label'], row['row_count'], row['read_count'],
+                '—' if row['read_rate'] is None else row['read_rate'],
+                row['avg_span_label'],
+                '这一档没有样本' if row['is_empty'] else '',
+            ])
+        writer.writerow([])
+        writer.writerow(['聚合跨度（第一条到最后一条隔了多久）', '条数', '占比（%）', '口径说明'])
+        for row in aggregation['span_rows']:
+            writer.writerow([
+                row['label'], row['row_count'],
+                '—' if row['share'] is None else row['share'],
+                '跨度和次数是两个维度：9 次摊在 10 分钟内和 9 次摊在 5 天里是两件事'
+                if not row['is_empty'] else '这一档没有样本',
+            ])
+    writer.writerow([])
+    writer.writerow(['聚合过的行 vs 从没被聚合过的行', '条数', '事件数', '已读', '未读',
+                     '阅读率（%）', '平均处理时长', 'P90 处理时长'])
+    if not aggregation['has_data']:
+        writer.writerow(['当前周期还没有带聚合键的通知，对照需要先有通知发生。'])
+    else:
+        for row in aggregation['comparison']['groups']:
+            writer.writerow([
+                row['label'], row['row_count'], row['event_count'],
+                row['read_count'], row['unread_count'],
+                '—' if row['read_rate'] is None else row['read_rate'],
+                row['avg_label'], row['p90_label'],
+            ])
+        writer.writerow([
+            '差值（百分点）',
+            '—' if aggregation['comparison']['read_rate_delta'] is None
+            else aggregation['comparison']['read_rate_delta'],
+            (
+                '两侧都不足样本下限，只报数字、不给方向'
+                if not aggregation['comparison']['comparable']
+                else '这是两组之间的差距，不等于聚合本身有害——两组还差着类型的构成'
+            ),
+            '', '', '', '',
+        ])
+    writer.writerow([])
+    writer.writerow(['通知类型', '通知行', '事件数', '被聚合的行', '聚合率（%）',
+                     '平均每行次数', '最大次数', '平均跨度', '阅读率（%）', '样本是否够'])
+    if not aggregation['has_data']:
+        writer.writerow(['当前周期还没有带聚合键的通知。'])
+    else:
+        for row in aggregation['kind_rows']:
+            writer.writerow([
+                row['label'], row['row_count'], row['event_count'],
+                row['merged_row_count'],
+                '—' if row['aggregation_rate'] is None else row['aggregation_rate'],
+                '—' if row['avg_occurrence'] is None else row['avg_occurrence'],
+                row['max_occurrence'], row['avg_span_label'],
+                '—' if row['read_rate'] is None else row['read_rate'],
+                f"不足 {aggregation['min_bucket_sample']} 条" if row['is_small_sample'] else '够',
+            ])
+    writer.writerow([])
+    writer.writerow(['合并行的结构', '数值', '说明'])
+    if aggregation['structure']['is_empty']:
+        writer.writerow(['当前周期没有被聚合过的通知行。'])
+    else:
+        writer.writerow([
+            '被合并过的行', aggregation['structure']['merged_row_count'],
+            'occurrence_count 大于 1 的行',
+        ])
+        writer.writerow([
+            '其中没有跳转地址的',
+            '—' if aggregation['structure']['missing_target_rate'] is None
+            else f"{aggregation['structure']['missing_target_count']} 条"
+                 f"（{aggregation['structure']['missing_target_rate']}%）",
+            '合并会覆盖 target_url，而 title 停留在第一次——用户点进去看到的东西，和标题说的可能不是一件事',
+        ])
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '合并是通知系统里唯一一条写入时合并的路径：窗口内找到未读的同类行，occurrence_count 加一、'
+        '覆盖 message 与 target_url、title 不动。读这两个字段的地方此前只有一个压缩率，而比例天生看不出'
+        '样本——「合并率 60%」既可以是两分钟内的连击，也可以是拖了四天的堆积。本模块只报告：'
+        '不改 create_notification、不改 dedupe_window_seconds 默认值、不加迁移、不自动拆分聚合行、'
+        '不自动标记已读；未读行是右删失样本，单独数、不当 0 秒算进时长；'
+        '阅读率的分母是行数不是事件数——一条压着 9 件事的未读通知，用户一次点击就能消掉它，'
+        '但它压着的事一件都没被处理；两组差距不归因给聚合，两组之间还差着类型的构成；'
+        '不读 message 的语义，只报 target_url 的空值比例这个结构事实；'
+        '不按用户排名，那是一份考勤表，不是一份看板。',
+    ])
+
     attendance = dashboard['meeting_attendance']
     writer.writerow([])
     writer.writerow(['约好的那一次见面', '数值', '说明'])

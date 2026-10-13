@@ -1047,6 +1047,109 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 notification-aggregation-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Aggregation quality</span><h2>通知聚合的质量：合并掉的是打扰，还是信息</h2></div>
+        <span class="ops-panel-hint">同一条未读行下面压着几件事，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-layers me-1"></i><code>create_notification</code> 收到 <code>dedupe_key</code> 之后，会在窗口内找到同接收人、同类型、同键的<strong>未读</strong>行叠上去：<code>occurrence_count</code> 加一，覆盖 <code>message</code> 与 <code>target_url</code>，<code>title</code> 停在第一次。这是通知系统里唯一一条写入时合并的路径，13 处调用点都在用它。而读它的地方此前只有一个压缩率——<strong>比例天生看不出样本：「合并率 60%」既可以是同一件事两分钟内响了三次，也可以是同一个提醒拖了四天、用户一次没点开。</strong>两种完全相反的含义，在看板上是同一个数字。</p>
+    {% if not notification_aggregation_quality.has_data %}
+    <div class="empty-inline">{{ notification_aggregation_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>带聚合键的通知行</span><strong>{{ notification_aggregation_quality.current.keyed_row_count }}</strong><small>dedupe_key 为空的不参与对照</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>承载的事件数</span><strong>{{ notification_aggregation_quality.current.event_count }}</strong><small>各聚合键次数之和</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>被合并掉的事件</span><strong>{{ notification_aggregation_quality.current.compressed_event_count }}</strong><small>{% if notification_aggregation_quality.current.aggregation_rate is None %}—{% else %}聚合率 {{ notification_aggregation_quality.current.aggregation_rate }}%{% endif %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>被聚合过的行</span><strong>{{ notification_aggregation_quality.current.merged_row_count }}</strong><small>occurrence_count 大于 1</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">聚合过的行 vs 从没被聚合过的行</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分组</th><th>行数</th><th>事件数</th><th>已读</th><th>未读</th><th>阅读率</th><th>平均处理时长</th><th>P90</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_aggregation_quality.comparison.groups %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.description }}</small></td>
+                            <td>{{ row.row_count }}</td>
+                            <td>{{ row.event_count }}</td>
+                            <td>{{ row.read_count }}</td>
+                            <td>{{ row.unread_count }}</td>
+                            <td>{% if row.read_rate is None %}&mdash;{% else %}{{ row.read_rate }}%{% endif %}{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ notification_aggregation_quality.min_bucket_sample }} 条</small>{% endif %}</td>
+                            <td>{{ row.avg_label }}</td>
+                            <td>{{ row.p90_label }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">{% if notification_aggregation_quality.comparison.read_rate_delta is None %}&mdash;{% else %}两组阅读率相差 <strong>{{ notification_aggregation_quality.comparison.read_rate_delta }}</strong> 个百分点。{% endif %}{% if notification_aggregation_quality.comparison.comparable %}这是两组之间的差距，<strong>不等于聚合本身有害</strong>——两组还差着类型的构成：被聚合的类型（求购匹配、关注搜索汇总）本身就可能比单次通知更容易被跳过。{% else %}两侧各自不足样本下限，只报数字、不给方向。{% endif %}</div>
+            <h3 class="h6 mb-3 mt-4">聚合次数分档</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>聚合次数</th><th>条数</th><th>已读</th><th>阅读率</th><th>平均跨度</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_aggregation_quality.occurrence_bands %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.row_count }}</td>
+                            <td>{{ row.read_count }}</td>
+                            <td>{% if row.read_rate is None %}&mdash;{% else %}{{ row.read_rate }}%{% endif %}</td>
+                            <td>{{ row.avg_span_label }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">9 次及以上那一档没有上界：库里出现过 9 次以上的行本身就值得知道，再往上切分只会让每档的样本更薄。</div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">聚合跨度：第一条到最后一条隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>跨度</th><th>条数</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_aggregation_quality.span_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.row_count }}</td>
+                            <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">跨度和次数是<strong>两个独立的维度</strong>：9 次里 8 次发生在 10 分钟内，和 9 次摊在 5 天里，是两件不同的事。跨度读的是 <code>last_occurred_at - created_at</code>，与用户多久才读无关。</div>
+            <h3 class="h6 mb-3 mt-4">周期内真的发过的类型，按类型拆聚合</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>通知类型</th><th>行数</th><th>事件数</th><th>聚合率</th><th>平均每行</th><th>最大次数</th><th>阅读率</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_aggregation_quality.kind_rows %}
+                        <tr>
+                            <td>{{ row.label }}{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ notification_aggregation_quality.min_bucket_sample }} 条</small>{% endif %}</td>
+                            <td>{{ row.row_count }}</td>
+                            <td>{{ row.event_count }}</td>
+                            <td>{% if row.aggregation_rate is None %}&mdash;{% else %}{{ row.aggregation_rate }}%{% endif %}</td>
+                            <td>{% if row.avg_occurrence is None %}&mdash;{% else %}{{ row.avg_occurrence }}{% endif %}</td>
+                            <td>{{ row.max_occurrence }}</td>
+                            <td>{% if row.read_rate is None %}&mdash;{% else %}{{ row.read_rate }}%{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">合并过的行里，有 <strong>{{ notification_aggregation_quality.structure.missing_target_count }}</strong> 条没有跳转地址{% if notification_aggregation_quality.structure.missing_target_rate is not None %}（占 {{ notification_aggregation_quality.structure.missing_target_rate }}%）{% endif %}。合并覆盖 <code>target_url</code> 而 <code>title</code> 停在第一次——用户点进去看到的东西，和标题说的可能不是一件事。</div>
+        </div>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里只报告：不改 <code>create_notification</code>、不改 <code>dedupe_window_seconds</code> 的默认值、不加迁移、不自动拆分聚合行、不自动标记已读。未读行是右删失样本——它隔多久会被读还没发生，把它记成「0 秒」会让处理时长显得更快，所以单独数、不丢不混。阅读率的分母是<strong>行数</strong>不是事件数：一条压着 9 件事的未读通知，用户一次点击就能消掉它，但它压着的事一件都没被处理。两组差距不归因给聚合。不读 <code>message</code> 的语义——标题与正文是不是一回事要解析自然语言，只报 <code>target_url</code> 的空值比例这个结构事实。不按用户排名，那是一份考勤表，不是一份看板。</div>
+    {% if not notification_aggregation_quality.has_data %}
+    <div class="empty-inline mt-2">{{ notification_aggregation_quality.summary }}</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 campaign-analytics-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Campaign performance</span><h2>校园专题表现</h2></div>
