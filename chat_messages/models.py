@@ -72,6 +72,17 @@ class ModerationEvent(models.Model):
             models.Index(fields=['author', '-created_at']),
         ]
 
+    @property
+    def has_release_material(self):
+        """误判放行时是否具备按原渠道恢复的最低材料。"""
+        if not self.author_id:
+            return False
+        if self.channel == 'comment':
+            return bool(self.item_id)
+        if self.channel == 'private_message':
+            return bool(self.receiver_id)
+        return False
+
     def __str__(self):
         return f'{self.get_channel_display()} · {self.get_status_display()} · {self.created_at:%Y-%m-%d %H:%M}'
 

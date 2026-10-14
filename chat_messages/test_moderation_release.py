@@ -165,3 +165,33 @@ class ModerationReleaseTests(TestCase):
         self.assertRedirects(response, reverse('item_detail', args=[self.item.id]))
         self.assertFalse(ModerationEvent.objects.exists())
         self.assertFalse(Comment.objects.exists())
+
+    def test_moderation_queue_exposes_release_closure_counts_and_filters(self):
+        released = moderate_submission(
+            '打开 https://example.com/released',
+            author=self.buyer, channel='comment', item=self.item,
+        )
+        self.review(released)
+        released.refresh_from_db()
+        missing = ModerationEvent.objects.create(
+            channel='private_message',
+            author=self.buyer,
+            content='历史私信缺少接收人',
+            matched_terms='外部链接',
+            risk_score=20,
+            risk_level='low',
+        )
+
+        response = self.client.get(reverse('moderation_queue'), {'release': 'closed'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['moderation_events']), [released])
+        self.assertEqual(response.context['moderation_released_count'], 1)
+        self.assertEqual(response.context['moderation_unreleased_count'], 0)
+        self.assertEqual(response.context['moderation_missing_material_count'], 1)
+        self.assertContains(response, '已恢复原渠道')
+
+        response = self.client.get(reverse('moderation_queue'), {'release': 'missing_material'})
+
+        self.assertEqual(list(response.context['moderation_events']), [missing])
+        self.assertContains(response, '待复核缺少恢复材料')

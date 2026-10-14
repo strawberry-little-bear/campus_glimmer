@@ -363,16 +363,31 @@ def moderation_queue(request):
     risk_filter = request.GET.get('risk', 'all').strip()
     if risk_filter not in {'all', 'low', 'medium', 'high'}:
         risk_filter = 'all'
+    release_filter = request.GET.get('release', 'all').strip()
+    if release_filter not in {'all', 'closed', 'unreleased', 'missing_material'}:
+        release_filter = 'all'
+    if 'status' not in request.GET and release_filter in {'closed', 'unreleased'}:
+        status_filter = 'all'
     search_query = request.GET.get('q', '').strip()[:120]
 
     base_events = ModerationEvent.objects.all()
-    events = base_events.select_related('author', 'item', 'reviewed_by')
+    events = base_events.select_related('author', 'item__seller', 'receiver', 'reviewed_by')
     if status_filter != 'all':
         events = events.filter(status=status_filter)
     if channel_filter != 'all':
         events = events.filter(channel=channel_filter)
     if risk_filter != 'all':
         events = events.filter(risk_level=risk_filter)
+    if release_filter == 'closed':
+        events = events.filter(status='dismissed', released_at__isnull=False)
+    elif release_filter == 'unreleased':
+        events = events.filter(status='dismissed', released_at__isnull=True)
+    elif release_filter == 'missing_material':
+        events = events.filter(status='pending').filter(
+            Q(author__isnull=True)
+            | Q(channel='comment', item__isnull=True)
+            | Q(channel='private_message', receiver__isnull=True)
+        )
     if search_query:
         events = events.filter(
             Q(content__icontains=search_query)
@@ -390,6 +405,24 @@ def moderation_queue(request):
         'moderation_risk_filter': risk_filter,
         'moderation_search_query': search_query,
         'moderation_pending_high_count': base_events.filter(status='pending', risk_level='high').count(),
+        'moderation_released_count': base_events.filter(
+            status='dismissed', released_at__isnull=False,
+        ).count(),
+        'moderation_unreleased_count': base_events.filter(
+            status='dismissed', released_at__isnull=True,
+        ).count(),
+        'moderation_missing_material_count': base_events.filter(status='pending').filter(
+            Q(author__isnull=True)
+            | Q(channel='comment', item__isnull=True)
+            | Q(channel='private_message', receiver__isnull=True)
+        ).count(),
+        'moderation_release_filter': release_filter,
+        'moderation_release_options': (
+            ('all', '全部放行状态'),
+            ('closed', '误判已恢复'),
+            ('unreleased', '误判未恢复'),
+            ('missing_material', '待复核缺材料'),
+        ),
         'moderation_status_options': (
             ('pending', '待复核'), ('confirmed', '确认违规'),
             ('dismissed', '误判放行'), ('all', '全部记录'),
@@ -460,7 +493,9 @@ def review_moderation_event(request, event_id):
         next_url = ''
     with transaction.atomic():
         event = get_object_or_404(
-            ModerationEvent.objects.select_for_update().select_related('author', 'item', 'receiver'),
+            ModerationEvent.objects.select_for_update().select_related(
+            'author', 'item__seller', 'receiver',
+        ),
             id=event_id,
         )
         decision = request.POST.get('decision', '').strip()
