@@ -31,6 +31,7 @@ from .demand_radar import build_demand_radar
 from .search_rejection_recurrence import build_search_rejection_recurrence
 from .search_rejection_stats import build_search_rejection_stats
 from .search_position_quality import build_search_position_quality
+from .search_impression_pairing_quality import build_search_impression_pairing_quality
 from .demand_match_quality import build_demand_match_quality
 from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .demand_opportunity_followups import build_demand_opportunity_followups
@@ -2422,6 +2423,9 @@ def operations_dashboard(request):
     dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
     dashboard['relist_freshness'] = build_relist_freshness(days=days)
     dashboard['refresh_response'] = build_refresh_response(days=days)
+    dashboard['search_impression_pairing_quality'] = (
+        build_search_impression_pairing_quality(days=days)
+    )
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -2618,6 +2622,9 @@ def operations_dashboard_export(request):
     dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
     dashboard['relist_freshness'] = build_relist_freshness(days=days)
     dashboard['refresh_response'] = build_refresh_response(days=days)
+    dashboard['search_impression_pairing_quality'] = (
+        build_search_impression_pairing_quality(days=days)
+    )
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -7123,6 +7130,60 @@ def operations_dashboard_export(request):
         '文案和代码不一致是真的，但先有数再决定改哪一边：如果只有个位数，'
         '改一句话就够；如果是成百上千件沉底商品，那它值得一张刷新历史表。',
     ])
+
+    search_pairing = dashboard['search_impression_pairing_quality']
+    writer.writerow([])
+    writer.writerow(['搜索曝光与点击配对质量'])
+    writer.writerow([])
+    writer.writerow(['口径说明'])
+    writer.writerow(['指标', '数值', '说明'])
+    for label, value, note in (
+        ('回看天数', search_pairing['period_days'], '本地自然日边界，主统计只读到当前时刻'),
+        ('允许配对的范围', '曝光表上线以来', '周期内点击可以配对周期外更早的同搜索同商品曝光'),
+        ('用户比较', '不比较', '链接可以转发或登录状态变化，配对只看搜索、商品与时间'),
+        ('位置比较', '任一更早曝光位置', '没有请求 ID，不伪装能定位某一次渲染'),
+        ('每页结果数', search_pairing['metrics']['search_page_size'], '只作为当前搜索页契约说明，不用它倒推缺几张'),
+    ):
+        writer.writerow([label, value, note])
+
+    writer.writerow([])
+    writer.writerow(['字段与结构'])
+    writer.writerow(['检查对象', '行数', '状态', '怎么读'])
+    for row in search_pairing['field_rows']:
+        writer.writerow([row['label'], row['count'], row['status'], row['note']])
+
+    writer.writerow([])
+    writer.writerow(['配对与延迟'])
+    writer.writerow(['延迟档', '点击数', '占比（%）'])
+    for row in search_pairing['latency_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            row['share'] if row['share'] is not None else '—',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['覆盖'])
+    writer.writerow(['指标', '数值', '说明'])
+    summary = search_pairing['summary']
+    for label, value, note in (
+        ('周期内曝光', summary['total_impressions'], '主统计不含未来时间'),
+        ('周期内点击', summary['total_clicks'], '主统计不含未来时间'),
+        ('可配对点击', summary['matched_click_count'], '同一搜索、同一商品，且曝光不晚于点击'),
+        ('可配对点击占比（%）', summary['matched_click_share'] if summary['matched_click_share'] is not None else '—', '分母是周期内全部点击'),
+        ('位置一致点击', summary['position_match_count'], '点击位置出现在任一更早同组曝光里'),
+        ('位置不一致点击', summary['position_mismatch_count'], '零位置点击不进入这张位置一致性分母'),
+        ('至少被一次点击配上的曝光', summary['paired_impression_count'], '同一曝光可以被多次点击引用，这里去重'),
+        ('覆盖自然日', summary['calendar_days'], '从周期开始到当前时刻'),
+        ('曝光有写入自然日', summary['impression_active_days'], '至少一行曝光'),
+        ('点击有写入自然日', summary['click_active_days'], '至少一行点击'),
+        ('任一事件有写入自然日', summary['either_active_days'], '两类事件取并集'),
+        ('无写入自然日', summary['zero_days'], '假期、低流量或无搜索都可能出现，不判写入失败'),
+    ):
+        writer.writerow([label, value, note])
+
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([search_pairing['note']])
 
     refresh_response = dashboard['refresh_response']
     writer.writerow([])

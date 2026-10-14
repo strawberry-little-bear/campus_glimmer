@@ -9,11 +9,14 @@ and missing/orphan rows remain separate shapes rather than one scary "bad row"
 number.
 """
 
+import csv
+import io
 from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import Category, Item, SearchClick, SearchImpression, SearchQuery
@@ -220,3 +223,66 @@ class SearchImpressionPairingQualityTests(TestCase):
         self.assertEqual(result['summary']['click_active_days'], 1)
         self.assertEqual(result['summary']['either_active_days'], 2)
         self.assertEqual(result['summary']['zero_days'], 1)
+
+
+class SearchImpressionPairingQualityDashboardTests(TestCase):
+    """Keep the screen, CSV export, and privacy boundary in the same shape."""
+
+    def test_dashboard_and_csv_have_the_same_shape_without_private_fields(self):
+        staff = User.objects.create_user(
+            username='pairing-quality-staff', password='safe-password-123',
+            is_staff=True,
+        )
+        seller = User.objects.create_user(
+            username='pairing-quality-export-seller', password='safe-password-123',
+        )
+        category = Category.objects.create(name='配对质量导出分类')
+        item = Item.objects.create(
+            title='配对导出不应出现的商品标题', description='用于导出测试。',
+            price='43.00', category=category, condition='良好',
+            seller=seller, status='available',
+        )
+        now = timezone.localtime().replace(
+            hour=12, minute=0, second=0, microsecond=0,
+        )
+        search = SearchQuery.objects.create(
+            user=seller, query='配对导出隐私搜索词', result_count=3,
+        )
+        impression = SearchImpression.objects.create(
+            search_query=search, item=item, position=1, user=seller,
+        )
+        SearchImpression.objects.filter(pk=impression.pk).update(
+            created_at=now - timedelta(days=1),
+        )
+        click = SearchClick.objects.create(
+            search_query=search, item=item, position=1,
+        )
+        SearchClick.objects.filter(pk=click.pk).update(
+            created_at=now - timedelta(hours=2),
+        )
+        self.client.force_login(staff)
+
+        page = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(export.status_code, 200)
+        html = page.content.decode('utf-8')
+        panel = html.split('搜索曝光与点击配对质量', 1)[1].split(
+            '商品刷新后的搜索回响', 1,
+        )[0]
+        self.assertIn('字段与结构', panel)
+        self.assertIn('配对与延迟', panel)
+        self.assertIn('覆盖', panel)
+
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        titles = [row[0] if row else '' for row in rows]
+        start = titles.index('搜索曝光与点击配对质量')
+        end = titles.index('商品刷新后的搜索回响')
+        section = '\n'.join(','.join(row) for row in rows[start:end])
+        self.assertIn('字段与结构', section)
+        self.assertIn('配对与延迟', section)
+        self.assertIn('覆盖', section)
+        self.assertNotIn('配对导出隐私搜索词', section)
+        self.assertNotIn(seller.username, section)
+        self.assertNotIn(item.title, section)

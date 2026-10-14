@@ -3222,3 +3222,15 @@ a { color: inherit; text-decoration: none; }
 
     .relist-freshness-panel .ops-table td:nth-child(4) { text-align: left; }
 }
+/* 搜索曝光与点击配对质量：先守住分子分母的可配对性，再谈搜索效果。
+   不把缺记录或历史旧链接涂成故障色，只用轻徽章提示需要核对。 */
+.search-pairing-quality-panel .search-pairing-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.search-pairing-quality-panel .search-pairing-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.search-pairing-quality-panel .search-pairing-summary span { color: #83938b; font-size: .71rem; }
+.search-pairing-quality-panel .search-pairing-summary small { color: #9aa8a0; font-size: .69rem; line-height: 1.45; }
+.search-pairing-quality-panel .search-pairing-summary strong { color: #315946; font-size: 1.45rem; font-variant-numeric: tabular-nums; line-height: 1; }
+.search-pairing-table td:nth-child(2), .search-pairing-table td:nth-child(3) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.search-pairing-ok { display: inline-block; padding: 2px 9px; border-radius: 999px; color: #2f6a4f; background: #e8f4ec; font-size: .73rem; white-space: nowrap; }
+.search-pairing-attention { display: inline-block; padding: 2px 9px; border-radius: 999px; color: #8a5a2f; background: #f8efe3; font-size: .73rem; white-space: nowrap; }
+.search-pairing-note { margin-top: 6px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
+@media (max-width: 575px) { .search-pairing-quality-panel .search-pairing-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.search-pairing-quality-panel .search-pairing-summary > div { min-height: 72px; padding: 11px; }.search-pairing-table td { white-space: normal; } }
