@@ -2,10 +2,12 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .lifecycle_reminder_effect import (
     EFFECT_WINDOW_DAYS,
+    MIN_SEGMENT_ITEMS,
     NOTICE_MATCH_TOLERANCE,
     UNTOUCHED_LIMIT,
     build_lifecycle_reminder_effect,
@@ -111,6 +113,8 @@ class LifecycleReminderEffectTests(TestCase):
         self.assertFalse(data['has_data'])
         self.assertEqual(data['summary']['reminded_items'], 0)
         self.assertEqual(data['kind_rows'], [])
+        self.assertEqual(data['category_rows'], [])
+        self.assertEqual(data['seller_load_rows'], [])
         self.assertEqual(data['untouched_rows'], [])
         self.assertEqual(data['blocked_rows'], [])
         self.assertEqual(data['recommendations'], [])
@@ -356,3 +360,144 @@ class LifecycleReminderEffectTests(TestCase):
         self.assertEqual(summary['notice_read_rate'], 33.3)
         self.assertEqual(summary['read_rate'], 33.3)
 
+
+
+    def test_category_rows_separate_actions_and_keep_their_order(self):
+        book = Category.objects.create(name='教材')
+        device = Category.objects.create(name='数码')
+        acted = self.make_item(title='提醒后整理的教材', category=book, age_days=60)
+        stale = self.make_item(
+            seller=self.other, title='提醒前整理的数码', category=device, age_days=60,
+        )
+        self.stamp_reminder(acted, days_ago=3)
+        self.stamp_reminder(stale, days_ago=3)
+        self.make_notice(read=True, days_ago=3)
+        self.make_notice(seller=self.other, read=True, days_ago=3)
+        Item.objects.filter(pk=acted.pk).update(
+            last_refreshed_at=timezone.now(), refresh_count=1,
+        )
+        Item.objects.filter(pk=stale.pk).update(
+            last_refreshed_at=timezone.now() - timedelta(days=10), refresh_count=1,
+        )
+
+        rows = {row['category_name']: row for row in self.data()['category_rows']}
+
+        self.assertEqual(rows['教材']['items'], 1)
+        self.assertEqual(rows['教材']['acted_after'], 1)
+        self.assertEqual(rows['教材']['action_rate'], 100.0)
+        self.assertEqual(rows['数码']['refreshed_after'], 0)
+        self.assertEqual(rows['数码']['acted_after'], 0)
+        self.assertEqual(
+            [row['category_name'] for row in self.data()['category_rows']],
+            ['教材', '数码'],
+        )
+
+    def test_small_category_reports_numbers_without_direction(self):
+        item = self.make_item(age_days=60)
+        self.stamp_reminder(item)
+
+        row = self.data()['category_rows'][0]
+
+        self.assertEqual(row['items'], 1)
+        self.assertEqual(row['action_rate'], 0)
+        self.assertFalse(row['comparable'])
+        self.assertEqual(row['sample_label'], '样本不足')
+        self.assertLess(MIN_SEGMENT_ITEMS, 13)
+
+    def test_seller_load_rows_use_in_period_reminded_item_counts(self):
+        heavy = User.objects.create_user(
+            username='effect-heavy-load', password='safe-password-123',
+        )
+        single = self.make_item(title='单件卖家', age_days=60)
+        self.stamp_reminder(single, days_ago=2)
+        few_items = [
+            self.make_item(
+                seller=self.other, title='少量商品 ' + str(index), age_days=60,
+            )
+            for index in range(2)
+        ]
+        many_items = [
+            self.make_item(seller=heavy, title='多件商品 ' + str(index), age_days=60)
+            for index in range(4)
+        ]
+        for item in few_items + many_items:
+            self.stamp_reminder(item, days_ago=2)
+        Item.objects.filter(pk=single.pk).update(
+            last_refreshed_at=timezone.now(), refresh_count=1,
+        )
+        Item.objects.filter(pk=few_items[0].pk).update(
+            last_refreshed_at=timezone.now(), refresh_count=1,
+        )
+        for item in many_items[:2]:
+            Item.objects.filter(pk=item.pk).update(
+                last_refreshed_at=timezone.now(), refresh_count=1,
+            )
+
+        data = self.data()
+        rows = {row['key']: row for row in data['seller_load_rows']}
+
+        self.assertEqual(rows['one']['label'], '1 件')
+        self.assertEqual(rows['one']['sellers'], 1)
+        self.assertEqual(rows['one']['items'], 1)
+        self.assertEqual(rows['one']['acted_after'], 1)
+        self.assertEqual(rows['few']['sellers'], 1)
+        self.assertEqual(rows['few']['items'], 2)
+        self.assertEqual(rows['few']['acted_after'], 1)
+        self.assertEqual(rows['many']['sellers'], 1)
+        self.assertEqual(rows['many']['items'], 4)
+        self.assertEqual(rows['many']['acted_after'], 2)
+        self.assertEqual(
+            sum(row['items'] for row in data['seller_load_rows']),
+            data['summary']['reminded_items'],
+        )
+        self.assertEqual(
+            sum(row['acted_after'] for row in data['seller_load_rows']),
+            data['summary']['acted_after'],
+        )
+
+    def test_segment_rows_do_not_expose_seller_identity(self):
+        item = self.make_item(age_days=60)
+        self.stamp_reminder(item)
+
+        data = self.data()
+
+        for row in data['category_rows'] + data['seller_load_rows']:
+            self.assertNotIn('seller', row)
+            self.assertNotIn('seller_id', row)
+            self.assertNotIn('username', row)
+            self.assertNotIn('item', row)
+
+
+    def test_dashboard_and_export_render_the_two_segment_tables(self):
+        category = Category.objects.create(name='分层分类')
+        item = self.make_item(title='分层商品', category=category, age_days=60)
+        self.stamp_reminder(item, days_ago=2)
+        Item.objects.filter(pk=item.pk).update(
+            last_refreshed_at=timezone.now(), refresh_count=1,
+        )
+        staff = User.objects.create_user(
+            username='effect-staff', password='safe-password-123', is_staff=True,
+        )
+        self.client.force_login(staff)
+
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertIn('生命周期提醒触达与行动', html)
+        self.assertIn('按商品分类看行动率', html)
+        self.assertIn('按本周期被提醒件数看行动率', html)
+        self.assertIn('这是提醒负担，不是卖家库存规模', html)
+        self.assertIn('不足，只报数', html)
+        self.assertNotIn('effect-seller', html)
+
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        self.assertEqual(export.status_code, 200)
+        csv_text = export.content.decode('utf-8-sig')
+        self.assertIn('生命周期提醒效果：按商品分类', csv_text)
+        self.assertIn('生命周期提醒效果：按卖家本周期提醒负担', csv_text)
+        self.assertIn('分层分类', csv_text)
+        self.assertIn('1 件', csv_text)
+        self.assertIn('不足，只报数', csv_text)
+        self.assertNotIn('effect-seller', csv_text)

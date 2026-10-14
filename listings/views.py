@@ -7848,6 +7848,42 @@ def operations_dashboard_export(request):
                 row['acted'], row['action_rate'],
             ])
     writer.writerow([])
+    writer.writerow(['生命周期提醒效果：按商品分类'])
+    writer.writerow(['分类', '商品数', '对应通知', '已读商品', '提醒后刷新', '提醒后终态', '有动作', '行动率（%）', '样本'])
+    if not reminder_effect['category_rows']:
+        writer.writerow(['周期内没有可按分类统计的提醒商品。'])
+    else:
+        for row in reminder_effect['category_rows']:
+            writer.writerow([
+                row['category_name'], row['items'], row['reached_items'],
+                row['read_items'], row['refreshed_after'], row['completed_after'],
+                row['acted_after'], row['action_rate'],
+                '足够' if row['comparable'] else '不足，只报数',
+            ])
+    writer.writerow([])
+    writer.writerow(['生命周期提醒效果：按卖家本周期提醒负担'])
+    writer.writerow(['本周期被提醒件数', '卖家数', '商品数', '已读商品', '有动作', '行动率（%）', '样本'])
+    if not reminder_effect['seller_load_rows']:
+        writer.writerow(['周期内没有可按提醒负担统计的卖家。'])
+    else:
+        for row in reminder_effect['seller_load_rows']:
+            writer.writerow([
+                row['label'], row['sellers'], row['items'], row['read_items'],
+                row['acted_after'], row['action_rate'],
+                '足够' if row['comparable'] else '不足，只报数',
+            ])
+    writer.writerow([])
+    writer.writerow(['分层说明'])
+    writer.writerow([
+        '分组少于', reminder_effect['segment_threshold'],
+        '件商品时只报数字，不判方向；分类表按名称排列，提醒负担表按固定档位排列，均不按行动率排序。',
+    ])
+    writer.writerow([
+        '“本周期被提醒件数”来自周期内提醒时间戳，不代表卖家当前库存或长期规模；'
+        '两层分组都不输出卖家用户名。',
+    ])
+
+    writer.writerow([])
     writer.writerow(['当前仍未真正收到', '商品数', '说明'])
     for row in reminder_effect['blocked_rows']:
         writer.writerow([row['label'], row['items'], row['note']])
@@ -7884,7 +7920,7 @@ def operations_dashboard_export(request):
         '发送时的计数只存在于命令的返回值里，从来没有被存下来。',
     ])
     writer.writerow([
-        '此处只报告，不补发提醒、不修改提醒阈值、不按行动率给卖家排序。',
+        '此处只报告，不补发提醒、不修改提醒阈值、不按行动率给分类或卖家排序。',
     ])
 
     trend_runs = dashboard['task_run_trend']

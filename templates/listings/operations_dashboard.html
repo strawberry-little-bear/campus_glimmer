@@ -2674,6 +2674,61 @@
         </div>
     </div>
 
+    <div class="row g-3 mt-1">
+        <div class="col-xl-7">
+            <div class="supply-lifecycle-block">
+                <div class="supply-lifecycle-block-heading"><strong>按商品分类看行动率</strong><span>按名称排列，不按行动率排名</span></div>
+                {% if lifecycle_reminder_effect.category_rows %}
+                <div class="ops-table-wrap">
+                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-category-table">
+                        <thead><tr><th>分类</th><th>商品</th><th>对应通知</th><th>已读</th><th>刷新</th><th>终态</th><th>有动作</th><th>行动率</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in lifecycle_reminder_effect.category_rows %}
+                            <tr>
+                                <td data-label="分类">{{ row.category_name }}</td>
+                                <td data-label="商品">{{ row.items }}</td>
+                                <td data-label="对应通知">{{ row.reached_items }}</td>
+                                <td data-label="已读">{{ row.read_items }}</td>
+                                <td data-label="刷新">{{ row.refreshed_after }}</td>
+                                <td data-label="终态">{{ row.completed_after }}</td>
+                                <td data-label="有动作">{{ row.acted_after }}</td>
+                                <td data-label="行动率">{% if row.comparable and row.action_rate %}<span class="supply-lifecycle-flag">{{ row.action_rate }}%</span>{% else %}{{ row.action_rate }}%{% endif %}</td>
+                                <td data-label="样本">{% if row.comparable %}<span class="text-muted">足够</span>{% else %}<span class="text-muted">不足，只报数</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<div class="empty-inline">周期内没有可按分类统计的提醒商品。</div>{% endif %}
+            </div>
+        </div>
+        <div class="col-xl-5">
+            <div class="supply-lifecycle-block">
+                <div class="supply-lifecycle-block-heading"><strong>按本周期被提醒件数看行动率</strong><span>这是提醒负担，不是卖家库存规模</span></div>
+                {% if lifecycle_reminder_effect.seller_load_rows %}
+                <div class="ops-table-wrap">
+                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-seller-load-table">
+                        <thead><tr><th>本周期被提醒件数</th><th>卖家</th><th>商品</th><th>已读</th><th>有动作</th><th>行动率</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in lifecycle_reminder_effect.seller_load_rows %}
+                            <tr>
+                                <td data-label="本周期被提醒件数">{{ row.label }}</td>
+                                <td data-label="卖家">{{ row.sellers }}</td>
+                                <td data-label="商品">{{ row.items }}</td>
+                                <td data-label="已读">{{ row.read_items }}</td>
+                                <td data-label="有动作">{{ row.acted_after }}</td>
+                                <td data-label="行动率">{% if row.comparable and row.action_rate %}<span class="supply-lifecycle-flag">{{ row.action_rate }}%</span>{% else %}{{ row.action_rate }}%{% endif %}</td>
+                                <td data-label="样本">{% if row.comparable %}<span class="text-muted">足够</span>{% else %}<span class="text-muted">不足，只报数</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}<div class="empty-inline">周期内没有可按提醒负担统计的卖家。</div>{% endif %}
+            </div>
+        </div>
+    </div>
+
     {% if lifecycle_reminder_effect.untouched_rows %}
     <div class="supply-lifecycle-block mt-3">
         <div class="supply-lifecycle-block-heading"><strong>提醒之后仍无动作的商品</strong><span>展示前 {{ lifecycle_reminder_effect.untouched_rows|length }} 条，共 {{ lifecycle_reminder_effect.untouched_total }} 件</span></div>
@@ -2709,7 +2764,7 @@
     </div>
     {% endif %}
     {% else %}<div class="empty-inline mt-3">周期内还没有发送过生命周期提醒，调度任务执行后这里会开始统计触达与行动情况。</div>{% endif %}
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这里只统计「提醒之后发生」的动作，不区分是否由提醒引起：卖家完全可能在提醒前就已决定整理商品。刷新看主动刷新时间，成交看订单走到终态；编辑商品不算动作，因为任何保存都会改写更新时间。「当前仍未真正收到」用当前偏好与免打扰时段重算，不是发送当天的历史快照。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这里只统计「提醒之后发生」的动作，不区分是否由提醒引起：卖家完全可能在提醒前就已决定整理商品。刷新看主动刷新时间，成交看订单走到终态；编辑商品不算动作，因为任何保存都会改写更新时间。「当前仍未真正收到」用当前偏好与免打扰时段重算，不是发送当天的历史快照。分类与提醒负担分层仍只是观察：低于 {{ lifecycle_reminder_effect.segment_threshold }} 件商品的分组只报数字、不判方向，也不按行动率给分类或卖家排名。</div>
 </section>
 <section class="content-card ops-panel mb-4 lifecycle-reminder-action-trend-panel">
     <div class="ops-panel-heading">

@@ -45,6 +45,10 @@ TERMINAL_ORDER_STATUSES = ('completed', 'returned')
 # “提醒了却没有任何动作”的商品只展示前几条，但这个数字本身始终给出。
 UNTOUCHED_LIMIT = 8
 
+# 分类和提醒负担分层的最小商品样本。低于这个数时比例仍然照报，但面板和
+# CSV 都会明确“样本不足”，不把它读成方向或优劣。
+MIN_SEGMENT_ITEMS = 12
+
 # 通知写入与冷却字段回写在同一个事务里，但两者仍可能差出毫秒级；
 # 匹配通知与商品时留出这点余量，避免把同一次提醒判成“没有触达”。
 NOTICE_MATCH_TOLERANCE = timedelta(minutes=5)
@@ -236,6 +240,8 @@ def build_lifecycle_reminder_effect(days=30, *, now=None):
         })
 
     kind_rows = _build_kind_rows(outcome_rows)
+    category_rows = _build_category_rows(outcome_rows)
+    seller_load_rows = _build_seller_load_rows(outcome_rows)
     blocked_rows = _build_blocked_rows(now=now)
     untouched_rows = _build_untouched_rows(outcome_rows)
 
@@ -282,6 +288,13 @@ def build_lifecycle_reminder_effect(days=30, *, now=None):
             'window_days': EFFECT_WINDOW_DAYS,
         },
         'kind_rows': kind_rows,
+        'category_rows': category_rows,
+        'seller_load_rows': seller_load_rows,
+        'segment_threshold': MIN_SEGMENT_ITEMS,
+        'segment_threshold_note': (
+            f'分组少于 {MIN_SEGMENT_ITEMS} 件商品时只报数字，不判方向；'
+            '表格不按行动率排序。'
+        ),
         'blocked_rows': blocked_rows,
         'untouched_rows': untouched_rows,
         'untouched_total': reminded_items - acted,
@@ -339,6 +352,91 @@ def _build_kind_rows(outcome_rows):
             "read_rate": _pct(read, len(matched)),
             "acted": acted,
             "action_rate": _pct(acted, len(matched)),
+        })
+    return rows
+
+
+def _segment_counts(matched):
+    """Shared counters for the two read-only segmentations."""
+    return {
+        "items": len(matched),
+        "reached_items": sum(1 for row in matched if row["reached"]),
+        "read_items": sum(1 for row in matched if row["read"]),
+        "refreshed_after": sum(1 for row in matched if row["refreshed_after"]),
+        "completed_after": sum(1 for row in matched if row["completed_after"]),
+        "acted_after": sum(
+            1 for row in matched
+            if row["refreshed_after"] or row["completed_after"]
+        ),
+    }
+
+
+def _with_segment_rate(counts):
+    """Attach the already-defined action rate and small-sample state."""
+    comparable = counts["items"] >= MIN_SEGMENT_ITEMS
+    return {
+        **counts,
+        "action_rate": _pct(counts["acted_after"], counts["items"]),
+        "comparable": comparable,
+        "sample_label": "样本足够" if comparable else "样本不足",
+    }
+
+
+def _build_category_rows(outcome_rows):
+    """Split the observed outcomes by listing category.
+
+    Rows are ordered by category name rather than action rate. A category
+    table sorted by its rate invites an operator to read it as a ranking of
+    sellers, which this diagnostic explicitly does not support.
+    """
+    grouped = {}
+    for row in outcome_rows:
+        category = row["item"].category
+        grouped.setdefault(category.pk, {"category": category, "rows": []})
+        grouped[category.pk]["rows"].append(row)
+
+    rows = []
+    for entry in sorted(
+        grouped.values(),
+        key=lambda value: (value["category"].name, value["category"].pk),
+    ):
+        category = entry["category"]
+        rows.append({
+            "category_id": category.pk,
+            "category_name": category.name,
+            **_with_segment_rate(_segment_counts(entry["rows"])),
+        })
+    return rows
+
+
+def _build_seller_load_rows(outcome_rows):
+    """Split outcomes by how many listings a seller was reminded for.
+
+    This is deliberately *not* current inventory size. Listing status changes
+    after the nudge, so current stock cannot reconstruct the moment the
+    reminder was sent. The number of in-period reminded listings is directly
+    countable and is labelled as reminder load instead.
+    """
+    loads = {}
+    for row in outcome_rows:
+        loads.setdefault(row["seller"].pk, []).append(row)
+
+    definitions = (
+        ("one", "1 件", lambda count: count == 1),
+        ("few", "2—3 件", lambda count: 2 <= count <= 3),
+        ("many", "4 件及以上", lambda count: count >= 4),
+    )
+    rows = []
+    for key, label, matches in definitions:
+        seller_ids = [seller_id for seller_id, count in loads.items() if matches(len(count))]
+        if not seller_ids:
+            continue
+        matched = [row for seller_id in seller_ids for row in loads[seller_id]]
+        rows.append({
+            "key": key,
+            "label": label,
+            "sellers": len(seller_ids),
+            **_with_segment_rate(_segment_counts(matched)),
         })
     return rows
 
