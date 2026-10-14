@@ -459,6 +459,42 @@ class Order(models.Model):
         return f'{self.item.title} · {self.get_status_display()}'
 
 
+class OrderSafetyAcknowledgement(models.Model):
+    ROLE_CHOICES = (
+        ('buyer', '买家'),
+        ('seller', '卖家'),
+    )
+
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE,
+        related_name='safety_acknowledgements', verbose_name='订单',
+    )
+    role = models.CharField('确认角色', max_length=10, choices=ROLE_CHOICES)
+    fingerprint = models.CharField(
+        '安全卡指纹', max_length=64,
+        help_text='由当前安全卡提醒标题、等级和行动建议生成；关键信号变化后需要重新确认。',
+    )
+    acknowledged_at = models.DateTimeField('确认时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '订单安全卡确认'
+        verbose_name_plural = '订单安全卡确认'
+        ordering = ['order', 'role', '-acknowledged_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['order', 'role', 'fingerprint'],
+                name='unique_order_safety_acknowledgement',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['order', 'fingerprint']),
+            models.Index(fields=['role', '-acknowledged_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.order.item.title} · {self.get_role_display()} · {self.acknowledged_at:%Y-%m-%d %H:%M}'
+
+
 class OrderEvent(models.Model):
     STATUS_CHOICES = Order.STATUS_CHOICES
 

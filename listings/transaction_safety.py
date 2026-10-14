@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import hashlib
+import json
 from decimal import Decimal
 
 from django.db.models import Avg, Count, Q
@@ -40,6 +42,22 @@ class TransactionSafetySummary:
         if self.positive_count >= 2:
             return '当前交易保障较完整'
         return '建议完成交付前核对'
+
+
+def transaction_safety_fingerprint(summary):
+    """Return a stable fingerprint for the current safety actions.
+
+    The acknowledgement is bound to what the user is asked to do, not to every
+    number in the explanatory text. A category average moving from 47% to 48%
+    does not require another acknowledgement, while a new private-location
+    warning does.
+    """
+    payload = [
+        {'level': signal.level, 'title': signal.title, 'action': signal.action}
+        for signal in summary.signals
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
+    return hashlib.sha256(encoded.encode('utf-8')).hexdigest()
 
 
 def _participant_stats(user_id):

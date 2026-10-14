@@ -98,7 +98,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
@@ -119,7 +119,7 @@ from .saved_searches import (
     matches_saved_search, notify_saved_search_matches,
 )
 from .saved_search_digest import deliver_buffered_saved_search_matches
-from .transaction_safety import build_transaction_safety
+from .transaction_safety import build_transaction_safety, transaction_safety_fingerprint
 from chat_messages.models import ModerationEvent, PrivateMessage
 from accounts.models import CampusVerification
 
@@ -954,6 +954,17 @@ def order_detail(request, order_id):
         return redirect('home')
     appointment = getattr(order, 'appointment', None)
     transaction_safety = build_transaction_safety(order)
+    safety_fingerprint = transaction_safety_fingerprint(transaction_safety)
+    current_safety_acknowledgements = {
+        acknowledgement.role: acknowledgement
+        for acknowledgement in order.safety_acknowledgements.filter(fingerprint=safety_fingerprint)
+    }
+    viewer_safety_role = 'buyer' if request.user == order.buyer else 'seller'
+    my_safety_acknowledgement = current_safety_acknowledgements.get(viewer_safety_role)
+    can_acknowledge_order_safety = (
+        order.status in {'pending', 'confirmed', 'meeting'}
+        and my_safety_acknowledgement is None
+    )
     meeting_form = None
     meeting_location_recommendations = []
     meeting_time_recommendations = []
@@ -998,6 +1009,11 @@ def order_detail(request, order_id):
         'handoff_code_display': handoff_code_display,
         'appointment': appointment,
         'transaction_safety': transaction_safety,
+        'safety_fingerprint': safety_fingerprint,
+        'buyer_safety_acknowledgement': current_safety_acknowledgements.get('buyer'),
+        'seller_safety_acknowledgement': current_safety_acknowledgements.get('seller'),
+        'my_safety_acknowledgement': my_safety_acknowledgement,
+        'can_acknowledge_order_safety': can_acknowledge_order_safety,
         'meeting_form': meeting_form,
         'meeting_location_recommendations': meeting_location_recommendations,
         'meeting_time_recommendations': meeting_time_recommendations,
@@ -1008,6 +1024,50 @@ def order_detail(request, order_id):
         'dispute_evidence_form': dispute_evidence_form,
         'now': timezone.now(),
     })
+
+
+@login_required
+def acknowledge_order_safety(request, order_id):
+    """Record one participant's acknowledgement of the current safety card.
+
+    The acknowledgement is versioned by the safety-action fingerprint. It is
+    deliberately not an order event and sends no notification: reading a safety
+    checklist is the participant's own risk decision, not the other party's todo.
+    """
+    order = get_object_or_404(
+        Order.objects.select_related('item', 'buyer', 'seller'), id=order_id,
+    )
+    if request.user not in {order.buyer, order.seller}:
+        messages.error(request, '你没有权限确认这笔订单的安全卡。')
+        return redirect('home')
+    if request.method != 'POST':
+        return redirect('order_detail', order_id=order.id)
+
+    with transaction.atomic():
+        locked_order = Order.objects.select_for_update().select_related(
+            'item', 'buyer', 'seller', 'meeting_location', 'item__category', 'item__location',
+        ).get(pk=order.id)
+        if request.user not in {locked_order.buyer, locked_order.seller}:
+            messages.error(request, '你没有权限确认这笔订单的安全卡。')
+            return redirect('home')
+        if locked_order.status not in {'pending', 'confirmed', 'meeting'}:
+            messages.info(request, '订单已进入后续阶段，无需再补确认交易安全卡。')
+            return redirect('order_detail', order_id=locked_order.id)
+
+        summary = build_transaction_safety(locked_order)
+        fingerprint = transaction_safety_fingerprint(summary)
+        role = 'buyer' if request.user == locked_order.buyer else 'seller'
+        _, created = OrderSafetyAcknowledgement.objects.get_or_create(
+            order=locked_order,
+            role=role,
+            fingerprint=fingerprint,
+        )
+
+    if created:
+        messages.success(request, '已确认当前交易安全卡。')
+    else:
+        messages.info(request, '你已经确认过当前交易安全卡。')
+    return redirect('order_detail', order_id=order.id)
 
 
 @login_required

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
 
@@ -234,6 +234,15 @@ class DeliveryConfirmationAdmin(admin.ModelAdmin):
         if obj.handoff_code_attempts >= 5:
             return '已锁定'
         return f'有效（{obj.handoff_code_hint}）'
+
+
+@admin.register(OrderSafetyAcknowledgement)
+class OrderSafetyAcknowledgementAdmin(admin.ModelAdmin):
+    list_display = ('order', 'role', 'fingerprint', 'acknowledged_at')
+    list_filter = ('role', 'acknowledged_at')
+    search_fields = ('order__item__title', 'order__buyer__username', 'order__seller__username', 'fingerprint')
+    autocomplete_fields = ('order',)
+    readonly_fields = ('role', 'fingerprint', 'acknowledged_at')
 
 
 @admin.register(OrderDispute)

@@ -69,6 +69,34 @@
                     </article>
                     {% endfor %}
                 </div>
+                <div class="transaction-safety-acknowledgement mt-3 pt-3 border-top">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <small class="text-muted">当前安全卡确认：</small>
+                            {% if buyer_safety_acknowledgement %}
+                            <span class="badge text-bg-success">买家已确认 · {{ buyer_safety_acknowledgement.acknowledged_at|date:'Y-m-d H:i' }}</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">买家未确认</span>
+                            {% endif %}
+                            {% if seller_safety_acknowledgement %}
+                            <span class="badge text-bg-success">卖家已确认 · {{ seller_safety_acknowledgement.acknowledged_at|date:'Y-m-d H:i' }}</span>
+                            {% else %}
+                            <span class="badge text-bg-secondary">卖家未确认</span>
+                            {% endif %}
+                        </div>
+                        {% if can_acknowledge_order_safety %}
+                        <form method="post" action="{% url 'acknowledge_order_safety' order.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-check2-square me-1"></i>我已核对当前安全提醒
+                            </button>
+                        </form>
+                        {% elif my_safety_acknowledgement %}
+                        <span class="small text-muted"><i class="bi bi-check2-circle me-1"></i>你已确认当前版本</span>
+                        {% endif %}
+                    </div>
+                    <p class="small text-muted mt-2 mb-0">确认只表示已核对当前提醒，不是平台担保；交付安排变化后需要重新确认。</p>
+                </div>
             </section>
             {% endif %}
 
