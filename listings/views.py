@@ -38,6 +38,7 @@ from .demand_task_aging import build_demand_task_aging
 from .notification_snooze_return import build_notification_snooze_return
 from .notification_kind_coverage import build_notification_kind_coverage
 from .notification_preference_usage import build_notification_preference_usage
+from .notification_quiet_hours_shape import build_notification_quiet_hours_shape
 from .notification_aggregation_quality import build_notification_aggregation_quality
 from .report_resolution_quality import build_report_resolution_quality
 from .meeting_incident_quality import build_meeting_incident_quality
@@ -2342,6 +2343,7 @@ def operations_dashboard(request):
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
+    dashboard['notification_quiet_hours_shape'] = build_notification_quiet_hours_shape(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
@@ -2527,6 +2529,7 @@ def operations_dashboard_export(request):
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
+    dashboard['notification_quiet_hours_shape'] = build_notification_quiet_hours_shape(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
     dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
@@ -3510,6 +3513,105 @@ def operations_dashboard_export(request):
         '两格都只报人数，不报任何两格之间的比值。'
         '本模块只报告：不加迁移、不加字段、不改 create_notification 的静默 return None、'
         '不给任何人自动打开开关；不按用户排名、不输出用户名。',
+    ])
+    quiet_hours_shape = dashboard['notification_quiet_hours_shape']
+    writer.writerow([])
+    writer.writerow(['免打扰时段的形状', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', quiet_hours_shape['summary'],
+        '快照读全部偏好行，days 只为与其他面板同屏而不参与过滤；免打扰只压角标，不挡通知入库',
+    ])
+    writer.writerow([])
+    writer.writerow(['总闸与配置'])
+    writer.writerow(['指标', '数值', '说明'])
+    writer.writerow([
+        '偏好行', quiet_hours_shape['preference_count'],
+        '分母是偏好行，不是全体用户',
+    ])
+    writer.writerow([
+        '没有偏好行', quiet_hours_shape['no_preference_count'],
+        '单列一格，不并入「关掉免打扰」',
+    ])
+    writer.writerow([
+        '开启免打扰',
+        '—' if quiet_hours_shape['enabled_share'] is None else quiet_hours_shape['enabled_share'],
+        f"{quiet_hours_shape['enabled_count']} 行开着总闸",
+    ])
+    writer.writerow([
+        '照抄默认窗口',
+        '—' if quiet_hours_shape['default_window_share'] is None else quiet_hours_shape['default_window_share'],
+        f"{quiet_hours_shape['default_window_count']} 行为 22:00-08:00",
+    ])
+    writer.writerow([
+        '开启且自选窗口',
+        '—' if quiet_hours_shape['custom_window_share'] is None else quiet_hours_shape['custom_window_share'],
+        f"{quiet_hours_shape['custom_window_count']} 行没有照抄默认窗口",
+    ])
+    writer.writerow([
+        '总闸关着但已配自选窗口', quiet_hours_shape['disabled_custom_count'],
+        '碰过窗口，却没有真正用上；不进方向、时长与逐小时叠加',
+    ])
+    writer.writerow([
+        '开启且开始等于结束', quiet_hours_shape['invalid_equal_count'],
+        '表单挡住了这条路径；非 0 说明有数据绕过表单，是待修 bug，不是一档正常分布',
+    ])
+    writer.writerow([])
+    writer.writerow(['窗口方向与时长'])
+    writer.writerow(['观察项', '数量', '占比（%）', '说明'])
+    for row in quiet_hours_shape['direction_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '—' if row['share'] is None else row['share'],
+            f"生效窗口不足 {quiet_hours_shape['min_sample']} 行，只作参考" if row['is_small_sample'] else '',
+        ])
+    for row in quiet_hours_shape['duration_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '—' if row['share'] is None else row['share'],
+            '时长档左闭右开；0 样本档保留' if not row['is_empty'] else '这一档没有样本',
+        ])
+    writer.writerow([
+        '开始等于结束', quiet_hours_shape['invalid_equal_count'], '—',
+        '不进方向、时长、小时和分钟叠加；实际读取逻辑会把它当成全天生效',
+    ])
+    writer.writerow([])
+    writer.writerow(['开始与结束小时'])
+    writer.writerow(['开始小时', '数量', '占比（%）', '样本'])
+    for row in quiet_hours_shape['start_hour_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '—' if row['share'] is None else row['share'],
+            f"不足 {quiet_hours_shape['min_sample']} 行" if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow(['结束小时', '数量', '占比（%）', '样本'])
+    for row in quiet_hours_shape['end_hour_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '—' if row['share'] is None else row['share'],
+            f"不足 {quiet_hours_shape['min_sample']} 行" if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([])
+    writer.writerow(['逐小时叠加与全天峰值'])
+    writer.writerow(['全天峰值人数', '数值', '说明'])
+    writer.writerow([
+        '同一分钟被压着角标的最多人数', quiet_hours_shape['peak']['count'],
+        '按 1440 个分钟格子取最大值',
+    ])
+    writer.writerow([
+        '峰值首次出现', quiet_hours_shape['peak']['first_minute_label'],
+        '同一峰值只报第一次出现的分钟',
+    ])
+    writer.writerow(['小时', '平均压着人数', '小时峰值人数', '说明'])
+    for row in quiet_hours_shape['hour_rows']:
+        writer.writerow([
+            row['label'], row['average_count'], row['peak_count'],
+            '这一小时没有生效窗口覆盖' if row['peak_count'] == 0 else '',
+        ])
+    writer.writerow([
+        '说明',
+        '本模块只报告：不加迁移、不改 quiet_hours_active、不改表单校验、不自动打开总闸。'
+        '免打扰只压顶部角标，通知照常入库，不报「提醒少了多少」；不读 Notification 表。'
+        '不按用户排名、不输出用户名、不列任何人的具体窗口。',
     ])
     aggregation = dashboard['notification_aggregation_quality']
     writer.writerow([])

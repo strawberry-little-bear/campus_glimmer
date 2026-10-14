@@ -9,6 +9,7 @@ from datetime import time
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 
 from .models import NotificationPreference
 from .notification_quiet_hours_shape import (
@@ -190,3 +191,34 @@ class NotificationQuietHoursShapeTests(TestCase):
         self.assertTrue(all(
             row['is_small_sample'] for row in result['direction_rows']
         ))
+
+
+class NotificationQuietHoursShapeDashboardTests(TestCase):
+    def test_dashboard_and_export_expose_the_same_panel(self):
+        staff = User.objects.create_user(
+            username='quiet-hours-staff', password='safe-password-123', is_staff=True,
+        )
+        NotificationPreference.objects.create(
+            user=make_user('quiet-hours-user'),
+            quiet_hours_enabled=True,
+            quiet_hours_start=time(22, 30),
+            quiet_hours_end=time(8, 30),
+        )
+        self.client.force_login(staff)
+
+        html = self.client.get(reverse('operations_dashboard'), {'days': 30}).content.decode('utf-8')
+        self.assertIn('免打扰时段的形状', html)
+        for heading in (
+            '总闸与配置', '窗口方向与时长', '开始与结束小时',
+            '逐小时叠加与全天峰值',
+        ):
+            self.assertIn(heading, html)
+        self.assertIn('22:30-08:30', html)
+
+        csv_text = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        ).content.decode('utf-8-sig')
+        self.assertIn('免打扰时段的形状', csv_text)
+        self.assertIn('窗口方向与时长', csv_text)
+        self.assertIn('22:00', csv_text)
+        self.assertIn('08:00', csv_text)

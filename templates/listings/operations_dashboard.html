@@ -1107,6 +1107,137 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 notification-quiet-hours-shape-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Quiet hours shape</span><h2>免打扰时段的形状</h2></div>
+        <span class="ops-panel-hint">用户把窗口配在什么时候、多长、几点叠出峰值</span>
+    </div>
+    <p class="notification-quiet-hours-shape-note mb-3"><i class="bi bi-moon-stars me-1"></i><code>quiet_hours_enabled</code> 已经被上一块面板当成一个开关读过，但 <code>quiet_hours_start</code> 与 <code>quiet_hours_end</code> 此前没有任何数字读者。只报开启率会把一个 1 小时窗口和一个 23 小时窗口读成同一件事，也看不出多个窗口在一天里什么时候叠出峰值。本面板按快照读偏好行，把每个生效窗口映射到 1440 个分钟格子上。</p>
+    {% if not notification_quiet_hours_shape.has_data %}
+    <div class="empty-inline">{{ notification_quiet_hours_shape.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>偏好行</span><strong>{{ notification_quiet_hours_shape.preference_count }}</strong><small>另有 {{ notification_quiet_hours_shape.no_preference_count }} 个用户没有偏好行</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>开启免打扰</span><strong>{% if notification_quiet_hours_shape.enabled_share is None %}&mdash;{% else %}{{ notification_quiet_hours_shape.enabled_share }}%{% endif %}</strong><small>{{ notification_quiet_hours_shape.enabled_count }} / {{ notification_quiet_hours_shape.preference_count }} 行</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>照抄默认窗口</span><strong>{% if notification_quiet_hours_shape.default_window_share is None %}&mdash;{% else %}{{ notification_quiet_hours_shape.default_window_share }}%{% endif %}</strong><small>{{ notification_quiet_hours_shape.default_window_count }} 行为 22:00-08:00</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>配了自选但总闸关</span><strong>{{ notification_quiet_hours_shape.disabled_custom_count }}</strong><small>碰过窗口，却没有真正用上</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>总闸与配置</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
+                <tbody>
+                    <tr><td>偏好行</td><td>{{ notification_quiet_hours_shape.preference_count }}</td><td>分母是偏好行，不是全体用户；没有偏好行的用户单列</td></tr>
+                    <tr><td>没有偏好行</td><td>{{ notification_quiet_hours_shape.no_preference_count }}</td><td>从没碰过设置页，不等于显式关掉免打扰</td></tr>
+                    <tr><td>开启免打扰</td><td>{% if notification_quiet_hours_shape.enabled_share is None %}&mdash;{% else %}{{ notification_quiet_hours_shape.enabled_share }}%{% endif %}</td><td>{{ notification_quiet_hours_shape.enabled_count }} 行开着总闸</td></tr>
+                    <tr><td>开启且自选窗口</td><td>{% if notification_quiet_hours_shape.custom_window_share is None %}&mdash;{% else %}{{ notification_quiet_hours_shape.custom_window_share }}%{% endif %}</td><td>{{ notification_quiet_hours_shape.custom_window_count }} 行没有照抄 22:00-08:00</td></tr>
+                    <tr><td>开启且开始等于结束</td><td>{{ notification_quiet_hours_shape.invalid_equal_count }}</td><td>表单挡住了这条路径；非 0 说明有数据绕过了表单，是待修 bug</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>窗口方向与时长</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>观察项</th><th>数量</th><th>占比</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in notification_quiet_hours_shape.direction_rows %}
+                    <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        <td class="ops-hint">{% if row.is_small_sample %}生效窗口不足 {{ notification_quiet_hours_shape.min_sample }} 行，只作参考{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    {% for row in notification_quiet_hours_shape.duration_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.count }}{% if row.is_empty %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        <td class="ops-hint">时长档左闭右开；0 样本档保留</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分母是总闸开启且开始时间不等于结束时间的 {{ notification_quiet_hours_shape.direction_rows.0.count|add:notification_quiet_hours_shape.direction_rows.1.count }} 行。总闸关着的行即使存着时间，也不进这张表——那些时间此刻不生效，叠进去会把「配过但没用」读成「正在压角标」。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>开始与结束小时</h3>
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <h4 class="h6 mb-2">开始小时</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                        <thead><tr><th>开始小时</th><th>数量</th><th>占比</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in notification_quiet_hours_shape.start_hour_rows %}
+                            <tr{% if row.count == 0 %} class="text-muted"{% endif %}>
+                                <td>{{ row.label }}</td>
+                                <td>{{ row.count }}</td>
+                                <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                                <td>{% if row.is_small_sample %}不足 {{ notification_quiet_hours_shape.min_sample }} 行{% else %}可读数{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <h4 class="h6 mb-2">结束小时</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                        <thead><tr><th>结束小时</th><th>数量</th><th>占比</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in notification_quiet_hours_shape.end_hour_rows %}
+                            <tr{% if row.count == 0 %} class="text-muted"{% endif %}>
+                                <td>{{ row.label }}</td>
+                                <td>{{ row.count }}</td>
+                                <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                                <td>{% if row.is_small_sample %}不足 {{ notification_quiet_hours_shape.min_sample }} 行{% else %}可读数{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <p class="small text-muted mt-2 mb-0">0 到 23 点全列，包括没有人选择的小时。分子为 0、分母存在时报 0.0；一个生效窗口都没有时报「&mdash;」，不报 0。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>逐小时叠加与全天峰值</h3>
+        <div class="row g-3 mb-3">
+            <div class="col-md-6"><div class="ops-mini-stat"><span>全天峰值人数</span><strong>{{ notification_quiet_hours_shape.peak.count }}</strong><small>同一分钟里被压着角标的最多人数</small></div></div>
+            <div class="col-md-6"><div class="ops-mini-stat"><span>峰值首次出现</span><strong>{{ notification_quiet_hours_shape.peak.first_minute_label }}</strong><small>按分钟格子取第一次出现</small></div></div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>小时</th><th>平均压着人数</th><th>小时峰值人数</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in notification_quiet_hours_shape.hour_rows %}
+                    <tr{% if row.peak_count == 0 %} class="text-muted"{% endif %}>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.average_count }}</td>
+                        <td>{{ row.peak_count }}</td>
+                        <td class="ops-hint">{% if row.peak_count == 0 %}这一小时没有生效窗口覆盖{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">先把每个窗口落到 1440 个分钟格子上，再按 60 分钟求平均和峰值。22:30-08:30 和 22:00-08:30 在只看小时数字的表上几乎一样，实际差 30 分钟；跨午夜窗口必须按分钟处理。</p>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何偏好。</strong>不加迁移、不加模型约束、不改 <code>quiet_hours_active</code>、不改表单校验、不自动打开任何人的总闸。免打扰只压顶部未读角标，通知本身照常入库，所以这里不报「未读提醒少了多少」——那个效果在 <code>Notification</code> 表里不可观测，不编。快照口径不按周期过滤，不报窗口修改次数；不按用户排名、不输出用户名、不列任何人的具体窗口。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 notification-aggregation-quality-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Aggregation quality</span><h2>通知聚合的质量：合并掉的是打扰，还是信息</h2></div>

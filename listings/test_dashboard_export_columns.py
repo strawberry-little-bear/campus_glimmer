@@ -33,12 +33,12 @@ from django.utils import timezone
 from .models import (
     AcademicPhase, AcademicTerm, CampusCampaign, CampusLocation, Category,
     CommunityContribution, DemandPost, DemandResponse, Item, MutualAidFeedback,
-    Order,
+    NotificationPreference, Order,
 )
 from chat_messages.models import ModerationEvent
 from .task_runs import normalise_metrics, record_task_run
 
-from datetime import timedelta
+from datetime import time, timedelta
 
 
 PANEL_TITLE = re.compile(r"<h2[^>]*>(.*?)</h2>", re.S)
@@ -280,6 +280,11 @@ class DashboardExportColumnTests(TestCase):
         """
         seller = User.objects.create_user(username='column-seller')
         buyer = User.objects.create_user(username='column-buyer')
+        # 免打扰面板要有一行生效偏好，四张分布表才会真正渲染。
+        NotificationPreference.objects.create(
+            user=seller, quiet_hours_enabled=True,
+            quiet_hours_start=time(22, 30), quiet_hours_end=time(8, 30),
+        )
         category = Category.objects.create(name='列名测试分类')
         location = CampusLocation.objects.create(
             name='列名测试地点', building='列名测试楼', is_public=True,
