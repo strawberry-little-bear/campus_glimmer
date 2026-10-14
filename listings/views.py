@@ -28,6 +28,7 @@ from .search_threshold_feedback import build_search_threshold_feedback
 from .search_trend import build_search_trend
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
+from .search_rejection_recurrence import build_search_rejection_recurrence
 from .search_rejection_stats import build_search_rejection_stats
 from .search_position_quality import build_search_position_quality
 from .demand_match_quality import build_demand_match_quality
@@ -8553,6 +8554,7 @@ def search_insights(request):
     )
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
     dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
+    dashboard['rejection_recurrence'] = build_search_rejection_recurrence(days=period_days)
     dashboard['rejection_reasons'] = list(SearchSynonymRejection.REASON_CHOICES)
     dashboard['position_quality'] = build_search_position_quality(days=period_days)
     return render(request, 'listings/search_insights.html', dashboard)
@@ -8658,6 +8660,7 @@ def search_insights_export(request):
     )
     dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
     dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
+    dashboard['rejection_recurrence'] = build_search_rejection_recurrence(days=period_days)
     dashboard['position_quality'] = build_search_position_quality(days=period_days)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -8753,6 +8756,36 @@ def search_insights_export(request):
         '否决信号', rejections['signal']['label'],
         rejections['not_equivalent_count'], rejections['too_rare_count'],
         rejections['ambiguous_count'],
+    ])
+
+    recurrence = dashboard['rejection_recurrence']
+    writer.writerow([])
+    writer.writerow([
+        '否决的回头与被推翻', '仍然生效', '被确认覆盖', '推翻率（%）',
+        '反复出现的词对', '累计回头次数', '口径',
+    ])
+    writer.writerow([
+        '否决的回头与被推翻', recurrence['standing_count'],
+        recurrence['superseded_count'],
+        recurrence['reversed_share'] if recurrence['reversed_share'] is not None else '样本不足，暂不判断',
+        recurrence['recurred_count'], recurrence['recurrence_total'],
+        f"回头 {recurrence['min_recurrences']} 次以上算反复；推翻率需 {recurrence['min_judged_rejections']} 条以上样本；"
+        f"超过 {recurrence['reversed_share_limit']}% 说明判据该回头看一眼；已撤销删除读不到，不编数",
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '每一条否决的后来', '用户先搜', '随后改搜', '否决原因', '现在的状态',
+        '否决后回头次数', '最近回头',
+    ])
+    for row in recurrence['rows']:
+        writer.writerow([
+            '每一条否决的后来', row['source'], row['target'], row['reason_label'],
+            row['kind_label'], row['recurrences'],
+            f"{row['last_seen']:%Y-%m-%d %H:%M}" if row['last_seen'] else '生效期间未再出现',
+        ])
+    writer.writerow([
+        '说明', '此处只报告：不改任何否决记录、不撤销任何否决、不恢复任何候选，'
+        '也不修改候选次数门槛。回头次数不进入门槛判断，撤销删除不落表、因此不报数。',
     ])
     writer.writerow([])
     writer.writerow(['被否决词对', '用户先搜', '随后改搜', '否决原因', '出现次数', '是否达到门槛', '最近出现'])
