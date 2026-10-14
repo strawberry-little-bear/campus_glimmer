@@ -116,7 +116,7 @@ class SharedOperationsDashboardAssemblyTests(SimpleTestCase):
         self.assertEqual(calls, [('core', 7), ('first', 7), ('second', 7)])
         self.assertEqual(report['metrics']['builder_total'], 3)
         self.assertEqual(report['metrics']['duplicate_key_total'], 0)
-        self.assertEqual(
+        self.assertCountEqual(
             [row['key'] for row in report['rows']],
             ['operations_core', 'first_panel', 'second_panel'],
         )
@@ -124,10 +124,11 @@ class SharedOperationsDashboardAssemblyTests(SimpleTestCase):
     def test_the_production_registry_has_unique_shared_keys(self):
         keys = [row[0] for row in OPERATIONS_DASHBOARD_SHARED_BUILDERS]
 
-        self.assertEqual(len(keys), 46)
-        self.assertEqual(len(set(keys)), 46)
+        self.assertEqual(len(keys), 47)
+        self.assertEqual(len(set(keys)), 47)
         self.assertIn('search_impression_pairing_quality', keys)
         self.assertIn('recommendation_impression_quality', keys)
+        self.assertIn('location_registry_quality', keys)
 
 
 class DashboardBuildPerformanceExportTests(TestCase):

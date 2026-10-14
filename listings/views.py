@@ -71,6 +71,7 @@ from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
 from .item_image_coverage import build_item_image_coverage
+from .location_registry_quality import build_location_registry_quality
 # 订单承诺截止与催收效果：第八轮接面板时漏了这一行 import，看板整页 500。
 # 测试当时只跑新模块自己的用例，没有渲染过看板，所以它一路绿着上了 main。
 from .order_deadline_reminders import build_order_deadline_reminders
@@ -2448,6 +2449,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
     ('recommendation_impression_quality', '推荐曝光日志质量', build_recommendation_impression_quality),
+    ('location_registry_quality', '校园地点档案质量', build_location_registry_quality),
 )
 
 
@@ -9614,6 +9616,104 @@ def operations_dashboard_export(request):
         '不碰免费赠送和失物招领',
         '不按用户排名、不输出用户名、不读 description（它是商品标题拼出来的自由文本）',
         '不重复 analytics 的周期口径：它报流量，本模块报结构',
+    ])
+
+
+    location_quality = dashboard['location_registry_quality']
+    writer.writerow([])
+    writer.writerow(['校园地点档案质量'])
+    writer.writerow(['档案形状', '数值', '说明'])
+    writer.writerow([
+        '全部地点', location_quality['summary']['location_total'],
+        '含启用与停用地点的当前快照',
+    ])
+    writer.writerow([
+        '启用地点', location_quality['summary']['active_total'],
+        f"其中公共 {location_quality['summary']['active_public_total']} 个、非公共 {location_quality['summary']['active_private_total']} 个",
+    ])
+    writer.writerow([
+        '停用地点', location_quality['summary']['inactive_total'],
+        f"其中公共 {location_quality['summary']['inactive_public_total']} 个；停用只表示选择器不可见",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['地点字段覆盖', '范围', '已填写', '缺失', '总数', '填写率（%）'])
+    for row in location_quality['field_rows']:
+        writer.writerow([
+            row['label'], row['scope'], row['filled'], row['missing'],
+            row['total'], '' if row['share'] is None else row['share'],
+        ])
+
+    coverage = location_quality['coverage']
+    writer.writerow([])
+    writer.writerow(['当前业务覆盖', '数量 / 分类', '说明'])
+    writer.writerow([
+        '当前在售商品', f"{coverage['item_with_location']} / {coverage['item_total']}",
+        f"有地点 {coverage['item_with_location_share'] if coverage['item_with_location_share'] is not None else '—'}%，没地点 {coverage['item_without_location']}",
+    ])
+    writer.writerow([
+        '活跃求购', f"{coverage['demand_with_location']} / {coverage['demand_total']}",
+        f"没地点 {coverage['demand_without_location']}；没地点不是数据错误",
+    ])
+    writer.writerow([
+        '启用关注搜索', f"{coverage['saved_search_active_location']} / {coverage['saved_search_total']}",
+        f"绑定停用地点 {coverage['saved_search_inactive_location']}，未限定地点 {coverage['saved_search_without_location']}",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['周期交付地点来源', '订单数', '占比（%）', '说明'])
+    source_notes = {
+        'order': 'Order.meeting_location 优先',
+        'appointment': '订单没有地点时读交付安排地点',
+        'item': '订单与安排都没有地点时读商品地点',
+        'none': '订单、安排和商品都没有地点',
+    }
+    for row in location_quality['delivery_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '' if row['share'] is None else row['share'],
+            source_notes[row['source']],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['启用地点档案', '安全语义', '楼栋 / 校区', '详细位置', '说明', '安全提示', '在售', '求购', '关注搜索'])
+    for row in location_quality['location_rows']:
+        writer.writerow([
+            row['name'], '公共' if row['is_public'] else '非公共',
+            row['building'], row['address'], row['description'], row['safety_note'],
+            row['available_item_count'], row['active_demand_count'],
+            row['active_saved_search_count'],
+        ])
+    if location_quality['location_row_hidden_total']:
+        writer.writerow([
+            '未展示启用地点', '', '', '', '', '',
+            location_quality['location_row_hidden_total'], '', '',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['近似重名组', '地点数', '原文名称', '楼栋 / 详细位置', '当前在售'])
+    for group in location_quality['duplicate_name_groups']:
+        writer.writerow([
+            group['normalized_name'], group['location_count'],
+            ' / '.join(row['name'] for row in group['locations']),
+            ' / '.join(filter(None, (row['building'] or row['address'] for row in group['locations']))),
+            sum(row['available_item_count'] for row in group['locations']),
+        ])
+    if location_quality['duplicate_group_hidden_total']:
+        writer.writerow(['未展示组', location_quality['duplicate_group_hidden_total'], '', '', ''])
+
+    writer.writerow([])
+    writer.writerow(['停用地点仍被当前记录引用', '在售', '求购', '关注搜索', '合计'])
+    for row in location_quality['stale_reference_rows']:
+        writer.writerow([
+            row['name'], row['available_item_count'], row['active_demand_count'],
+            row['active_saved_search_count'], row['reference_total'],
+        ])
+    if location_quality['stale_reference_row_hidden_total']:
+        writer.writerow(['未展示地点', location_quality['stale_reference_row_hidden_total'], '', '', ''])
+    writer.writerow([
+        '口径', '', '', '', '',
+        '档案与当前引用为快照；交付按订单时间回看；只报告，不自动合并、不改外键、不输出用户或商品信息',
     ])
 
     return response

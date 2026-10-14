@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .location_registry_quality import (
@@ -271,4 +272,51 @@ class LocationRegistryQualityTests(TestCase):
     def test_invalid_period_falls_back_to_thirty_days(self):
         self.assertEqual(
             build_location_registry_quality(days=13, now=self.now)['period_days'], 30,
+        )
+
+
+class LocationRegistryQualityDashboardTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='location-quality-staff', password='safe-password-123', is_staff=True,
+        )
+        self.client.force_login(self.staff)
+
+    def test_operations_dashboard_renders_the_panel(self):
+        location = CampusLocation.objects.create(
+            name='档案质量地点', building='东区', address='东门内侧', safety_note='夜间照明到 22:00',
+        )
+
+        response = self.client.get(reverse('operations_dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '校园地点档案质量')
+        self.assertContains(response, '档案质量地点')
+        self.assertContains(response, '停用是选择器可见性')
+        self.assertContains(response, '只读：不改地点开关')
+
+    def test_operations_dashboard_export_contains_the_same_sections(self):
+        CampusLocation.objects.create(name='档案质量导出地点')
+
+        response = self.client.get(reverse('operations_dashboard_export'))
+
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('校园地点档案质量', text)
+        self.assertIn('档案质量导出地点', text)
+        self.assertIn('地点字段覆盖', text)
+        self.assertIn('周期交付地点来源', text)
+        self.assertIn('只报告，不自动合并、不改外键', text)
+
+    def test_non_staff_users_cannot_read_the_dashboard_or_export(self):
+        User.objects.create_user(
+            username='location-quality-reader', password='safe-password-123',
+        )
+        self.client.force_login(
+            User.objects.get(username='location-quality-reader'),
+        )
+
+        self.assertEqual(self.client.get(reverse('operations_dashboard')).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse('operations_dashboard_export')).status_code, 403,
         )

@@ -7092,5 +7092,159 @@
     {% endif %}
 </section>
 
+
+<section class="content-card ops-panel mb-4 location-registry-quality-panel" id="location-registry-quality">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Location registry</span><h2>校园地点档案质量</h2></div>
+        <span class="ops-panel-hint">档案与当前覆盖是快照；交付来源按订单时间回看</span>
+    </div>
+
+    {% if not location_registry_quality.has_data %}
+    <div class="empty-inline">还没有校园地点、在售商品、活跃求购、启用关注搜索或周期订单可读。</div>
+    {% else %}
+    <div class="row g-3 mb-3">
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>全部地点</span><strong>{{ location_registry_quality.summary.location_total }}</strong><small>启用 {{ location_registry_quality.summary.active_total }} · 停用 {{ location_registry_quality.summary.inactive_total }}</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>启用且公共</span><strong>{{ location_registry_quality.summary.active_public_total }}</strong><small>安全语义，不等于“必须可交付”</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>在售有地点</span><strong>{{ location_registry_quality.coverage.item_with_location }}</strong><small>共 {{ location_registry_quality.coverage.item_total }} 件</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>求购有地点</span><strong>{{ location_registry_quality.coverage.demand_with_location }}</strong><small>共 {{ location_registry_quality.coverage.demand_total }} 条</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>关注绑停用地点</span><strong>{{ location_registry_quality.coverage.saved_search_inactive_location }}</strong><small>启用关注搜索共 {{ location_registry_quality.coverage.saved_search_total }} 条</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>交付无解释</span><strong>{{ location_registry_quality.delivery_rows.3.count }}</strong><small>周期订单 {{ location_registry_quality.order_total }} 笔</small></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-6">
+            <div class="ops-panel-block h-100">
+                <h3>一、档案形状与字段覆盖</h3>
+                <div class="ops-table-wrap">
+                    <table class="table table-sm ops-table align-middle mb-0">
+                        <thead><tr><th>字段 / 形状</th><th>范围</th><th>已填 / 数量</th><th>缺失</th><th>填写率</th></tr></thead>
+                        <tbody>
+                            {% for row in location_registry_quality.field_rows %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td>{{ row.scope }}</td>
+                                <td>{{ row.filled }} / {{ row.total }}</td>
+                                <td>{{ row.missing }}</td>
+                                <td>{% if row.share is None %}—{% else %}{{ row.share }}%{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr>
+                                <td>启用但非公共</td>
+                                <td>启用地点</td>
+                                <td>{{ location_registry_quality.summary.active_private_total }}</td>
+                                <td>—</td>
+                                <td>—</td>
+                            </tr>
+                            <tr>
+                                <td>停用且公共</td>
+                                <td>停用地点</td>
+                                <td>{{ location_registry_quality.summary.inactive_public_total }}</td>
+                                <td>—</td>
+                                <td>不是错误</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">停用是选择器可见性，公共是安全语义；两个开关可以同时存在。缺安全提示只提示维护档案，不自动判错。</p>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="ops-panel-block h-100">
+                <h3>二、当前业务与周期交付</h3>
+                <div class="ops-split-list">
+                    <div>
+                        <h3><i class="bi bi-box-seam me-1"></i>当前快照</h3>
+                        <div class="ops-rank-row"><span>在售没有地点</span><strong>{{ location_registry_quality.coverage.item_without_location }}</strong><small>无法参与地点筛选</small></div>
+                        <div class="ops-rank-row"><span>求购没有地点</span><strong>{{ location_registry_quality.coverage.demand_without_location }}</strong><small>无法参与就近匹配</small></div>
+                        <div class="ops-rank-row"><span>关注未限定地点</span><strong>{{ location_registry_quality.coverage.saved_search_without_location }}</strong><small>全站范围提醒</small></div>
+                    </div>
+                    <div>
+                        <h3><i class="bi bi-geo-alt me-1"></i>交付地点来源</h3>
+                        {% for row in location_registry_quality.delivery_rows %}
+                        <div class="ops-rank-row"><span>{{ row.label }}</span><strong>{{ row.count }}</strong><small>{% if row.share is None %}暂无订单{% else %}{{ row.share }}%{% endif %}</small></div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <p class="small text-muted mt-2 mb-0">“可解释”只表示平台能从订单、交付安排或商品中指出一个地点，不等于双方实际见过面；取消订单也保留在分母里。</p>
+            </div>
+        </div>
+    </div>
+
+    {% if location_registry_quality.location_rows %}
+    <div class="ops-panel-block mt-3">
+        <h3>三、启用地点档案清单</h3>
+        <div class="ops-table-wrap">
+            <table class="table table-sm ops-table align-middle mb-0">
+                <thead><tr><th>地点</th><th>安全语义</th><th>楼栋 / 校区</th><th>详细位置</th><th>说明</th><th>安全提示</th><th>当前引用</th></tr></thead>
+                <tbody>
+                    {% for row in location_registry_quality.location_rows %}
+                    <tr>
+                        <td><strong>{{ row.name }}</strong></td>
+                        <td>{% if row.is_public %}公共{% else %}非公共{% endif %}</td>
+                        <td>{{ row.building|default:'—' }}</td>
+                        <td>{{ row.address|default:'—' }}</td>
+                        <td>{{ row.description|default:'—' }}</td>
+                        <td>{{ row.safety_note|default:'—' }}</td>
+                        <td><small class="d-block">在售 {{ row.available_item_count }} · 求购 {{ row.active_demand_count }} · 关注 {{ row.active_saved_search_count }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if location_registry_quality.location_row_hidden_total %}
+        <p class="small text-muted mt-2 mb-0">还有 {{ location_registry_quality.location_row_hidden_total }} 个启用地点未展示；截断只影响展示，不影响上方汇总。</p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if location_registry_quality.duplicate_name_groups %}
+    <div class="ops-panel-block mt-3">
+        <h3>四、归一化后的近似重名</h3>
+        <div class="ops-table-wrap">
+            <table class="table table-sm ops-table align-middle mb-0">
+                <thead><tr><th>归一化名称</th><th>地点数</th><th>原文名称</th><th>楼栋 / 详细位置</th><th>当前在售</th></tr></thead>
+                <tbody>
+                    {% for group in location_registry_quality.duplicate_name_groups %}
+                    <tr>
+                        <td><code>{{ group.normalized_name }}</code></td>
+                        <td>{{ group.location_count }}</td>
+                        <td>{% for row in group.locations %}<span class="d-block">{{ row.name }}</span>{% endfor %}</td>
+                        <td>{% for row in group.locations %}<span class="d-block">{% if row.building or row.address %}{{ row.building }}{% if row.building and row.address %} · {% endif %}{{ row.address }}{% else %}—{% endif %}</span>{% endfor %}</td>
+                        <td>{% for row in group.locations %}<span class="d-block">{{ row.available_item_count }}</span>{% endfor %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">Unicode NFKC、大小写和空白折叠后仍然相同的启用地点才成组；面板不判断哪一个是“正版”，更不会自动合并。</p>
+    </div>
+    {% endif %}
+
+    {% if location_registry_quality.stale_reference_rows %}
+    <div class="ops-panel-block mt-3">
+        <h3>五、停用地点仍被当前记录引用</h3>
+        <div class="ops-table-wrap">
+            <table class="table table-sm ops-table align-middle mb-0">
+                <thead><tr><th>停用地点</th><th>在售商品</th><th>活跃求购</th><th>启用关注搜索</th><th>合计引用</th></tr></thead>
+                <tbody>
+                    {% for row in location_registry_quality.stale_reference_rows %}
+                    <tr>
+                        <td><strong>{{ row.name }}</strong>{% if row.building or row.address %}<small class="d-block text-muted">{{ row.building }}{% if row.building and row.address %} · {% endif %}{{ row.address }}</small>{% endif %}</td>
+                        <td>{{ row.available_item_count }}</td>
+                        <td>{{ row.active_demand_count }}</td>
+                        <td>{{ row.active_saved_search_count }}</td>
+                        <td>{{ row.reference_total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读：不改地点开关、不改业务外键、不自动合并近似重名、不补写档案字段；商品、求购和关注搜索名称不进入输出。</div>
+    {% endif %}
+</section>
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}
