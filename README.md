@@ -1090,6 +1090,7 @@
 | 筛选组合交叉 | 分类 × 价格带的二维交叉，样本门槛与单维完全一致 | [展开](#search-g4) |
 | 候选门槛建议 | 同一份日志按 1–5 次各跑一遍，把每档的代价摆在一起 | [展开](#search-g5) |
 | 候选否决与负向样本 | 被运营否掉的词对留痕，按出现次数加权、可撤销、与确认互斥 | [展开](#search-g6) |
+| 否决的回头与被推翻 | 同一条否决在更长周期里的两种走向，以及被否决词对的回头次数 | [展开](#search-g10) |
 | 曝光位置与匹配打分 | `SearchImpression.position`、`SearchClick.position` 与 `DemandResponse.match_score` 第一次被读 | [展开](#search-g8) |
 
 <a id="search-g1"></a>
@@ -1190,6 +1191,22 @@
   - 门槛建议一节虽然会给出方向，但同样只到建议为止，不碰常量本身。
 - 统计只覆盖已确认的同义词，候选本身不落库，无法统计其确认率。
   - 已停用的同义词不参与判定，停用后的搜索变化属于市场而不属于这条配置。
+
+</details>
+
+<a id="search-g10"></a>
+
+<details>
+<summary>否决的回头与被推翻（6 条，含缩进子项）</summary>
+
+- **否决的回头与被推翻**：否决是一次性判断，可它锁住的是一个会重复出现的候选。三月的判断和九月再次出现的同一个词对，此前是两个互不相干的数字——没有任何一处把它们连起来看。
+  - 现在把同一条否决连起来看两件事：它后来还在不在被人认着，以及那个词对有没有自己回来。
+- **仍然生效和被确认覆盖分开报，方向相反**：前者是「当初的判断现在仍作数」，后者是「当初否错了，它其实是个等价关系」。合成一个撤销率会把两个相反的事实搅成一个数字，什么都说明不了。
+- **回头次数不能跨失效累加**：一条已被覆盖的否决不再挡任何候选，它之后的改口属于一个已经在扩大搜索的词对。所以回头的统计区间是 `[否决时刻, 失效时刻)`，仍然生效的数到现在。
+- **回头用与挖掘完全相同的规则数**：同一个用户、间隔不超过 30 分钟、前一次无结果、后一次有结果。两把尺子量出来的数字摆在一张表里，读者没有任何办法知道它们不可比。
+- **「已撤销删除」这一桶读不到，就不编数**：撤销只写消息日志、不落任何表，硬报一个「已撤销 0 条」等于让一个看不见的桶看起来真的没有事。
+  - 回头次数也不进门槛判断：一个回头三十次的词对仍然是当初否掉它的那个理由，除非它被覆盖，否则它一天就不该出现在候选里。
+- 本模块只报告，不改任何否决记录、不撤销任何否决、不恢复任何候选、不动门槛，也不读备注字段。
 
 </details>
 
@@ -2480,7 +2497,7 @@ campus_glimmer/
 └── README.md
 ```
 
-### listings/ 的业务模块（92 个）
+### listings/ 的业务模块（93 个）
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -2513,6 +2530,7 @@ campus_glimmer/
 | `search_synonym_effect.py` | 已确认同义词的无结果率回流与生效判定 | 读写 |
 | `search_threshold_feedback.py` | 由命中率反推候选门槛建议（只建议不自动改） | 只报告 |
 | `search_rejection_stats.py` | 否决记录的频率加权与门槛负向样本（只报告不改写） | 只报告 |
+| `search_rejection_recurrence.py` | 否决的回头与被推翻：只报回头次数与覆盖，撤销读不到就不编数 | 只报告 |
 | `search_position_quality.py` | 搜索结果位置分档点击率与排序效果（只报告不改权重） | 只报告 |
 | `search_combo_shift.py` | 筛选组合的跳周期交叉对比（分类×价格带，只报告） | 只报告 |
 | `notification_response.py` | 通知处理时效与触达质量统计 | 读写 |
@@ -2583,10 +2601,10 @@ campus_glimmer/
 | `urls.py` | 应用路由：商品、订单、搜索、通知、运营看板与后台入口 | 只读 |
 | `views.py` | 商品、订单、搜索、通知和运营页面 | 读写 |
 
-### listings/ 的测试模块（100 个）
+### listings/ 的测试模块（101 个）
 
 <details>
-<summary>测试模块清单（100 个）</summary>
+<summary>测试模块清单（101 个）</summary>
 
 清单按文件名字典序排列，`listings/tests.py`（早期总装）与各模块的冒烟用例都算在内。
 
@@ -2677,6 +2695,7 @@ campus_glimmer/
 - **`test_search_combo_shift.py`**：组合占比口径、稀疏门槛、单周期组合与面板导出测试
 - **`test_search_position_quality.py`**：位置分档点击率、排序效果与深度诊断，含页面与导出呈现
 - **`test_search_rejection_stats.py`**：否决生效、双向、可撤销、否决失效与面板导出测试
+- **`test_search_rejection_recurrence.py`**：回头区间不跨失效累计、回头与挖掘同规则、撤销不编数、样本不足不报推翻率
 - **`test_search_rewrites.py`**：改口配对、时间窗口、已配同义词排除与一键确认入口测试
 - **`test_search_synonym_effect.py`**：已确认同义词的无结果率回流与生效判定
 - **`test_search_threshold_feedback.py`**：由命中率反推候选门槛，只建议不自动改
@@ -2695,7 +2714,7 @@ campus_glimmer/
 ### docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（42 篇，按字典序）</summary>
+<summary>设计文档清单（43 篇，按字典序）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 - **`academic-term-snapshot-read-path-design.md`**：已结束读快照、进行中实时算，判据是计数是否封闭而不是 `refreshed_at`
@@ -2705,6 +2724,7 @@ campus_glimmer/
 - **`chat_response_trend_design.md`**：这个月的私信响应比上个月好还是坏，按份额判方向
 - **`meeting-reschedule-design.md`**：改期计数的四条损失与「一次谈成是主档」的口径
 - **`report-resolution-quality-design.md`**：商品举报按 reason 拆驳回率，意见只读长度，不把驳回率和处理人挂钩
+- **`rejection-recurrence-design.md`**：被否决词对在更长周期里的回头率，撤销和覆盖方向相反因此分开报
 - **`refresh-quota-drift-design.md`**：刷新额度累计计数器的四条证据与「先看板后改口径」的取舍
 - **`refresh-quota-drift-fixups-design.md`**：两个挂了很久的测试失败，一个同一行两个口径，一个扫描把查询参数当归零
 - **`relist-freshness-design.md`**：新鲜度欠账的四条证据与「先看板后改口径」的三条路
@@ -2724,6 +2744,7 @@ campus_glimmer/
 - **`moderation-rule-quality-design.md`**：四条审核规则的误判率、漏判率与复核时效
 - **`notification-aggregation-quality-design.md`**：被聚合过的行与从没被聚合过的行，阅读率与时长对照
 - **`notification-kind-coverage-design.md`**：通知类型、偏好开关与表单字段三张表的对齐情况
+- **`notification-preference-usage-design.md`**
 - **`notification-kind-gap-fix-design.md`**：两个曾经被诊断出的窟窿怎么补：一个补数据层的名字，一个补表单层的暴露，两处都不需迁移
 - **`notification-snooze-return-design.md`**：延后把处理慢拆成两半，到期后到底回不回来
 - **`opportunity-dismissal-quality-design.md`**：按过「不再显示」的机会的规模、理由与重复忽略
@@ -2731,6 +2752,7 @@ campus_glimmer/
 - **`order-deadline-reminders-design.md`**：确认与归还截止的等待分档、催收四种结局与距截止余量
 - **`rating-quality-design.md`**：交易评价的覆盖率分母只收已走完、完成时刻取 `OrderEvent`
 - `recommendation-impression-design.md`：首页推荐的反馈率为什么值得落库、曝光表的五条口径、存 `reason_key` 与 `score` 是首页这边独有的取舍、匿名访客也写的那条纠正
+- **`recommendation-impression-design.md`**
 - **`recommendation-quality-design.md`**：首页那八张推荐卡的反馈率、正负比例与理由拆分
 - **`return-handshake-design.md`**：归还双方确认的顺序、间隔与只点一半的四条损失
 - **`saved-search-entry-design.md`**：关注搜索的管理入口与「当前命中」点过去必须对得上
@@ -3325,7 +3347,8 @@ CI 的目标不是替代本地验证，而是确保每个独立迭代至少满�
   - 否决按出现次数加权而不按否决条数，否得多的运营不会被读成面对着一个吹唧的候选池。
   - 低于门槛的否决单独计数、不进门槛判断，因为门槛从来不是运营看见那个词对的原因。
   - 否决可撤销，与确认互斥：词对后来被确认时否决标记为失效而不删除，同义词被删掉时否决重新生效。
-  - 后续可继续补充按运营人员切分否决口径，以及被否决词对在更长周期里的回头率。
+  - 被否决词对在更长周期里的回头率也已落地：仍然生效与被确认覆盖分开报，回头次数只数否决生效期间的改口，规则与候选挖掘完全一致；「已撤销删除」读不到就不编数。
+  - 后续仍缺按运营人员切分的否决口径，理由和「按卖家规模的行动率分层」一样：样本量先不够。
 - **推荐质量**：首页八张卡的可解释打分已经可以被运营读到——按理由拆开报反馈率、正负比例、改口数和「想看看」之后有没有真的去看，只报告不改权重。
   - 反馈率的分母已经真正落库：首页每次渲染落一行 `RecommendationImpression`，分母是「这张卡被看见过」而不是「被点开过的商品」，它仍然只低不高——写入走 `bulk_create` 且挂了只记日志、页面照常渲染，所以分母可能悄悄偏小。
   - 同时落库的还有推荐当时的 `reason_key` 与 `score`，所以「当时挂这句话的卡，用户点了吗」第一次有了推荐当时的分母。
