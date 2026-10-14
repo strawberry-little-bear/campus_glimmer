@@ -34,7 +34,7 @@ SAFETY_FIELD_SPECS = (
 )
 
 
-def _normalise_location_name(value):
+def normalise_location_name(value):
     """Fold Unicode, case and whitespace without changing the stored name."""
     normalised = unicodedata.normalize('NFKC', value).casefold()
     return ' '.join(normalised.split())
@@ -181,7 +181,7 @@ def build_location_registry_quality(days=30, *, now=None):
 
     duplicate_groups = defaultdict(list)
     for location in active_locations:
-        duplicate_groups[_normalise_location_name(location.name)].append({
+        duplicate_groups[normalise_location_name(location.name)].append({
             'name': location.name,
             'building': location.building,
             'address': location.address,
