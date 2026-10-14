@@ -8,6 +8,7 @@ from django.utils import timezone
 from listings.models import Category, Item
 
 from .chat_response import (
+    MIN_CONTEXT_SAMPLE,
     MIN_LATENCY_SAMPLE,
     SILENT_AFTER,
     build_chat_response_insights,
@@ -188,6 +189,195 @@ class ChatResponseInsightTests(TestCase):
         roles = {row['key']: row for row in insights['role_rows']}
         self.assertFalse(roles['buyer_asks_seller']['has_sample'])
 
+    def create_context_item(self, category_name, trade_mode='sale'):
+        category = Category.objects.create(name=category_name)
+        return Item.objects.create(
+            title=f'{category_name}响应测试商品',
+            description='用于私信响应场景分层。',
+            category=category, trade_mode=trade_mode,
+            price='59.00', condition='九成新', seller=self.seller,
+        )
+
+    def test_category_rows_split_reach_and_latency_by_current_category(self):
+        fast_item = self.create_context_item('生活用品')
+        slow_item = self.create_context_item('数码配件')
+        for _ in range(MIN_CONTEXT_SAMPLE):
+            self.create_message(
+                sender=self.buyer, receiver=self.seller, item=fast_item,
+                read_after=timedelta(hours=1),
+            )
+        self.create_message(
+            sender=self.buyer, receiver=self.seller, item=slow_item,
+            read_after=timedelta(hours=3),
+        )
+
+        insights = build_chat_response_insights(days=30, now=self.now)
+        rows = {row['label']: row for row in insights['category_rows']}
+        self.assertEqual(rows['生活用品']['sent'], MIN_CONTEXT_SAMPLE)
+        self.assertEqual(rows['生活用品']['opened'], MIN_CONTEXT_SAMPLE)
+        self.assertEqual(rows['生活用品']['open_rate'], 100.0)
+        self.assertEqual(rows['生活用品']['sample_size'], MIN_CONTEXT_SAMPLE)
+        self.assertEqual(rows['生活用品']['median_seconds'], 3600)
+        self.assertTrue(rows['生活用品']['has_sample'])
+        self.assertEqual(rows['数码配件']['sent'], 1)
+        self.assertEqual(rows['数码配件']['opened'], 1)
+        self.assertEqual(rows['数码配件']['sample_size'], 1)
+        self.assertEqual(rows['数码配件']['median_seconds'], 10800)
+        self.assertFalse(rows['数码配件']['has_sample'])
+
+    def test_category_rows_read_the_item_current_category(self):
+        old_category = Category.objects.create(name='原分类')
+        new_category = Category.objects.create(name='当前分类')
+        item = Item.objects.create(
+            title='分类调整商品', description='分类调整后仍应按当前分类统计。',
+            category=old_category, price='59.00', condition='九成新',
+            seller=self.seller,
+        )
+        self.create_message(
+            sender=self.buyer, receiver=self.seller, item=item,
+            read_after=timedelta(hours=1),
+        )
+        item.category = new_category
+        item.save(update_fields=['category'])
+
+        insights = build_chat_response_insights(days=30, now=self.now)
+        self.assertEqual(
+            [row['label'] for row in insights['category_rows']],
+            ['当前分类'],
+        )
+
+    def test_trade_mode_rows_keep_the_defined_order(self):
+        items = {
+            'borrow': self.create_context_item('借用分类', 'borrow'),
+            'free': self.create_context_item('赠送分类', 'free'),
+            'sale': self.create_context_item('出售分类', 'sale'),
+        }
+        for trade_mode, count in (('borrow', 1), ('free', 2), ('sale', 3)):
+            for _ in range(count):
+                self.create_message(
+                    sender=self.buyer, receiver=self.seller,
+                    item=items[trade_mode], read_after=timedelta(hours=1),
+                )
+
+        insights = build_chat_response_insights(days=30, now=self.now)
+        self.assertEqual(
+            [row['label'] for row in insights['trade_mode_rows']],
+            ['出售', '免费赠送', '限期借用'],
+        )
+        self.assertEqual(
+            [row['sent'] for row in insights['trade_mode_rows']],
+            [3, 2, 1],
+        )
+
+    def test_context_rows_share_one_linked_message_denominator(self):
+        self.create_message(
+            sender=self.buyer, receiver=self.seller, item=self.item,
+            read_after=timedelta(hours=1),
+        )
+        free_item = self.create_context_item('免费分类', 'free')
+        self.create_message(
+            sender=self.seller, receiver=self.buyer, item=free_item,
+            read_after=timedelta(hours=2),
+        )
+        self.create_message(sender=self.buyer, receiver=self.seller)
+
+        insights = build_chat_response_insights(days=30, now=self.now)
+        self.assertEqual(insights['unlinked_messages'], 1)
+        linked_sent = (
+            insights['summary']['sent'] - insights['unlinked_messages']
+        )
+        self.assertEqual(
+            sum(row['sent'] for row in insights['category_rows']),
+            linked_sent,
+        )
+        self.assertEqual(
+            sum(row['sent'] for row in insights['trade_mode_rows']),
+            linked_sent,
+        )
+
+    def test_itemless_messages_are_reported_outside_context_rows(self):
+        self.create_message(
+            sender=self.buyer, receiver=self.seller,
+            read_after=timedelta(hours=1),
+        )
+        insights = build_chat_response_insights(days=30, now=self.now)
+        self.assertEqual(insights['category_rows'], [])
+        self.assertEqual(insights['trade_mode_rows'], [])
+        self.assertEqual(insights['unlinked_messages'], 1)
+
+    def test_untimed_context_messages_count_reach_but_not_latency(self):
+        self.create_message(
+            sender=self.buyer, receiver=self.seller, item=self.item,
+            read_after=timedelta(hours=1),
+        )
+        PrivateMessage.objects.update(is_read=True, read_at=None)
+
+        insights = build_chat_response_insights(days=30, now=self.now)
+        row = insights['category_rows'][0]
+        self.assertEqual(row['sent'], 1)
+        self.assertEqual(row['opened'], 1)
+        self.assertEqual(row['open_rate'], 100.0)
+        self.assertEqual(row['sample_size'], 0)
+        self.assertFalse(row['has_sample'])
+        self.assertIsNone(row['median_seconds'])
+
+    def test_context_rows_do_not_expose_private_identity_or_content(self):
+        self.create_message(
+            sender=self.buyer, receiver=self.seller, item=self.item,
+            read_after=timedelta(hours=1),
+        )
+        insights = build_chat_response_insights(days=30, now=self.now)
+        allowed_keys = {
+            'key', 'label', 'sent', 'opened', 'open_rate',
+            'median_seconds', 'median_label', 'p90_seconds', 'p90_label',
+            'sample_size', 'has_sample',
+        }
+        rendered = repr(insights['category_rows'] + insights['trade_mode_rows'])
+        for secret in (
+            self.buyer.username, self.seller.username,
+            self.item.title, '私信响应时效测试。',
+        ):
+            self.assertNotIn(secret, rendered)
+        for row in insights['category_rows'] + insights['trade_mode_rows']:
+            self.assertEqual(set(row), allowed_keys)
+
+    def test_dashboard_and_export_show_context_rows_without_private_identity(self):
+        staff = User.objects.create_user(
+            username='chat-context-staff', password='safe-password-123',
+            is_staff=True,
+        )
+        self.create_message(
+            sender=self.buyer, receiver=self.seller, item=self.item,
+            read_after=timedelta(hours=1),
+        )
+        self.create_message(sender=self.buyer, receiver=self.seller)
+        self.client.force_login(staff)
+
+        dashboard = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        export = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        )
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(export.status_code, 200)
+        html = dashboard.content.decode('utf-8')
+        csv_text = export.content.decode('utf-8-sig')
+        # Other operations panels may legitimately expose an item title; this
+        # test guards the chat-response panel and its CSV section only.
+        html_section = html.split('chat-response-panel', 1)[1].split(
+            'chat-response-trend-panel', 1,
+        )[0]
+        csv_section = csv_text.split('私信响应时效', 1)[1].split(
+            '私信响应时效跨周期对比', 1,
+        )[0]
+        for text in (html_section, csv_section):
+            self.assertIn('按商品分类看私信响应', text)
+            self.assertIn('按交易方式看私信响应', text)
+            self.assertIn('未关联商品', text)
+            self.assertNotIn(self.buyer.username, text)
+            self.assertNotIn(self.seller.username, text)
+            self.assertNotIn(self.item.title, text)
+            self.assertNotIn('私信响应时效测试。', text)
+
     def test_latency_distribution_buckets_every_opened_message(self):
         for minutes, expected in ((30, '1 小时内'), (120, '1 天内'), (7200, '1 周内')):
             self.create_message(
@@ -249,6 +439,9 @@ class ChatResponseInsightTests(TestCase):
         self.assertEqual(insights['summary']['sent'], 0)
         self.assertIsNone(insights['summary']['median_seconds'])
         self.assertEqual(insights['summary']['open_rate'], 0)
+        self.assertEqual(insights['category_rows'], [])
+        self.assertEqual(insights['trade_mode_rows'], [])
+        self.assertEqual(insights['unlinked_messages'], 0)
 
     def test_hour_profile_covers_all_twenty_four_hours(self):
         insights = build_chat_response_insights(days=30, now=self.now)

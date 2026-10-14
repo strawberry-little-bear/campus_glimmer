@@ -46,6 +46,11 @@ MIN_LATENCY_SAMPLE = 5
 # Below this a breakdown by sender/receiver role is not worth reading.
 MIN_ROLE_SAMPLE = 10
 
+# Category and trade-mode rows use the same floor. Two standards on one panel
+# would let a reader treat a nine-sample category as meaningful while rejecting
+# a nine-sample role row.
+MIN_CONTEXT_SAMPLE = MIN_ROLE_SAMPLE
+
 PERIOD_FIELDS = (
     'sender_id',
     'receiver_id',
@@ -195,7 +200,94 @@ def _build_hour_profile(rows, read_rows):
     return profile
 
 
-def _build_role_rows(rows):
+def _load_item_context(rows):
+    """Load only the listing fields needed by the read-only context rows.
+
+    Role, category, and trade mode are different questions about the same
+    message population. Loading one shared mapping keeps their denominators
+    aligned and avoids sending a second query after the rows were evaluated.
+    """
+    from listings.models import Item  # local import avoids an app-loading cycle
+
+    item_ids = {row['item_id'] for row in rows if row['item_id']}
+    if not item_ids:
+        return {}
+    return {
+        row['id']: row
+        for row in Item.objects.filter(id__in=item_ids).values(
+            'id', 'seller_id', 'category_id', 'category__name', 'trade_mode',
+        )
+    }
+
+
+def _context_metrics(key, label, rows):
+    """Shared counters for category and trade-mode response rows."""
+    opened = _read_rows(rows)
+    latencies = [
+        row['response_seconds'] for row in opened
+        if row['response_seconds'] is not None
+    ]
+    median_seconds = _percentile(latencies, 0.5)
+    p90_seconds = _percentile(latencies, 0.9)
+    return {
+        'key': key,
+        'label': label,
+        'sent': len(rows),
+        'opened': len(opened),
+        'open_rate': round(len(opened) / len(rows) * 100, 1) if rows else 0,
+        'median_seconds': median_seconds,
+        'median_label': _format_duration(median_seconds),
+        'p90_seconds': p90_seconds,
+        'p90_label': _format_duration(p90_seconds),
+        'sample_size': len(latencies),
+        'has_sample': len(latencies) >= MIN_CONTEXT_SAMPLE,
+    }
+
+
+def _build_category_rows(rows, item_context):
+    """Response metrics by the listing's current category."""
+    grouped = {}
+    for row in rows:
+        context = item_context.get(row['item_id'])
+        if context is None:
+            continue
+        key = context['category_id']
+        grouped.setdefault(key, {
+            'label': context['category__name'],
+            'rows': [],
+        })
+        grouped[key]['rows'].append(row)
+
+    return [
+        _context_metrics(key, entry['label'], entry['rows'])
+        for key, entry in sorted(
+            grouped.items(), key=lambda item: (item[1]['label'], item[0]),
+        )
+    ]
+
+
+def _build_trade_mode_rows(rows, item_context):
+    """Response metrics by the listing's current trade mode."""
+    definitions = (
+        ('sale', '出售'),
+        ('free', '免费赠送'),
+        ('borrow', '限期借用'),
+    )
+    grouped = {key: [] for key, _label in definitions}
+    for row in rows:
+        context = item_context.get(row['item_id'])
+        if context is None or context['trade_mode'] not in grouped:
+            continue
+        grouped[context['trade_mode']].append(row)
+
+    return [
+        _context_metrics(key, label, grouped[key])
+        for key, label in definitions
+        if grouped[key]
+    ]
+
+
+def _build_role_rows(rows, item_context=None):
     """Split latency by whether the reader is a seller or a buyer.
 
     The role is derived from whether the row's item was owned by the reader.
@@ -204,13 +296,11 @@ def _build_role_rows(rows):
     Messages with no item attached carry no role and are reported on their own
     rather than forced into either bucket.
     """
-    from .models import Item  # local import to keep module import cheap
-
-    item_owner = dict(
-        Item.objects.filter(id__in={
-            row['item_id'] for row in rows if row['item_id']
-        }).values_list('id', 'seller_id')
-    )
+    item_context = item_context if item_context is not None else _load_item_context(rows)
+    item_owner = {
+        item_id: context['seller_id']
+        for item_id, context in item_context.items()
+    }
     grouped = {
         'buyer_asks_seller': [],
         'seller_replies_buyer': [],
@@ -359,7 +449,11 @@ def build_chat_response_insights(*, days=30, now=None, silent_after=None):
     p90_seconds = _percentile(all_latencies, 0.9)
 
     buckets, bucket_total = _build_latency_distribution(read_rows)
-    role_rows = _build_role_rows(rows)
+    item_context = _load_item_context(rows)
+    role_rows = _build_role_rows(rows, item_context)
+    category_rows = _build_category_rows(rows, item_context)
+    trade_mode_rows = _build_trade_mode_rows(rows, item_context)
+    unlinked_messages = sum(1 for row in rows if not row['item_id'])
     conversation_health = _build_conversation_health(rows)
     daily_trend = _build_daily_trend(rows, dates)
     hour_profile = _build_hour_profile(rows, read_rows)
@@ -392,6 +486,13 @@ def build_chat_response_insights(*, days=30, now=None, silent_after=None):
         'latency_buckets': buckets,
         'latency_total': bucket_total,
         'role_rows': role_rows,
+        'category_rows': category_rows,
+        'trade_mode_rows': trade_mode_rows,
+        'unlinked_messages': unlinked_messages,
+        'min_context_sample': MIN_CONTEXT_SAMPLE,
+        'context_note': (
+            '分类与交易方式读取商品当前值；未关联商品的私信单独计数，不进入分层分母。'
+        ),
         'conversation_health': conversation_health,
         'daily_trend': daily_trend,
         'daily_trend_max': max(

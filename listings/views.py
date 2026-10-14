@@ -8573,6 +8573,44 @@ def operations_dashboard_export(request):
         ])
 
     writer.writerow([])
+    writer.writerow(['按商品分类看私信响应'])
+    writer.writerow([
+        '分类', '私信数', '已打开', '打开率（%）', '中位打开', 'P90',
+        '带时间戳样本', '样本',
+    ])
+    for row in chat_response['category_rows']:
+        writer.writerow([
+            row['label'], row['sent'], row['opened'], row['open_rate'],
+            row['median_label'], row['p90_label'], row['sample_size'],
+            row['sample_size'] if row['has_sample'] else '样本不足',
+        ])
+    writer.writerow([
+        '未关联商品的私信数', chat_response['unlinked_messages'],
+        '最小样本数', chat_response['min_context_sample'],
+    ])
+
+    writer.writerow([])
+    writer.writerow(['按交易方式看私信响应'])
+    writer.writerow([
+        '交易方式', '私信数', '已打开', '打开率（%）', '中位打开', 'P90',
+        '带时间戳样本', '样本',
+    ])
+    for row in chat_response['trade_mode_rows']:
+        writer.writerow([
+            row['label'], row['sent'], row['opened'], row['open_rate'],
+            row['median_label'], row['p90_label'], row['sample_size'],
+            row['sample_size'] if row['has_sample'] else '样本不足',
+        ])
+    writer.writerow([
+        '口径说明', chat_response['context_note'],
+        '分类与交易方式读取商品当前值，不伪装成私信发送时的快照',
+    ])
+    writer.writerow([
+        '隐私边界',
+        'CSV 不输出用户名、商品标题或私信内容，只保留聚合后的场景与数字',
+    ])
+
+    writer.writerow([])
     writer.writerow(['会话是聊起来了，还是只说了一句'])
     writer.writerow(['形状', '会话数', '占比（%）', '说明'])
     for row in chat_response['conversation_health']['rows']:

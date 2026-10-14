@@ -1954,8 +1954,64 @@
             </tbody>
         </table>
     </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-xl-6">
+            <div class="chat-response-block h-100">
+                <div class="chat-response-block-heading"><strong>按商品分类看私信响应</strong><span>按名称排列，不按打开率排名</span></div>
+                {% if chat_response.category_rows %}
+                <div class="ops-table-wrap chat-response-category-table">
+                    <table class="table ops-table align-middle mb-0">
+                        <thead><tr><th>场景</th><th>私信</th><th>已打开</th><th>打开率</th><th>中位打开</th><th>P90</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in chat_response.category_rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.sent }}</td>
+                                <td>{{ row.opened }}</td>
+                                <td>{{ row.open_rate }}%</td>
+                                <td>{{ row.median_label }}</td>
+                                <td>{{ row.p90_label }}</td>
+                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="chat-response-context-note mb-0">另有 {{ chat_response.unlinked_messages }} 条私信未关联商品，单独计数，不进入这张表的分母。</p>
+                {% else %}<div class="empty-inline mb-0">当前周期没有关联商品的私信，无法按商品分类分层。</div>{% endif %}
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="chat-response-block h-100">
+                <div class="chat-response-block-heading"><strong>按交易方式看私信响应</strong><span>固定顺序：出售、免费赠送、限期借用</span></div>
+                {% if chat_response.trade_mode_rows %}
+                <div class="ops-table-wrap chat-response-trade-mode-table">
+                    <table class="table ops-table align-middle mb-0">
+                        <thead><tr><th>场景</th><th>私信</th><th>已打开</th><th>打开率</th><th>中位打开</th><th>P90</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in chat_response.trade_mode_rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.sent }}</td>
+                                <td>{{ row.opened }}</td>
+                                <td>{{ row.open_rate }}%</td>
+                                <td>{{ row.median_label }}</td>
+                                <td>{{ row.p90_label }}</td>
+                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="chat-response-context-note mb-0">样本不足时仍显示已发生的数字，但不把它读成方向。</p>
+                {% else %}<div class="empty-inline mb-0">当前周期没有关联商品的私信，无法按交易方式分层。</div>{% endif %}
+            </div>
+        </div>
+    </div>
     {% else %}<div class="empty-inline mt-3">当前周期还没有私信数据，发出第一条私信后这里会开始统计响应时效。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>响应时长按「第一次被标记为已读的时间−私信发出时间」计算，只统计带时间戳的样本；未读私信不计入时长分布，否则会把没回复当成零秒回复。本面板只给运营看，不对对话双方暴露「对方已读」，也不给任何人打回复速度分。</div>
+    <div class="ops-footer-note text-start mt-2"><i class="bi bi-info-circle me-1"></i>{{ chat_response.context_note }}分类与交易方式不输出用户名、商品标题或私信内容，也不给任何场景或回复速度打分。</div>
 </section>
 
 <section class="content-card ops-panel mb-4 chat-response-trend-panel">

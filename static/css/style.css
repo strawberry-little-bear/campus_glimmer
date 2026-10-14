@@ -1672,6 +1672,9 @@ a { color: inherit; text-decoration: none; }
 .chat-response-health span { display: block; color: #83938b; font-size: .71rem; }
 .chat-response-health strong { color: #2f6a4f; font-size: 1.16rem; }
 .chat-response-role-note { color: #8b9a91; font-size: .74rem; }
+.chat-response-category-table, .chat-response-trade-mode-table { min-width: 690px; }
+.chat-response-category-table td:nth-child(n+2), .chat-response-category-table th:nth-child(n+2), .chat-response-trade-mode-table td:nth-child(n+2), .chat-response-trade-mode-table th:nth-child(n+2) { text-align: right; }
+.chat-response-context-note { margin-top: 10px; color: #8b9a91; font-size: .73rem; line-height: 1.55; }
 .chat-response-hours { display: flex; align-items: flex-end; gap: 3px; height: 84px; padding-top: 6px; }
 .chat-response-hour { position: relative; flex: 1; display: flex; align-items: flex-end; justify-content: center; height: 100%; }
 .chat-response-hour-bar { width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: #cfe4d6; }
