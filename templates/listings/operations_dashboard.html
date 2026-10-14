@@ -1107,6 +1107,45 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 notification-preference-bypass-diagnosis-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Preference bypass diagnosis</span><h2>通知偏好关了为什么还看得到</h2></div>
+        <span class="ops-panel-hint">把正常残留和偏好写入后仍出现分开</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-clock-history me-1"></i>上一个面板只报得出「关着却仍收到过」。这里继续往下拆一层：通知最近发生时间<strong>不晚于</strong>偏好行最后写入，允许是「先收到、后来才关掉」的残留；最近发生时间<strong>晚于</strong>最后写入，才进入「偏好写入后仍出现」。</p>
+    {% if not notification_preference_bypass_diagnosis.has_data %}
+    <div class="empty-inline">{{ notification_preference_bypass_diagnosis.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>当前关着且本期出现</span><strong>{{ notification_preference_bypass_diagnosis.totals.off_seen_users }}</strong><small>按通知类型去重后的用户数</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>与后关一致</span><strong>{{ notification_preference_bypass_diagnosis.totals.consistent_users }}</strong><small>时间顺序允许是旧通知残留</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>偏好写入后仍出现</span><strong>{{ notification_preference_bypass_diagnosis.totals.suspicious_users }}</strong><small>{{ notification_preference_bypass_diagnosis.totals.suspicious_rows }} 条通知行构成下界</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>收到过通知但没有偏好行</span><strong>{{ notification_preference_bypass_diagnosis.coverage.no_preference_users }}</strong><small>默认全开，不算异常</small></div></div>
+    </div>
+    <h3 class="h6 mb-3">逐类型拆开时间顺序</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>开关</th><th>已知路径</th><th>当前关着</th><th>本期出现</th><th>与后关一致</th><th>偏好写入后仍出现</th><th>可疑行数下界</th></tr></thead>
+            <tbody>
+                {% for row in notification_preference_bypass_diagnosis.rows %}
+                <tr{% if row.has_suspicious %} class="table-warning"{% elif not row.seen_users %} class="text-muted"{% endif %}>
+                    <td><strong>{{ row.field }}</strong><small class="d-block text-muted">{{ row.label }}</small></td>
+                    <td><code>{{ row.writer }}</code><small class="d-block text-muted">{{ row.path_label }}</small></td>
+                    <td>{{ row.off_users }}</td>
+                    <td>{{ row.seen_users }}</td>
+                    <td>{{ row.consistent_users }}</td>
+                    <td>{% if row.suspicious_users %}<strong>{{ row.suspicious_users }}</strong>{% else %}&mdash;{% endif %}</td>
+                    <td>{% if row.suspicious_rows %}<strong>{{ row.suspicious_rows }}</strong>{% else %}&mdash;{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="empty-inline">「偏好写入后仍出现」是观察下界，不是总量：<code>updated_at</code> 属于整行偏好，后来保存过其他开关会把这个时间推晚，可能掩盖更早的异常。反向看，「与后关一致」也只说明时间顺序不冲突，不证明开关一定生效。</div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读结构化时间戳和布尔开关，不读通知标题、不读正文、不输出用户名、不按用户排名，也不把结果用于自动风控、信誉或排名。异常类型需要回到对应写入路径检查调度和数据导入历史；这里不自动打开开关、不发送提醒、不生成催办。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 notification-quiet-hours-shape-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Quiet hours shape</span><h2>免打扰时段的形状</h2></div>

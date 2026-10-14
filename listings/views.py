@@ -38,6 +38,7 @@ from .demand_task_aging import build_demand_task_aging
 from .notification_snooze_return import build_notification_snooze_return
 from .notification_kind_coverage import build_notification_kind_coverage
 from .notification_preference_usage import build_notification_preference_usage
+from .notification_preference_bypass_diagnosis import build_notification_preference_bypass_diagnosis
 from .notification_quiet_hours_shape import build_notification_quiet_hours_shape
 from .notification_aggregation_quality import build_notification_aggregation_quality
 from .report_resolution_quality import build_report_resolution_quality
@@ -2406,6 +2407,9 @@ def operations_dashboard(request):
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
+    dashboard['notification_preference_bypass_diagnosis'] = (
+        build_notification_preference_bypass_diagnosis(days=days)
+    )
     dashboard['notification_quiet_hours_shape'] = build_notification_quiet_hours_shape(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
@@ -2595,6 +2599,9 @@ def operations_dashboard_export(request):
     dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
     dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
     dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
+    dashboard['notification_preference_bypass_diagnosis'] = (
+        build_notification_preference_bypass_diagnosis(days=days)
+    )
     dashboard['notification_quiet_hours_shape'] = build_notification_quiet_hours_shape(days=days)
     dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
     dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
@@ -3582,6 +3589,46 @@ def operations_dashboard_export(request):
         '两格都只报人数，不报任何两格之间的比值。'
         '本模块只报告：不加迁移、不加字段、不改 create_notification 的静默 return None、'
         '不给任何人自动打开开关；不按用户排名、不输出用户名。',
+    ])
+    bypass_diagnosis = dashboard['notification_preference_bypass_diagnosis']
+    writer.writerow([])
+    writer.writerow(['通知偏好关了为什么还看得到', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', bypass_diagnosis['summary'],
+        '通知时间优先读 last_occurred_at，为空回退 created_at；只按当前周期切窗口',
+    ])
+    writer.writerow([
+        '有偏好行的用户', bypass_diagnosis['coverage']['preference_users'],
+        'updated_at 是整行偏好的最后写入时间，不是逐开关关闭时间',
+    ])
+    writer.writerow([
+        '收到过通知但没有偏好行', bypass_diagnosis['coverage']['no_preference_users'],
+        '模型默认全开；收到通知不算异常，也不并入开着或关着',
+    ])
+    writer.writerow([
+        '当前关着且本期出现', bypass_diagnosis['totals']['off_seen_users'],
+        '这是上一个面板的「关着却仍收到过」，本节把它按时间顺序拆开',
+    ])
+    writer.writerow([
+        '偏好写入后仍出现', bypass_diagnosis['totals']['suspicious_users'],
+        f"{bypass_diagnosis['totals']['suspicious_rows']} 条通知行构成观察下界；不报绕过率",
+    ])
+    writer.writerow([])
+    writer.writerow(['逐类型拆开时间顺序', '已知路径', '当前关着', '本期出现', '与后关一致', '偏好写入后仍出现', '可疑行数下界'])
+    if not bypass_diagnosis['has_data']:
+        writer.writerow(['当前平台还没有任何偏好行。'])
+    else:
+        for row in bypass_diagnosis['rows']:
+            writer.writerow([
+                row['field'], row['writer'], row['off_users'], row['seen_users'],
+                row['consistent_users'], row['suspicious_users'], row['suspicious_rows'],
+            ])
+    writer.writerow([
+        '说明',
+        '「与后关一致」只表示时间顺序不冲突，不证明开关必然生效；'
+        '「偏好写入后仍出现」也只是下界——后来保存过其他偏好会把 updated_at 推晚，'
+        '从而掩盖更早的异常。表格按模型字段顺序输出，不按可疑人数排序；'
+        '不读标题正文、不输出用户名、不按用户排名、不自动改偏好。',
     ])
     quiet_hours_shape = dashboard['notification_quiet_hours_shape']
     writer.writerow([])
