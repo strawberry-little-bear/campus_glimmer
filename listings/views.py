@@ -9730,6 +9730,10 @@ def operations_dashboard_export(request):
         '进入队列', location_queue['summary']['queued_total'],
         f"启用且无信号 {location_queue['summary']['active_clean_total']} 个，停用且无当前引用 {location_queue['summary']['inactive_clean_total']} 个",
     ])
+    writer.writerow([
+        '复核闭环', location_queue['summary']['reviewed_total'],
+        f"待核对 {location_queue['summary']['unreviewed_total']} 个；已处理 {location_queue['summary']['outcome_totals']['handled']} 个，维持现状 {location_queue['summary']['outcome_totals']['accepted']} 个，暂缓 {location_queue['summary']['outcome_totals']['deferred']} 个",
+    ])
 
     writer.writerow([])
     writer.writerow(['主优先级', '地点数', '读法'])
@@ -9750,24 +9754,28 @@ def operations_dashboard_export(request):
     writer.writerow([])
     writer.writerow([
         '维护地点', '主优先级', '主信号', '全部信号', '缺失字段', '状态',
-        '当前引用', '行动提示',
+        '当前引用', '复核', '行动提示',
     ])
     for row in location_queue['location_rows']:
+        review = row['review_status_label']
+        if row['review_outcome_label']:
+            review += f" · {row['review_outcome_label']}"
         writer.writerow([
             row['name'], row['priority_label'], row['primary_reason_label'],
             '、'.join(row['reason_labels']),
             '、'.join(field['label'] for field in row['missing_fields']),
             ('启用' if row['is_active'] else '停用') + (' · 公共' if row['is_public'] else ' · 非公共'),
             f"在售 {row['available_item_count']} · 求购 {row['active_demand_count']} · 关注 {row['active_saved_search_count']}",
+            review,
             row['action_hint'],
         ])
     if location_queue['location_row_hidden_total']:
         writer.writerow([
-            '未展示地点', location_queue['location_row_hidden_total'], '', '', '', '', '', '',
+            '未展示地点', location_queue['location_row_hidden_total'], '', '', '', '', '', '', '',
         ])
     writer.writerow([
-        '口径', '', '', '', '', '', '',
-        '当前快照；主优先级互斥，信号可重叠；只报告，不自动修复、不合并、不改外键',
+        '口径', '', '', '', '', '', '', '',
+        '当前快照；主优先级互斥，信号可重叠；队列只读，决策由后台留痕且不隐藏当前信号',
     ])
     return response
 

@@ -445,9 +445,14 @@ class LocationMaintenanceQueueDashboardTests(TestCase):
         self.client.force_login(self.staff)
 
     def test_operations_dashboard_renders_the_queue_panel(self):
-        CampusLocation.objects.create(
+        location = CampusLocation.objects.create(
             name='维护队列地点', building='东区', address='东门内侧',
             description='白天有人经过', safety_note='',
+        )
+        CampusLocationMaintenanceDecision.objects.create(
+            location=location, signal_fingerprint='public_safety_gap',
+            outcome='accepted', note='该入口无需额外提示。',
+            reviewed_by=self.staff,
         )
 
         response = self.client.get(reverse('operations_dashboard'))
@@ -456,12 +461,20 @@ class LocationMaintenanceQueueDashboardTests(TestCase):
         self.assertContains(response, '校园地点维护队列')
         self.assertContains(response, '维护队列地点')
         self.assertContains(response, '主优先级互斥；信号允许重叠')
-        self.assertContains(response, '不自动合并近似重名')
+        self.assertContains(response, '复核闭环：待核对 0 个 · 已复核 1 个')
+        self.assertContains(response, '已复核')
+        self.assertContains(response, '维持现状')
+        self.assertContains(response, '决策由后台单独留痕')
 
     def test_operations_dashboard_export_contains_the_same_sections(self):
-        CampusLocation.objects.create(
+        location = CampusLocation.objects.create(
             name='维护队列导出地点', building='东区', address='东门内侧',
             description='白天有人经过', safety_note='',
+        )
+        CampusLocationMaintenanceDecision.objects.create(
+            location=location, signal_fingerprint='public_safety_gap',
+            outcome='accepted', note='该入口无需额外提示。',
+            reviewed_by=self.staff,
         )
 
         response = self.client.get(reverse('operations_dashboard_export'))
@@ -472,4 +485,8 @@ class LocationMaintenanceQueueDashboardTests(TestCase):
         self.assertIn('维护队列导出地点', text)
         self.assertIn('主优先级,地点数,读法', text)
         self.assertIn('命中信号,地点数,读法', text)
+        self.assertIn('复核闭环,1,待核对 0 个', text)
+        self.assertIn('维护地点,主优先级,主信号,全部信号,缺失字段,状态,当前引用,复核,行动提示', text)
+        self.assertIn('已复核 · 维持现状', text)
         self.assertIn('主优先级互斥，信号可重叠', text)
+        self.assertIn('决策由后台留痕且不隐藏当前信号', text)
