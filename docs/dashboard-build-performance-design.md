@@ -87,7 +87,7 @@
     "has_data": True,
     "summary": "...",
     "metrics": {
-        "builder_total": 48,
+        "builder_total": 47,
         "total_elapsed_ms": 123.4,
         "p50_ms": ...,
         "p90_ms": ...,

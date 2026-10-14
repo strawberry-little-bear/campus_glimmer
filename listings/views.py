@@ -2,6 +2,7 @@ import csv
 import logging
 import mimetypes
 import secrets
+from time import perf_counter
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -23,6 +24,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
+from .dashboard_build_performance import build_dashboard_build_performance
 from .search_combo_shift import build_search_combo_shift
 from .search_threshold_feedback import build_search_threshold_feedback
 from .search_trend import build_search_trend
@@ -2383,6 +2385,106 @@ def bulk_assign_campaign(request):
     return redirect('my_items')
 
 
+
+# 运营看板页面与 CSV 共用的面板注册表。这里只登记「两边都导出的共享面板」；
+# 页面特有的待办筛选、CSV 特有的序列化都不进这份表，避免把两个不同问题
+# 混进同一份耗时里。
+OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
+    ('demand_match_quality', '求购匹配质量', build_demand_match_quality),
+    ('mutual_aid_feedback_notes', '互助反馈补充说明', build_mutual_aid_feedback_notes),
+    ('demand_opportunity_followups', '需求跟进任务填写', build_demand_opportunity_followups),
+    ('demand_task_aging', '需求任务等待与停留', build_demand_task_aging),
+    ('notification_snooze_return', '延后通知回访', build_notification_snooze_return),
+    ('notification_kind_coverage', '通知类型覆盖', build_notification_kind_coverage),
+    ('notification_preference_usage', '通知偏好使用', build_notification_preference_usage),
+    (
+        'notification_preference_bypass_diagnosis', '通知偏好绕过诊断',
+        build_notification_preference_bypass_diagnosis,
+    ),
+    ('notification_quiet_hours_shape', '免打扰时段形状', build_notification_quiet_hours_shape),
+    ('notification_aggregation_quality', '通知聚合质量', build_notification_aggregation_quality),
+    ('report_resolution_quality', '举报处理质量', build_report_resolution_quality),
+    ('meeting_incident_quality', '面约异常处理', build_meeting_incident_quality),
+    ('moderation_notice_preference', '治理通知偏好', build_moderation_notice_preference),
+    ('meeting_attendance', '面约到场', build_meeting_attendance),
+    ('meeting_reschedule', '面约改期', build_meeting_reschedule),
+    ('refresh_quota_drift', '刷新额度漂移', build_refresh_quota_drift),
+    ('relist_freshness', '重新上架新鲜度', build_relist_freshness),
+    ('refresh_response', '商品刷新回响', build_refresh_response),
+    (
+        'search_impression_pairing_quality', '搜索曝光与点击配对质量',
+        build_search_impression_pairing_quality,
+    ),
+    ('handoff_code_usage', '交付码使用', build_handoff_code_usage),
+    ('return_handshake', '归还双方握手', build_return_handshake),
+    ('delivery_handshake', '当面交付握手', build_delivery_handshake),
+    (
+        'transaction_safety_acknowledgement_quality', '交易安全卡确认质量',
+        build_transaction_safety_acknowledgement_quality,
+    ),
+    ('first_viewed', '第一次看见之后', build_first_viewed),
+    ('saved_search_latency', '关注搜索命中等待', build_saved_search_latency),
+    ('saved_search_quiet_window', '关注搜索静默窗口', build_saved_search_quiet_window),
+    ('saved_search_limit_shape', '关注搜索上限形状', build_saved_search_limit_shape),
+    ('lost_found_matched_outcome', '失物匹配结果', build_lost_found_matched_outcome),
+    ('campus_verification_friction', '校园认证等待', build_campus_verification_friction),
+    ('gift_application_queue', '赠送申请队列', build_gift_application_queue),
+    ('item_image_coverage', '商品图片覆盖', build_item_image_coverage),
+    ('moderation_rule_quality', '治理规则命中', build_moderation_rule_quality),
+    ('availability_watch_quality', '到货提醒关注', build_availability_watch_quality),
+    ('rating_quality', '交易评价质量', build_rating_quality),
+    ('dispute_resolution_quality', '申诉处理质量', build_dispute_resolution_quality),
+    ('lost_found_lead_quality', '失物线索质量', build_lost_found_lead_quality),
+    ('demand_response_conversion', '求购响应转化', build_demand_response_conversion),
+    ('order_deadline_reminders', '订单截止提醒', build_order_deadline_reminders),
+    ('opportunity_dismissal_quality', '机会流忽略质量', build_opportunity_dismissal_quality),
+    ('favorite_collection_quality', '心愿单分组形状', build_favorite_collection_quality),
+    (
+        'academic_term_snapshot_quality', '学期阶段快照质量',
+        build_academic_term_snapshot_quality,
+    ),
+    ('contribution_tier_shape', '积分等级与徽章形状', build_contribution_tier_shape),
+    ('borrow_days_shape', '默认借用天数形状', build_borrow_days_shape),
+    ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
+    ('recommendation_quality', '推荐质量', build_recommendation_quality),
+    ('recommendation_impression_quality', '推荐曝光日志质量', build_recommendation_impression_quality),
+)
+
+
+def _build_shared_operations_dashboard(
+    *, days, base_builder=build_operations_dashboard,
+    panel_builders=None,
+):
+    """构建页面与 CSV 共用的运营看板，并附上本次请求的耗时报告。
+
+    测试可以注入很小的 ``base_builder`` 与 ``panel_builders``，不必为了验证
+    注册表和计时契约而把几十个真实面板各跑一遍。
+    """
+    runs = []
+    started = perf_counter()
+    dashboard = base_builder(days=days)
+    runs.append({
+        'key': 'operations_core',
+        'label': '运营看板核心统计',
+        'elapsed_ms': (perf_counter() - started) * 1000,
+    })
+
+    builders = panel_builders
+    if builders is None:
+        builders = OPERATIONS_DASHBOARD_SHARED_BUILDERS
+    for key, label, builder in builders:
+        started = perf_counter()
+        dashboard[key] = builder(days=days)
+        runs.append({
+            'key': key,
+            'label': label,
+            'elapsed_ms': (perf_counter() - started) * 1000,
+        })
+
+    dashboard['dashboard_build_performance'] = build_dashboard_build_performance(runs)
+    return dashboard
+
+
 def _operations_period_days(request):
     try:
         return int(request.GET.get('days', 30))
@@ -2402,67 +2504,7 @@ def operations_dashboard(request):
     if not request.user.is_staff:
         raise PermissionDenied
     days = _operations_period_days(request)
-    dashboard = build_operations_dashboard(days)
-    dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
-    dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
-    dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
-    dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
-    dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
-    dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
-    dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
-    dashboard['notification_preference_bypass_diagnosis'] = (
-        build_notification_preference_bypass_diagnosis(days=days)
-    )
-    dashboard['notification_quiet_hours_shape'] = build_notification_quiet_hours_shape(days=days)
-    dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
-    dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
-    dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
-    dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
-    dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
-    dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
-    dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
-    dashboard['relist_freshness'] = build_relist_freshness(days=days)
-    dashboard['refresh_response'] = build_refresh_response(days=days)
-    dashboard['search_impression_pairing_quality'] = (
-        build_search_impression_pairing_quality(days=days)
-    )
-    dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
-    dashboard['return_handshake'] = build_return_handshake(days=days)
-    dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
-    dashboard['transaction_safety_acknowledgement_quality'] = (
-        build_transaction_safety_acknowledgement_quality(days=days)
-    )
-    dashboard['first_viewed'] = build_first_viewed(days=days)
-    dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
-    dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
-    dashboard['saved_search_limit_shape'] = build_saved_search_limit_shape(days=days)
-    dashboard['lost_found_matched_outcome'] = build_lost_found_matched_outcome(days=days)
-    dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
-    dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
-    dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
-    dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
-    dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
-    dashboard['rating_quality'] = build_rating_quality(days=days)
-    dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
-    dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
-    dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
-    dashboard['order_deadline_reminders'] = build_order_deadline_reminders(days=days)
-    dashboard['opportunity_dismissal_quality'] = (
-        build_opportunity_dismissal_quality(days=days)
-    )
-    dashboard['favorite_collection_quality'] = (
-        build_favorite_collection_quality(days=days)
-    )
-    dashboard['academic_term_snapshot_quality'] = (
-        build_academic_term_snapshot_quality(days=days)
-    )
-    dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
-    dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
-    dashboard['dispute_evidence_shape'] = build_dispute_evidence_shape(days=days)
-    dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
-    dashboard['recommendation_impression_quality'] = (
-        build_recommendation_impression_quality(days=days)
-    )
+    dashboard = _build_shared_operations_dashboard(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2481,7 +2523,6 @@ def operations_dashboard(request):
         days=days, statuses=_demand_outcome_status_filter(request),
     )
     dashboard['demand_outcome_status_filter'] = _demand_outcome_status_filter(request)
-    dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
     return render(request, 'listings/operations_dashboard.html', dashboard)
 
 
@@ -2601,67 +2642,7 @@ def operations_dashboard_export(request):
         raise PermissionDenied
 
     days = _operations_period_days(request)
-    dashboard = build_operations_dashboard(days)
-    dashboard['demand_match_quality'] = build_demand_match_quality(days=days)
-    dashboard['mutual_aid_feedback_notes'] = build_mutual_aid_feedback_notes(days=days)
-    dashboard['demand_opportunity_followups'] = build_demand_opportunity_followups(days=days)
-    dashboard['demand_task_aging'] = build_demand_task_aging(days=days)
-    dashboard['notification_snooze_return'] = build_notification_snooze_return(days=days)
-    dashboard['notification_kind_coverage'] = build_notification_kind_coverage(days=days)
-    dashboard['notification_preference_usage'] = build_notification_preference_usage(days=days)
-    dashboard['notification_preference_bypass_diagnosis'] = (
-        build_notification_preference_bypass_diagnosis(days=days)
-    )
-    dashboard['notification_quiet_hours_shape'] = build_notification_quiet_hours_shape(days=days)
-    dashboard['notification_aggregation_quality'] = build_notification_aggregation_quality(days=days)
-    dashboard['report_resolution_quality'] = build_report_resolution_quality(days=days)
-    dashboard['meeting_incident_quality'] = build_meeting_incident_quality(days=days)
-    dashboard['moderation_notice_preference'] = build_moderation_notice_preference(days=days)
-    dashboard['meeting_attendance'] = build_meeting_attendance(days=days)
-    dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
-    dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
-    dashboard['relist_freshness'] = build_relist_freshness(days=days)
-    dashboard['refresh_response'] = build_refresh_response(days=days)
-    dashboard['search_impression_pairing_quality'] = (
-        build_search_impression_pairing_quality(days=days)
-    )
-    dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
-    dashboard['return_handshake'] = build_return_handshake(days=days)
-    dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
-    dashboard['transaction_safety_acknowledgement_quality'] = (
-        build_transaction_safety_acknowledgement_quality(days=days)
-    )
-    dashboard['first_viewed'] = build_first_viewed(days=days)
-    dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
-    dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
-    dashboard['saved_search_limit_shape'] = build_saved_search_limit_shape(days=days)
-    dashboard['lost_found_matched_outcome'] = build_lost_found_matched_outcome(days=days)
-    dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
-    dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
-    dashboard['item_image_coverage'] = build_item_image_coverage(days=days)
-    dashboard['moderation_rule_quality'] = build_moderation_rule_quality(days=days)
-    dashboard['availability_watch_quality'] = build_availability_watch_quality(days=days)
-    dashboard['rating_quality'] = build_rating_quality(days=days)
-    dashboard['dispute_resolution_quality'] = build_dispute_resolution_quality(days=days)
-    dashboard['lost_found_lead_quality'] = build_lost_found_lead_quality(days=days)
-    dashboard['demand_response_conversion'] = build_demand_response_conversion(days=days)
-    dashboard['order_deadline_reminders'] = build_order_deadline_reminders(days=days)
-    dashboard['opportunity_dismissal_quality'] = (
-        build_opportunity_dismissal_quality(days=days)
-    )
-    dashboard['favorite_collection_quality'] = (
-        build_favorite_collection_quality(days=days)
-    )
-    dashboard['academic_term_snapshot_quality'] = (
-        build_academic_term_snapshot_quality(days=days)
-    )
-    dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
-    dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
-    dashboard['dispute_evidence_shape'] = build_dispute_evidence_shape(days=days)
-    dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
-    dashboard['recommendation_impression_quality'] = (
-        build_recommendation_impression_quality(days=days)
-    )
+    dashboard = _build_shared_operations_dashboard(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -2722,6 +2703,47 @@ def operations_dashboard_export(request):
     for key, label in metric_labels:
         value = metrics[key]
         writer.writerow([label, '' if value is None else value])
+
+    performance = dashboard['dashboard_build_performance']
+    writer.writerow([])
+    writer.writerow(['看板自身构建耗时'])
+    writer.writerow(['指标', '数值'])
+    writer.writerow([
+        '共享构建器数量', performance['metrics']['builder_total'],
+        '运营看板核心统计 + 两端共用的共享面板',
+    ])
+    writer.writerow([
+        '计入耗时（ms）', performance['metrics']['total_elapsed_ms'],
+        '只含共享构建函数，不含渲染、序列化、请求筛选和下载',
+    ])
+    writer.writerow([
+        'P50（ms）', '' if performance['metrics']['p50_ms'] is None else performance['metrics']['p50_ms'],
+        '最近秩，不插值',
+    ])
+    writer.writerow([
+        'P90（ms）', '' if performance['metrics']['p90_ms'] is None else performance['metrics']['p90_ms'],
+        '最近秩，不插值',
+    ])
+    writer.writerow([
+        '重复 key 数量', performance['metrics']['duplicate_key_total'],
+        '页面与 CSV 共用注册表的自检数字',
+    ])
+    writer.writerow([])
+    writer.writerow(['共享构建器', '耗时（ms）', '占比（%）', '累计占比（%）', '读数'])
+    for row in performance['rows']:
+        reading = []
+        if row['is_slowest']:
+            reading.append('最慢')
+        if row['is_duplicate']:
+            reading.append('重复 key')
+        writer.writerow([
+            f"构建：{row['label']}", row['elapsed_ms'],
+            '' if row['share_percent'] is None else row['share_percent'],
+            '' if row['cumulative_percent'] is None else row['cumulative_percent'],
+            ' · '.join(reading) if reading else '—',
+        ])
+    writer.writerow(['口径', performance['note']])
+
     writer.writerow([])
     writer.writerow(['求购匹配转化', '数量', '相对上一步转化率（%）', '口径说明'])
     for stage in dashboard['demand_match_insights']['funnel']:

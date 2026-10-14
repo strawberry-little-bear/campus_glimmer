@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
-from django.test import SimpleTestCase
+from django.contrib.auth.models import User
+from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
 
 from .dashboard_build_performance import build_dashboard_build_performance
+from .views import (
+    OPERATIONS_DASHBOARD_SHARED_BUILDERS, _build_shared_operations_dashboard,
+)
 
 
 class DashboardBuildPerformanceTests(SimpleTestCase):
@@ -82,3 +87,67 @@ class DashboardBuildPerformanceTests(SimpleTestCase):
     def test_negative_timing_is_rejected(self):
         with self.assertRaisesMessage(ValueError, '构建耗时不能是负数'):
             self.run_report({'key': 'core', 'label': '核心看板', 'elapsed_ms': -1})
+
+class SharedOperationsDashboardAssemblyTests(SimpleTestCase):
+    def test_the_shared_assembly_times_the_core_and_each_panel_once(self):
+        calls = []
+
+        def base_builder(*, days):
+            calls.append(('core', days))
+            return {'period_days': days, 'metrics': {}}
+
+        def first_panel(*, days):
+            calls.append(('first', days))
+            return {'has_data': True}
+
+        def second_panel(*, days):
+            calls.append(('second', days))
+            return {'has_data': False}
+
+        report = _build_shared_operations_dashboard(
+            days=7,
+            base_builder=base_builder,
+            panel_builders=(
+                ('first_panel', '第一张面板', first_panel),
+                ('second_panel', '第二张面板', second_panel),
+            ),
+        )['dashboard_build_performance']
+
+        self.assertEqual(calls, [('core', 7), ('first', 7), ('second', 7)])
+        self.assertEqual(report['metrics']['builder_total'], 3)
+        self.assertEqual(report['metrics']['duplicate_key_total'], 0)
+        self.assertEqual(
+            [row['key'] for row in report['rows']],
+            ['operations_core', 'first_panel', 'second_panel'],
+        )
+
+    def test_the_production_registry_has_unique_shared_keys(self):
+        keys = [row[0] for row in OPERATIONS_DASHBOARD_SHARED_BUILDERS]
+
+        self.assertEqual(len(keys), 46)
+        self.assertEqual(len(set(keys)), 46)
+        self.assertIn('search_impression_pairing_quality', keys)
+        self.assertIn('recommendation_impression_quality', keys)
+
+
+class DashboardBuildPerformanceExportTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='build-performance-staff', password='safe-password-123', is_staff=True,
+        )
+        self.client.force_login(self.user)
+
+    def test_the_page_and_export_use_the_same_performance_contract(self):
+        page = self.client.get(reverse('operations_dashboard'))
+        export = self.client.get(reverse('operations_dashboard_export'))
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(export.status_code, 200)
+        self.assertContains(page, '看板自身构建耗时')
+        self.assertContains(page, '最近秩')
+        self.assertContains(page, '页面先显示最慢的 12 个构建器')
+        text = export.content.decode('utf-8-sig')
+        self.assertIn('看板自身构建耗时', text)
+        self.assertIn('共享构建器,耗时（ms）,占比（%）,累计占比（%）,读数', text)
+        self.assertIn('构建：运营看板核心统计', text)
+        self.assertIn('不落库、不做跨请求平均', text)
