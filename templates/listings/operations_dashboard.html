@@ -6352,6 +6352,83 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 refresh-response-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Refresh response</span><h2>商品刷新后的搜索回响</h2></div>
+        <span class="ops-panel-hint">只对照前后各 72 小时的搜索事件</span>
+    </div>
+    <p class="refresh-response-note mb-3"><i class="bi bi-search me-1"></i>这里的分析单位是<strong>商品当前可观察到的最近一次刷新</strong>。系统还没有刷新历史表，所以不回填更早的刷新，也不把看不到的历史当成不存在；在最近一次刷新上，累计的 <code>refresh_count</code> 就是这次刷新的次序。前后窗各 {{ refresh_response.window_hours }} 小时，中间只以刷新时间为界，共享的端点只计入后窗。</p>
+    <div class="row g-3 mb-4 refresh-response-summary">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内观察到刷新</span><strong>{{ refresh_response.summary.observed_refreshes }}</strong><small>商品 × 最近一次刷新</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>成熟且可对照</span><strong>{{ refresh_response.summary.eligible_refreshes }}</strong><small>进入下表的分母</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未满 {{ refresh_response.window_hours }} 小时</span><strong>{{ refresh_response.summary.immature_refreshes }}</strong><small>先不比较，避免截断后窗</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>无完整前窗</span><strong>{{ refresh_response.summary.no_full_pre_window_refreshes }}</strong><small>发布太晚，单独列出</small></div></div>
+    </div>
+    <div class="refresh-response-table">
+        <h3 class="h6 mb-3">刷新次序对照（前 72 小时 / 后 72 小时）</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-grid">
+                <thead>
+                    <tr>
+                        <th>刷新次序</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in refresh_response.rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.refreshes }}</td>
+                        <td>{{ row.before_impressions }}</td>
+                        <td>{{ row.after_impressions }}</td>
+                        <td>{% if row.after_median_impressions is None %}—{% else %}{{ row.after_median_impressions }}{% endif %}</td>
+                        <td>{% if row.before_click_rate is None %}—{% else %}{{ row.before_click_rate }}{% endif %}</td>
+                        <td>{% if row.after_click_rate is None %}—{% else %}{{ row.after_click_rate }}{% endif %}</td>
+                        <td>{{ row.before_favorites }}</td>
+                        <td>{{ row.after_favorites }}</td>
+                        <td>{{ row.before_orders }}</td>
+                        <td>{{ row.after_orders }}</td>
+                        <td>{% if row.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif row.refreshes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ refresh_response.min_group_items }} 件</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>{{ refresh_response.overall.label }}</td>
+                        <td>{{ refresh_response.overall.refreshes }}</td>
+                        <td>{{ refresh_response.overall.before_impressions }}</td>
+                        <td>{{ refresh_response.overall.after_impressions }}</td>
+                        <td>{% if refresh_response.overall.after_median_impressions is None %}—{% else %}{{ refresh_response.overall.after_median_impressions }}{% endif %}</td>
+                        <td>{% if refresh_response.overall.before_click_rate is None %}—{% else %}{{ refresh_response.overall.before_click_rate }}{% endif %}</td>
+                        <td>{% if refresh_response.overall.after_click_rate is None %}—{% else %}{{ refresh_response.overall.after_click_rate }}{% endif %}</td>
+                        <td>{{ refresh_response.overall.before_favorites }}</td>
+                        <td>{{ refresh_response.overall.after_favorites }}</td>
+                        <td>{{ refresh_response.overall.before_orders }}</td>
+                        <td>{{ refresh_response.overall.after_orders }}</td>
+                        <td>{% if refresh_response.overall.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif refresh_response.overall.refreshes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ refresh_response.min_group_items }} 件</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    <div class="mt-4">
+        <h3 class="h6 mb-3">哪些刷新没有进入对照</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-status">
+                <thead><tr><th>状态</th><th>数量</th><th>处理方式</th></tr></thead>
+                <tbody>
+                    <tr><td>周期内观察到的刷新</td><td>{{ refresh_response.summary.observed_refreshes }}</td><td>先全部登记，再看观察条件</td></tr>
+                    <tr><td>成熟且可对照</td><td>{{ refresh_response.summary.eligible_refreshes }}</td><td>进入次序表；每组至少 {{ refresh_response.min_group_items }} 件才标为样本可用</td></tr>
+                    <tr><td>未满 {{ refresh_response.window_hours }} 小时</td><td>{{ refresh_response.summary.immature_refreshes }}</td><td>单列，不用被截断的后窗做对照</td></tr>
+                    <tr><td>无完整前窗</td><td>{{ refresh_response.summary.no_full_pre_window_refreshes }}</td><td>单列，不把新发布商品混进对照组</td></tr>
+                    <tr><td>时间异常</td><td>{{ refresh_response.summary.invalid_timestamp_refreshes }}</td><td>单列，不猜测正确时间</td></tr>
+                    <tr><td>次序不在 1—4</td><td>{{ refresh_response.summary.unexpected_ordinal_refreshes }}</td><td>单列，不并入任何固定档</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读搜索曝光、搜索点击、收藏和预约的发生时间，<strong>不读 <code>BrowsingHistory.view_count</code></strong>——浏览历史里的浏览次数是累计聚合，不是逐次浏览事件，切开看会像很精确、实际无法核对。输出不包含用户、商品标题、搜索词或订单号，不排名、不建议自动刷新，也不把统计写回推荐或风控；后窗高于前窗只表示共同变化，不解释为因果提升。</div>
+</section>
+
 <section class="ops-panel relist-freshness-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Relist freshness</span><h2>重新上架的那件商品，为什么一回来就沉底</h2></div>

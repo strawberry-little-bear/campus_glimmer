@@ -46,6 +46,7 @@ from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
 from .refresh_quota_drift import build_refresh_quota_drift
+from .refresh_response import build_refresh_response
 from .relist_freshness import build_relist_freshness
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2419,6 +2420,7 @@ def operations_dashboard(request):
     dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
     dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
     dashboard['relist_freshness'] = build_relist_freshness(days=days)
+    dashboard['refresh_response'] = build_refresh_response(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -2611,6 +2613,7 @@ def operations_dashboard_export(request):
     dashboard['meeting_reschedule'] = build_meeting_reschedule(days=days)
     dashboard['refresh_quota_drift'] = build_refresh_quota_drift(days=days)
     dashboard['relist_freshness'] = build_relist_freshness(days=days)
+    dashboard['refresh_response'] = build_refresh_response(days=days)
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
@@ -7113,6 +7116,97 @@ def operations_dashboard_export(request):
         '文案和代码不一致是真的，但先有数再决定改哪一边：如果只有个位数，'
         '改一句话就够；如果是成百上千件沉底商品，那它值得一张刷新历史表。',
     ])
+
+    refresh_response = dashboard['refresh_response']
+    writer.writerow([])
+    writer.writerow(['商品刷新后的搜索回响'])
+    writer.writerow([])
+    writer.writerow(['口径说明'])
+    writer.writerow(['字段', '数值', '说明'])
+    writer.writerow([
+        '回看天数', refresh_response['period_days'],
+        f"看板周期从 {timezone.localtime(refresh_response['period_start']):%Y-%m-%d %H:%M} 起",
+    ])
+    writer.writerow([
+        '观察窗口', refresh_response['window_hours'], '刷新前后各固定小时数，共享端点只计入后窗',
+    ])
+    writer.writerow([
+        '分析单位', '商品 × 最近一次刷新',
+        '系统没有刷新历史表；当前只能观察最新一次刷新，不回填历史',
+    ])
+    writer.writerow([
+        '固定次序', '第 1—4 次',
+        '四档全列，包含 0 样本档；累计刷新次数在最新一次刷新上就是次序',
+    ])
+    writer.writerow([
+        '样本门槛', refresh_response['min_group_items'],
+        '每个次序达到该成熟样本数才标记样本可用',
+    ])
+    writer.writerow([
+        '只读事件', '搜索曝光、搜索点击、收藏、预约',
+        '点击率使用同一窗口的搜索曝光作分母',
+    ])
+    writer.writerow([
+        '刻意不读', 'BrowsingHistory.view_count',
+        '浏览次数是累计聚合，不是逐次浏览事件，不能按刷新切开核对',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['刷新次序对照（前 72 小时 / 后 72 小时）'])
+    writer.writerow([
+        '刷新次序', '成熟样本', '前窗曝光', '后窗曝光', '后窗中位曝光',
+        '前窗点击率（%）', '后窗点击率（%）', '前窗收藏', '后窗收藏',
+        '前窗预约', '后窗预约', '样本状态',
+    ])
+    for row in [*refresh_response['rows'], refresh_response['overall']]:
+        sample_state = (
+            '样本可用' if row['has_sample'] else
+            ('少于 %d 件' % refresh_response['min_group_items'] if row['refreshes'] else '无样本')
+        )
+        writer.writerow([
+            row['label'], row['refreshes'], row['before_impressions'],
+            row['after_impressions'],
+            row['after_median_impressions'] if row['after_median_impressions'] is not None else '—',
+            row['before_click_rate'] if row['before_click_rate'] is not None else '—',
+            row['after_click_rate'] if row['after_click_rate'] is not None else '—',
+            row['before_favorites'], row['after_favorites'],
+            row['before_orders'], row['after_orders'], sample_state,
+        ])
+
+    writer.writerow([])
+    writer.writerow(['哪些刷新没有进入对照'])
+    writer.writerow(['状态', '数量', '处理方式'])
+    writer.writerow([
+        '周期内观察到的刷新', refresh_response['summary']['observed_refreshes'],
+        '先全部登记，再看观察条件',
+    ])
+    writer.writerow([
+        '成熟且可对照', refresh_response['summary']['eligible_refreshes'],
+        '进入次序表；每组达到样本门槛才标记可用',
+    ])
+    writer.writerow([
+        '未满观察窗口', refresh_response['summary']['immature_refreshes'],
+        '单列，不用被截断的后窗做对照',
+    ])
+    writer.writerow([
+        '无完整前窗', refresh_response['summary']['no_full_pre_window_refreshes'],
+        '单列，不把新发布商品混进对照组',
+    ])
+    writer.writerow([
+        '时间异常', refresh_response['summary']['invalid_timestamp_refreshes'],
+        '单列，不猜测正确时间',
+    ])
+    writer.writerow([
+        '次序不在 1—4', refresh_response['summary']['unexpected_ordinal_refreshes'],
+        '单列，不并入任何固定档',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['只读与隐私边界'])
+    writer.writerow(['项目', '约束'])
+    writer.writerow(['因果解释', '只描述共同变化；后窗高于前窗不代表刷新带来因果提升'])
+    writer.writerow(['身份与自由文本', '不输出用户名、商品标题、描述、搜索词或订单号'])
+    writer.writerow(['运营动作', '不排名、不建议自动刷新、不改排序、不写回推荐或风控'])
 
     relist = dashboard['relist_freshness']
     writer.writerow([])

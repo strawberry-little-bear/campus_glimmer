@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+import csv
+import io
 from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from listings.models import Category, Favorite, Item, Order, SearchClick, SearchImpression
@@ -206,3 +209,94 @@ class RefreshResponseTests(TestCase):
             },
         )
 
+
+
+class RefreshResponseDashboardTests(TestCase):
+    """Keep the screen, CSV export, and privacy boundary in the same shape."""
+
+    def setUp(self):
+        self.now = timezone.now()
+        self.seller = User.objects.create_user(
+            username='refresh-response-seller', password='safe-password-123',
+        )
+        self.buyer = User.objects.create_user(
+            username='refresh-response-buyer', password='safe-password-123',
+        )
+        self.category = Category.objects.create(name='看板回响测试分类')
+        self.staff = User.objects.create_user(
+            username='refresh-response-staff', password='safe-password-123',
+            is_staff=True,
+        )
+        self.client.force_login(self.staff)
+
+    def make_item(self, *, title='刷新回响商品'):
+        created_at = self.now - timedelta(days=8)
+        refresh_at = self.now - timedelta(days=4)
+        item = Item.objects.create(
+            title=title,
+            description='用于商品刷新后的搜索回响看板测试。',
+            price='52.00',
+            category=self.category,
+            condition='九成新',
+            seller=self.seller,
+        )
+        Item.objects.filter(pk=item.pk).update(
+            created_at=created_at,
+            last_refreshed_at=refresh_at,
+            refresh_count=1,
+        )
+        item.refresh_from_db()
+        return item
+
+    def test_dashboard_and_csv_show_the_same_refresh_response_contract(self):
+        item = self.make_item(title='回响导出不应带出的商品标题')
+        impression = SearchImpression.objects.create(item=item, position=1)
+        SearchImpression.objects.filter(pk=impression.pk).update(
+            created_at=item.last_refreshed_at + timedelta(hours=2),
+        )
+        order = Order.objects.create(
+            item=item,
+            buyer=self.buyer,
+            seller=self.seller,
+            agreed_price=item.price,
+        )
+        Order.objects.filter(pk=order.pk).update(
+            created_at=item.last_refreshed_at + timedelta(hours=3),
+        )
+
+        page = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(export.status_code, 200)
+        html = page.content.decode('utf-8')
+        panel = html.split('商品刷新后的搜索回响', 1)[1].split(
+            '重新上架的那件商品，为什么一回来就沉底', 1,
+        )[0]
+        for label in ('第 1 次', '第 2 次', '第 3 次', '第 4 次', '全部次序'):
+            self.assertIn(label, panel)
+        self.assertIn('刷新次序对照（前 72 小时 / 后 72 小时）', panel)
+        self.assertIn('哪些刷新没有进入对照', panel)
+
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        titles = [row[0] if row else '' for row in rows]
+        start = titles.index('商品刷新后的搜索回响')
+        end = titles.index('重新上架的那件商品，为什么一回来就沉底')
+        section = rows[start:end]
+
+        self.assertIn(
+            [
+                '刷新次序', '成熟样本', '前窗曝光', '后窗曝光', '后窗中位曝光',
+                '前窗点击率（%）', '后窗点击率（%）', '前窗收藏', '后窗收藏',
+                '前窗预约', '后窗预约', '样本状态',
+            ],
+            section,
+        )
+        self.assertIn(['状态', '数量', '处理方式'], section)
+        rendered_section = '\n'.join(','.join(row) for row in section)
+        for secret in (self.seller.username, self.buyer.username, item.title):
+            self.assertNotIn(secret, rendered_section)
+        main_rows = [row for row in section if len(row) == 12 and row[0].startswith(('第 ', '全部'))]
+        self.assertEqual(len(main_rows), 5)
+        self.assertTrue(all(len(row) == 12 for row in main_rows))
+        self.assertNotIn('订单号', main_rows[0])

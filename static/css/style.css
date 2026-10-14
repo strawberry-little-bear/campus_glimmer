@@ -3106,6 +3106,52 @@ a { color: inherit; text-decoration: none; }
 }
 
 
+/* 商品刷新后的搜索回响：放在两个供给侧面板之间，用更安静的雾蓝。
+ * 这一面报的不是「刷新有没有效果」，而是前后窗口里搜索信号的共同变化，
+ * 所以配色压低、不使用红绿：样本薄不是故障，后窗更高也不是成功。 */
+.refresh-response-panel { padding: 14px; border: 1px solid #d5dbe8; border-radius: 14px; background: linear-gradient(135deg, #f6f8fc, #fdfdfe); color: #404b63; }
+
+.refresh-response-panel p { color: #526076; }
+
+.refresh-response-panel .ops-mini-stat { background: #fff; }
+
+.refresh-response-panel .ops-mini-stat strong { color: #38506f; font-variant-numeric: tabular-nums; }
+
+.refresh-response-panel .ops-mini-stat span,
+.refresh-response-panel .ops-mini-stat small { color: #7d8799; }
+
+.refresh-response-note { margin-bottom: 12px; padding: 12px 14px; border: 1px solid #dce2ee; border-radius: 12px; background: #f3f6fb; color: #43516a; font-size: .84rem; line-height: 1.7; }
+
+.refresh-response-summary { row-gap: .75rem; }
+
+.refresh-response-table .table-responsive { border: 1px solid #e2e7f1; border-radius: 12px; background: #fff; }
+
+.refresh-response-grid { min-width: 1160px; margin-bottom: 0; }
+
+.refresh-response-status { min-width: 680px; margin-bottom: 0; }
+
+.refresh-response-panel .table th { color: #48597a; white-space: nowrap; }
+
+.refresh-response-panel .ops-table td:not(:first-child),
+.refresh-response-panel .ops-table tfoot td:not(:first-child) { font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+
+.refresh-response-panel .ops-table td:first-child { white-space: nowrap; }
+
+.refresh-response-panel .ops-table tfoot { background: #f7f9fc; font-weight: 600; }
+
+.refresh-response-ok { background: #e8eef7 !important; color: #3b5473 !important; }
+
+.refresh-response-thin { background: #f1f2f5 !important; color: #6c757d !important; }
+
+.refresh-response-panel .ops-footer-note { color: #526076; }
+
+@media (max-width: 575px) {
+    .refresh-response-panel { padding: 12px; }
+    .refresh-response-panel .ops-table td:not(:first-child),
+    .refresh-response-panel .ops-table tfoot td:not(:first-child) { text-align: left; }
+}
+
+
 /* 重新上架的那件商品，为什么一回来就沉底的面板，自成一组色相（冷钢青，
  * 压一层石板灰）。为什么自成一套颜色：供给侧这一排里，左侧刷新额度是
  * 赭金（#6b5333 一带），供给侧生命周期是草绿（#7aa892 一带），会面事件
