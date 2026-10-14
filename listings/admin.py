@@ -1,6 +1,7 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, CampusLocationMaintenanceDecision, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
 
@@ -21,6 +22,59 @@ class CampusLocationAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'is_public', 'building')
     search_fields = ('name', 'building', 'address')
     list_editable = ('is_public', 'is_active', 'sort_order')
+
+
+@admin.register(CampusLocationMaintenanceDecision)
+class CampusLocationMaintenanceDecisionAdmin(admin.ModelAdmin):
+    list_display = (
+        'location', 'outcome', 'signal_fingerprint', 'reviewed_by',
+        'updated_at', 'created_at',
+    )
+    list_filter = ('outcome', 'location', 'signal_fingerprint')
+    list_select_related = ('location', 'reviewed_by')
+    search_fields = ('location__name', 'location__building', 'location__address', 'note')
+    autocomplete_fields = ('location',)
+    readonly_fields = ('signal_fingerprint', 'reviewed_by', 'created_at', 'updated_at')
+    date_hierarchy = 'updated_at'
+
+    def save_model(self, request, obj, form, change):
+        keep_existing_fingerprint = False
+        if change and obj.pk:
+            previous_location_id = CampusLocationMaintenanceDecision.objects.filter(
+                pk=obj.pk,
+            ).values_list('location_id', flat=True).first()
+            keep_existing_fingerprint = (
+                previous_location_id == obj.location_id
+                and bool(obj.signal_fingerprint)
+            )
+        fingerprint = (
+            obj.signal_fingerprint
+            if keep_existing_fingerprint
+            else get_location_maintenance_fingerprint(obj.location_id)
+        )
+        if not fingerprint:
+            messages.error(
+                request,
+                '该地点当前没有维护队列信号，不能保存决策；请先处理有信号的地点。',
+            )
+            return
+
+        existing = CampusLocationMaintenanceDecision.objects.filter(
+            location_id=obj.location_id,
+            signal_fingerprint=fingerprint,
+        )
+        if obj.pk:
+            existing = existing.exclude(pk=obj.pk)
+        if existing.exists():
+            messages.error(
+                request,
+                '同一地点的同一组信号已有决策，请编辑原记录，不要重复创建。',
+            )
+            return
+
+        obj.signal_fingerprint = fingerprint
+        obj.reviewed_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(CampusCampaign)

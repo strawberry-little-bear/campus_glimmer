@@ -1,15 +1,24 @@
 # -*- coding: utf-8 -*-
 from datetime import timedelta
 
+from django.contrib.admin import AdminSite
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.contrib.messages.storage.cookie import CookieStorage
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from .admin import CampusLocationMaintenanceDecisionAdmin
 from .location_maintenance_queue import (
     LIST_LIMIT, build_location_maintenance_queue,
+    get_location_maintenance_fingerprint, signal_fingerprint,
 )
-from .models import CampusLocation, Category, DemandPost, Item, SavedSearch
+from .models import (
+    CampusLocation, CampusLocationMaintenanceDecision, Category, DemandPost,
+    Item, SavedSearch,
+)
 
 
 class LocationMaintenanceQueueTests(TestCase):
@@ -243,6 +252,188 @@ class LocationMaintenanceQueueTests(TestCase):
         result = build_location_maintenance_queue(days=13, now=self.now)
 
         self.assertEqual(result['period_days'], 30)
+
+
+class CampusLocationMaintenanceDecisionTests(TestCase):
+    def setUp(self):
+        self.now = timezone.now() + timedelta(seconds=1)
+        self.user = User.objects.create_user(
+            username='location-decision-user', password='safe-password-123',
+        )
+        self.category = Category.objects.create(name='地点决策分类')
+
+    def make_location(self, name, **kwargs):
+        options = {
+            'building': '东区', 'address': '东门内侧',
+            'description': '白天有人经过', 'safety_note': '夜间有照明',
+            'is_public': True, 'is_active': True,
+        }
+        options.update(kwargs)
+        return CampusLocation.objects.create(name=name, **options)
+
+    def make_decision(self, location, outcome='accepted', **kwargs):
+        options = {
+            'signal_fingerprint': get_location_maintenance_fingerprint(
+                location.id, now=self.now,
+            ),
+            'outcome': outcome,
+            'note': '两个入口确实不相同。' if outcome == 'accepted' else '已在地点后台补充。',
+            'reviewed_by': self.user,
+        }
+        options.update(kwargs)
+        return CampusLocationMaintenanceDecision.objects.create(
+            location=location, **options
+        )
+
+    def test_fingerprint_is_order_insensitive_and_signal_sensitive(self):
+        self.assertEqual(
+            signal_fingerprint(['profile_gap', 'duplicate_name']),
+            signal_fingerprint(['duplicate_name', 'profile_gap']),
+        )
+        self.assertNotEqual(
+            signal_fingerprint(['profile_gap']),
+            signal_fingerprint(['stale_reference', 'profile_gap']),
+        )
+
+    def test_decisions_match_current_signals_and_unreviewed_rows_come_first(self):
+        reviewed = self.make_location('A 已复核地点', building='')
+        unreviewed = self.make_location('B 待核对地点', building='')
+        self.make_decision(reviewed, outcome='accepted')
+
+        result = build_location_maintenance_queue(now=self.now)
+
+        self.assertEqual(
+            [row['name'] for row in result['location_rows']],
+            ['B 待核对地点', 'A 已复核地点'],
+        )
+        reviewed_row = result['location_rows'][1]
+        self.assertEqual(reviewed_row['review_status'], 'reviewed')
+        self.assertEqual(reviewed_row['review_status_label'], '已复核')
+        self.assertEqual(reviewed_row['review_outcome'], 'accepted')
+        self.assertEqual(reviewed_row['review_outcome_label'], '维持现状')
+        self.assertIsNotNone(reviewed_row['decision_updated_at'])
+        self.assertEqual(result['summary']['unreviewed_total'], 1)
+        self.assertEqual(result['summary']['reviewed_total'], 1)
+        self.assertEqual(result['summary']['outcome_totals']['accepted'], 1)
+
+    def test_changed_signal_combination_requires_a_new_decision(self):
+        location = self.make_location('信号变化地点', building='')
+        decision = self.make_decision(location, outcome='accepted')
+
+        location.is_active = False
+        location.save()
+        Item.objects.create(
+            title='信号变化商品', description='用于信号变化测试',
+            category=self.category, condition='良好', seller=self.user,
+            price='12.00', location=location,
+        )
+
+        result = build_location_maintenance_queue(now=self.now)
+        row = result['location_rows'][0]
+
+        self.assertEqual(row['reason_keys'], ['stale_reference'])
+        self.assertEqual(row['review_status'], 'unreviewed')
+        self.assertNotEqual(
+            row['signal_fingerprint'], decision.signal_fingerprint,
+        )
+
+    def test_review_totals_are_not_affected_by_display_truncation(self):
+        for index in range(LIST_LIMIT + 1):
+            self.make_location(f'待补充 {index:02d}', building='')
+        reviewed = self.make_location('最后已复核', building='')
+        self.make_decision(reviewed, outcome='deferred')
+
+        result = build_location_maintenance_queue(now=self.now)
+
+        self.assertEqual(result['location_row_total'], LIST_LIMIT + 2)
+        self.assertFalse(
+            any(row['name'] == '最后已复核' for row in result['location_rows'])
+        )
+        self.assertEqual(result['summary']['reviewed_total'], 1)
+        self.assertEqual(result['summary']['outcome_totals']['deferred'], 1)
+
+    def test_model_validation_and_unique_constraint(self):
+        location = self.make_location('决策模型地点', building='')
+        blank_note = CampusLocationMaintenanceDecision(
+            location=location, signal_fingerprint='profile_gap',
+            outcome='accepted', note=' ', reviewed_by=self.user,
+        )
+        with self.assertRaises(ValidationError):
+            blank_note.full_clean()
+
+        self.make_decision(location, outcome='accepted')
+        with transaction.atomic():
+            with self.assertRaises(IntegrityError):
+                CampusLocationMaintenanceDecision.objects.create(
+                    location=location, signal_fingerprint='profile_gap',
+                    outcome='handled', note='重复决策', reviewed_by=self.user,
+                )
+
+    def test_queue_builder_does_not_change_decisions(self):
+        location = self.make_location('只读决策地点', building='')
+        decision = self.make_decision(location, outcome='accepted')
+
+        build_location_maintenance_queue(now=self.now)
+
+        decision.refresh_from_db()
+        self.assertEqual(decision.outcome, 'accepted')
+        self.assertEqual(decision.note, '两个入口确实不相同。')
+        self.assertEqual(decision.reviewed_by, self.user)
+
+
+class CampusLocationMaintenanceDecisionAdminTests(TestCase):
+    def setUp(self):
+        self.now = timezone.now() + timedelta(seconds=1)
+        self.staff = User.objects.create_user(
+            username='location-decision-staff', password='safe-password-123',
+            is_staff=True, is_superuser=True,
+        )
+        self.factory = RequestFactory()
+        self.admin = CampusLocationMaintenanceDecisionAdmin(
+            CampusLocationMaintenanceDecision, AdminSite(),
+        )
+
+    def request(self):
+        request = self.factory.post('/admin/')
+        request.user = self.staff
+        request._messages = CookieStorage(request)
+        return request
+
+    def test_save_model_generates_fingerprint_and_reviewer(self):
+        location = CampusLocation.objects.create(
+            name='后台决策地点', building='东区', address='东门内侧',
+            description='白天有人经过', safety_note='',
+        )
+        decision = CampusLocationMaintenanceDecision(
+            location=location, outcome='accepted', note='该入口无需额外提示。',
+        )
+
+        self.admin.save_model(
+            self.request(), decision, form=None, change=False,
+        )
+
+        decision.refresh_from_db()
+        self.assertEqual(decision.signal_fingerprint, 'public_safety_gap')
+        self.assertEqual(decision.reviewed_by, self.staff)
+
+    def test_save_model_rejects_location_without_current_signal(self):
+        location = CampusLocation.objects.create(
+            name='干净后台地点', building='东区', address='东门内侧',
+            description='白天有人经过', safety_note='夜间有照明',
+        )
+        decision = CampusLocationMaintenanceDecision(
+            location=location, outcome='accepted', note='没有信号也创建。',
+        )
+
+        self.admin.save_model(
+            self.request(), decision, form=None, change=False,
+        )
+
+        self.assertFalse(
+            CampusLocationMaintenanceDecision.objects.filter(
+                location=location,
+            ).exists()
+        )
 
 
 class LocationMaintenanceQueueDashboardTests(TestCase):

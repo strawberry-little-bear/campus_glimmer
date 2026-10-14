@@ -49,6 +49,66 @@ class CampusLocation(models.Model):
         ordering = ['sort_order', 'name']
 
 
+class CampusLocationMaintenanceDecision(models.Model):
+    """一次校园地点维护队列的人工判断留痕。
+
+    维护队列只负责把当前信号排出来；本表记录管理员看过这组信号后的结论。它不修改地
+    点档案，也不迁移业务外键。`signal_fingerprint` 只由排序后的信号 key 组成，当前引用
+    数变化不会让同一组问题失去匹配；一旦出现新的信号组合，旧决策不再匹配，地点重新回
+    到待核对。
+    """
+
+    OUTCOME_CHOICES = (
+        ('handled', '已处理'),
+        ('accepted', '维持现状'),
+        ('deferred', '暂缓处理'),
+    )
+    OUTCOME_LABELS = dict(OUTCOME_CHOICES)
+
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.PROTECT,
+        related_name='maintenance_decisions', verbose_name='校园地点',
+    )
+    signal_fingerprint = models.CharField(
+        '信号指纹', max_length=200, editable=False, blank=True,
+        help_text='由当前维护队列命中的信号 key 排序后生成。',
+    )
+    outcome = models.CharField('处理结果', max_length=20, choices=OUTCOME_CHOICES)
+    note = models.TextField('判断说明', blank=True)
+    reviewed_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name='campus_location_decisions',
+        verbose_name='复核人',
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    def clean(self):
+        super().clean()
+        if self.outcome in {'accepted', 'deferred'} and not self.note.strip():
+            raise ValidationError({'note': '维持现状或暂缓处理必须填写判断理由。'})
+
+    def __str__(self):
+        return f'{self.location.name} · {self.get_outcome_display()}'
+
+    class Meta:
+        verbose_name = '校园地点维护决策'
+        verbose_name_plural = '校园地点维护决策'
+        ordering = ['-updated_at', '-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['location', 'signal_fingerprint'],
+                name='unique_location_maintenance_signal',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['location', 'updated_at'],
+                name='location_maint_recent_idx',
+            ),
+            models.Index(fields=['signal_fingerprint']),
+        ]
+
+
 class CampusCampaign(models.Model):
     """A time-bounded public collection for seasonal campus activity."""
 

@@ -2,7 +2,8 @@
 """校园地点维护队列的只读分诊。
 
 地点档案质量面板回答“哪里有信号”；这个模块把同一批信号排成维护顺序。
-它不做加权评分，也不自动修复，只按固定优先级说明先核对什么。
+它不做加权评分，也不自动修复，只按固定优先级说明先核对什么。维护决策由独立的
+``CampusLocationMaintenanceDecision`` 留痕，本模块只读它，不写任何决策。
 """
 
 from collections import defaultdict
@@ -12,7 +13,10 @@ from django.utils import timezone
 
 from .analytics import PERIOD_CHOICES
 from .location_registry_quality import normalise_location_name
-from .models import CampusLocation, DemandPost, Item, SavedSearch
+from .models import (
+    CampusLocation, CampusLocationMaintenanceDecision, DemandPost, Item,
+    SavedSearch,
+)
 
 LIST_LIMIT = 20
 PRIORITY_SPECS = (
@@ -25,6 +29,11 @@ REASON_SPECS = (
     ('public_safety_gap', '公共地点缺安全提示'),
     ('duplicate_name', '近似重名'),
     ('profile_gap', '档案字段缺失'),
+)
+OUTCOME_SPECS = (
+    ('handled', '已处理'),
+    ('accepted', '维持现状'),
+    ('deferred', '暂缓处理'),
 )
 REASON_PRIORITY = {
     'stale_reference': 'check_first',
@@ -46,6 +55,7 @@ FIELD_LABELS = (
 )
 PRIORITY_LABELS = {key: label for key, label, _ in PRIORITY_SPECS}
 REASON_LABELS = dict(REASON_SPECS)
+OUTCOME_LABELS = dict(OUTCOME_SPECS)
 PRIORITY_INDEX = {key: index for index, (key, _, _) in enumerate(PRIORITY_SPECS)}
 
 
@@ -57,12 +67,12 @@ def _count_by_location(queryset):
     return counts
 
 
-def build_location_maintenance_queue(days=30, *, now=None):
-    """Build a read-only maintenance queue for campus locations."""
-    allowed_days = {value for value, _ in PERIOD_CHOICES}
-    days = days if days in allowed_days else 30
-    now = now or timezone.now()
+def signal_fingerprint(reason_keys):
+    """Build the stable identity of one location's current signal combination."""
+    return '|'.join(sorted(reason_keys))
 
+
+def _collect_location_entries(now):
     locations = list(CampusLocation.objects.order_by('sort_order', 'name'))
     active_locations = [location for location in locations if location.is_active]
 
@@ -121,6 +131,7 @@ def build_location_maintenance_queue(days=30, *, now=None):
         primary_reason = reasons[0]
         priority = REASON_PRIORITY[primary_reason]
         entries.append({
+            'id': location.id,
             'name': location.name,
             'building': location.building,
             'address': location.address,
@@ -141,10 +152,69 @@ def build_location_maintenance_queue(days=30, *, now=None):
             'missing_fields': missing_fields,
             'duplicate_group_size': duplicate_sizes.get(location.id, 0),
             'action_hint': ACTION_HINTS[primary_reason],
+            'signal_fingerprint': signal_fingerprint(reasons),
         })
+
+    return locations, active_locations, entries
+
+
+def get_location_maintenance_fingerprint(location_id, *, now=None):
+    """Return the current queue fingerprint for one location, or ``None``."""
+    now = now or timezone.now()
+    _, _, entries = _collect_location_entries(now)
+    for entry in entries:
+        if entry['id'] == location_id:
+            return entry['signal_fingerprint']
+    return None
+
+
+def _decision_map(entries):
+    if not entries:
+        return {}
+
+    decisions = CampusLocationMaintenanceDecision.objects.filter(
+        location_id__in=[entry['id'] for entry in entries],
+    ).select_related('location')
+    return {
+        (decision.location_id, decision.signal_fingerprint): decision
+        for decision in decisions
+    }
+
+
+def build_location_maintenance_queue(days=30, *, now=None):
+    """Build a read-only maintenance queue with optional decision history."""
+    allowed_days = {value for value, _ in PERIOD_CHOICES}
+    days = days if days in allowed_days else 30
+    now = now or timezone.now()
+
+    locations, active_locations, entries = _collect_location_entries(now)
+    decisions = _decision_map(entries)
+    outcome_counts = {key: 0 for key, _ in OUTCOME_SPECS}
+
+    for entry in entries:
+        decision = decisions.get(
+            (entry['id'], entry['signal_fingerprint'])
+        )
+        if decision is None:
+            entry['review_status'] = 'unreviewed'
+            entry['review_status_label'] = '待核对'
+            entry['review_outcome'] = None
+            entry['review_outcome_label'] = None
+            entry['decision_updated_at'] = None
+            entry['reviewed'] = False
+            continue
+
+        entry['review_status'] = 'reviewed'
+        entry['review_status_label'] = '已复核'
+        entry['review_outcome'] = decision.outcome
+        entry['review_outcome_label'] = OUTCOME_LABELS[decision.outcome]
+        entry['decision_updated_at'] = decision.updated_at
+        entry['reviewed'] = True
+        outcome_counts[decision.outcome] += 1
 
     entries.sort(key=lambda row: (
         PRIORITY_INDEX[row['priority']],
+        row['reviewed'],
         -row['current_use_total'],
         -len(row['reason_keys']),
         row['name'],
@@ -157,17 +227,16 @@ def build_location_maintenance_queue(days=30, *, now=None):
         for reason in entry['reason_keys']:
             reason_counts[reason] += 1
 
-    queued_names = {
-        entry['name'] for entry in entries
-    }
+    queued_ids = {entry['id'] for entry in entries}
     active_clean_total = sum(
-        location.is_active and location.name not in queued_names
+        location.is_active and location.id not in queued_ids
         for location in locations
     )
     inactive_clean_total = sum(
-        not location.is_active and location.name not in queued_names
+        not location.is_active and location.id not in queued_ids
         for location in locations
     )
+    reviewed_total = sum(outcome_counts.values())
 
     priority_rows = [{
         'key': key,
@@ -187,6 +256,9 @@ def build_location_maintenance_queue(days=30, *, now=None):
             'location_total': len(locations),
             'active_total': len(active_locations),
             'queued_total': len(entries),
+            'unreviewed_total': len(entries) - reviewed_total,
+            'reviewed_total': reviewed_total,
+            'outcome_totals': outcome_counts,
             'active_clean_total': active_clean_total,
             'inactive_clean_total': inactive_clean_total,
             'priority_totals': priority_counts,
