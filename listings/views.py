@@ -92,6 +92,7 @@ from .contributions import (
 from .contribution_tier_shape import build_contribution_tier_shape
 from .availability import notify_item_available
 from .borrow_days_shape import build_borrow_days_shape
+from .dispute_evidence_shape import build_dispute_evidence_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
@@ -2378,6 +2379,7 @@ def operations_dashboard(request):
     )
     dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
     dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
+    dashboard['dispute_evidence_shape'] = build_dispute_evidence_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
@@ -2562,6 +2564,7 @@ def operations_dashboard_export(request):
     )
     dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
     dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
+    dashboard['dispute_evidence_shape'] = build_dispute_evidence_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -5223,9 +5226,10 @@ def operations_dashboard_export(request):
 
     writer.writerow([])
     limit_shape = dashboard['saved_search_limit_shape']
-    writer.writerow(['单次最多提醒条数：用户自己配的截断', '数值', '说明'])
+    writer.writerow(['用户自己配的「一条通知里列几件商品」', '数值', '说明'])
     writer.writerow([
         '口径与门槛', limit_shape['summary'],
+        '副标题：单次最多提醒条数，用户自己配的截断',
         '只读 max_matches_per_notice 与缓冲区命中，不改写任何一条关注、任何一条命中、'
         '任何一件商品，也不把统计写回任何记录',
         f"一档关注至少 {limit_shape['min_limit_searches']} 条才给方向，"
@@ -7281,8 +7285,10 @@ def operations_dashboard_export(request):
 
     shape = dashboard['borrow_days_shape']
     writer.writerow([])
-    writer.writerow(['默认借用天数的形状：borrow_days 第一次被数字读到'])
-    writer.writerow(['口径与门槛', shape['summary'], '只读 Item.borrow_days、Order 与 '
+    writer.writerow(['默认借用天数的形状'])
+    writer.writerow(['口径与门槛', shape['summary'],
+                     '副标题：borrow_days 第一次被数字读到',
+                     '只读 Item.borrow_days、Order 与 '
                      'BorrowReturnEscalation，不加迁移、不改默认值、不改 1 到 90 的校验、'
                      '不追改历史订单、不动催收阶梯'])
     writer.writerow([
@@ -7377,6 +7383,81 @@ def operations_dashboard_export(request):
         '也不据此调整默认借用天数或给任何人打标记。',
     ])
 
+    evidence_shape = dashboard['dispute_evidence_shape']
+    writer.writerow([])
+    writer.writerow(['证据文件的形状'])
+    writer.writerow(['口径与门槛', evidence_shape['summary'],
+                     '副标题：attachment.name 与 size 第一次被数字读到',
+                     '只读 '
+                     'OrderDisputeEvidence.attachment 的 name 与 size，不加迁移、不改 '
+                     'validate_dispute_evidence 的 5 MB 上限与四种扩展名、不读文件内容、'
+                     '不读 note、不列文件名、不按 uploaded_by 拆'])
+    writer.writerow([
+        '周期天数', evidence_shape['days'],
+        '窗口起', evidence_shape['period_start'],
+        '窗口止', evidence_shape['period_end'],
+        '附件总数', evidence_shape['evidence_count'],
+        '能读到大小的', evidence_shape['readable_count'],
+        '读不到大小的', evidence_shape['unreadable_count'],
+        '带附件的争议数', evidence_shape['dispute_count'],
+        '允许的扩展名', '、'.join(evidence_shape['allowed_extensions']),
+    ])
+    near_limit = evidence_shape['near_limit']
+    writer.writerow([
+        '贴上限（≥ %s）' % near_limit['near_limit_label'],
+        near_limit['near_limit_count'],
+        '占能读到大小的（%）',
+        near_limit['near_limit_rate'],
+        '超过上限', near_limit['over_limit_count'],
+        '超过上限占比（%）', near_limit['over_limit_rate'],
+        '最大附件', near_limit['max_size_label'],
+    ])
+    writer.writerow([])
+    writer.writerow(['格式', '份数', '占比（%）', '说明'])
+    if not evidence_shape['has_data']:
+        writer.writerow(['当前周期还没有证据数据。'])
+    else:
+        for row in evidence_shape['extension_rows']:
+            writer.writerow([row['label'], row['count'], row['share'], row['note']])
+    writer.writerow([])
+    writer.writerow(['大小档', '份数', '占比（%）', '说明'])
+    for row in evidence_shape['size_rows']:
+        writer.writerow([
+            row['label'], row['count'], row['share'],
+            '不足 %d 份，只作参考' % evidence_shape['min_sample']
+            if row['is_small_sample'] else '',
+        ])
+    writer.writerow([])
+    writer.writerow(['每笔争议的附件份数', '争议数', '占比（%）', '说明'])
+    per_dispute = evidence_shape['per_dispute']
+    for row in per_dispute['count_rows']:
+        writer.writerow([
+            row['label'], row['count'], row['share'],
+            '不足 %d 笔，只作参考' % evidence_shape['min_sample'] if row['is_small_sample'] else '',
+        ])
+    writer.writerow([
+        '争议总数', per_dispute['dispute_count'],
+        '单笔最多', per_dispute['max_count'],
+        '总大小中位', per_dispute['median_total_label'],
+        'P90 总大小', per_dispute['p90_total_label'],
+        '平均总大小', per_dispute['average_total_label'],
+        '单笔最大总大小', per_dispute['max_total_label'],
+    ])
+    writer.writerow([])
+    writer.writerow(['争议状态', '争议数', '附件数', '平均份数', '总大小中位',
+                     '单笔最大', '说明'])
+    for row in evidence_shape['status_cross_rows']:
+        writer.writerow([
+            row['label'], row['dispute_count'], row['evidence_count'],
+            row['average_count'], row['median_total_label'], row['max_total_label'],
+            '不足 %d 笔，只报规模、不给方向' % row['min_sample']
+            if not row['gives_direction'] else row['note'],
+        ])
+    writer.writerow([
+        '此处只报告，不判断「证据够不够」——平台没有能力判断一段聊天记录能不能'
+        '证明「商品与描述不符」，这个判断只有处理人能做；不读文件内容、不 OCR、'
+        '不看图片尺寸、不判断截图是否与订单有关。',
+    ])
     response_quality = dashboard['notification_response']
     writer.writerow([])
     writer.writerow(['通知处理时效与触达质量'])
@@ -8730,9 +8811,10 @@ def operations_dashboard_export(request):
 
     tier = dashboard['contribution_tier_shape']
     writer.writerow([])
-    writer.writerow(['积分等级与徽章的门槛形状：三张规则表第一次被数字读到', '数值', '说明'])
+    writer.writerow(['积分等级与徽章的门槛形状', '数值', '说明'])
     writer.writerow([
         '口径与门槛', tier['summary'],
+        '副标题：三张规则表第一次被数字读到',
         '只读 CommunityContribution 与 contributions.py 里的三张规则表，不加迁移、不改任何'
         '分值、不调任何人的等级、不发任何积分、不补发漏记的分',
         f"按全量算，不按周期切：等级是累计量，按周期切会让三个月前升到第三级的人在这个月消失。"
@@ -8754,12 +8836,14 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['等级', '门槛', '用户数', '占比（%）', '读数'])
+    writer.writerow(['五级等级各自有多少人'])
+    writer.writerow(['等级', '门槛（分）', '用户数', '占比（%）', '读数', '说明'])
     for row in tier['level_rows']:
         writer.writerow([
             '—', row.label, row.threshold, row.user_count,
             '—' if row.share is None else row.share,
             '最高一级' if row.is_top else '',
+            '等级判定直接调产品侧的 _level_for_points，不在本地复制一份',
         ])
     writer.writerow([
         '说明', '', '', '',
@@ -8771,11 +8855,13 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['到下一级还差多少', '停在这一级的人数', '中位距离', '最大距离'])
+    writer.writerow(['每一级到下一级，这批人还差多少'])
+    writer.writerow(['到下一级还差多少', '停在这一级的人数', '中位距离', '最大距离', '说明'])
     for row in tier['gap_rows']:
         writer.writerow([
             '—', row.distance_count, row.mean_distance_label,
             '—' if row.max_distance is None else row.max_distance,
+            '距离 = 下一级门槛 − 当前积分，报中位数和最大值、不报平均值',
         ])
     writer.writerow([
         '说明', '', '',
@@ -8786,13 +8872,15 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['徽章', '看什么', '门槛', '拿到的人数', '占比（%）'])
+    writer.writerow(['七枚徽章，各自有多少人拿到'])
+    writer.writerow(['徽章', '看什么', '门槛', '拿到的人数', '占比（%）', '说明'])
     for row in tier['badge_rows']:
         writer.writerow([
             '—', row.title,
             '事件总数' if row.metric == 'events' else '特定类型',
             row.threshold, row.earned_count,
             '—' if row.share is None else row.share,
+            '判定直接调产品侧的 build_contribution_badges，不在本地复制一份',
         ])
     writer.writerow([
         '说明', '', '', '',
@@ -8803,6 +8891,7 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    writer.writerow(['哪一类行为在发分'])
     writer.writerow([
         '贡献类型', '事件数', '积分', '单次平均分', '积分占比（%）', '样本',
     ])
@@ -8822,11 +8911,13 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['写入路径（幂等键前缀）', '事件数', '用户数', '占比（%）'])
+    writer.writerow(['写入路径与幂等键的间接体检'])
+    writer.writerow(['写入路径（幂等键前缀）', '事件数', '用户数', '占比（%）', '说明'])
     for row in tier['key_prefix_rows']:
         writer.writerow([
             '—', row.prefix, row.event_count, row.user_count,
             '—' if row.share is None else row.share,
+            '前缀取 source_key 第一个冒号前的部分；用户数按用户去重',
         ])
     writer.writerow([
         '说明', '', '',
@@ -8838,12 +8929,14 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
-    writer.writerow(['同用户同类型的记录数', '组合数', '占比（%）', '读数'])
+    writer.writerow(['同用户同类型的记录数'])
+    writer.writerow(['同用户同类型的记录数', '组合数', '占比（%）', '读数', '说明'])
     for row in tier['repeat_rows']:
         writer.writerow([
             '—', row.label, row.pair_count,
             '—' if row.share is None else row.share,
             '正常形态' if row.times == 1 else '这个用户在这条路径上被记了多次',
+            'pair_count 数的是「用户 × 类型」的组合数，不是用户数',
         ])
     writer.writerow([
         '说明', '', '',
