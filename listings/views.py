@@ -120,6 +120,9 @@ from .saved_searches import (
 )
 from .saved_search_digest import deliver_buffered_saved_search_matches
 from .transaction_safety import build_transaction_safety, transaction_safety_fingerprint
+from .transaction_safety_acknowledgement_quality import (
+    build_transaction_safety_acknowledgement_quality,
+)
 from chat_messages.models import ModerationEvent, PrivateMessage
 from accounts.models import CampusVerification
 
@@ -2415,6 +2418,9 @@ def operations_dashboard(request):
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
+    dashboard['transaction_safety_acknowledgement_quality'] = (
+        build_transaction_safety_acknowledgement_quality(days=days)
+    )
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
@@ -2601,6 +2607,9 @@ def operations_dashboard_export(request):
     dashboard['handoff_code_usage'] = build_handoff_code_usage(days=days)
     dashboard['return_handshake'] = build_return_handshake(days=days)
     dashboard['delivery_handshake'] = build_delivery_handshake(days=days)
+    dashboard['transaction_safety_acknowledgement_quality'] = (
+        build_transaction_safety_acknowledgement_quality(days=days)
+    )
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
@@ -4740,6 +4749,78 @@ def operations_dashboard_export(request):
         '本模块只报告，不改 confirm_delivery 的任何逻辑、不自动补点、不新增提醒类型、'
         '不改确认码的生成与核对，也不把统计写回任何记录。',
     ])
+
+    writer.writerow([])
+    safety_quality = dashboard['transaction_safety_acknowledgement_quality']
+    writer.writerow(['交易安全卡的双方确认', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', safety_quality['summary'],
+        '主分母按订单创建时间切窗口，只收仍可确认的 pending / confirmed / meeting 订单；'
+        '当前指纹在服务端重算，历史确认不冒充当前确认',
+    ])
+    safety_coverage = safety_quality['coverage']
+    writer.writerow([
+        '本期仍可确认订单', safety_coverage['total'], '',
+    ])
+    writer.writerow([
+        '买家当前确认率（%）', safety_coverage['buyer_rate'],
+        '分母是本期仍可确认订单数',
+    ])
+    writer.writerow([
+        '卖家当前确认率（%）', safety_coverage['seller_rate'], '',
+    ])
+    writer.writerow([
+        '双方当前确认率（%）', safety_coverage['both_rate'], '',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['当前确认覆盖', '笔数', '占比（%）'])
+    for row in safety_coverage['rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+
+    writer.writerow([])
+    writer.writerow(['安全卡确认时延', '笔数', '占比（%）', '口径说明'])
+    writer.writerow([
+        '双方已确认当前版本', safety_quality['latency']['completed_count'], '',
+        '只有完整链路进入时延分布',
+    ])
+    writer.writerow([
+        '仍缺至少一侧确认', safety_quality['latency']['incomplete_count'], '',
+        '右删失样本，只报规模',
+    ])
+    for label, rows in (
+        ('第一位确认', safety_quality['latency']['first_bucket_rows']),
+        ('双方补齐', safety_quality['latency']['complete_bucket_rows']),
+    ):
+        for row in rows:
+            writer.writerow([f'{label}：{row["label"]}', row['count'], row['share'], row['note']])
+
+    writer.writerow([])
+    writer.writerow(['曾被确认过的安全卡指纹数', '笔数', '占比（%）', '口径说明'])
+    safety_versions = safety_quality['versions']
+    for row in safety_versions['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], '观察下界：没被确认过的版本不留记录'])
+    writer.writerow([
+        '当前版本之前曾有确认', safety_versions['current_pending_after_prior_count'], '',
+        '说明信号变化后当前版本仍待确认；不推断变化次数',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['全站待确认清单', '订单号', '商品', '状态', '缺少的角色', '订单年龄'])
+    safety_pending = safety_quality['pending']
+    if safety_pending['rows']:
+        for row in safety_pending['rows']:
+            writer.writerow([
+                '', row['order_id'], row['item_title'], row['status_label'],
+                row['missing_roles_label'], row['age_label'],
+            ])
+    else:
+        writer.writerow(['当前没有仍处于可确认阶段的订单', '', '', '', '', ''])
+    if safety_pending['is_truncated']:
+        writer.writerow([
+            f"清单最多列 {safety_pending['row_limit']} 条，完整的在数据库里",
+            '', '', '', f"总计 {safety_pending['total']} 笔", '',
+        ])
 
     writer.writerow([])
     deadline_reminders = dashboard['order_deadline_reminders']

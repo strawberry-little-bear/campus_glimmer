@@ -3880,6 +3880,99 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 transaction-safety-acknowledgement-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Safety acknowledgement</span><h2>交易安全卡确认到哪一步了</h2></div>
+        <span class="ops-panel-hint">当前覆盖、确认节奏与待确认清单，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-shield-check me-1"></i>安全卡确认是买家和卖家各自核对当前提醒的动作。看板在这里只回答三件事：当前版本谁已确认、从下单到双方补齐用了多久、还有哪些订单缺哪一侧。它不把确认读成平台担保，也不把没确认读成违规。</p>
+    {% if not transaction_safety_acknowledgement_quality.has_data %}
+    <div class="empty-inline">{{ transaction_safety_acknowledgement_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>本期仍可确认</span><strong>{{ transaction_safety_acknowledgement_quality.coverage.total }}</strong><small>只收 pending / confirmed / meeting</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>双方当前确认</span><strong>{{ transaction_safety_acknowledgement_quality.coverage.both_count }}</strong><small>{% if transaction_safety_acknowledgement_quality.coverage.both_rate is None %}—{% else %}{{ transaction_safety_acknowledgement_quality.coverage.both_rate }}%{% endif %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>第一位确认中位</span><strong>{{ transaction_safety_acknowledgement_quality.latency.first_median_label }}</strong><small>P90 {{ transaction_safety_acknowledgement_quality.latency.first_p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>全站待确认</span><strong>{{ transaction_safety_acknowledgement_quality.pending.total }}</strong><small>缺两侧 {{ transaction_safety_acknowledgement_quality.pending.missing_both_count }} 笔</small></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">当前版本的四档覆盖</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in transaction_safety_acknowledgement_quality.coverage.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                        <tr><td>买家已确认</td><td>{{ transaction_safety_acknowledgement_quality.coverage.buyer_count }}</td><td>{% if transaction_safety_acknowledgement_quality.coverage.buyer_rate is None %}—{% else %}{{ transaction_safety_acknowledgement_quality.coverage.buyer_rate }}{% endif %}</td></tr>
+                        <tr><td>卖家已确认</td><td>{{ transaction_safety_acknowledgement_quality.coverage.seller_count }}</td><td>{% if transaction_safety_acknowledgement_quality.coverage.seller_rate is None %}—{% else %}{{ transaction_safety_acknowledgement_quality.coverage.seller_rate }}{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母只收本统计周期内创建、当前仍可确认的订单。当前指纹每次在服务端重算；安全信号变化后，旧确认进入历史版本，不再把这一档顶成“已确认”。</p>
+        </div>
+
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">双方补齐用了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>间隔</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in transaction_safety_acknowledgement_quality.latency.complete_bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                        <tr><td>中位 / P90</td><td colspan="2">{{ transaction_safety_acknowledgement_quality.latency.complete_median_label }} / {{ transaction_safety_acknowledgement_quality.latency.complete_p90_label }}</td></tr>
+                        <tr><td>仍缺至少一侧</td><td>{{ transaction_safety_acknowledgement_quality.latency.incomplete_count }}</td><td>右删失样本</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">只有买家和卖家都确认当前版本的订单进入时延分布。缺一侧的订单还可能继续确认，把它硬算成“很慢”会把正常在途交易读成问题。</p>
+        </div>
+    </div>
+
+    <h3 class="h6 mb-3 mt-4">曾被确认过的安全卡版本（观察下界）</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th><th>说明</th></tr></thead>
+            <tbody>
+                {% for row in transaction_safety_acknowledgement_quality.versions.rows %}
+                <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td><td>按确认记录里的不同指纹数统计</td></tr>
+                {% endfor %}
+                <tr><td>当前版本之前曾有确认</td><td>{{ transaction_safety_acknowledgement_quality.versions.current_pending_after_prior_count }}</td><td>—</td><td>信号变化后，当前版本仍待确认</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <p class="small text-muted mt-2 mb-0">没有被任何角色确认过的安全卡版本不会留下指纹记录，所以这里只能报观察下界，不推断安全卡实际变化过几次。</p>
+
+    <h3 class="h6 mb-3 mt-4">全站待确认清单</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>订单号</th><th>商品</th><th>状态</th><th>缺少的角色</th><th>订单年龄</th></tr></thead>
+            <tbody>
+                {% for row in transaction_safety_acknowledgement_quality.pending.rows %}
+                <tr>
+                    <td>#{{ row.order_id }}</td>
+                    <td><strong>{{ row.item_title }}</strong></td>
+                    <td>{{ row.status_label }}</td>
+                    <td>{{ row.missing_roles_label }}</td>
+                    <td>{{ row.age_label }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前没有仍处于可确认阶段的订单。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if transaction_safety_acknowledgement_quality.pending.is_truncated %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ transaction_safety_acknowledgement_quality.pending.row_limit }} 条，当前共 {{ transaction_safety_acknowledgement_quality.pending.total }} 笔；完整记录在后台审计页。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">清单按“缺两侧优先、创建更早优先”排序，只列订单、商品、状态、缺口和年龄，不列用户名。它不是催办名单，也不自动指派负责人。</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只读确认记录与当前安全卡信号，不改订单、不改确认记录、不自动补确认、不发送通知、不生成告警，也不把确认率用于用户排名或自动风控。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 order-deadline-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Order deadline</span><h2>承诺的截止时间，和催过之后</h2></div>
