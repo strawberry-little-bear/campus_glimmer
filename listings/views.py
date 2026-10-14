@@ -4752,7 +4752,7 @@ def operations_dashboard_export(request):
 
     writer.writerow([])
     safety_quality = dashboard['transaction_safety_acknowledgement_quality']
-    writer.writerow(['交易安全卡的双方确认', '数值', '说明'])
+    writer.writerow(['交易安全卡确认到哪一步了', '数值', '说明'])
     writer.writerow([
         '口径与门槛', safety_quality['summary'],
         '主分母按订单创建时间切窗口，只收仍可确认的 pending / confirmed / meeting 订单；'

@@ -231,4 +231,4 @@ class TransactionSafetyAcknowledgementQualityTests(TestCase):
         export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
 
         self.assertEqual(export.status_code, 200)
-        self.assertIn('交易安全卡的双方确认', export.content.decode('utf-8'))
+        self.assertIn('交易安全卡确认到哪一步了', export.content.decode('utf-8'))
