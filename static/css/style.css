@@ -2939,6 +2939,16 @@ a { color: inherit; text-decoration: none; }
 .chat-response-trend-direction[data-tone="bad"] { color: #9c4a34; background: #fbeae5; }
 .chat-response-trend-direction[data-tone="flat"] { color: #6d8078; background: #eef3f0; }
 .chat-response-trend-note { margin-top: 6px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
+.chat-trade-correlation-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
+.chat-trade-correlation-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
+.chat-trade-correlation-summary span { color: #83938b; font-size: .71rem; }
+.chat-trade-correlation-summary small { color: #9aa8a0; font-size: .69rem; }
+.chat-trade-correlation-summary strong { color: #315946; font-size: 1.4rem; line-height: 1; }
+.chat-trade-correlation-table { min-width: 860px; }
+.chat-trade-correlation-table td:nth-child(n+2), .chat-trade-correlation-table th:nth-child(n+2) { text-align: right; white-space: nowrap; }
+.chat-trade-correlation-ok { color: #2f6a4f; }
+.chat-trade-correlation-thin { color: #9c4a34; }
+.chat-trade-correlation-note { margin-top: 8px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
 .recommendation-quality-panel .recommendation-quality-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .recommendation-quality-panel .recommendation-quality-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
 .recommendation-quality-panel .recommendation-quality-summary span { color: #83938b; font-size: .71rem; }

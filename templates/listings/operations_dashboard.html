@@ -2052,6 +2052,46 @@
     {% else %}<div class="empty-inline mt-3">两个周期内都没有私信记录，发出第一条私信后这里会开始统计跨周期变化。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>两条曲线都按私信发出时刻归期，两侧窗口等长、都从本地午夜切，与搜索趋势面板同一套口径。未打开按「占本周期发出总量的比例」判，不按次数差判：次数是原始计数，量涨起来每条曲线都会跟着涨。本模块只报告，不改写任何一条私信、不调整静默期阈值、不给任何人打回复速度分。</div>
 </section>
+
+<section class="content-card ops-panel mb-4 chat-trade-correlation-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Chat and trade</span><h2>私信响应与成交的共同变化</h2></div>
+        <span class="ops-panel-hint">固定 {{ chat_trade_correlation.outcome_window_days }} 天观察窗·只看共同变化</span>
+    </div>
+    {% if chat_trade_correlation.has_data %}
+    <div class="chat-trade-correlation-summary">
+        <div><span>成熟且可计时</span><strong>{{ chat_trade_correlation.summary.eligible_conversations }}</strong><small>进入响应档分母</small></div>
+        <div><span>窗口内有订单</span><strong>{{ chat_trade_correlation.summary.ordered_conversations }}</strong><small>订单创建于询问之后</small></div>
+        <div><span>7 天内成交</span><strong>{{ chat_trade_correlation.summary.completed_conversations }}</strong><small>completed 或 returned</small></div>
+        <div><span>成交率</span><strong>{% if chat_trade_correlation.summary.completion_rate != None %}{{ chat_trade_correlation.summary.completion_rate }}%{% else %}—{% endif %}</strong><small>分母为可计时会话</small></div>
+        <div><span>未满 7 天</span><strong>{{ chat_trade_correlation.summary.immature_conversations }}</strong><small>单独观察，不进分母</small></div>
+        <div><span>无法计时</span><strong>{{ chat_trade_correlation.summary.untimed_conversations }}</strong><small>已满窗口但没有 read_at</small></div>
+    </div>
+    <div class="ops-table-wrap mt-3">
+        <table class="table ops-table align-middle mb-0 chat-trade-correlation-table">
+            <thead><tr><th>响应档</th><th>会话</th><th>带时戳询问</th><th>中位打开</th><th>有订单</th><th>7天内成交</th><th>成交率</th><th>样本</th></tr></thead>
+            <tbody>
+                {% for row in chat_trade_correlation.rows %}
+                <tr>
+                    <td><strong>{{ row.label }}</strong></td>
+                    <td>{{ row.conversations }}</td>
+                    <td>{{ row.timed_inquiries }}</td>
+                    <td>{{ row.median_label }}</td>
+                    <td>{{ row.ordered }}</td>
+                    <td>{{ row.completed }}</td>
+                    <td>{% if row.completion_rate != None %}{{ row.completion_rate }}%{% else %}—{% endif %}</td>
+                    <td>{% if row.has_sample %}<span class="chat-trade-correlation-ok">够</span>{% else %}<span class="chat-trade-correlation-thin">样本不足</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="chat-trade-correlation-note mb-0"><i class="bi bi-info-circle me-1"></i>{{ chat_trade_correlation.note }}</p>
+    <p class="chat-trade-correlation-note mb-0">每个响应档需要 {{ chat_trade_correlation.min_bucket_sample }} 个成熟且可计时的会话才把成交率读成可用信号；不足时数字照报。统计周期内触碰过但第一条询问在周期外的会话有 {{ chat_trade_correlation.summary.started_before_period }} 个，不算新会话。</p>
+    <p class="chat-trade-correlation-note mb-0">面板不输出用户名、商品标题、订单号或私信内容，也不按用户、商品、分类或响应速度排名；不给回复速度打分，不把结果写回推荐、信誉或风控。</p>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有关联商品的买家私信，出现第一条新会话后这里会开始统计共同变化。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这不是因果结论：响应快与成交可能同时来自商品热度、开学季、价格、库存或双方时间安排。此面板只把对齐后的分母放在一起，供运营继续观察。</div>
+</section>
 <section class="content-card ops-panel mb-4 recommendation-quality-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Recommendation</span><h2>首页推荐卡挑得准不准</h2></div>

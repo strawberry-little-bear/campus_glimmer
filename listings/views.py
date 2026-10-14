@@ -8666,6 +8666,75 @@ def operations_dashboard_export(request):
         '不按次数差判。本模块只报告，不改写任何一条私信、不调整静默期阈值、'
         '不给任何人打回复速度分。',
     ])
+    correlation = dashboard['chat_trade_correlation']
+    writer.writerow([])
+    writer.writerow(['私信响应与成交的共同变化'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', correlation['period_days'],
+        '观察窗口（天）', correlation['outcome_window_days'],
+    ])
+    writer.writerow([
+        '分析单位', '商品 × 买家 × 卖家',
+        '每档样本门槛', correlation['min_bucket_sample'],
+    ])
+    writer.writerow([
+        '响应计时', '每个会话先取自己带 read_at 买家询问的中位打开时长，再落入固定五档',
+        '成交事件', 'completed 与 returned 都算完整闭环',
+    ])
+    writer.writerow([
+        '只读边界', '不读私信内容，不输出用户名、商品标题、订单号或链接；只报告，不写回',
+        '解释边界', '只描述共同变化，不把相关读成因果',
+    ])
+    writer.writerow([])
+    writer.writerow(['响应档与会话'])
+    writer.writerow([
+        '响应档', '会话', '带时戳询问', '中位打开', '有订单', '7天内成交',
+        '成交率（%）', '样本',
+    ])
+    for row in correlation['rows']:
+        writer.writerow([
+            row['label'], row['conversations'], row['timed_inquiries'],
+            row['median_label'], row['ordered'], row['completed'],
+            row['completion_rate'] if row['completion_rate'] is not None else '—',
+            row['conversations'] if row['has_sample'] else '样本不足',
+        ])
+    writer.writerow(['会话状态'])
+    writer.writerow(['状态', '会话数', '说明'])
+    writer.writerow([
+        '统计周期内触碰', correlation['summary']['observed_conversations'],
+        '只用于发现候选会话',
+    ])
+    writer.writerow([
+        '第一条询问在周期外', correlation['summary']['started_before_period'],
+        '不算新会话，查询时看完整历史',
+    ])
+    writer.writerow([
+        '未满观察窗口', correlation['summary']['immature_conversations'],
+        '单独报告，不进入成交率分母',
+    ])
+    writer.writerow([
+        '无法计时', correlation['summary']['untimed_conversations'],
+        '已满窗口但窗口内没有带 read_at 的买家询问',
+    ])
+    writer.writerow([
+        '成熟且可计时', correlation['summary']['eligible_conversations'],
+        f"窗口内有订单 {correlation['summary']['ordered_conversations']} 个，"
+        f"7 天内成交 {correlation['summary']['completed_conversations']} 个",
+    ])
+    writer.writerow([
+        '整体成交率（%）',
+        correlation['summary']['completion_rate']
+        if correlation['summary']['completion_rate'] is not None else '—',
+        '7 天内完整闭环会话数 ÷ 成熟且可计时会话数',
+    ])
+    writer.writerow(['说明'])
+    writer.writerow([correlation['note']])
+    writer.writerow([
+        '订单创建于本次第一条询问之前的不算结果；订单或成交事件落在第一条询问后 7 天之外，'
+        '也不计入本表。每个会话只计一次，避免同一会话多条询问重复进入分母，也避免商品级'
+        '聚合把一个买家的订单摊到另一个买家头上。',
+    ])
     quality = dashboard['recommendation_quality']
     writer.writerow([])
     writer.writerow(['首页推荐卡挑得准不准'])

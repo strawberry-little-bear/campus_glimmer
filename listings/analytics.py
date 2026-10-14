@@ -8,6 +8,7 @@ from django.utils import timezone
 from chat_messages.models import PrivateMessage
 from chat_messages.chat_response import build_chat_response_insights
 from chat_messages.chat_response_trend import build_chat_response_trend
+from chat_messages.chat_trade_correlation import build_chat_trade_correlation
 
 from .models import BrowsingHistory, CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, Favorite, Item, LostFoundLead, MutualAidFeedback, Notification, Order, OrderEvent, Report, SearchClick, SearchImpression, SearchQuery
 from .campus_pulse import build_campus_pulse
@@ -1628,6 +1629,7 @@ def build_operations_dashboard(days=30):
         'notification_response': build_notification_response_insights(days=days),
         'chat_response': build_chat_response_insights(days=days, now=now),
         'chat_response_trend': build_chat_response_trend(days=days, now=now),
+        'chat_trade_correlation': build_chat_trade_correlation(days=days, now=now),
         'opportunity_dismissal_quality': build_opportunity_dismissal_quality(
             days=days, now=now,
         ),
