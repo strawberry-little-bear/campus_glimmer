@@ -7326,5 +7326,80 @@
     {% endif %}
 </section>
 
+
+<section class="content-card ops-panel mb-4 location-maintenance-decision-review-panel" id="location-maintenance-decision-review">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Decision review</span><h2>校园地点维护决策回看</h2></div>
+        <span class="ops-panel-hint">当前快照 · 不判处理率</span>
+    </div>
+
+    {% if not location_maintenance_decision_review.has_data %}
+    <div class="empty-inline">当前队列没有地点信号，暂时没有决策回看。</div>
+    {% else %}
+    <div class="row g-3 mb-3">
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>当前队列</span><strong>{{ location_maintenance_decision_review.summary.queued_total }}</strong><small>待核对 {{ location_maintenance_decision_review.summary.unreviewed_total }} 个</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>已复核</span><strong>{{ location_maintenance_decision_review.summary.reviewed_total }}</strong><small>{% if location_maintenance_decision_review.summary.reviewed_share != None %}占当前队列 {{ location_maintenance_decision_review.summary.reviewed_share|floatformat }}%{% else %}比例待积累{% endif %}</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>本周期首次决策</span><strong>{{ location_maintenance_decision_review.summary.first_decision_current_total }}</strong><small>周期含未结束当天</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>上一周期首次决策</span><strong>{{ location_maintenance_decision_review.summary.first_decision_previous_total }}</strong><small>等长对照窗口</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>更早首次决策</span><strong>{{ location_maintenance_decision_review.summary.first_decision_earlier_total }}</strong><small>旧决策仍匹配当前信号</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>仍暂缓</span><strong>{{ location_maintenance_decision_review.summary.deferred_total }}</strong><small>只观察停留，不自动催办</small></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-5">
+            <div class="ops-panel-block h-100">
+                <h3>一、首次决策沉淀</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm ops-table align-middle mb-0">
+                        <thead><tr><th>首次决策时间</th><th>决策数</th><th>当前队列占比</th><th>结果分布</th></tr></thead>
+                        <tbody>
+                            {% for row in location_maintenance_decision_review.first_decision_rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.decision_total }}</td>
+                                <td>{% if row.queue_share != None %}{{ row.queue_share|floatformat }}%{% else %}—{% endif %}</td>
+                                <td><small>已处理 {{ row.outcome_totals.handled }} · 维持 {{ row.outcome_totals.accepted }} · 暂缓 {{ row.outcome_totals.deferred }}</small></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">占比的分母是当前队列总数；“更早”表示旧决策仍在支撑同一组当前信号的复核状态。</p>
+            </div>
+        </div>
+
+        <div class="col-xl-7">
+            <div class="ops-panel-block h-100">
+                <h3>二、暂缓停留清单</h3>
+                <div class="ops-table-wrap">
+                    <table class="table table-sm ops-table align-middle mb-0">
+                        <thead><tr><th>地点</th><th>主优先级</th><th>全部信号</th><th>首次决策</th><th>最后更新</th><th>停留</th></tr></thead>
+                        <tbody>
+                            {% for row in location_maintenance_decision_review.deferred_rows %}
+                            <tr>
+                                <td><strong>{{ row.name }}</strong></td>
+                                <td>{{ row.priority_label }}</td>
+                                <td><small>{% for label in row.reason_labels %}<span class="d-block">{{ label }}</span>{% endfor %}</small></td>
+                                <td><small>{{ row.decision_created_at|date:'Y-m-d' }}</small></td>
+                                <td><small>{{ row.decision_updated_at|date:'Y-m-d' }}</small></td>
+                                <td><strong>{{ row.last_update_age_days }}</strong><small class="d-block text-muted">天未更新</small></td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6"><span class="text-muted">当前没有匹配信号的暂缓决策。</span></td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if location_maintenance_decision_review.deferred_row_hidden_total %}
+                <p class="small text-muted mt-2 mb-0">还有 {{ location_maintenance_decision_review.deferred_row_hidden_total }} 个暂缓地点未展示；截断只影响清单，不影响汇总。</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>没有历史队列快照和决策编辑审计表，本面板不计算跨周期处理率、不给升降方向；首次决策按本地午夜归期，暂缓停留按最后一次更新的完整本地日期数观察。输出不包含复核人与备注。</div>
+    {% endif %}
+</section>
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

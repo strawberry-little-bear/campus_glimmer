@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .location_maintenance_decision_review import (
@@ -228,3 +229,64 @@ class LocationMaintenanceDecisionReviewTests(TestCase):
         self.assertEqual(after, before)
         self.assertEqual(report['summary']['reviewed_total'], 1)
         self.assertEqual(decision.outcome, 'accepted')
+
+
+class LocationMaintenanceDecisionReviewDashboardTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='review-dashboard-staff', password='safe-password-123',
+            is_staff=True,
+        )
+        self.client.force_login(self.staff)
+
+    def test_operations_dashboard_renders_the_review_panel(self):
+        location = CampusLocation.objects.create(
+            name='回看面板地点', building='东区', address='东门内侧',
+            description='白天有人经过', safety_note='',
+        )
+        decision = CampusLocationMaintenanceDecision.objects.create(
+            location=location, signal_fingerprint='public_safety_gap',
+            outcome='deferred', note='等待开学后再补提示。',
+            reviewed_by=self.staff,
+        )
+        stamp = timezone.now() - timedelta(days=40)
+        CampusLocationMaintenanceDecision.objects.filter(pk=decision.pk).update(
+            created_at=stamp, updated_at=stamp,
+        )
+
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '校园地点维护决策回看')
+        self.assertContains(response, '回看面板地点')
+        self.assertContains(response, '更早首次决策')
+        self.assertContains(response, '不计算跨周期处理率')
+        self.assertContains(response, '只观察停留，不自动催办')
+        self.assertNotContains(response, '等待开学后再补提示')
+
+    def test_operations_dashboard_export_contains_the_review_sections(self):
+        location = CampusLocation.objects.create(
+            name='回看导出地点', building='东区', address='东门内侧',
+            description='白天有人经过', safety_note='',
+        )
+        decision = CampusLocationMaintenanceDecision.objects.create(
+            location=location, signal_fingerprint='public_safety_gap',
+            outcome='accepted', note='该入口无需额外提示。',
+            reviewed_by=self.staff,
+        )
+        stamp = timezone.now() - timedelta(days=1)
+        CampusLocationMaintenanceDecision.objects.filter(pk=decision.pk).update(
+            created_at=stamp, updated_at=stamp,
+        )
+
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('校园地点维护决策回看', text)
+        self.assertIn('首次决策时间,决策数,当前队列占比（%）,已处理,维持现状,暂缓处理,读法', text)
+        self.assertIn('处理结果,本周期首次决策,上一周期首次决策,更早首次决策,合计', text)
+        self.assertIn('暂缓地点,主优先级,全部信号,首次决策,最后更新,最后更新间隔,读法', text)
+        self.assertIn('不计算处理率、不给升降方向', text)
+        self.assertNotIn('该入口无需额外提示', text)
+        self.assertNotIn('review-dashboard-staff', text)

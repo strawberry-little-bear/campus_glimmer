@@ -72,6 +72,7 @@ from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
 from .item_image_coverage import build_item_image_coverage
 from .location_registry_quality import build_location_registry_quality
+from .location_maintenance_decision_review import build_location_maintenance_decision_review
 from .location_maintenance_queue import build_location_maintenance_queue
 # 订单承诺截止与催收效果：第八轮接面板时漏了这一行 import，看板整页 500。
 # 测试当时只跑新模块自己的用例，没有渲染过看板，所以它一路绿着上了 main。
@@ -2452,6 +2453,10 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('recommendation_impression_quality', '推荐曝光日志质量', build_recommendation_impression_quality),
     ('location_registry_quality', '校园地点档案质量', build_location_registry_quality),
     ('location_maintenance_queue', '校园地点维护队列', build_location_maintenance_queue),
+    (
+        'location_maintenance_decision_review', '校园地点维护决策回看',
+        build_location_maintenance_decision_review,
+    ),
 )
 
 
@@ -9639,6 +9644,7 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    writer.writerow(['一、档案形状与字段覆盖'])
     writer.writerow(['地点字段覆盖', '范围', '已填写', '缺失', '总数', '填写率（%）'])
     for row in location_quality['field_rows']:
         writer.writerow([
@@ -9678,6 +9684,7 @@ def operations_dashboard_export(request):
         ])
 
     writer.writerow([])
+    writer.writerow(['三、启用地点档案清单'])
     writer.writerow(['启用地点档案', '安全语义', '楼栋 / 校区', '详细位置', '说明', '安全提示', '在售', '求购', '关注搜索'])
     for row in location_quality['location_rows']:
         writer.writerow([
@@ -9736,6 +9743,7 @@ def operations_dashboard_export(request):
     ])
 
     writer.writerow([])
+    writer.writerow(['一、主优先级与命中信号'])
     writer.writerow(['主优先级', '地点数', '读法'])
     for row in location_queue['priority_rows']:
         writer.writerow([row['label'], row['location_total'], row['description']])
@@ -9752,6 +9760,7 @@ def operations_dashboard_export(request):
         writer.writerow([row['label'], row['location_total'], signal_notes[row['key']]])
 
     writer.writerow([])
+    writer.writerow(['二、维护清单'])
     writer.writerow([
         '维护地点', '主优先级', '主信号', '全部信号', '缺失字段', '状态',
         '当前引用', '复核', '行动提示',
@@ -9776,6 +9785,67 @@ def operations_dashboard_export(request):
     writer.writerow([
         '口径', '', '', '', '', '', '', '',
         '当前快照；主优先级互斥，信号可重叠；队列只读，决策由后台留痕且不隐藏当前信号',
+    ])
+
+    location_review = dashboard['location_maintenance_decision_review']
+    writer.writerow([])
+    writer.writerow(['校园地点维护决策回看'])
+    writer.writerow(['回看形状', '数值', '说明'])
+    writer.writerow([
+        '当前队列', location_review['summary']['queued_total'],
+        f"待核对 {location_review['summary']['unreviewed_total']} 个；已复核 {location_review['summary']['reviewed_total']} 个",
+    ])
+    writer.writerow([
+        '复核比例（%）', location_review['summary']['reviewed_share'],
+        '分母是当前队列总数；没有历史队列快照，不把它读成跨周期处理率',
+    ])
+    writer.writerow([
+        '仍暂缓', location_review['summary']['deferred_total'],
+        '匹配当前信号且结果为暂缓处理；只观察停留，不自动催办',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['一、首次决策沉淀'])
+    writer.writerow(['首次决策时间', '决策数', '当前队列占比（%）', '已处理', '维持现状', '暂缓处理', '读法'])
+    for row in location_review['first_decision_rows']:
+        writer.writerow([
+            row['label'], row['decision_total'],
+            '' if row['queue_share'] is None else row['queue_share'],
+            row['outcome_totals']['handled'], row['outcome_totals']['accepted'],
+            row['outcome_totals']['deferred'], row['description'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['处理结果', '本周期首次决策', '上一周期首次决策', '更早首次决策', '合计'])
+    for row in location_review['outcome_rows']:
+        writer.writerow([
+            row['outcome_label'], row['cohort_totals']['current'],
+            row['cohort_totals']['previous'], row['cohort_totals']['earlier'],
+            row['decision_total'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['二、暂缓停留清单'])
+    writer.writerow(['暂缓地点', '主优先级', '全部信号', '首次决策', '最后更新', '最后更新间隔', '读法'])
+    for row in location_review['deferred_rows']:
+        writer.writerow([
+            row['name'], row['priority_label'], '、'.join(row['reason_labels']),
+            timezone.localtime(row['decision_created_at']).strftime('%Y-%m-%d'),
+            timezone.localtime(row['decision_updated_at']).strftime('%Y-%m-%d'),
+            f"{row['last_update_age_days']} 天",
+            '只报告停留，不输出复核人与备注，也不自动催办',
+        ])
+    if location_review['deferred_row_hidden_total']:
+        writer.writerow([
+            '未展示暂缓地点', location_review['deferred_row_hidden_total'], '', '', '', '', '',
+        ])
+    writer.writerow([
+        '口径', '', '', '', '', '',
+        f"本周期从 {timezone.localtime(location_review['current_period_start']):%Y-%m-%d} 起，可能包含未结束的当天；首次决策按 created_at 归期，暂缓停留按 updated_at 到当前时刻的完整本地日期数计算",
+    ])
+    writer.writerow([
+        '边界', '', '', '', '', '',
+        '没有历史队列快照和决策编辑审计表，不计算处理率、不给升降方向；输出不包含复核人和自由备注',
     ])
     return response
 

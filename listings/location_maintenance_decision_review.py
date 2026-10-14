@@ -125,6 +125,16 @@ def build_location_maintenance_decision_review(days=30, *, now=None):
         row['name'],
     ))
 
+    outcome_rows = [{
+        'outcome': outcome,
+        'outcome_label': outcome_label,
+        'cohort_totals': {
+            cohort: outcome_cohort_counts[outcome][cohort]
+            for cohort, _, _ in COHORT_SPECS
+        },
+        'decision_total': outcome_counts[outcome],
+    } for outcome, outcome_label in OUTCOME_SPECS]
+
     return {
         'has_data': bool(entries),
         'days': days,
@@ -142,6 +152,7 @@ def build_location_maintenance_decision_review(days=30, *, now=None):
         },
         'first_decision_rows': first_decision_rows,
         'outcome_age_rows': outcome_age_rows,
+        'outcome_rows': outcome_rows,
         'deferred_rows': deferred_rows[:DEFERRED_ROW_LIMIT],
         'deferred_row_limit': DEFERRED_ROW_LIMIT,
         'deferred_row_hidden_total': max(
