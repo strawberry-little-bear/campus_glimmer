@@ -72,6 +72,7 @@ from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
 from .item_image_coverage import build_item_image_coverage
 from .location_registry_quality import build_location_registry_quality
+from .location_maintenance_queue import build_location_maintenance_queue
 # 订单承诺截止与催收效果：第八轮接面板时漏了这一行 import，看板整页 500。
 # 测试当时只跑新模块自己的用例，没有渲染过看板，所以它一路绿着上了 main。
 from .order_deadline_reminders import build_order_deadline_reminders
@@ -2450,6 +2451,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
     ('recommendation_impression_quality', '推荐曝光日志质量', build_recommendation_impression_quality),
     ('location_registry_quality', '校园地点档案质量', build_location_registry_quality),
+    ('location_maintenance_queue', '校园地点维护队列', build_location_maintenance_queue),
 )
 
 
@@ -9716,6 +9718,57 @@ def operations_dashboard_export(request):
         '档案与当前引用为快照；交付按订单时间回看；只报告，不自动合并、不改外键、不输出用户或商品信息',
     ])
 
+    location_queue = dashboard['location_maintenance_queue']
+    writer.writerow([])
+    writer.writerow(['校园地点维护队列'])
+    writer.writerow(['队列形状', '数值', '说明'])
+    writer.writerow([
+        '全部地点', location_queue['summary']['location_total'],
+        f"启用 {location_queue['summary']['active_total']} 个",
+    ])
+    writer.writerow([
+        '进入队列', location_queue['summary']['queued_total'],
+        f"启用且无信号 {location_queue['summary']['active_clean_total']} 个，停用且无当前引用 {location_queue['summary']['inactive_clean_total']} 个",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['主优先级', '地点数', '读法'])
+    for row in location_queue['priority_rows']:
+        writer.writerow([row['label'], row['location_total'], row['description']])
+
+    writer.writerow([])
+    writer.writerow(['命中信号', '地点数', '读法'])
+    signal_notes = {
+        'stale_reference': '停用地点仍被当前在售商品、活跃求购或启用关注搜索引用',
+        'public_safety_gap': '启用且公共，但安全提示为空；缺提示只提示核对',
+        'duplicate_name': 'Unicode 归一、大小写和空白折叠后有两个及以上启用地点同名',
+        'profile_gap': '启用地点缺楼栋、详细位置、说明，或非公共地点缺安全提示',
+    }
+    for row in location_queue['reason_rows']:
+        writer.writerow([row['label'], row['location_total'], signal_notes[row['key']]])
+
+    writer.writerow([])
+    writer.writerow([
+        '维护地点', '主优先级', '主信号', '全部信号', '缺失字段', '状态',
+        '当前引用', '行动提示',
+    ])
+    for row in location_queue['location_rows']:
+        writer.writerow([
+            row['name'], row['priority_label'], row['primary_reason_label'],
+            '、'.join(row['reason_labels']),
+            '、'.join(field['label'] for field in row['missing_fields']),
+            ('启用' if row['is_active'] else '停用') + (' · 公共' if row['is_public'] else ' · 非公共'),
+            f"在售 {row['available_item_count']} · 求购 {row['active_demand_count']} · 关注 {row['active_saved_search_count']}",
+            row['action_hint'],
+        ])
+    if location_queue['location_row_hidden_total']:
+        writer.writerow([
+            '未展示地点', location_queue['location_row_hidden_total'], '', '', '', '', '', '',
+        ])
+    writer.writerow([
+        '口径', '', '', '', '', '', '',
+        '当前快照；主优先级互斥，信号可重叠；只报告，不自动修复、不合并、不改外键',
+    ])
     return response
 
 def search_items(request):

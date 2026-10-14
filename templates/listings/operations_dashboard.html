@@ -7246,5 +7246,83 @@
     {% endif %}
 </section>
 
+
+<section class="content-card ops-panel mb-4 location-maintenance-queue-panel" id="location-maintenance-queue">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Location queue</span><h2>校园地点维护队列</h2></div>
+        <span class="ops-panel-hint">只排人工核对顺序，不做自动修复</span>
+    </div>
+
+    {% if not location_maintenance_queue.has_data %}
+    <div class="empty-inline">还没有校园地点档案可读。</div>
+    {% else %}
+    <div class="row g-3 mb-3">
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>进入队列</span><strong>{{ location_maintenance_queue.summary.queued_total }}</strong><small>全部地点 {{ location_maintenance_queue.summary.location_total }}</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>优先核对</span><strong>{{ location_maintenance_queue.summary.priority_totals.check_first }}</strong><small>停用引用或公共安全提示</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>需要分辨</span><strong>{{ location_maintenance_queue.summary.priority_totals.disambiguate }}</strong><small>近似重名地点</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>择期补充</span><strong>{{ location_maintenance_queue.summary.priority_totals.enrich }}</strong><small>档案字段不完整</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>启用且干净</span><strong>{{ location_maintenance_queue.summary.active_clean_total }}</strong><small>没有命中队列信号</small></div></div>
+        <div class="col-xl-2 col-md-4 col-6"><div class="ops-mini-stat"><span>停用且干净</span><strong>{{ location_maintenance_queue.summary.inactive_clean_total }}</strong><small>没有当前业务引用</small></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-5">
+            <div class="ops-panel-block h-100">
+                <h3>一、主优先级与命中信号</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm ops-table align-middle mb-3">
+                        <thead><tr><th>主优先级</th><th>地点数</th><th>读法</th></tr></thead>
+                        <tbody>
+                            {% for row in location_maintenance_queue.priority_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.location_total }}</td><td class="text-muted">{{ row.description }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm ops-table align-middle mb-0">
+                        <thead><tr><th>命中信号</th><th>地点数</th></tr></thead>
+                        <tbody>
+                            {% for row in location_maintenance_queue.reason_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.location_total }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">主优先级互斥；信号允许重叠，所以右侧合计可以大于队列总数。</p>
+            </div>
+        </div>
+
+        <div class="col-xl-7">
+            <div class="ops-panel-block h-100">
+                <h3>二、维护清单</h3>
+                <div class="ops-table-wrap">
+                    <table class="table table-sm ops-table align-middle mb-0">
+                        <thead><tr><th>地点</th><th>主优先级</th><th>命中信号</th><th>缺失字段</th><th>当前引用</th><th>行动提示</th></tr></thead>
+                        <tbody>
+                            {% for row in location_maintenance_queue.location_rows %}
+                            <tr>
+                                <td><strong>{{ row.name }}</strong><small class="d-block text-muted">{% if row.is_active %}启用{% else %}停用{% endif %} · {% if row.is_public %}公共{% else %}非公共{% endif %}</small></td>
+                                <td>{{ row.priority_label }}</td>
+                                <td>{% for label in row.reason_labels %}<span class="d-block">{{ label }}</span>{% endfor %}</td>
+                                <td>{% if row.missing_fields %}{% for field in row.missing_fields %}<span class="d-block">{{ field.label }}</span>{% endfor %}{% else %}—{% endif %}</td>
+                                <td><small class="d-block">在售 {{ row.available_item_count }} · 求购 {{ row.active_demand_count }} · 关注 {{ row.active_saved_search_count }}</small></td>
+                                <td><small>{{ row.action_hint }}</small></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if location_maintenance_queue.location_row_hidden_total %}
+                <p class="small text-muted mt-2 mb-0">还有 {{ location_maintenance_queue.location_row_hidden_total }} 个地点未展示；截断只影响展示，不影响上方汇总。</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本队列只读：不改地点开关、不改业务外键、不自动合并近似重名、不补写档案字段，也不把“当前没人引用”读成应该删除。</div>
+    {% endif %}
+</section>
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

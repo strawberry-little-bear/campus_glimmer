@@ -3,6 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .location_maintenance_queue import (
@@ -242,3 +243,42 @@ class LocationMaintenanceQueueTests(TestCase):
         result = build_location_maintenance_queue(days=13, now=self.now)
 
         self.assertEqual(result['period_days'], 30)
+
+
+class LocationMaintenanceQueueDashboardTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='location-queue-staff', password='safe-password-123',
+            is_staff=True,
+        )
+        self.client.force_login(self.staff)
+
+    def test_operations_dashboard_renders_the_queue_panel(self):
+        CampusLocation.objects.create(
+            name='维护队列地点', building='东区', address='东门内侧',
+            description='白天有人经过', safety_note='',
+        )
+
+        response = self.client.get(reverse('operations_dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '校园地点维护队列')
+        self.assertContains(response, '维护队列地点')
+        self.assertContains(response, '主优先级互斥；信号允许重叠')
+        self.assertContains(response, '不自动合并近似重名')
+
+    def test_operations_dashboard_export_contains_the_same_sections(self):
+        CampusLocation.objects.create(
+            name='维护队列导出地点', building='东区', address='东门内侧',
+            description='白天有人经过', safety_note='',
+        )
+
+        response = self.client.get(reverse('operations_dashboard_export'))
+
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('校园地点维护队列', text)
+        self.assertIn('维护队列导出地点', text)
+        self.assertIn('主优先级,地点数,读法', text)
+        self.assertIn('命中信号,地点数,读法', text)
+        self.assertIn('主优先级互斥，信号可重叠', text)
