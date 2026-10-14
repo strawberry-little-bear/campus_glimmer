@@ -91,6 +91,7 @@ from .contributions import (
 # 后面，改表的人一眼能看出这里也跟着动。
 from .contribution_tier_shape import build_contribution_tier_shape
 from .availability import notify_item_available
+from .borrow_days_shape import build_borrow_days_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
@@ -2376,6 +2377,7 @@ def operations_dashboard(request):
         build_academic_term_snapshot_quality(days=days)
     )
     dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
+    dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
@@ -2559,6 +2561,7 @@ def operations_dashboard_export(request):
         build_academic_term_snapshot_quality(days=days)
     )
     dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
+    dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -7274,6 +7277,104 @@ def operations_dashboard_export(request):
     writer.writerow([
         '此处只报告，不因为某个分类看起来更容易拖就提前催收它的借用方，'
         '也不据此调整押金额度或给任何人打标记。',
+    ])
+
+    shape = dashboard['borrow_days_shape']
+    writer.writerow([])
+    writer.writerow(['默认借用天数的形状：borrow_days 第一次被数字读到'])
+    writer.writerow(['口径与门槛', shape['summary'], '只读 Item.borrow_days、Order 与 '
+                     'BorrowReturnEscalation，不加迁移、不改默认值、不改 1 到 90 的校验、'
+                     '不追改历史订单、不动催收阶梯'])
+    writer.writerow([
+        '借用商品', shape['item_count'],
+        '其中在架', shape['in_stock_count'],
+        '周期内借用', shape['borrow_count'],
+        '发生过升级', shape['escalated_count'],
+        '升级率（%）', '' if shape['escalation_rate'] is None else shape['escalation_rate'],
+        '拖到第三级', shape['level_three_count'],
+        '默认值', shape['default_borrow_days'],
+        '默认值占比（%）',
+        '' if shape['default_share'] is None else shape['default_share'],
+        '配置档最小样本', shape['min_band_sample'],
+        '占比方向最小样本', shape['min_item_sample'],
+    ])
+    writer.writerow([])
+    writer.writerow(['期限档', '商品数', '其中在架', '占比（%）', '样本'])
+    for row in shape['item_rows']:
+        writer.writerow([
+            row['label'], row['item_count'], row['in_stock_count'],
+            '' if row['share'] is None else row['share'],
+            f"不足 {shape['min_item_sample']} 件，只作参考" if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '分母是全部借用商品，包括从没被借出去的：借用商品的配置分布和「被用过的期限分布」'
+        '是两个问题，只读被借过的商品会让前者看起来像后者',
+        '档位取表单上的原值 1/3/7/14/30/90，不取分位数：运营看表时要能认出自己在表单上选的'
+        '那一档，一个每月都会移动的分位边界什么也说明不了',
+        '0 样本档全列：「90 天上没有人」本身是结论，不是表格的缺口',
+    ])
+    writer.writerow([])
+    writer.writerow(['期限档', '配置的借用', '配置占比（%）', '实际归还的借用',
+                     '实际占比（%）', '平均实际天数', '最长实际天数', '样本'])
+    for row in shape['configured_rows']:
+        writer.writerow([
+            row['label'], row['configured_count'],
+            '' if row['configured_share'] is None else row['configured_share'],
+            row['actual_count'],
+            '' if row['actual_share'] is None else row['actual_share'],
+            '' if row['average_actual_days'] is None else row['average_actual_days'],
+            '' if row['max_actual_days'] is None else row['max_actual_days'],
+            '是' if row['is_small_sample'] else '',
+        ])
+    writer.writerow([
+        '说明', '', '', '', '',
+        '配置列的分母是周期内全部借用，实际列的分母是其中已归还的借用：两个分母不是同一个'
+        '数，分开报。不知道这一点的读者会把完成率读成时长分布',
+        '配 7 天、3 天后归还，两列各记一格：配置侧记 4-7 天档，实际侧记 1-3 天档。报一个差值'
+        '列会看不出是哪一侧在动',
+        '还挂在 borrowed 的订单是右删失样本，实际时长还不存在，只进配置列，'
+        f"单独数出来（{shape['censored_count']} 笔），不进实际列的任何分母",
+        '配置侧读的是商品的现值。下单后改过借用天数的商品，会用新值和旧订单的时长对不上——'
+        '这个不对称如实报出来，不抹平：库里没有记录字段变更历史的表',
+        '改商品的借用天数不追溯旧订单：一笔已经借出去的订单，它的归还截止时刻在下单那一刻'
+        '就定了',
+    ])
+    writer.writerow([])
+    writer.writerow(['期限档', '借用', '升级', '第三级', '已闭环', '跟进中',
+                     '升级率（%）', '第三级率（%）', '逾期笔数', '逾期率（%）',
+                     '平均超期天数', '平均超期占配置（%）', '平均闭环（天）', '样本不足'])
+    for row in shape['band_rows']:
+        writer.writerow([
+            row['label'], row['borrow_count'], row['escalated_count'],
+            row['level_three_count'], row['resolved_count'], row['open_count'],
+            '' if row['escalation_rate'] is None else row['escalation_rate'],
+            '' if row['level_three_rate'] is None else row['level_three_rate'],
+            row['overdue_count'],
+            '' if row['overdue_rate'] is None else row['overdue_rate'],
+            '' if row['average_overdue_days'] is None else row['average_overdue_days'],
+            '' if row['average_overdue_ratio'] is None else row['average_overdue_ratio'],
+            '' if row['average_close_days'] is None else row['average_close_days'],
+            '是' if row['is_small_sample'] else '',
+        ])
+    writer.writerow([
+        '说明', '', '', '', '', '',
+        '分母包含从未升级过的借用，和 borrow_risk 同一批订单、同一个口径，两表可以并排读。'
+        '只看升级过的订单会让每一档的升级率都变成 100%',
+        '逾期按已归还的笔算，不按未闭环的算：未闭环的逾期天数还在随时间增长，报进平均值会让'
+        '这个数随读取时刻漂移',
+        '主口径是「超期天数 / 配置天数」而不是绝对天数：逾期 3 天对一笔 7 天的借用和对一笔 '
+        '90 天的借用是两件不同的事。绝对超期天数仍然单列，因为那是和借用者沟通时真的会用到的数',
+        '平均闭环从真正发生的那一级催收起算，不从到期日起算',
+        '不把相关性讲成因果：配 90 天的商品三天就还，可能是期限形同虚设，也可能这类东西本来'
+        '就不需要借那么久，本模块没有能力区分',
+        '不把长期限读成「更信任别人」：一个人可能只是因为懒或者照抄了默认值',
+        f"周期内共有 {shape['unknown_item_count']} 笔借用的商品已不存在，其配置读不到，"
+        '单独计数、不摊派到任何档位',
+    ])
+    writer.writerow([
+        '此处只报告，不因为某个期限档看起来更容易拖就提前催收它的借用方，'
+        '也不据此调整默认借用天数或给任何人打标记。',
     ])
 
     response_quality = dashboard['notification_response']

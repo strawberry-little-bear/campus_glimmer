@@ -6208,5 +6208,99 @@
 
 </section>
 
+<section class="content-card ops-panel mb-4 borrow-days-shape-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Borrow days shape</span><h2>默认借用天数的形状</h2></div>
+        <span class="ops-panel-hint">卖家当初允许借多久，第一次被数字读到</span>
+    </div>
+    <p class="borrow-days-shape-note mb-3"><i class="bi bi-hourglass-split me-1"></i><code>Item.borrow_days</code> 是借用域里唯一一个由出借方亲手写下的数字，也是 <code>Order.return_due_at</code> 的唯一来源。它是全站唯一一个在业务模块里出现次数为零的字段：<strong>写入路径有，显示路径有，统计路径没有。</strong>借用域已经有四个模块在数东西——<code>borrow_risk</code> 按分类和押金分层，<code>borrow_rhythm</code> 把它和学期阶段交叉，<code>borrow_escalation</code> 管三级催收阶梯，<code>governance_sla</code> 管治理队列时效——四个模块全部从「东西还没回来」切进去，没有一个从「卖家当初允许借多久」切进去。</p>
+    {% if not borrow_days_shape.has_data %}
+    <div class="empty-inline">{{ borrow_days_shape.summary }}</div>
+    {% endif %}
+    {% if borrow_days_shape.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>借用商品</span><strong>{{ borrow_days_shape.item_count }}</strong><small>其中在架 {{ borrow_days_shape.in_stock_count }} 件</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内借用</span><strong>{{ borrow_days_shape.borrow_count }}</strong><small>回看 {{ borrow_days_shape.days }} 天，与 <code>borrow_risk</code> 同一批订单</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>停在默认 {{ borrow_days_shape.default_borrow_days }} 天</span><strong>{% if borrow_days_shape.default_share is None %}—{% else %}{{ borrow_days_shape.default_share }}%{% endif %}</strong><small>表单上的占位符，被原样接受的比例</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>配置与实际同档</span><strong>{{ borrow_days_shape.matched_count }}</strong><small>不一致 {{ borrow_days_shape.mismatch_count }} 笔</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>一、借用商品配了多长的期限</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>期限档</th><th>商品数</th><th>其中在架</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_days_shape.item_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.item_count }}{% if row.item_count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{{ row.in_stock_count }}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if row.is_small_sample %}不足 {{ borrow_days_shape.min_item_sample }} 件，只作参考{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分母是<strong>全部借用商品</strong>，包括从没被借出去的：借用商品的配置分布和「被用过的期限分布」是两个问题，只读被借过的商品会让前者看起来像后者。档位取表单上的原值 1/3/7/14/30/90，<strong>不取分位数</strong>——运营看表时要能认出自己在表单上选的那一档，一个每月都会移动的分位边界什么也说明不了。<strong>0 样本档全列：「90 天上没有人」本身是结论，不是表格的缺口。</strong></p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>二、配的天数 vs 实际借了多久</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>期限档</th><th>配置的借用</th><th>配置占比（%）</th><th>实际归还的借用</th><th>实际占比（%）</th><th>平均实际天数</th><th>最长实际天数</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_days_shape.configured_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.configured_count }}</td>
+                        <td>{% if row.configured_share is None %}—{% else %}{{ row.configured_share }}{% endif %}</td>
+                        <td>{{ row.actual_count }}</td>
+                        <td>{% if row.actual_share is None %}—{% else %}{{ row.actual_share }}{% endif %}</td>
+                        <td>{% if row.average_actual_days is None %}—{% else %}{{ row.average_actual_days }}{% endif %}</td>
+                        <td>{% if row.max_actual_days is None %}—{% else %}{{ row.max_actual_days }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">配 7 天、3 天后归还，<strong>两列各记一格</strong>：配置侧记 4-7 天档，实际侧记 1-3 天档。报一个差值列会看不出是哪一侧在动。<strong>配置列的分母是周期内全部借用，实际列的分母是其中已归还的借用</strong>——两个分母不是同一个数，分开报；不知道这一点的读者会把完成率读成时长分布。还挂在 <code>borrowed</code> 的订单是右删失样本，实际时长还不存在，只进配置列，周期内共 {{ borrow_days_shape.censored_count }} 笔，不进实际列的任何分母。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>三、借用天数 × 催收</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>期限档</th><th>借用</th><th>升级</th><th>第三级</th><th>已闭环</th><th>跟进中</th><th>升级率（%）</th><th>第三级率（%）</th><th>逾期笔数</th><th>平均超期天数</th><th>平均超期占配置（%）</th><th>平均闭环（天）</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_days_shape.band_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.borrow_count }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">样本不足</span>{% endif %}</td>
+                        <td>{{ row.escalated_count }}</td>
+                        <td>{{ row.level_three_count }}</td>
+                        <td>{{ row.resolved_count }}</td>
+                        <td>{{ row.open_count }}</td>
+                        <td>{% if row.escalation_rate is None %}—{% else %}{{ row.escalation_rate }}{% endif %}</td>
+                        <td>{% if row.level_three_rate is None %}—{% else %}{{ row.level_three_rate }}{% endif %}</td>
+                        <td>{{ row.overdue_count }}</td>
+                        <td>{% if row.average_overdue_days is None %}—{% else %}{{ row.average_overdue_days }}{% endif %}</td>
+                        <td>{% if row.average_overdue_ratio is None %}—{% else %}{{ row.average_overdue_ratio }}{% endif %}</td>
+                        <td>{% if row.average_close_days is None %}—{% else %}{{ row.average_close_days }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><strong>分母包含从未升级过的借用</strong>，和 <code>borrow_risk</code> 读同一批订单、同一个口径，两表可以并排读；只看升级过的订单会让每一档的升级率都变成 100%。这是 <code>borrow_risk</code> 的第三个分层维度——它按分类和押金切，这里按卖家定的期限切。<strong>主口径是「超期天数 / 配置天数」而不是绝对天数</strong>：逾期 3 天对一笔 7 天的借用和对一笔 90 天的借用是两件不同的事。绝对超期天数仍然单列，因为那是和借用者沟通时真的会用到的数。</p>
+    </div>
+
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i><strong>逾期按已归还的笔算，不按未闭环的算。</strong>一笔逾期的未闭环借用，它的逾期天数还在随时间增长，报进平均值会让这个数随读取时刻漂移。平均闭环从真正发生的那一级催收起算，不从到期日起算——在 L1 躺了一周的订单不是治理侧花了一周处理的那一单。</p>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何东西。</strong>不加迁移、不加字段、不改 <code>borrow_days</code> 的默认值、不改 1 到 90 的校验、不追改任何一笔历史订单、不动催收阶梯。<strong>不报「这个字段被改过几次」</strong>——<code>Item.updated_at</code> 会在任何一次保存上刷新，包括将来的任何字段变更，拿它推断修改次数是拿噪声当信号；库里没有记录字段变更历史的表，这个数不知道，不编。<strong>改商品的 <code>borrow_days</code> 不追溯旧订单</strong>：一笔已经借出去的订单，它的归还截止时刻在下单那一刻就定了，所以第二节只做「配置档 vs 实际档」的对照，不做任何重算。不按用户排名、不输出用户名、不列商品名、不读自由文本。<strong>不把相关性讲成因果</strong>——配 90 天的商品三天就还，可能是期限形同虚设，也可能这类东西本来就不需要借那么久；<strong>也不把长期限读成「更信任别人」</strong>，一个人可能只是因为懒或者照抄了默认值。</div>
+</section>
+
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}
