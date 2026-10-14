@@ -87,6 +87,9 @@ from .contributions import (
     record_lost_found_lead_contribution, record_mutual_aid_feedback_contribution,
     record_order_contribution,
 )
+# 积分等级与徽章的门槛形状。它和 contributions.py 读同一套规则表，import 排在它
+# 后面，改表的人一眼能看出这里也跟着动。
+from .contribution_tier_shape import build_contribution_tier_shape
 from .availability import notify_item_available
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
@@ -2372,6 +2375,7 @@ def operations_dashboard(request):
     dashboard['academic_term_snapshot_quality'] = (
         build_academic_term_snapshot_quality(days=days)
     )
+    dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
@@ -2554,6 +2558,7 @@ def operations_dashboard_export(request):
     dashboard['academic_term_snapshot_quality'] = (
         build_academic_term_snapshot_quality(days=days)
     )
+    dashboard['contribution_tier_shape'] = build_contribution_tier_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -8620,6 +8625,137 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([
         '此处只报告，不自动派单、不改处理时限、不关闭任何事项。',
+    ])
+
+    tier = dashboard['contribution_tier_shape']
+    writer.writerow([])
+    writer.writerow(['积分等级与徽章的门槛形状：三张规则表第一次被数字读到', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', tier['summary'],
+        '只读 CommunityContribution 与 contributions.py 里的三张规则表，不加迁移、不改任何'
+        '分值、不调任何人的等级、不发任何积分、不补发漏记的分',
+        f"按全量算，不按周期切：等级是累计量，按周期切会让三个月前升到第三级的人在这个月消失。"
+        f"days 参数只为和看板其余面板的口径字段保持一致而收下",
+        f"分母是有过至少一条记录的用户（{tier['user_count']} 人），不是全体用户："
+        f"第一级门槛是 {tier['level_zero']}，没记录的用户也落在这一级，但那是默认值",
+        f"同用户同类型记录数至少 {tier['min_ranked_users']} 条才给方向，"
+        f"类型样本至少 {tier['min_type_sample']} 条才给方向，"
+        f"业务域至少 {tier['min_key_prefix']} 条才给方向，"
+        f"差值小于 {tier['noise_points']} 分视为噪声",
+    ])
+    writer.writerow([
+        '有记录的用户', tier['user_count'], '',
+        '分母只收有过至少一条贡献记录的用户',
+    ])
+    writer.writerow([
+        '贡献记录总数', tier['total_records'], '',
+        '不按周期过滤，和上一条同一个分母',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['等级', '门槛', '用户数', '占比（%）', '读数'])
+    for row in tier['level_rows']:
+        writer.writerow([
+            '—', row.label, row.threshold, row.user_count,
+            '—' if row.share is None else row.share,
+            '最高一级' if row.is_top else '',
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '五级全列，包括一级都没有人的那一级：漏掉空级，读者会以为这一级也是齐的',
+        '占比的分母是有过记录的用户数。分子 0、分母存在时报 0.0，空分母才报「—」，'
+        '两者不是一回事',
+        '等级判定直接调产品侧的 _level_for_points，不在本地复制一份：门槛表将来改一个数，'
+        '本地那份不会跟着动',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['到下一级还差多少', '停在这一级的人数', '中位距离', '最大距离'])
+    for row in tier['gap_rows']:
+        writer.writerow([
+            '—', row.distance_count, row.mean_distance_label,
+            '—' if row.max_distance is None else row.max_distance,
+        ])
+    writer.writerow([
+        '说明', '', '',
+        '距离 = 下一级门槛 − 当前积分。跨度对停在同一级的人都一样，距离才因人而异',
+        '四级跨度全列。这一级一个人都没停时报「—」不报 0：0 会被读成「差 0 分就升级」',
+        '报中位数和最大值，不报平均值：一个差 200 分的人会把平均值抬起来',
+        '已停在最高一级的人没有下一级，不进这一节',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['徽章', '看什么', '门槛', '拿到的人数', '占比（%）'])
+    for row in tier['badge_rows']:
+        writer.writerow([
+            '—', row.title,
+            '事件总数' if row.metric == 'events' else '特定类型',
+            row.threshold, row.earned_count,
+            '—' if row.share is None else row.share,
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '七枚全列，包括一个人都没拿到的那枚',
+        '门槛和获取数摆在同一行：分开看读不出「这枚徽章是不是太难过」——一个 5 次门槛拿到'
+        '4 个人，和一个 1 次门槛拿到 4 个人，是两件不同的事',
+        '判定直接调产品侧的 build_contribution_badges，不在本地复制一份',
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '贡献类型', '事件数', '积分', '单次平均分', '积分占比（%）', '样本',
+    ])
+    for row in tier['type_rows']:
+        writer.writerow([
+            '—', row.label, row.event_count, row.points,
+            row.mean_points_label,
+            '—' if row.point_share is None else row.point_share,
+            f"不足 {tier['min_type_sample']} 条，只作参考" if row.is_small_sample else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '六种全列，包括一条记录都没有的类型：漏掉空类型，读者会以为这套体系里只有出现过的'
+        '几种行为',
+        '积分占比的分母是全部积分，不是该类型自己的事件数',
+        '单次平均分报实际值，不报代码里的权重常数：两者在有补记或改过历史分值时可能不同',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['写入路径（幂等键前缀）', '事件数', '用户数', '占比（%）'])
+    for row in tier['key_prefix_rows']:
+        writer.writerow([
+            '—', row.prefix, row.event_count, row.user_count,
+            '—' if row.share is None else row.share,
+        ])
+    writer.writerow([
+        '说明', '', '',
+        '前缀取 source_key 第一个冒号前的部分。order:12:trade_completed:seller 的前缀是'
+        ' order，trade_completed 只是中间一段',
+        '这一节和贡献类型问的不是同一个问题：类型是「哪一种行为」，前缀是「哪一条写入路径」。'
+        '一条写入路径可以写出多种类型，两者摆在一起，能看出某条路径是不是整条没在跑',
+        '用户数按用户去重，不按记录数：按 source_key 分组时每组只有一个用户',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['同用户同类型的记录数', '组合数', '占比（%）', '读数'])
+    for row in tier['repeat_rows']:
+        writer.writerow([
+            '—', row.label, row.pair_count,
+            '—' if row.share is None else row.share,
+            '正常形态' if row.times == 1 else '这个用户在这条路径上被记了多次',
+        ])
+    writer.writerow([
+        '说明', '', '',
+        'pair_count 数的是「用户 × 类型」的组合数，不是用户数：一个用户可以在六种类型下各'
+        '出现一次，那是六个组合、一个用户。占比的分母是有过记录的用户数',
+        '不判断「异常多的记录」是重复还是真实高频：一个卖家这个月完成八笔交易，名下就有'
+        '八条 order:* 记录，这是正常的。给出一个「疑似重复」的结论比不报更糟',
+        '不报升级用了多久：库里只有 occurred_at 和 created_at，没有「何时跨过某一级」，'
+        '两个字段的差本身就是补记噪声',
+        '不把「停在低级」读成「不活跃」：积分是特定行为的加权和，一个人完全可能交易频繁但'
+        '不碰免费赠送和失物招领',
+        '不按用户排名、不输出用户名、不读 description（它是商品标题拼出来的自由文本）',
+        '不重复 analytics 的周期口径：它报流量，本模块报结构',
     ])
 
     return response

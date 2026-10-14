@@ -6050,6 +6050,162 @@
 
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不在重新上架时重置 <code>last_refreshed_at</code>、不给重新上架记时间戳、不加字段、不改 <code>_level_for</code> 的等级判据、不自动帮卖家刷新</strong>。刻意没有推断「它是否重新上架过」——重新上架不留时间戳，而 <code>expires_at</code> 在未来这个信号新发布的商品也会有。这里报的是<strong>新鲜度欠账</strong>这个可观测量，不是重新上架这个不可观测量。</div>
     {% endif %}
+<section class="content-card ops-panel mb-4 contribution-tier-shape-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Contribution tier shape</span><h2>积分等级与徽章的门槛形状</h2></div>
+        <span class="ops-panel-hint">五级等级各自有多少人、七枚徽章各自有多少人拿到，以及哪一类行为在发分</span>
+    </div>
+    <p class="contribution-tier-shape-note mb-3"><i class="bi bi-trophy me-1"></i><code>CommunityContribution</code> 是站内唯一一套完整的游戏化体系：六种贡献类型、一份积分权重表、五级积分门槛（<code>CONTRIBUTION_LEVELS</code>）、七枚徽章（<code>CONTRIBUTION_BADGE_RULES</code>），加一条幂等写入（<code>source_key</code> 唯一约束 + <code>get_or_create</code>）。运营侧原本唯一的读者 <code>analytics._build_contribution_insights</code> 只报周期内的积分总量、事件数、人数、按类型分布、每日趋势和前 8 名——<strong>全是流量口径，那三张规则表从来没有被任何一个数字碰过。</strong>于是一套上线运行的等级体系，运营看不到它的形状。</p>
+    {% if not contribution_tier_shape.has_data %}
+    <div class="empty-inline">{{ contribution_tier_shape.summary }}</div>
+    {% endif %}
+    {% if contribution_tier_shape.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>有记录的用户</span><strong>{{ contribution_tier_shape.user_count }}</strong><small>分母，不含从没参与过的用户</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>贡献记录总数</span><strong>{{ contribution_tier_shape.total_records }}</strong><small>不按统计周期过滤</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>停在最低一级</span><strong>{% for row in contribution_tier_shape.level_rows %}{% if forloop.counter0 == 0 %}{{ row.user_count }}{% endif %}{% endfor %}</strong><small>门槛 {{ contribution_tier_shape.level_zero }} 分，占比 {% for row in contribution_tier_shape.level_rows %}{% if forloop.counter0 == 0 %}{% if row.share is None %}—{% else %}{{ row.share }}%{% endif %}{% endif %}{% endfor %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>到达最高一级</span><strong>{% for row in contribution_tier_shape.level_rows %}{% if row.is_top %}{{ row.user_count }}{% endif %}{% endfor %}</strong><small>{% for row in contribution_tier_shape.level_rows %}{% if row.is_top %}门槛 {{ row.threshold }} 分{% endif %}{% endfor %}</small></div></div>
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i><strong>按全量算，不按周期切。</strong>等级是累计量，<code>_level_for_points</code> 吃的是一个人的总积分。按周期切会让一个三个月前就升到第三级的人在这个月「消失」——他这个月没有新贡献，于是从等级分布里掉出去，而他的等级并没有掉。本模块和 <code>analytics</code> 的周期口径明确分工：<strong>它报流量，本模块报结构。</strong>统计周期选择器对本面板无效。</p>
+
+    <div class="ops-panel-block">
+        <h3>五级等级各自有多少人</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>等级</th><th>门槛（分）</th><th>用户数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in contribution_tier_shape.level_rows %}
+                    <tr{% if row.is_top %} class="ops-row-emphasis"{% endif %}>
+                        <td>{{ row.label }}{% if row.is_top %} <span class="badge text-bg-secondary">最高一级</span>{% endif %}</td>
+                        <td>{{ row.threshold }}</td>
+                        <td>{{ row.user_count }}{% if row.user_count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if forloop.counter0 == 0 %}门槛是 0，从没参与过的用户按同一套规则也落在这一级，但他们不进分母{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">占比的分母是<strong>有过至少一条贡献记录的用户</strong>（{{ contribution_tier_shape.user_count }} 人），不是全体用户。第一级门槛是 {{ contribution_tier_shape.level_zero }}，把全体用户当分母会让第一级的占比被大量「从没参与过」的用户撑起来，而那个数说明的是产品渗透率，不是等级门槛的形状。分子 0、分母存在时报 <code>0.0</code>，空分母才报「—」——「一级都没人」和「分母不存在」不是一回事。等级判定直接调产品侧的 <code>_level_for_points</code>，不在本地复制一份。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>每一级到下一级，这批人还差多少</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>跨度</th><th>停在这一级的人数</th><th>中位距离</th><th>最大距离</th></tr></thead>
+                <tbody>
+                    {% for row in contribution_tier_shape.gap_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.distance_count }}{% if row.distance_count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{{ row.mean_distance_label }}</td>
+                        <td>{% if row.max_distance is None %}—{% else %}{{ row.max_distance }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">距离 = 下一级门槛 − 这个人现在的积分。跨度对停在同一级的人都一样，距离才因人而异。报中位数和最大值，不报平均值：一个差 200 分的人会把平均值抬起来，而这一节要看的正是「普遍还差多少」。<strong>这一级一个人都没停时报「—」不报 0</strong>——0 会被读成「差 0 分就升级」，而这里的事实是「这一级一个人都没停」。已停在最高一级的人没有下一级，不进这一节。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>七枚徽章，各自有多少人拿到</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>徽章</th><th>看什么</th><th>门槛</th><th>拿到的人数</th><th>占比（%）</th></tr></thead>
+                <tbody>
+                    {% for row in contribution_tier_shape.badge_rows %}
+                    <tr>
+                        <td>{{ row.title }}</td>
+                        <td>{% if row.metric == 'events' %}事件总数{% else %}特定类型{% endif %}</td>
+                        <td>{{ row.threshold }}</td>
+                        <td>{{ row.earned_count }}{% if row.earned_count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">门槛和获取数摆在同一行：分开看读不出「这枚徽章是不是太难过」——一个 5 次门槛拿到 4 个人，和一个 1 次门槛拿到 4 个人，是两件不同的事。两枚看事件总数，五枚看特定类型，点亮条件不同。七枚全列，包括一个人都没拿到的那枚。判定直接调产品侧的 <code>build_contribution_badges</code>，不在本地复制一份。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>哪一类行为在发分</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>贡献类型</th><th>事件数</th><th>积分</th><th>单次平均分</th><th>积分占比（%）</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in contribution_tier_shape.type_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.event_count }}{% if row.event_count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{{ row.points }}</td>
+                        <td>{{ row.mean_points_label }}</td>
+                        <td>{% if row.point_share is None %}—{% else %}{{ row.point_share }}{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="badge text-bg-warning">不足 {{ contribution_tier_shape.min_type_sample }} 条</span>{% else %}可读数{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">六种全列，包括一条记录都没有的类型——漏掉空类型，读者会以为这套体系里只有出现过的几种行为。积分占比的分母是<strong>全部积分</strong>，不是该类型自己的事件数。单次平均分报<strong>实际值</strong>，不报代码里的权重常数：两者在有补记或改过历史分值时可能不同，报常数等于把「规则」当成「事实」。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>写入路径与幂等键的间接体检</h3>
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <h4 class="h6 mb-2">业务域（幂等键前缀）</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                        <thead><tr><th>前缀</th><th>事件数</th><th>用户数</th><th>占比（%）</th></tr></thead>
+                        <tbody>
+                            {% for row in contribution_tier_shape.key_prefix_rows %}
+                            <tr>
+                                <td><code>{{ row.prefix }}</code></td>
+                                <td>{{ row.event_count }}</td>
+                                <td>{{ row.user_count }}</td>
+                                <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                            {% if not contribution_tier_shape.key_prefix_rows %}
+                            <tr><td colspan="4">还没有任何贡献记录。</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">前缀取 <code>source_key</code> 第一个冒号前的部分：<code>order:12:trade_completed:seller</code> 的前缀是 <code>order</code>，而 <code>trade_completed</code> 只是中间一段。<strong>这一节和贡献类型问的不是同一个问题</strong>——类型是「哪一种行为」，前缀是「哪一条写入路径」。一条写入路径可以写出多种类型，两者摆在一起，能看出某条路径是不是整条没在跑。用户数按用户去重。</p>
+            </div>
+            <div class="col-lg-6">
+                <h4 class="h6 mb-2">同一用户同一类型的记录数</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                        <thead><tr><th>出现次数</th><th>组合数</th><th>占比（%）</th><th>读数</th></tr></thead>
+                        <tbody>
+                            {% for row in contribution_tier_shape.repeat_rows %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td>{{ row.pair_count }}</td>
+                                <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                                <td class="ops-hint">{% if row.times == 1 %}正常形态{% else %}这个用户在这条路径上被记了多次{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                            {% if not contribution_tier_shape.repeat_rows %}
+                            <tr><td colspan="4">还没有任何贡献记录。</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0"><strong>组合数数的是「用户 × 类型」的组合，不是用户数</strong>——一个用户可以在六种类型下各出现一次，那是六个组合、一个用户。占比的分母是有过记录的用户数。<strong>本模块不判断「异常多的记录」是重复还是真实高频</strong>：一个卖家这个月完成了八笔交易，名下就有八条 <code>order:*</code> 记录，这是正常的。给出一个「疑似重复」的结论比不报更糟。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何东西。</strong>不加迁移、不加字段、不改 <code>CONTRIBUTION_LEVELS</code>、不改 <code>CONTRIBUTION_BADGE_RULES</code>、不改任何分值，不自动调整任何人的等级、不发任何积分、不补发漏记的分。<strong>不报「升级用了多久」</strong>——库里只有 <code>occurred_at</code>（业务时刻）和 <code>created_at</code>（落库时刻），没有「何时跨过某一级」，两个字段的差本身就是补记噪声。<strong>不把「停在低级」读成「不活跃」</strong>——积分是特定行为的加权和，一个人完全可能交易频繁但不碰免费赠送和失物招领。不按用户排名、不输出用户名、不读 <code>description</code>（它是商品标题拼出来的自由文本）、不重复 <code>analytics</code> 的周期口径。</div>
+    {% endif %}
+</section>
+
 </section>
 
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
