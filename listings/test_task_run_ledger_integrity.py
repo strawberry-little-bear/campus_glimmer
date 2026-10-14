@@ -3,7 +3,9 @@
 
 from datetime import timedelta
 
+from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import TaskRun
@@ -232,3 +234,57 @@ class TaskRunLedgerIntegrityTests(TestCase):
         self.assertEqual(after, before)
         self.assertEqual(run.status, 'succeeded')
         self.assertEqual(report['summary']['issue_row_total'], 0)
+
+
+class TaskRunLedgerIntegrityDashboardTests(TestCase):
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='ledger-integrity-staff', password='safe-password-123',
+            is_staff=True,
+        )
+        self.client.force_login(self.staff)
+        self.now = timezone.now()
+
+    def make_dashboard_run(self, **kwargs):
+        defaults = {
+            'name': 'send_lifecycle_reminders',
+            'status': 'succeeded',
+            'started_at': self.now - timedelta(minutes=10),
+            'finished_at': self.now - timedelta(minutes=9),
+            'duration_ms': 60000,
+            'metrics': {'sent': 1},
+            'note': '',
+        }
+        defaults.update(kwargs)
+        return TaskRun.objects.create(**defaults)
+
+    def test_operations_dashboard_renders_the_integrity_panel(self):
+        self.make_dashboard_run(
+            status='cancelled', note='INTERNAL-FAILURE-DETAIL',
+        )
+
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '定时任务台账完整性审计')
+        self.assertContains(response, '一、台账形状')
+        self.assertContains(response, '未知状态')
+        self.assertContains(response, '指标可读')
+        self.assertNotContains(response, 'INTERNAL-FAILURE-DETAIL')
+
+    def test_operations_dashboard_export_contains_the_integrity_sections(self):
+        self.make_dashboard_run(
+            status='failed', metrics={}, note='',
+        )
+
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        self.assertEqual(response.status_code, 200)
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('定时任务台账完整性审计', text)
+        self.assertIn('一、台账形状', text)
+        self.assertIn('问题类型,行数,涉及命令数,读法', text)
+        self.assertIn('命令,运行次数,问题行数,时间问题行数,指标问题行数,失败备注问题行数,未知指标键次数,命令名单', text)
+        self.assertIn('台账行,命令,开始时间,问题数,问题', text)
+        self.assertIn('失败行缺少备注', text)
+        self.assertIn('本模块不输出原始失败备注', text)

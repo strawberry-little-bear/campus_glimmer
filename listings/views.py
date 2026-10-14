@@ -28,6 +28,7 @@ from .dashboard_build_performance import build_dashboard_build_performance
 from .search_combo_shift import build_search_combo_shift
 from .search_threshold_feedback import build_search_threshold_feedback
 from .search_trend import build_search_trend
+from .task_run_ledger_integrity import build_task_run_ledger_integrity
 from .governance_sla import build_governance_sla
 from .demand_radar import build_demand_radar
 from .search_rejection_recurrence import build_search_rejection_recurrence
@@ -2456,6 +2457,10 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     (
         'location_maintenance_decision_review', '校园地点维护决策回看',
         build_location_maintenance_decision_review,
+    ),
+    (
+        'task_run_ledger_integrity', '定时任务台账完整性审计',
+        build_task_run_ledger_integrity,
     ),
 )
 
@@ -8497,6 +8502,94 @@ def operations_dashboard_export(request):
     writer.writerow([u'此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。'])
     writer.writerow([])
     writer.writerow(['此处只报告，不拆分命令、不改调度配置、不把统计写回台账。'])
+
+    writer.writerow([])
+    writer.writerow(['定时任务台账完整性审计'])
+    ledger_integrity = dashboard['task_run_ledger_integrity']
+    writer.writerow([
+        '周期起始', ledger_integrity['window_start'].strftime('%Y-%m-%d'),
+        '周期结束', ledger_integrity['window_end'].strftime('%Y-%m-%d %H:%M'),
+        '周期天数', ledger_integrity['days'],
+        '未来时钟余量（分钟）', ledger_integrity['future_clock_tolerance_minutes'],
+        '严重耗时不一致下限（毫秒）', ledger_integrity['duration_mismatch_base_ms'],
+        '耗时不一致比例门槛（%）', ledger_integrity['duration_mismatch_share_percent'],
+        '问题行清单上限', ledger_integrity['issue_row_limit'],
+    ])
+    writer.writerow([])
+
+    writer.writerow(['一、台账形状'])
+    writer.writerow(['口径与门槛'])
+    summary = ledger_integrity['summary']
+    writer.writerow([
+        '台账行', summary['run_total'],
+        '成功行', summary['succeeded_total'],
+        '失败行', summary['failed_total'],
+        'dry-run 行', summary['dry_run_total'],
+    ])
+    writer.writerow([
+        '已知命令行', summary['known_command_total'],
+        '未知命令行', summary['unknown_command_total'],
+        '问题行', summary['issue_row_total'],
+        '干净行', summary['clean_row_total'],
+    ])
+    writer.writerow([
+        '问题行占比（%）', '' if summary['issue_row_share'] is None else summary['issue_row_share'],
+        '需指标的成功行', summary['metric_required_total'],
+        '指标可读行', summary['metric_readable_total'],
+        '指标可读占比（%）', '' if summary['metric_readable_share'] is None else summary['metric_readable_share'],
+        '未知指标键次数', summary['unknown_metric_key_total'],
+    ])
+    writer.writerow([])
+
+    writer.writerow(['二、问题类型'])
+    writer.writerow(['问题类型', '行数', '涉及命令数', '读法'])
+    for row in ledger_integrity['issue_type_rows']:
+        writer.writerow([
+            row['label'], row['row_count'], row['command_count'],
+            '固定问题类型，空平台也保留这一行',
+        ])
+    writer.writerow([])
+
+    writer.writerow(['三、命令形状'])
+    writer.writerow([
+        '命令', '运行次数', '问题行数', '时间问题行数',
+        '指标问题行数', '失败备注问题行数', '未知指标键次数', '命令名单',
+    ])
+    if not ledger_integrity['command_rows']:
+        writer.writerow(['窗口内没有台账行。', '', '', '', '', '', '', ''])
+    else:
+        for row in ledger_integrity['command_rows']:
+            writer.writerow([
+                row['name'], row['run_count'], row['issue_row_count'],
+                row['time_issue_row_count'], row['metric_issue_row_count'],
+                row['missing_failure_note_row_count'],
+                row['unknown_metric_key_count'],
+                '已知命令' if row['is_known'] else '未知命令，单列不判错',
+            ])
+    writer.writerow([])
+
+    writer.writerow(['四、问题行清单'])
+    writer.writerow(['台账行', '命令', '开始时间', '问题数', '问题'])
+    if not ledger_integrity['issue_rows']:
+        writer.writerow(['暂无问题行。', '', '', '', ''])
+    else:
+        for row in ledger_integrity['issue_rows']:
+            writer.writerow([
+                row['id'], row['name'], row['started_at'].strftime('%Y-%m-%d %H:%M'),
+                row['issue_count'], '、'.join(row['issue_labels']),
+            ])
+    if ledger_integrity['issue_row_hidden_total']:
+        writer.writerow([
+            '未展示问题行', ledger_integrity['issue_row_hidden_total'], '', '', '',
+        ])
+    writer.writerow([])
+
+    writer.writerow(['说明'])
+    writer.writerow(['duration_ms 来自单调时钟，started_at / finished_at 来自墙钟；只有差异超过 2000 毫秒或时间戳间隔的 10% 才算严重不一致。'])
+    writer.writerow(['指标可读率的分母只有成功且非 dry-run 的行；失败行不要求指标，dry-run 不承诺发送。'])
+    writer.writerow(['未知命令和未知指标键只单列，不计为问题行；它们提醒名单或字段清单需要扩展。'])
+    writer.writerow(['本模块不输出原始失败备注，不修复台账、不回填指标、不改调度配置。'])
+    writer.writerow([])
 
     writer.writerow([])
     writer.writerow(['需求雷达命中率的跨周期趋势'])
