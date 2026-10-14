@@ -102,6 +102,7 @@ from .lost_found_matching import expire_lost_found_posts, find_lost_found_matche
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
+from .recommendation_impression_quality import build_recommendation_impression_quality
 from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
@@ -2455,6 +2456,9 @@ def operations_dashboard(request):
     dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
     dashboard['dispute_evidence_shape'] = build_dispute_evidence_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
+    dashboard['recommendation_impression_quality'] = (
+        build_recommendation_impression_quality(days=days)
+    )
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -2648,6 +2652,9 @@ def operations_dashboard_export(request):
     dashboard['borrow_days_shape'] = build_borrow_days_shape(days=days)
     dashboard['dispute_evidence_shape'] = build_dispute_evidence_shape(days=days)
     dashboard['recommendation_quality'] = build_recommendation_quality(days=days)
+    dashboard['recommendation_impression_quality'] = (
+        build_recommendation_impression_quality(days=days)
+    )
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -8924,6 +8931,53 @@ def operations_dashboard_export(request):
         '曝光表自上线起才开始积累。'
         '本模块只报告，不调 +10、不调 0.8、不调 +8、不改任何一句理由文案。',
     ])
+    impression_quality = dashboard['recommendation_impression_quality']
+    writer.writerow([])
+    writer.writerow(['推荐曝光日志质量'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', impression_quality['period_days'],
+        '当前展示位置上限', impression_quality['metrics']['home_position_limit'],
+        '理由样本门槛（次被看见）', impression_quality['metrics']['min_reason_impressions'],
+    ])
+    writer.writerow(['字段与结构'])
+    writer.writerow(['检查对象', '行数', '状态', '怎么读'])
+    for row in impression_quality['field_rows']:
+        writer.writerow([row['label'], row['count'], row['status'], row['note']])
+    writer.writerow([])
+    writer.writerow(['理由分布'])
+    writer.writerow(['理由', '曝光', '占比（%）', '样本'])
+    for row in impression_quality['reason_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            row['share'] if row['share'] is not None else '—',
+            '够' if not row['is_small_sample']
+            else f"不足 {impression_quality['metrics']['min_reason_impressions']} 次",
+        ])
+    writer.writerow([])
+    writer.writerow(['重复与覆盖'])
+    writer.writerow(['指标', '数值', '说明'])
+    shape = impression_quality['summary']
+    writer.writerow(['周期内落库曝光', shape['total_impressions'], '主统计只读到当前时刻'])
+    writer.writerow(['匿名或已注销访客', shape['anonymous_impressions'], 'user 为空是合法形状，不是缺失'])
+    writer.writerow(['登录用户曝光', shape['logged_in_impressions'], '匿名行不进入重复分母'])
+    writer.writerow(['重复的用户商品对', shape['repeat_pairs'], '同一登录用户看见同一商品不止一次'])
+    writer.writerow(['第一次之后多出的重复行', shape['repeat_rows'], '重复不是错误，不折叠分母'])
+    writer.writerow([
+        '登录用户重复行占比（%）',
+        shape['repeat_share'] if shape['repeat_share'] is not None else '—',
+        '分母是登录用户曝光',
+    ])
+    writer.writerow(['覆盖自然日', shape['calendar_days'], '从周期开始到当前时刻'])
+    writer.writerow(['有写入自然日', shape['active_days'], '至少一行曝光落库'])
+    writer.writerow(['无写入自然日', shape['zero_days'], '低流量或写入失败都会出现，当前模型不可区分'])
+    writer.writerow([
+        '最长观测间隙（小时）',
+        shape['longest_gap_hours'] if shape['longest_gap_hours'] is not None else '—',
+        '只描述已落库行的间隔，不判写入失败',
+    ])
+    writer.writerow(['说明'])
+    writer.writerow([impression_quality['note']])
     dismissal = dashboard['opportunity_dismissal_quality']
     writer.writerow([])
     writer.writerow(['机会流上被按「不再显示」的机会'])

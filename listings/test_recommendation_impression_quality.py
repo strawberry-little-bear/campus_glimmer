@@ -3,8 +3,12 @@
 
 from datetime import timedelta
 
+import csv
+import io
+
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .models import Category, Item, RecommendationImpression
@@ -145,3 +149,46 @@ class RecommendationImpressionQualityTests(TestCase):
         self.assertNotIn(self.item.title, rendered)
         self.assertNotIn('legacy-reason', rendered)
         self.assertIn('未收录理由', rendered)
+
+
+class RecommendationImpressionQualityDashboardTests(TestCase):
+    def test_dashboard_and_csv_have_the_same_shape_without_private_fields(self):
+        staff = User.objects.create_user(
+            username='impression-quality-staff',
+            password='safe-password-123', is_staff=True,
+        )
+        seller = User.objects.create_user(username='impression-quality-export-seller')
+        buyer = User.objects.create_user(username='impression-quality-export-buyer')
+        category = Category.objects.create(name='曝光质量导出分类')
+        item = Item.objects.create(
+            title='导出不应出现的商品标题', description='用于导出测试。',
+            price='41.00', category=category, condition='良好',
+            seller=seller, status='available',
+        )
+        now = timezone.now()
+        row = RecommendationImpression.objects.create(
+            user=buyer, item=item, reason_key='fresh', score=0, position=1,
+        )
+        RecommendationImpression.objects.filter(pk=row.pk).update(
+            created_at=now - timedelta(days=1),
+        )
+        self.client.force_login(staff)
+
+        page = self.client.get(reverse('operations_dashboard'), {'days': 30})
+        export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(export.status_code, 200)
+        html = page.content.decode('utf-8')
+        self.assertIn('推荐曝光日志质量', html)
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        titles = [row[0] if row else '' for row in rows]
+        self.assertIn('推荐曝光日志质量', titles)
+        section = rows[titles.index('推荐曝光日志质量'):]
+        rendered = '\n'.join(','.join(row) for row in section)
+        self.assertIn('字段与结构', rendered)
+        self.assertIn('理由分布', rendered)
+        self.assertIn('重复与覆盖', rendered)
+        self.assertNotIn(buyer.username, rendered)
+        self.assertNotIn(seller.username, rendered)
+        self.assertNotIn(item.title, rendered)
