@@ -966,6 +966,31 @@
 
 </details>
 
+<a id="moderation-g4"></a>
+
+<details>
+<summary>误判放行的业务闭环（7 条，含缩进子项）</summary>
+
+- **“误判放行”不再只是一个队列状态**：运营判定误判后，系统会把被拦截的内容恢复到原本要进入的渠道。
+  - 商品留言补建 `Comment`，私信补建 `PrivateMessage`，再写入 `ModerationEvent.released_at` 作为真实恢复时间。
+  - 恢复动作与复核结论在同一个数据库事务中提交，避免“记录已处理但内容没回来”的中间态。
+
+- **拦截时就保存恢复材料**：留言保存作者与商品，私信额外保存接收人 `receiver`。
+  - 审核内容完整入库，不在拦截时截断，放行后的内容与用户提交的内容保持一致。
+
+- **作者通知与接收方通知分开**：作者收到审核结果；卖家或私信接收人按原有业务路径收到新留言 / 新私信提醒。
+
+- **历史数据不猜测、不回填**：缺少作者、商品或接收人的旧记录可以保留人工结论，但 `released_at` 保持为空，通知会明确说明未能自动放行。
+
+- **审核队列把恢复结果摊开**：可筛选“误判已恢复”“误判未恢复”“待复核缺材料”。
+  - 汇总卡同步显示三组数量，后台列表也能直接看到接收人与恢复时间。
+
+- **确认违规不发布内容**：重复复核同一条记录也不会重复发布，避免闭环修复带来二次曝光。
+
+- **规则判断保持独立**：本闭环不改变关键词规则、权重、风险分档，也不自动复核或自动放行。
+
+</details>
+
 <a id="moderation-g2"></a>
 
 <details>
@@ -3137,7 +3162,7 @@ python manage.py sync_academic_calendar --term-slug autumn-2026
 ```text
 campus_glimmer/
 ├── accounts/                  # 注册、登录、个人资料和账户测试
-├── chat_messages/             # 商品留言、私信、内容审核、私信响应时效、响应时效跨周期对比和会话测试
+├── chat_messages/             # 商品留言、私信、内容审核、误判放行闭环、私信响应时效、响应时效跨周期对比和会话测试
 ├── campus_glimmer/            # Django 项目配置、根路由和健康检查
 ├── listings/                  # 商品、订单、搜索、通知、运营和治理业务（见下面的模块表）
 │   ├── migrations/            # 数据库迁移
@@ -3489,10 +3514,25 @@ campus_glimmer/
 - **`test_transaction_safety.py`**：交易安全卡与可解释风险提示
 </details>
 
+### chat_messages/ 的关键测试
+
+<details>
+<summary>消息、私信与审核测试（4 组）</summary>
+
+- **`tests.py`**：留言、私信、会话、审核队列和通知路径的基础流程测试。
+
+- **`test_moderation_release.py`**：误判放行后内容真的回到原渠道、接收方收到通知、历史缺材料不伪称放行、重复复核不重复发布。
+
+- **`test_chat_response.py`**：私信第一次被打开的响应时效、静默样本和看板口径测试。
+
+- **`test_chat_response_trend.py`**：私信响应时效的跨周期对比、样本门槛与方向判断测试。
+
+</details>
+
 ### docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（48 篇，按字典序）</summary>
+<summary>设计文档清单（49 篇，按字典序）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -3549,6 +3589,8 @@ campus_glimmer/
 - **`meeting-incident-quality-design.md`**：预约异常的驳回率按类型拆，提交方向取不到身份归未知
 
 - **`moderation-notice-preference-design.md`**：审核结果通知的触达四种成因不合成，免打扰只压徽章
+
+- **`moderation-release-closure-design.md`**：误判放行必须真正回到原渠道；拦截时保存材料，历史缺材料不伪装成已放行
 
 - **`moderation-rule-quality-design.md`**：四条审核规则的误判率、漏判率与复核时效
 
@@ -3620,7 +3662,7 @@ campus_glimmer/
 | 机会流曝光 | `OpportunityImpression`、`OpportunityDismissal` | 一次机会流渲染落一行的「被看见」，和一次「不再显示」落的「不看了」；两者口径对偶，忽略率的分母来自前者 |
 | 通知 | `Notification`、`NotificationPreference` | 站内提醒、未读状态、阅读时间、通知偏好、求购关联、到期提醒和幂等键；通知类型包含商品生命周期提醒，可单独关闭。偏好那 25 个布尔开关第一次被逐个读到：按「关掉它有没有交易后果」分四组报形状，不报效果——被开关挡掉的通知连一行都不建 |
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
-| 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、内容审核、交易争议、证据和复核记录 |
+| 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
 | 需求跟进闭环 | `DemandOpportunityTask.created_at`、`DemandOpportunityTask.radar_key`、`DemandOpportunityTask.available_supply`、`SearchQuery.result_count` | 任务创建时间是唯一稳定的分界线（雷达行是滚动聚合，内容每次刷新都变），创建时的供给数用于判断「动作是否真的发生」，搜索结果数用于判断「需求是否被满足」 |
 | 同义词候选 | `SearchQuery.user_id`、`SearchQuery.query`、`SearchQuery.result_count`、`SearchQuery.created_at`、`SearchSynonym.keyword` / `synonym` / `is_active` | 同一次会话内相邻两次搜索的改口证据；已启用同义词的两个方向都参与去重，停用同义词不屏蔽候选 |
@@ -4320,7 +4362,8 @@ CI 的目标不是替代本地验证，而是确保每个独立迭代至少满�
 
 <summary>展开这 4 个方向</summary>
 
-- **社区治理**：加入敏感词分级、举报优先级、审核工作台、申诉和处理结果反馈。
+- **社区治理**：内容审核的误判放行闭环已经补上，人工判定误判后内容会按原渠道恢复，历史缺材料也会显式暴露。
+  - 后续继续做敏感词分级、举报优先级、申诉和处理结果反馈，让不同风险的内容有不同的处理节奏。
 
 - **通知体验**：继续完善通知分组、批量操作、摘要投递和更及时的消息同步。
   - 当前关注搜索已支持即时、每日、每周三种节奏，汇总提醒按周期去重并限制单条列出条数，也支持临时静默和切回即时后补投。
