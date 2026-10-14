@@ -41,7 +41,7 @@ def scan_content(content: str) -> list[str]:
     return analyze_content(content)['matched_terms']
 
 
-def moderate_submission(content: str, *, author, channel: str, item=None):
+def moderate_submission(content: str, *, author, channel: str, item=None, receiver=None):
     """Create an audit event and return it when content should be blocked."""
     analysis = analyze_content(content)
     if not analysis['matched_terms']:
@@ -50,7 +50,9 @@ def moderate_submission(content: str, *, author, channel: str, item=None):
         channel=channel,
         author=author,
         item=item,
-        content=(content or '').strip()[:4000],
+        receiver=receiver if channel == 'private_message' else None,
+        # 放行时要按原文恢复，不能在这里先截断；输入长度由表单限制。
+        content=(content or '').strip(),
         matched_terms='、'.join(analysis['matched_terms']),
         risk_score=analysis['risk_score'],
         risk_level=analysis['risk_level'],

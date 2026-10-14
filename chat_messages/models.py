@@ -38,6 +38,11 @@ class ModerationEvent(models.Model):
         Item, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='moderation_events', verbose_name='关联商品',
     )
+    receiver = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='received_moderation_events', verbose_name='私信接收人',
+        help_text='误判放行时要恢复发送的接收人；历史记录没有这一列的值，不能自动补发。',
+    )
     content = models.TextField('被拦截内容')
     matched_terms = models.CharField('命中规则', max_length=255)
     risk_score = models.PositiveSmallIntegerField('风险分数', default=0)
@@ -50,6 +55,10 @@ class ModerationEvent(models.Model):
         related_name='reviewed_moderation_events', verbose_name='复核人',
     )
     reviewed_at = models.DateTimeField('复核时间', null=True, blank=True)
+    released_at = models.DateTimeField(
+        '误判放行时间', null=True, blank=True,
+        help_text='内容真的恢复到原渠道的时刻；历史记录缺少恢复材料时保持为空。',
+    )
     created_at = models.DateTimeField('拦截时间', auto_now_add=True)
 
     class Meta:

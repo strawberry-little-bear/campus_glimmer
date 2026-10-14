@@ -266,7 +266,7 @@ def send_message(request, receiver_id, item_id=None):
         if form.is_valid():
             moderation_event = moderate_submission(
                 form.cleaned_data['content'], author=request.user,
-                channel='private_message', item=item,
+                channel='private_message', item=item, receiver=receiver,
             )
             if moderation_event:
                 form.add_error('content', '消息包含需要复核的内容，暂未发送。请修改后再试。')
@@ -319,7 +319,7 @@ def conversation(request, user_id):
         if form.is_valid():
             moderation_event = moderate_submission(
                 form.cleaned_data['content'], author=request.user,
-                channel='private_message',
+                channel='private_message', receiver=other_user,
             )
             if moderation_event:
                 form.add_error('content', '消息包含需要复核的内容，暂未发送。请修改后再试。')
@@ -404,6 +404,48 @@ def moderation_queue(request):
     })
 
 
+def _release_moderated_content(event, *, released_at):
+    """把人工判定误判的内容恢复到它原本要进入的渠道。
+
+    这里的创建动作发生在 review_moderation_event 的同一个事务里：审核记录能提交，
+    内容就必须回来；缺历史材料则保留 dismissed 并返回 False，不伪装成已放行。
+    """
+    if event.channel == 'comment' and event.author_id and event.item_id:
+        Comment.objects.create(
+            item=event.item,
+            author=event.author,
+            content=event.content,
+        )
+        if event.item.seller_id and event.item.seller_id != event.author_id:
+            create_notification(
+                event.item.seller, actor=event.author, kind='comment_received',
+                title='商品收到新的留言',
+                message=f'{event.author.username}评论了你的商品“{event.item.title}”。',
+                item=event.item,
+                target_url=reverse('item_detail', args=[event.item.id]),
+                dedupe_key=f'moderation-release:comment:{event.id}',
+            )
+    elif event.channel == 'private_message' and event.author_id and event.receiver_id:
+        PrivateMessage.objects.create(
+            sender=event.author,
+            receiver=event.receiver,
+            item=event.item,
+            content=event.content,
+        )
+        create_notification(
+            event.receiver, actor=event.author, kind='message_received',
+            title='收到新的私信',
+            message=f'{event.author.username}给你发来了一条新消息。',
+            item=event.item,
+            target_url=reverse('conversation', args=[event.author.id]),
+            dedupe_key=f'moderation-release:message:{event.id}',
+        )
+    else:
+        return False
+    event.released_at = released_at
+    return True
+
+
 @login_required
 def review_moderation_event(request, event_id):
     if not request.user.is_staff:
@@ -418,7 +460,7 @@ def review_moderation_event(request, event_id):
         next_url = ''
     with transaction.atomic():
         event = get_object_or_404(
-            ModerationEvent.objects.select_for_update().select_related('author', 'item'),
+            ModerationEvent.objects.select_for_update().select_related('author', 'item', 'receiver'),
             id=event_id,
         )
         decision = request.POST.get('decision', '').strip()
@@ -427,22 +469,38 @@ def review_moderation_event(request, event_id):
         elif decision not in {'confirmed', 'dismissed'}:
             django_messages.error(request, '审核结果无效，请重新选择。')
         else:
+            now = timezone.now()
             event.status = decision
             event.reviewed_by = request.user
-            event.reviewed_at = timezone.now()
-            event.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+            event.reviewed_at = now
+            released = False
+            if decision == 'dismissed':
+                released = _release_moderated_content(event, released_at=now)
+            event.save(update_fields=[
+                'status', 'reviewed_by', 'reviewed_at', 'released_at',
+            ])
             if event.author:
-                title = '内容审核已确认违规' if decision == 'confirmed' else '内容审核完成，内容已放行'
-                message = (
-                    '你提交的一条留言或私信因命中社区安全规则，已确认违规。'
-                    if decision == 'confirmed' else
-                    '你提交的一条留言或私信经复核后未发现违规，已记录为误判放行。'
-                )
+                title = '内容审核已确认违规' if decision == 'confirmed' else '内容审核完成'
+                if decision == 'confirmed':
+                    message = '你提交的一条留言或私信因命中社区安全规则，已确认违规。'
+                elif released:
+                    message = '你提交的一条留言或私信经复核后未发现违规，内容已按原渠道恢复发布。'
+                else:
+                    message = (
+                        '你提交的内容经复核后未发现违规；这条历史记录缺少恢复材料，'
+                        '系统未能自动放行，请联系管理员处理。'
+                    )
                 create_notification(
                     event.author, actor=request.user, kind='moderation_update',
                     title=title, message=message,
                     item=event.item, target_url=reverse('notification_list'),
                 )
-            django_messages.success(request, '审核结果已保存，并已通知内容作者。')
+            if decision == 'dismissed' and not released:
+                django_messages.warning(
+                    request,
+                    '审核结论已保存，但这条历史记录缺少作者、商品或私信接收人，内容未能自动放行。',
+                )
+            else:
+                django_messages.success(request, '审核结果已保存，并已通知内容作者。')
 
     return redirect(next_url or 'moderation_queue')
