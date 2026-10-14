@@ -2541,6 +2541,71 @@
     {% else %}<div class="empty-inline mt-3">周期内还没有发送过生命周期提醒，调度任务执行后这里会开始统计触达与行动情况。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这里只统计「提醒之后发生」的动作，不区分是否由提醒引起：卖家完全可能在提醒前就已决定整理商品。刷新看主动刷新时间，成交看订单走到终态；编辑商品不算动作，因为任何保存都会改写更新时间。「当前仍未真正收到」用当前偏好与免打扰时段重算，不是发送当天的历史快照。</div>
 </section>
+<section class="content-card ops-panel mb-4 lifecycle-reminder-action-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Action trend</span><h2>生命周期提醒的跨周期行动率</h2></div>
+        <span class="ops-panel-hint">周期 {{ lifecycle_reminder_action_trend.days }} 天·与上一个等长周期对比</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>本周期被提醒商品</span><strong>{% if lifecycle_reminder_action_trend.current.reminded_items %}{{ lifecycle_reminder_action_trend.current.reminded_items }}{% else %}—{% endif %}</strong><small>上一周期 {% if lifecycle_reminder_action_trend.previous.reminded_items %}{{ lifecycle_reminder_action_trend.previous.reminded_items }}{% else %}—{% endif %}</small></div>
+        <div{% if lifecycle_reminder_action_trend.current.action_rate == None %} class="supply-lifecycle-summary-warning"{% endif %}><span>本周期行动率</span><strong>{% if lifecycle_reminder_action_trend.current.action_rate %}{{ lifecycle_reminder_action_trend.current.action_rate|floatformat }}%{% else %}—{% endif %}</strong><small>上一周期 {% if lifecycle_reminder_action_trend.previous.action_rate %}{{ lifecycle_reminder_action_trend.previous.action_rate|floatformat }}%{% else %}—{% endif %}</small></div>
+        <div><span>本周期通知数</span><strong>{% if lifecycle_reminder_action_trend.current.notices %}{{ lifecycle_reminder_action_trend.current.notices }}{% else %}—{% endif %}</strong><small>打开率 {% if lifecycle_reminder_action_trend.current.read_rate %}{{ lifecycle_reminder_action_trend.current.read_rate|floatformat }}%{% else %}—{% endif %}</small></div>
+        <div{% if not lifecycle_reminder_action_trend.has_sample %} class="supply-lifecycle-summary-warning"{% endif %}><span>样本门槛</span><strong>{{ lifecycle_reminder_action_trend.min_period_items }}</strong><small>{% if lifecycle_reminder_action_trend.has_sample %}两个周期都已达到{% else %}不足，只报数不判方向{% endif %}</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>整体指标的跨周期对比</strong><span>超过 {{ lifecycle_reminder_action_trend.trend_delta_points }} 个百分点才算上升或下降</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-action-trend-metric-table">
+                <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>差值</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in lifecycle_reminder_action_trend.metric_rows %}
+                    <tr>
+                        <td data-label="指标">{{ row.label }}</td>
+                        <td data-label="本周期">{% if row.current != None %}{{ row.current|floatformat:'-1' }}{% else %}—{% endif %}</td>
+                        <td data-label="上一周期">{% if row.previous != None %}{{ row.previous|floatformat:'-1' }}{% else %}—{% endif %}</td>
+                        <td data-label="差值">{{ row.delta_display }}</td>
+                        <td data-label="方向">{% if row.has_direction %}<span class="task-run-trend-direction" data-tone="{{ row.tone }}">{{ row.direction_label }}</span>{% else %}<span class="text-muted">不判方向</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if lifecycle_reminder_action_trend.kind_rows %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>按提醒类型看的行动率变化</strong><span>两类同时触达的桶只报数字，无法归因给任何一类</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-action-trend-kind-table">
+                <thead><tr><th>提醒类型</th><th>本周期商品</th><th>本周期行动率</th><th>上一周期行动率</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in lifecycle_reminder_action_trend.kind_rows %}
+                    <tr>
+                        <td data-label="提醒类型">{{ row.label }}</td>
+                        <td data-label="本周期商品">{{ row.current_items }}</td>
+                        <td data-label="本周期行动率">{% if row.current_action_rate != None %}{{ row.current_action_rate|floatformat:'-1' }}%{% else %}—{% endif %}</td>
+                        <td data-label="上一周期行动率">{% if row.previous_action_rate != None %}{{ row.previous_action_rate|floatformat:'-1' }}%{% else %}—{% endif %}</td>
+                        <td data-label="方向">{% if row.has_direction %}<span class="task-run-trend-direction" data-tone="{{ row.tone }}">{{ row.direction_label }}</span>{% else %}<span class="text-muted">不判方向</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>怎么读这张表</strong><span>只报告，不调频也不改文案</span></div>
+        <ul>
+            <li><i class="bi bi-info-circle me-1"></i>{{ lifecycle_reminder_action_trend.summary }}</li>
+            <li><i class="bi bi-slash-circle me-1"></i>只有行动率带方向：打开通知和动手整理是两件事，打开率涨了只说明文案被看见，不说明提醒更有用。被提醒商品数也不判方向，发得更多只代表这个周期更忙。</li>
+            <li><i class="bi bi-clock-history me-1"></i>本周期还在走，最后一天是残缺的；上一周期是完整的。读「这个月比上个月差」之前，先确认这个月已经过完。</li>
+            <li><i class="bi bi-arrow-left-right me-1"></i>一个周期里没有任何提醒时，行动率不存在而不是零——上一周期有提醒而本期没有，报的是「本期无提醒」，不是「行动率降到 0」。</li>
+            <li><i class="bi bi-slash-circle me-1"></i>这里仍然只报相关性：比例说的是「提醒之后有动作的比例变了」，不是「提醒变得更有说服力了」。不改发送频率、不改阈值、不自动调频。</li>
+        </ul>
+    </div>
+</section>
 <section class="content-card ops-panel mb-4 task-run-health-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Schedule health</span><h2>定时任务运行台账与健康统计</h2></div>

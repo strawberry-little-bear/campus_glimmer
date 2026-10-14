@@ -7317,6 +7317,66 @@ def operations_dashboard_export(request):
     ])
 
     trend_runs = dashboard['task_run_trend']
+    action_trend = dashboard['lifecycle_reminder_action_trend']
+    writer.writerow([])
+    writer.writerow(['生命周期提醒的跨周期行动率'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '当前周期起始', action_trend['current_period_start'].strftime('%Y-%m-%d'),
+        '上一周期起始', action_trend['previous_period_start'].strftime('%Y-%m-%d'),
+        '周期天数', action_trend['days'],
+        '最小被提醒商品数', action_trend['min_period_items'],
+        '方向阈值（百分点）', action_trend['trend_delta_points'],
+        '样本是否足够', '是' if action_trend['has_sample'] else '否',
+    ])
+    writer.writerow([])
+    writer.writerow(['指标', '本周期', '上一周期', '差值', '方向'])
+    for row in action_trend['metric_rows']:
+        writer.writerow([
+            row['label'],
+            row['current'] if row['current'] is not None else '—',
+            row['previous'] if row['previous'] is not None else '—',
+            row['delta_display'],
+            row['direction_label'] if row['has_direction'] else '不判方向',
+        ])
+    writer.writerow([])
+    writer.writerow(['提醒类型', '本周期商品', '本周期行动率（%）', '上一周期行动率（%）', '方向'])
+    if not action_trend['kind_rows']:
+        writer.writerow(['两个周期内都没有可归类的提醒。'])
+    else:
+        for row in action_trend['kind_rows']:
+            writer.writerow([
+                row['label'], row['current_items'],
+                row['current_action_rate'] if row['current_action_rate'] is not None else '—',
+                row['previous_action_rate'] if row['previous_action_rate'] is not None else '—',
+                row['direction_label'] if row['has_direction'] else '不判方向',
+            ])
+    writer.writerow([])
+    writer.writerow(['运营建议'])
+    writer.writerow([action_trend['summary']])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([
+        '只有行动率带方向。打开通知和动手整理是两件事：打开率涨了只说明文案被看见，' +
+        '不说明提醒更有用。被提醒商品数也不判方向，发得更多只代表这个周期更忙。',
+    ])
+    writer.writerow([
+        '两类同时触达的商品单独成桶且只报数字：一个既收到待处理提醒又收到价格证据的动作，' +
+        '无法归因给任何一类，给它判方向等于把噪声读成信号。',
+    ])
+    writer.writerow([
+        '一个周期里没有任何提醒时，行动率不存在而不是零。上一周期有提醒而本期没有，' +
+        '报的是「本期无提醒」，不是「行动率降到 0」。',
+    ])
+    writer.writerow([
+        '本周期还在走，最后一天是残缺的；上一周期是完整的。两个窗口都按本地零点切分，' +
+        '与站内其他跨周期面板同一套边界。',
+    ])
+    writer.writerow([
+        '此处只报告，不改发送频率、不改阈值、不自动调频、不按行动率给卖家排序。' +
+        '比例说的是「提醒之后有动作的比例变了」，不是「提醒变得更有说服力了」。',
+    ])
+
     writer.writerow([])
     writer.writerow(['定时任务健康度的跨周期趋势'])
     writer.writerow(['口径与门槛'])
