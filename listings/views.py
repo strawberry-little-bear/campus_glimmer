@@ -58,6 +58,7 @@ from .first_viewed import (
     NOISE_POINTS as FIRST_VIEWED_NOISE_POINTS, build_first_viewed,
 )
 from .saved_search_latency import build_saved_search_latency
+from .saved_search_limit_shape import build_saved_search_limit_shape
 from .saved_search_quiet_window import build_saved_search_quiet_window
 from .lost_found_matched_outcome import build_lost_found_matched_outcome
 from .campus_verification_friction import build_campus_verification_friction
@@ -2350,6 +2351,7 @@ def operations_dashboard(request):
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
+    dashboard['saved_search_limit_shape'] = build_saved_search_limit_shape(days=days)
     dashboard['lost_found_matched_outcome'] = build_lost_found_matched_outcome(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
@@ -2531,6 +2533,7 @@ def operations_dashboard_export(request):
     dashboard['first_viewed'] = build_first_viewed(days=days)
     dashboard['saved_search_latency'] = build_saved_search_latency(days=days)
     dashboard['saved_search_quiet_window'] = build_saved_search_quiet_window(days=days)
+    dashboard['saved_search_limit_shape'] = build_saved_search_limit_shape(days=days)
     dashboard['lost_found_matched_outcome'] = build_lost_found_matched_outcome(days=days)
     dashboard['campus_verification_friction'] = build_campus_verification_friction(days=days)
     dashboard['gift_application_queue'] = build_gift_application_queue(days=days)
@@ -5209,6 +5212,96 @@ def operations_dashboard_export(request):
         '运营会把「用户主动暂停」读成「我们的任务又慢了」',
         '两套阈值不合成一个平均数',
     ])
+
+    writer.writerow([])
+    limit_shape = dashboard['saved_search_limit_shape']
+    writer.writerow(['单次最多提醒条数：用户自己配的截断', '数值', '说明'])
+    writer.writerow([
+        '口径与门槛', limit_shape['summary'],
+        '只读 max_matches_per_notice 与缓冲区命中，不改写任何一条关注、任何一条命中、'
+        '任何一件商品，也不把统计写回任何记录',
+        f"一档关注至少 {limit_shape['min_limit_searches']} 条才给方向，"
+        f"缓冲命中至少 {limit_shape['min_buffered_matches']} 条才给方向，"
+        f"交叉格子至少 {limit_shape['min_cadence_cell']} 条才给方向",
+    ])
+    for row in limit_shape['limit_rows']:
+        writer.writerow([
+            '—',
+            f"{row.label}{'（默认值）' if row.is_default else ''}",
+            row.count,
+            '—' if row.share is None else row.share,
+            '占比的分母是全部关注，不是这一档自己',
+        ])
+    out_of_range = limit_shape['out_of_range']
+    writer.writerow([
+        '库里存的不是 1 到 9', out_of_range['stored_count'], '',
+        '—' if out_of_range['share'] is None else out_of_range['share'],
+        f"实际按 {out_of_range['effective_limit']} 条生效；"
+        f"配置值和实际生效值不是一回事，两档分开数不合并",
+    ])
+    truncation = limit_shape['truncation']
+    writer.writerow([
+        '缓冲区里的命中', truncation['buffered_count'], '',
+        '—', '只取发送侧扫过的那 20 条，第 21 条发送时压根不会被看到',
+    ])
+    writer.writerow([
+        '正被自己配的条数挡住', truncation['hidden_count'], '',
+        '—' if truncation['hidden_share'] is None else truncation['hidden_share'],
+        '占比的分母是全部缓冲命中，不是被挡掉的那一批',
+    ])
+    writer.writerow([
+        '正在被截断的关注', truncation['truncated_search_count'], '',
+        '—' if truncation['truncated_share'] is None else truncation['truncated_share'],
+        '占比的分母是全部关注；平均被挡掉 '
+        f"{truncation['mean_hidden_label']}，最多 {truncation['max_hidden_count']} 条",
+    ])
+
+    writer.writerow([
+        '说明', '', '', '',
+        '只报此刻缓冲区里正在被截断的规模，不报历史规模：发送完成后 notified_at 一写，'
+        '那批命中是展示的还是截断的就再也分不出来了，没有任何字段留下痕迹。'
+        '把当前快照当长期趋势读，是本模块最容易被误用的地方',
+        '不报条数改过几次、不报修改时刻：updated_at 被同一个表单里的 notify_frequency '
+        '和 quiet_until 共用，改频率、填静默、清空静默都会刷新它，反推等于编数据',
+        '空字符串提交是「不改」而不是「改成默认值」，所以默认值 3 是「主动配的」和'
+        '「从没配过的」两种关注的会合点，不是「从没配过」的精确计数',
+        '条数与节奏只做形状描述，不给因果、不建议该配多少条：选周度汇总又配 1 条，'
+        '可能是只想要一个「有动静了就告诉我一声」的信号，平台没有能力区分这两种动机',
+        '不自动调任何人的条数、不报取消率、不把「配得小」读成「用户不满」',
+        '不按用户排名，不报任何用户名、不列任何商品名；关注名称可以报，'
+        '它是用户给自己条件起的名字，不是身份',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['条数 × 节奏交叉', '节奏', '关注数', '中位条数', '平均条数', '正被截断的关注', '占比（%）'])
+    for row in limit_shape['cadence_rows']:
+        writer.writerow([
+            '—', row['label'], row['search_count'],
+            '—' if row['median_limit'] is None else row['median_limit'],
+            row['mean_limit_label'],
+            row['truncated_count'],
+            '—' if row['truncated_share'] is None else row['truncated_share'],
+        ])
+    writer.writerow([
+        '说明', '', '', '', '',
+        '中位条数按实际生效的值算，不按库里存的配置值——存 0 的关注生效的是 3',
+        '这一节只做形状描述，不给因果',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['正在被截断的关注', '关注条件', '节奏', '配了几条', '缓冲命中', '被挡掉'])
+    for row in limit_shape['truncated_rows']:
+        writer.writerow([
+            '—', row.saved_search_name, row.cadence_label,
+            row.configured, row.buffered_count, row.hidden_count,
+        ])
+    if limit_shape['truncated_row_total'] > limit_shape['truncated_row_limit']:
+        writer.writerow([
+            '—',
+            f"清单最多列 {limit_shape['truncated_row_limit']} 条，"
+            f"当前共 {limit_shape['truncated_row_total']} 条，完整的在数据库里",
+            '', '', '', '',
+        ])
 
     writer.writerow([])
     matched = dashboard['lost_found_matched_outcome']

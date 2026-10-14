@@ -4168,6 +4168,102 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 saved-search-limit-shape-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Saved search limit shape</span><h2>用户自己配的「一条通知里列几件商品」</h2></div>
+        <span class="ops-panel-hint">配了几条、被自己配的数字挡住多少，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-ui-checks me-1"></i><code>max_matches_per_notice</code> 是站内唯一一个由用户亲手决定「一条通知里列几条命中商品」的字段，1 到 9，默认 3。日度和周度汇总把一个周期的命中并成一条通知，条数列得太多会刷屏，列得太少又会漏——这个字段就是用户在这个权衡里给自己选的位置。写入路径只有 <code>update_saved_search_cadence</code> 里 <code>1 &lt;= limit &lt;= 9</code> 的校验，读取路径只有 <code>saved_search_digest._clamp_limit</code>。<strong>十五处引用，全是写入、校验和展示，没有一处统计过它的形状。</strong>而 <code>hidden</code>（<code>len(matches) - len(shown)</code>）是这十五处里最该被看见的一个量：一个把条数配成 3 的用户，每周都在收到「另有 7 条未展示」——这是他知道自己配小了，还是根本没意识到这个数字可以调？</p>
+    {% if not saved_search_limit_shape.has_data %}
+    <div class="empty-inline">{{ saved_search_limit_shape.summary }}</div>
+    {% endif %}
+    {% if saved_search_limit_shape.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>关注搜索总数</span><strong>{{ saved_search_limit_shape.search_count }}</strong><small>不按统计周期过滤</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>停在默认的 3 条</span><strong>{% for row in saved_search_limit_shape.limit_rows %}{% if row.is_default %}{{ row.count }}{% endif %}{% endfor %}</strong><small>{% for row in saved_search_limit_shape.limit_rows %}{% if row.is_default %}占 {{ row.share }}%{% endif %}{% endfor %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>正被自己配的条数挡住</span><strong>{{ saved_search_limit_shape.truncation.hidden_count }}</strong><small>缓冲区共 {{ saved_search_limit_shape.truncation.buffered_count }} 条命中</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>平均被挡掉</span><strong>{{ saved_search_limit_shape.truncation.mean_hidden_label }}</strong><small>最多 {{ saved_search_limit_shape.truncation.max_hidden_count }} 条</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>1 到 9 九档，用户把条数配在了哪里</h3>
+        <table class="ops-table">
+            <thead><tr><th>单次最多提醒条数</th><th>关注数</th><th>占比（%）</th><th>说明</th></tr></thead>
+            <tbody>
+                {% for row in saved_search_limit_shape.limit_rows %}
+                <tr{% if row.is_default %} class="ops-row-emphasis"{% endif %}>
+                    <td>{{ row.label }}{% if row.is_default %} <span class="badge text-bg-secondary">默认值</span>{% endif %}</td>
+                    <td>{{ row.count }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                    <td class="ops-hint">{% if row.is_default %}同时是「主动配成 3」和「从没打开过节奏表单」两种关注的会合点，不是「从没配过」的精确计数{% else %}{% if row.limit <= 2 %}配得很小，一条通知只露出个位数{% elif row.limit >= 7 %}配得很大，接近发送侧的硬天花板 9 条{% endif %}{% endif %}</td>
+                </tr>
+                {% endfor %}
+                <tr>
+                    <td>库里存的不是 1 到 9</td>
+                    <td>{{ saved_search_limit_shape.out_of_range.stored_count }}</td>
+                    <td>{% if saved_search_limit_shape.out_of_range.share is None %}—{% else %}{{ saved_search_limit_shape.out_of_range.share }}{% endif %}</td>
+                    <td class="ops-hint">实际按 {{ saved_search_limit_shape.out_of_range.effective_limit }} 条生效。<strong>配置值和实际生效值不是一回事</strong>，两档分开数、不合并</td>
+                </tr>
+            </tbody>
+        </table>
+        <p class="small text-muted mt-2 mb-0">占比的分母是<strong>全部关注</strong>，不是这一档自己——拿一档除一档永远得到 100%。空档也列出来，漏掉它读者会以为这一档也是齐的。{% if saved_search_limit_shape.search_count < saved_search_limit_shape.min_limit_searches %}当前关注总数不足 {{ saved_search_limit_shape.min_limit_searches }} 条，九档分布只报数字、不给方向。{% endif %}</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>被截断的规模：这一节是本模块的核心</h3>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><div class="ops-mini-stat"><span>缓冲区里的命中</span><strong>{{ saved_search_limit_shape.truncation.buffered_count }}</strong><small>只取发送侧扫过的那 20 条</small></div></div>
+            <div class="col-md-4"><div class="ops-mini-stat"><span>正被挡在外面</span><strong>{{ saved_search_limit_shape.truncation.hidden_count }}</strong><small>{% if saved_search_limit_shape.truncation.hidden_share is None %}—{% else %}占 {{ saved_search_limit_shape.truncation.hidden_share }}%{% endif %}</small></div></div>
+            <div class="col-md-4"><div class="ops-mini-stat"><span>正在被截断的关注</span><strong>{{ saved_search_limit_shape.truncation.truncated_search_count }}</strong><small>{% if saved_search_limit_shape.truncation.truncated_share is None %}—{% else %}占 {{ saved_search_limit_shape.truncation.truncated_share }}%{% endif %}</small></div></div>
+        </div>
+        <table class="ops-table">
+            <thead><tr><th>关注条件</th><th>节奏</th><th>配了几条</th><th>缓冲命中</th><th>被挡掉</th></tr></thead>
+            <tbody>
+                {% for row in saved_search_limit_shape.truncated_rows %}
+                <tr>
+                    <td>{{ row.saved_search_name }}</td>
+                    <td>{{ row.cadence_label }}</td>
+                    <td>{{ row.configured }}</td>
+                    <td>{{ row.buffered_count }}</td>
+                    <td>{{ row.hidden_count }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前没有关注正在被自己配的条数截断。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if saved_search_limit_shape.truncated_row_total > saved_search_limit_shape.truncated_row_limit %}
+        <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ saved_search_limit_shape.truncated_row_limit }} 条，完整的在导出里。</p>
+        {% endif %}
+        {% if saved_search_limit_shape.truncation.is_small_sample %}<p class="small text-muted mt-2 mb-0">缓冲命中不足 {{ saved_search_limit_shape.min_buffered_matches }} 条，截断规模只报数字、不给方向。</p>{% endif %}
+        <p class="small text-muted mt-2 mb-0"><strong>只报此刻缓冲区里正在被截断的规模，不报历史规模。</strong>发送完成之后 <code>notified_at</code> 一写，那批命中是展示的还是截断的就再也分不出来了，没有任何字段留下痕迹。把当前快照当长期趋势读，是本模块最容易被误用的地方。平均被挡掉几条只对被截断过的关注求平均——命中数正好等于条数的关注压根没被截断，把它算进去会把平均值拉低。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>条数 × 节奏：只做形状描述，不给因果</h3>
+        <table class="ops-table">
+            <thead><tr><th>节奏</th><th>关注数</th><th>中位条数</th><th>平均条数</th><th>正被截断的关注</th><th>占比（%）</th></tr></thead>
+            <tbody>
+                {% for row in saved_search_limit_shape.cadence_rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.search_count }}{% if row.search_count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    <td>{% if row.median_limit is None %}—{% else %}{{ row.median_limit }}{% endif %}</td>
+                    <td>{{ row.mean_limit_label }}</td>
+                    <td>{{ row.truncated_count }}</td>
+                    <td>{% if row.truncated_share is None %}—{% else %}{{ row.truncated_share }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% for row in saved_search_limit_shape.cadence_rows %}{% if row.is_small_sample and row.search_count %}<p class="small text-muted mt-2 mb-0">{{ row.label }}节奏的关注不足 {{ saved_search_limit_shape.min_cadence_cell }} 条，这一格只报数字、不给方向。</p>{% endif %}{% endfor %}
+        <p class="small text-muted mt-2 mb-0">一个人选了周度汇总又在条数里填 1，看起来自相矛盾——周度本来就是把一周的命中并成一条。但这同样有合理的解释：他可能只想要一个「有动静了就告诉我一声」的信号，点进去看全部。<strong>平台没有能力区分这两种动机，所以只报形状，不把它读成「用户配错了」，更不自动去改任何人的条数。</strong>中位条数按实际生效的值算，不按库里存的配置值——存 0 的关注生效的是 3。</p>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-sliders me-1"></i><strong>这个模块只报告</strong>：不加迁移、不加字段、不改模型、不改 <code>_clamp_limit</code>、不改 <code>MAX_LISTED_MATCHES</code>（9 是发送侧的硬天花板，改它会让通知文案的长度假设失效）、不改 <code>update_saved_search_cadence</code> 的校验和保存、<strong>不自动调任何人的条数</strong>。<strong>不报条数改过几次，也不报修改时刻</strong>——<code>updated_at</code> 被同一个表单里的 <code>notify_frequency</code> 和 <code>quiet_until</code> 共用，改频率、填静默时间、清空静默都会刷新它，拿它反推「条数是什么时候改的」等于编一个数据出来。<strong>空字符串提交是「不改」而不是「改成默认值」</strong>，所以默认值 3 是一个会合点，不是一个「从没配过」的精确计数。不报取消率，也不把「配得小」读成「用户不满」——配 1 条可能恰恰是因为这个关注很吵。<strong>不按用户排名，不报任何用户名、不列任何商品名</strong>：关注名称可以报，那是用户给自己条件起的名字，不是身份；商品名不报，因为那会牵出「谁在找什么」。也不重复 <code>saved_search_latency</code> 的时延结论和 <code>saved_search_quiet_window</code> 的静默结论——三件事成因相反，不合成任何一个总分。</div>
+    {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 lost-found-matched-outcome-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Lost &amp; found matched outcome</span><h2>失物招领确认匹配之后，记录停在哪一种终局里</h2></div>
