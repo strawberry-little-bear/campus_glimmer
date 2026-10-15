@@ -12,7 +12,7 @@ from collections import Counter
 from django.db.models import Count
 from django.utils import timezone
 
-from .models import Report
+from .models import Report, ReportOutcomeFeedback
 
 
 OPEN_REPORT_STATUSES = frozenset({'pending', 'reviewing'})
@@ -27,6 +27,7 @@ PRIORITY_LABELS = {
     'high': '较高关注',
     'normal': '常规处理',
 }
+OUTCOME_FEEDBACK_LABELS = dict(ReportOutcomeFeedback.CHOICE_CHOICES)
 
 
 def _is_exposed(item_status, expires_at, now):
@@ -109,12 +110,23 @@ def build_report_queue(queryset, *, now=None, summary_queryset=None):
     """
     now = now or timezone.now()
     counts = open_report_counts()
+    reports = list(queryset)
+    feedback_choices = dict(
+        ReportOutcomeFeedback.objects.filter(
+            report_id__in=[report.pk for report in reports],
+        ).values_list('report_id', 'choice')
+    ) if reports else {}
     decorated = []
-    for report in queryset:
+    for report in reports:
         priority = build_report_priority_for_report(report, open_counts=counts, now=now)
+        outcome_feedback = feedback_choices.get(report.pk)
         decorated.append({
             'report': report,
             **priority,
+            'outcome_feedback': outcome_feedback,
+            'outcome_feedback_label': (
+                OUTCOME_FEEDBACK_LABELS.get(outcome_feedback) if outcome_feedback else None
+            ),
         })
 
     decorated.sort(key=lambda row: (

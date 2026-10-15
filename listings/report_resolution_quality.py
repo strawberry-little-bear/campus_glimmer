@@ -55,7 +55,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import Report
+from .models import Report, ReportOutcomeFeedback
 
 # 统计窗口的可选天数，和看板其他模块保持一致。
 PERIOD_CHOICES = (
@@ -105,8 +105,16 @@ REPORTER_COUNT_BANDS = (
     (10, None, '10 次及以上'),
 )
 
+# 结果回访时延分档。未回访是右删失样本：不是「回访很慢」，而是回访还没发生，
+# 所以只进待回访数，不进这里的分母。
+FEEDBACK_LATENCY_BUCKETS = (
+    (timedelta(hours=1), '1 小时内'),
+    (timedelta(hours=24), '1-24 小时'),
+    (None, '超过 24 小时'),
+)
+
 # 模块需要读的列。保持显式：365 天视图上 Report 可能很大，只取用得上的。
-# 不读 detail、不读 review_note——两处都是自由文本，可能写着电话、微信、楼栋号。
+# 不读 detail；review_note 只读长度与空否——自由文本可能写着电话、微信、楼栋号。
 PERIOD_FIELDS = (
     'id',
     'reason',
@@ -122,7 +130,7 @@ PERIOD_FIELDS = (
 # 集中度、举报人分布各读一遍，按记录现算会让每条举报打好几遍库，
 # 而看板是一次打开全算的。
 ReportRecord = namedtuple('ReportRecord', [
-    'report', 'item_status', 'item_seller_id',
+    'report', 'item_status', 'item_seller_id', 'feedback',
 ])
 
 
@@ -185,6 +193,13 @@ def _note_text(record):
     return (record.report['review_note'] or '').strip()
 
 
+def _feedback_latency_index(delay):
+    for index, (limit, _label) in enumerate(FEEDBACK_LATENCY_BUCKETS):
+        if limit is None or delay <= limit:
+            return index
+    return len(FEEDBACK_LATENCY_BUCKETS) - 1
+
+
 def _fetch_records(days, now):
     """周期内创建的举报，连它指向的商品状态一起取回来。
 
@@ -203,15 +218,30 @@ def _fetch_records(days, now):
     # 所以正常路径下 item_id 一定指向一件还在的商品），取不到就不取。
     from .models import Item
     item_ids = {row['item_id'] for row in rows if row['item_id']}
+    report_ids = {row['id'] for row in rows}
     item_map = {}
     if item_ids:
         for item in Item.objects.filter(id__in=item_ids).values('id', 'status', 'seller_id'):
             item_map[item['id']] = item
+
+    # 回访同样只取结构化列，并且截到统计终点：未来尚未发生的反馈不能参与当前周期。
+    feedback_map = {}
+    if report_ids:
+        for feedback in (
+            ReportOutcomeFeedback.objects.filter(
+                report_id__in=report_ids, created_at__lte=now,
+            ).values('report_id', 'choice', 'created_at')
+        ):
+            feedback_map[feedback['report_id']] = {
+                'choice': feedback['choice'],
+                'created_at': feedback['created_at'],
+            }
     return [
         ReportRecord(
             report=row,
             item_status=item_map.get(row['item_id'], {}).get('status'),
             item_seller_id=item_map.get(row['item_id'], {}).get('seller_id'),
+            feedback=feedback_map.get(row['id']),
         )
         for row in rows
     ]
@@ -344,6 +374,91 @@ def _outcome_gap(by_outcome):
     return round(rates[1] - rates[0], 1)
 
 
+def _build_outcome_feedback_stats(records):
+    """举报人是否看懂并收到完结结果。
+
+    回访只收三档结构化选择，不收自由文本。它衡量的是**沟通质量**：结果有没有被送达、
+    送达之后能不能被看懂。它不是申诉，也不改变审核结论，因此不参与优先级排序。
+
+    未回访的完结举报是右删失样本：用户可能还没打开通知，也可能选择不再回来。只把它数成
+    「待回访」，不用 0 小时伪装成一次很快的回访，也不把它读成「默认认可」。
+    """
+    closed = [record for record in records if _is_closed(record)]
+    replied = [record for record in closed if record.feedback]
+    waiting = [record for record in closed if not record.feedback]
+
+    choice_labels = dict(ReportOutcomeFeedback.CHOICE_CHOICES)
+    grouped = {}
+    for record in replied:
+        grouped.setdefault(record.feedback['choice'], []).append(record)
+    choice_rows = []
+    for choice in sorted(set(choice_labels) | set(grouped)):
+        rows = grouped.get(choice, [])
+        resolved_count = sum(1 for row in rows if not _is_rejected(row))
+        rejected_count = sum(1 for row in rows if _is_rejected(row))
+        choice_rows.append({
+            'choice': choice,
+            'label': choice_labels.get(choice, choice),
+            'count': len(rows),
+            'share': _percent_or_none(len(rows), len(replied)),
+            'resolved_count': resolved_count,
+            'rejected_count': rejected_count,
+            'is_empty': not rows,
+        })
+
+    by_outcome = []
+    for key, label, rejected in (
+        ('resolved', '已处理', False),
+        ('rejected', '已驳回', True),
+    ):
+        group = [record for record in closed if _is_rejected(record) is rejected]
+        group_replied = [record for record in group if record.feedback]
+        by_outcome.append({
+            'key': key,
+            'label': label,
+            'closed_count': len(group),
+            'replied_count': len(group_replied),
+            'response_rate': _percent_or_none(len(group_replied), len(group)),
+            'is_empty': not group,
+        })
+
+    latency_buckets = [
+        {'label': label, 'count': 0} for _limit, label in FEEDBACK_LATENCY_BUCKETS
+    ]
+    invalid_latency_count = 0
+    missing_reviewed_at_count = 0
+    for record in replied:
+        reviewed_at = record.report.get('reviewed_at')
+        feedback_at = record.feedback.get('created_at')
+        if reviewed_at is None or feedback_at is None:
+            missing_reviewed_at_count += 1
+            continue
+        delay = feedback_at - reviewed_at
+        if delay.total_seconds() < 0:
+            invalid_latency_count += 1
+            continue
+        latency_buckets[_feedback_latency_index(delay)]['count'] += 1
+    latency_sample_count = sum(row['count'] for row in latency_buckets)
+    for bucket in latency_buckets:
+        bucket['share'] = _percent_or_none(bucket['count'], latency_sample_count)
+
+    return {
+        'closed_count': len(closed),
+        'replied_count': len(replied),
+        'waiting_count': len(waiting),
+        'response_rate': _percent_or_none(len(replied), len(closed)),
+        'is_empty': not closed,
+        # 少于全站样本下限时只读计数，不给「回访好/不好」的方向结论。
+        'is_small_sample': 0 < len(closed) < MIN_BUCKET_SAMPLE,
+        'choice_rows': choice_rows,
+        'by_outcome': by_outcome,
+        'latency_rows': latency_buckets,
+        'latency_sample_count': latency_sample_count,
+        'invalid_latency_count': invalid_latency_count,
+        'missing_reviewed_at_count': missing_reviewed_at_count,
+    }
+
+
 def _build_concentration(records):
     """被驳回的举报集中在哪些商品、哪些卖家身上。
 
@@ -434,7 +549,7 @@ def _build_reporter_rows(records):
     }
 
 
-def _summary(outcome, reason_rows, note, concentration, reporters):
+def _summary(outcome, reason_rows, note, concentration, reporters, outcome_feedback):
     """一段人话，说明这条治理队列此刻公不公平。"""
     if not outcome['total_count']:
         return (
@@ -470,6 +585,14 @@ def _summary(outcome, reason_rows, note, concentration, reporters):
         parts.append(
             f"{reporters['reporter_count']} 位举报人里 {reporters['once_only_rate']}% 只举报过一次。"
         )
+    if outcome_feedback['closed_count']:
+        if outcome_feedback['is_small_sample']:
+            parts.append(
+                f"已完结举报中 {outcome_feedback['replied_count']} 条已回访"
+                f"（样本不足 {MIN_BUCKET_SAMPLE} 条，只读计数）。"
+            )
+        else:
+            parts.append(f"结果回访率 {outcome_feedback['response_rate']}%。")
     return ''.join(parts)
 
 
@@ -486,18 +609,20 @@ def build_report_resolution_quality(days=30, now=None):
     note = _build_note_stats(records)
     concentration = _build_concentration(records)
     reporters = _build_reporter_rows(records)
+    outcome_feedback = _build_outcome_feedback_stats(records)
 
     return {
         'period_days': days,
         'period_start': _period_start(days, timezone.localtime(now).date()),
         'period_end': now,
         'has_data': bool(records),
-        'summary': _summary(outcome, reason_rows, note, concentration, reporters),
+        'summary': _summary(outcome, reason_rows, note, concentration, reporters, outcome_feedback),
         'outcome': outcome,
         'reason_rows': reason_rows,
         'note': note,
         'concentration': concentration,
         'reporters': reporters,
+        'outcome_feedback': outcome_feedback,
         'min_bucket_sample': MIN_BUCKET_SAMPLE,
         'min_closed_reports': MIN_CLOSED_REPORTS,
         'noise_points': NOISE_POINTS,

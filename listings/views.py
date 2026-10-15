@@ -22,6 +22,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
 from .dashboard_build_performance import build_dashboard_build_performance
@@ -112,7 +113,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
 from .opportunity_impression_quality import build_opportunity_impression_quality
@@ -1744,6 +1745,55 @@ def download_dispute_evidence(request, evidence_id):
 
 
 @login_required
+def my_reports(request):
+    """Show a reporter only their own submissions and the one-shot follow-up."""
+    reports = (
+        Report.objects.filter(reporter=request.user)
+        .select_related('item__seller', 'item__location', 'feedback')
+        .order_by('-created_at', '-id')
+    )
+    paginator = Paginator(reports, 10)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'listings/my_reports.html', {
+        'reports': page_obj.object_list,
+        'page_obj': page_obj,
+        'feedback_choices': ReportOutcomeFeedback.CHOICE_CHOICES,
+        'title': '我的举报',
+    })
+
+
+@login_required
+@require_POST
+def submit_report_feedback(request, report_id):
+    """Record one structured comprehension reply; never reopen the report."""
+    report = get_object_or_404(
+        Report.objects.select_related('item', 'reporter'),
+        id=report_id,
+        reporter=request.user,
+    )
+    choice = request.POST.get('choice')
+    valid_choices = dict(ReportOutcomeFeedback.CHOICE_CHOICES)
+    if choice not in valid_choices:
+        messages.error(request, '请选择一个有效的举报结果反馈。')
+    elif report.status not in {'resolved', 'rejected'}:
+        messages.info(request, '这条举报还在处理中，暂时不能提交结果反馈。')
+    else:
+        try:
+            _feedback, created = ReportOutcomeFeedback.objects.get_or_create(
+                report=report,
+                defaults={'choice': choice},
+            )
+        except IntegrityError:
+            messages.info(request, '这条举报已经记录过结果反馈。')
+        else:
+            if created:
+                messages.success(request, '感谢回访，你的反馈会帮助治理流程更好沟通。')
+            else:
+                messages.info(request, '这条举报已经记录过结果反馈，不能重复提交。')
+    return redirect('my_reports')
+
+
+@login_required
 def report_list(request):
     if not request.user.is_staff:
         raise PermissionDenied
@@ -1776,7 +1826,9 @@ def review_report(request, report_id):
     if not request.user.is_staff:
         raise PermissionDenied
     report = get_object_or_404(
-        Report.objects.select_related('item__seller', 'item__category', 'item__location', 'reporter', 'reviewer'),
+        Report.objects.select_related(
+            'item__seller', 'item__category', 'item__location', 'reporter', 'reviewer', 'feedback',
+        ),
         id=report_id,
     )
     if request.method == 'POST':
@@ -1798,7 +1850,7 @@ def review_report(request, report_id):
                     title='你提交的举报有处理进展',
                     message=f'关于商品“{report.item.title}”的举报状态已更新为“{report.get_status_display()}”。',
                     item=report.item,
-                    target_url=reverse('item_detail', args=[report.item_id]),
+                    target_url=reverse('my_reports'),
                 )
             messages.success(request, '举报审核结果已保存，举报人会收到通知。')
             return redirect('report_list')
@@ -3981,7 +4033,7 @@ def operations_dashboard_export(request):
     writer.writerow(['商品举报处理得公不公平', '数值', '说明'])
     writer.writerow([
         '口径与门槛', quality['summary'],
-        '只读 reason / status / review_note，不读 detail 的自由文本，也不改写任何一条举报',
+        '只读 reason / status / review_note 的长度与空否、结构化结果回访，不读 detail 的自由文本，也不改写任何一条举报',
     ])
     writer.writerow([
         '周期内举报', quality['outcome']['total_count'], '按举报创建时间统计',
@@ -3998,6 +4050,38 @@ def operations_dashboard_export(request):
         '—' if quality['outcome']['rejection_rate'] is None else quality['outcome']['rejection_rate'],
         f"分母是已完结的 {quality['outcome']['closed_count']} 条，少于 "
         f"{quality['min_closed_reports']} 条只报数字",
+    ])
+    feedback = quality['outcome_feedback']
+    writer.writerow([
+        '结果回访率（%）',
+        '—' if feedback['response_rate'] is None else feedback['response_rate'],
+        f"分母是已完结的 {feedback['closed_count']} 条；未回访 {feedback['waiting_count']} 条是右删失样本",
+    ])
+    writer.writerow([])
+    writer.writerow(['结果回访分布', '条数', '占比（%）', '已处理结局', '已驳回结局'])
+    for row in feedback['choice_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '—' if row['share'] is None else row['share'],
+            row['resolved_count'], row['rejected_count'],
+        ])
+    for row in feedback['by_outcome']:
+        writer.writerow([
+            f"其中：{row['label']}已回访", row['replied_count'],
+            '—' if row['response_rate'] is None else row['response_rate'],
+            '', f"已{row['label']} {row['closed_count']} 条",
+        ])
+    writer.writerow(['结果回访时延', '条数', '占比（%）', '口径说明'])
+    for row in feedback['latency_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '—' if row['share'] is None else row['share'],
+            '完结到回访，负时延与缺审核时间不进分母',
+        ])
+    writer.writerow([
+        '回访负时延 / 缺审核时间',
+        f"{feedback['invalid_latency_count']} / {feedback['missing_reviewed_at_count']}",
+        '', '异常单独计数，不用 0 小时伪装',
     ])
     writer.writerow([])
     writer.writerow(['驳回率按举报原因拆', '举报数', '已完结', '驳回数', '驳回率（%）', '还在流程里', '样本是否够'])

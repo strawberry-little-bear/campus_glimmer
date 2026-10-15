@@ -86,7 +86,7 @@ campus_glimmer/
 | `notification_preference_usage.py` | 26 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
 | `notification_quiet_hours_shape.py` | 免打扰时段的形状：默认窗口采用率、同日 / 跨午夜、时长档、开始与结束小时、逐分钟叠加成小时曲线 | 只读 |
 | `notification_aggregation_quality.py` | 通知聚合的质量：被聚合过的行 vs 从没被聚合过的行，阅读率与处理时长对照（只报告） | 只报告 |
-| `report_resolution_quality.py` | 商品举报按原因的驳回率、审核意见填写情况、集中度与举报人分布（只报告） | 只报告 |
+| `report_resolution_quality.py` | 商品举报按原因的驳回率、审核意见填写情况、集中度、举报人分布与结果回访质量（只报告） | 只报告 |
 | `meeting_attendance.py` | 交付预约的实际到场情况：响应分档、迟到区间与缺席分母（只报告不改写） | 读写 |
 | `meeting_incident_quality.py` | 交付预约异常按类型的驳回率、处理意见填写情况、提交方向与提交人分布（只报告） | 只报告 |
 | `saved_search_quiet_window.py` | 关注搜索临时静默的规模、缓冲区年龄与静默结束后的存活（只报告） | 只报告 |
@@ -363,6 +363,8 @@ campus_glimmer/
 - **`test_relist_freshness.py`**：重新上架新鲜度欠账的判据、分母、额度与无互动测试
 
 - **`test_report_resolution_quality.py`**：驳回率按 reason 拆、意见只读长度与空否、不把驳回率和处理人挂钩
+
+- **`test_report_outcome_feedback.py`**：我的举报、一次性三档回访、管理员只读、统计分母与页面 / 导出契约
 
 - **`test_return_handshake.py`**：归还双方确认的顺序、间隔与只点一半，只报告不改写
 

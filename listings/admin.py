@@ -126,15 +126,21 @@ class FavoriteAdmin(admin.ModelAdmin):
 
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
-    list_display = ('item', 'reporter', 'reason', 'status', 'reviewer', 'created_at', 'reviewed_at')
+    list_display = ('item', 'reporter', 'reason', 'status', 'outcome_feedback', 'reviewer', 'created_at', 'reviewed_at')
     list_filter = ('status', 'reason', 'created_at')
+    list_select_related = ('item', 'reporter', 'reviewer', 'feedback')
     search_fields = ('item__title', 'reporter__username', 'detail', 'review_note')
     autocomplete_fields = ('item', 'reporter', 'reviewer')
-    readonly_fields = ('created_at', 'updated_at', 'reviewed_at')
+    readonly_fields = ('created_at', 'updated_at', 'reviewed_at', 'outcome_feedback')
     fieldsets = (
         ('举报信息', {'fields': ('item', 'reporter', 'reason', 'detail', 'created_at')}),
         ('审核结果', {'fields': ('status', 'reviewer', 'review_note', 'reviewed_at', 'updated_at')}),
+        ('结果回访', {'fields': ('outcome_feedback',)}),
     )
+
+    @admin.display(description='结果回访')
+    def outcome_feedback(self, obj):
+        return obj.feedback.get_choice_display() if obj.feedback else '—'
 
 
 @admin.register(GiftApplication)

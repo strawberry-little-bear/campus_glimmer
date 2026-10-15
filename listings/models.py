@@ -773,6 +773,38 @@ class Report(models.Model):
         return f'{self.item.title} · {self.get_reason_display()}'
 
 
+class ReportOutcomeFeedback(models.Model):
+    """A reporter's one-shot comprehension reply after a report is closed.
+
+    The choice is deliberately structured. It measures whether the decision was
+    understood and accepted; it is not an appeal, a moderation verdict, or a
+    free-text evidence box.
+    """
+
+    CHOICE_CHOICES = (
+        ('handled', '问题已处理'),
+        ('unclear', '结果看不懂'),
+        ('disagree', '不认同结果'),
+    )
+
+    report = models.OneToOneField(
+        Report, on_delete=models.CASCADE, related_name='feedback',
+        verbose_name='商品举报',
+    )
+    choice = models.CharField('回访反馈', max_length=20, choices=CHOICE_CHOICES)
+    created_at = models.DateTimeField('提交时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '商品举报结果回访'
+        verbose_name_plural = '商品举报结果回访'
+        ordering = ['-created_at']
+        indexes = [models.Index(fields=['-created_at'])]
+
+    def __str__(self):
+        return f'{self.report_id} · {self.get_choice_display()}'
+
+
 class GiftApplication(models.Model):
     """A lightweight queue entry for a free-gift listing.
 

@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro report-history-intro">
+    <div><span class="eyebrow eyebrow-soft">Community safety</span><h1>我的举报</h1><p>这里只显示你提交过的商品举报。处理完成后，可以告诉我们结果是否看得懂。</p></div>
+    <a href="{% url 'item_list' %}" class="btn btn-light"><i class="bi bi-grid me-2"></i>去发现好物</a>
+</div>
+<section class="report-history-list">
+    {% for report in reports %}
+    <article class="content-card report-history-card {% if report.status in 'resolved rejected' %}is-closed{% endif %}">
+        <div class="report-history-head">
+            <div>
+                <span class="report-status report-status-{{ report.status }}">{{ report.get_status_display }}</span>
+                <h2><a href="{% url 'item_detail' report.item_id %}">{{ report.item.title }}</a></h2>
+                <p>{{ report.get_reason_display }} · {{ report.created_at|date:'Y-m-d H:i' }} 提交{% if report.reviewed_at %} · {{ report.reviewed_at|date:'Y-m-d H:i' }} 处理{% endif %}</p>
+            </div>
+            <a class="report-history-item-link" href="{% url 'item_detail' report.item_id %}"><i class="bi bi-box-arrow-up-right me-1"></i>查看商品</a>
+        </div>
+        <div class="report-history-body">
+            {% if report.review_note %}<div class="report-review-note"><strong>审核说明</strong><p>{{ report.review_note|linebreaksbr }}</p></div>{% else %}<p class="mb-0 text-muted small">管理员还没有填写审核说明。若结果已经完结，你可以先按自己的理解提交回访。</p>{% endif %}
+        </div>
+        <div class="report-history-feedback">
+            {% if report.feedback %}
+            <span class="report-outcome-feedback is-{{ report.feedback.choice }}"><i class="bi bi-check2-circle me-1"></i>已回访：{{ report.feedback.get_choice_display }}</span>
+            <small>反馈已记录，不能修改；它不会自动改变审核结论。</small>
+            {% elif report.status in 'resolved rejected' %}
+            <form method="post" action="{% url 'submit_report_feedback' report.id %}" class="report-feedback-form">
+                {% csrf_token %}
+                <span class="small text-muted">这次结果你看起来怎么样？</span>
+                <div class="report-feedback-actions">
+                    <button type="submit" name="choice" value="handled">问题已处理</button>
+                    <button type="submit" name="choice" value="unclear">结果看不懂</button>
+                    <button type="submit" name="choice" value="disagree">不认同结果</button>
+                </div>
+            </form>
+            {% else %}
+            <span class="report-outcome-feedback is-waiting"><i class="bi bi-hourglass-split me-1"></i>处理完成后可回访</span>
+            {% endif %}
+        </div>
+    </article>
+    {% empty %}
+    <div class="content-card empty-state py-5"><i class="bi bi-flag"></i><h2>还没有提交过举报</h2><p>看到疑似诈骗、虚假信息或不适内容时，可以在商品详情页提交举报。</p><a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a></div>
+    {% endfor %}
+</section>
+{% if page_obj.has_other_pages %}
+<nav class="mt-4" aria-label="我的举报分页"><ul class="pagination justify-content-center mb-0">
+    {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a></li>{% endif %}
+    <li class="page-item active"><span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a></li>{% endif %}
+</ul></nav>
+{% endif %}
+{% endblock %}
