@@ -29,7 +29,7 @@ from .lifecycle_diagnostics import (
     listings_due_for_attention_reminder,
     listings_due_for_price_drop_reminder,
 )
-from .models import Notification
+from .models import LifecycleReminderEvent, Notification
 from .notifications import create_notification, quiet_hours_active
 from .price_insights import build_price_insight
 
@@ -148,6 +148,7 @@ def send_lifecycle_reminders(*, now=None, seller_ids=None, dry_run=False):
         'skipped_no_evidence': 0,
         'quiet': 0,
         'marked': 0,
+        'events': 0,
     }
 
     attention_by_seller = {}
@@ -219,6 +220,24 @@ def send_lifecycle_reminders(*, now=None, seller_ids=None, dry_run=False):
             if not notification:
                 result['skipped_preference'] += 1
                 continue
+
+            # 事件先于冷却字段写入：它记录的是这一次实际触达，而不是下一次
+            # 候选扫描的结果。通知被清理后外键置空，发送事实仍留在台账里。
+            event_rows = [
+                LifecycleReminderEvent(
+                    item=item, seller=seller, kind='attention',
+                    sent_at=now, notification=notification,
+                )
+                for item in attention_items
+            ] + [
+                LifecycleReminderEvent(
+                    item=item, seller=seller, kind='price',
+                    sent_at=now, notification=notification,
+                )
+                for item, _insight in price_items
+            ]
+            LifecycleReminderEvent.objects.bulk_create(event_rows)
+            result['events'] += len(event_rows)
 
             # 一件商品可能同时进入两类候选，按商品主键合并，避免同一行被写
             # 两次，也让“回写了多少件商品”如实反映处理的商品数量。

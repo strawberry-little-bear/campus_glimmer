@@ -8300,6 +8300,9 @@ def operations_dashboard_export(request):
         '看了但没动', reminder_summary['read_but_inactive'],
         '完全没动作', reminder_summary['untouched'],
         '观察窗口（天）', reminder_summary['window_days'],
+        '事件台账口径商品', reminder_summary['event_backed_items'],
+        '混合口径商品', reminder_summary['mixed_source_items'],
+        '旧时间戳口径商品', reminder_summary['legacy_timestamp_items'],
         '周期天数', reminder_effect['period_days'],
     ])
     writer.writerow([])

@@ -2837,6 +2837,7 @@
         <div><span>其中完成交易</span><strong>{{ lifecycle_reminder_effect.summary.completed_after }}</strong><small>订单走到终态</small></div>
         <div{% if lifecycle_reminder_effect.summary.read_but_inactive %} class="supply-lifecycle-summary-warning"{% endif %}><span>看了但没动</span><strong>{{ lifecycle_reminder_effect.summary.read_but_inactive }}</strong><small>另有 {{ lifecycle_reminder_effect.summary.untouched }} 件完全没动作</small></div>
     </div>
+    <p class="small text-muted mb-3"><i class="bi bi-journal-check me-1"></i>{{ lifecycle_reminder_effect.source_note }}跨学期对比前先看这三行：混合与旧时间戳越多，历史口径越需要保守解读。</p>
 
     <div class="row g-3 mt-1">
         <div class="col-lg-7">

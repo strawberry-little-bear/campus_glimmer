@@ -274,8 +274,8 @@ campus_glimmer/
 | 地点档案质量 | 不新增表，读 `CampusLocation` 与商品、求购、关注搜索、订单、交付安排的外键 | 报告地点档案形状、字段覆盖、当前引用、交付地点可解释性、近似重名和停用引用；只报告，不自动合并或改写任何地点与业务记录 |
 | 地点维护队列 | 读 `CampusLocation` 与当前在售商品、活跃求购、启用关注搜索的地点引用 | 把停用引用、公共地点缺安全提示、近似重名和档案字段缺失排成互斥主优先级与可重叠信号清单；只提示人工核对，不自动修复 |
 | 地点维护决策 | `CampusLocationMaintenanceDecision` | 保存同一地点同一组信号的人工结论、理由、复核人与时间；决策不隐藏当前信号，也不代替地点或业务记录修改 |
-| 商品生命周期 | `Item.last_refreshed_at`、`Item.refresh_count`、`Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at` | 商品刷新时间与次数、待处理提醒和降价提醒的发送记录，用于生命周期诊断、刷新限流和供给侧统计 |
-| 生命周期提醒效果 | `Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at`、`Item.category`、`Notification.read_at`、`OrderEvent.created_at` | 提醒时间戳、通知是否被打开，以及订单何时走到终态；三者共同决定「提醒之后有没有动作」，分类字段只用于只读分层 |
+| 商品生命周期 | `Item.last_refreshed_at`、`Item.refresh_count`、`Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at`、`LifecycleReminderEvent` | 商品刷新时间与次数、两类提醒的冷却时间，以及逐商品、逐类型的真实发送事件台账；台账在通知删除后仍保留，用于生命周期诊断和供给侧统计 |
+| 生命周期提醒效果 | `LifecycleReminderEvent`、`Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at`、`Item.category`、`Notification.read_at`、`OrderEvent.created_at` | 真实发送事件优先，旧数据回退商品冷却时间戳；通知是否被打开与订单终态时间共同决定「提醒之后有没有动作」，分类字段只用于只读分层 |
 | 分类调价参考 | 不新增表，只读 `Item.category` / `price` / `status` / `expires_at` / `created_at` | 分类级当前供给价格形状：优先近 180 天样本、每分类最多 500 件，当前在售单列低于 / 区间内 / 高于；样本不足、四分位退化与区间过宽都显式标记，只报告不自动改价 |
 | 校园活动 | `CampusCampaign` | 有起止时间的专题活动，以及专题与在售商品的可选关联 |
 | 学期日历 | `AcademicTerm`、`AcademicPhase`、`AcademicTermSnapshot` | 学期起止日期、按偏移天数划分的阶段规则、阶段级统计快照（已结束阶段由 `build_academic_calendar` 读取，进行中阶段实时算） |
@@ -619,8 +619,6 @@ python manage.py send_saved_search_digest --frequency weekly
 命令会回归发送、跳过、无命中和静默中的关注数量；处于静默期的关注只统计不发送，命中记录仍然保留。建议每日运行一次（或按需分别运行日订任务与周订任务，两者彻底独立，不会互相干扰）；重复运行安全无偶给性。
 
 
-提醒的触达与行动情况由运营看板的「生命周期提醒触达与行动」面板呈现，读取的是同一批时间戳，因此看板与命令回报天然一致。
-
 ### 商品生命周期提醒
 
 把需要卖家处理的商品合并成一条站内通知，按冷却期控制节奏：
@@ -631,9 +629,11 @@ python manage.py send_lifecycle_reminders --seller-id 12 --seller-id 34
 python manage.py send_lifecycle_reminders --dry-run
 ```
 
-命令会回报发送条数、两类提醒各覆盖多少卖家、回写了多少件商品的冷却时间，以及因关闭提醒、处于免打扰时段或缺少价格证据而跳过的卖家数。`--seller-id` 可重复传入，用于只补发某几个卖家；`--dry-run` 只统计不写入，适合上线前确认影响范围。
+命令会回报发送条数、两类提醒各覆盖多少卖家、回写了多少件商品的冷却时间、写入多少条事件台账，以及因关闭提醒、处于免打扰时段或缺少价格证据而跳过的卖家数。事件、合并通知与冷却字段在同一事务内写入；`--seller-id` 可重复传入，用于只补发某几个卖家；`--dry-run` 只统计，不写通知、事件或冷却字段，适合上线前确认影响范围。
 
 去重键按“通知类型 + 日期 + 卖家”构成，同一天重复运行不会发出第二条，也不会重复回写冷却时间，因此可以直接接入系统计划任务。建议每日运行一次，与运营告警日报错开时间，避免同一批卖家在同一天收到多条长文通知。
+
+提醒的触达与行动情况由运营看板的「生命周期提醒触达与行动」面板呈现：新发送优先读取事件台账，旧数据回退商品冷却时间戳，并单独标明事件、混合与旧时间戳口径，避免把覆盖差异误读为效果变化。
 
 ### 学期日历维护
 
@@ -717,7 +717,7 @@ CI 的目标不是替代本地验证，而是确保每个独立迭代至少满�
 
 | 方向 | 下一步重点 |
 | --- | --- |
-| 供给侧与提醒 | 继续评估提醒后的处理率和跨学期生命周期对比 |
+| 供给侧与提醒 | 继续评估跨学期生命周期对比，并以事件台账守住提醒分母 |
 | 搜索、供需与机会流 | 补齐空结果诊断、需求承接和推荐解释，避免只增加入口 |
 | 交易、交付与借用 | 强化交付异常、归还质量、催收效果和安全确认的闭环 |
 | 治理与通知 | 继续做治理分组、申诉质量、通知降噪和偏好覆盖观测 |

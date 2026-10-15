@@ -29,7 +29,9 @@ from django.utils import timezone
 
 from .lifecycle_diagnostics import _level_for
 from .lifecycle_reminders import _price_candidates
-from .models import Item, Notification, NotificationPreference, OrderEvent
+from .models import (
+    Item, LifecycleReminderEvent, Notification, NotificationPreference, OrderEvent,
+)
 from .notifications import quiet_hours_active
 
 
@@ -65,35 +67,72 @@ def _period_bounds(days, now):
 
 
 def _reminded_items(start, now):
-    """Listings whose seller was actually reached inside the period.
+    """Return item-level reminder observations, preferring the event ledger.
 
-    A listing counts as reached when either reminder timestamp falls inside
-    the period. ``reminded_at`` is the later of the in-period timestamps, so
-    a listing reminded twice in the period is judged from the most recent
-    nudge instead of the first one.
+    A row is still one item in one analysis period, but its attention/price
+    timestamps can come from two sources. New sends carry an event row; legacy
+    rows fall back to the latest cool-down timestamp. The source map is kept so
+    the panel can show whether this period is already comparable term over term.
     """
-    items = list(
-        Item.objects.filter(
-            Q(attention_reminder_sent_at__gte=start, attention_reminder_sent_at__lte=now)
-            | Q(price_drop_reminder_sent_at__gte=start, price_drop_reminder_sent_at__lte=now),
-        ).select_related('seller', 'category')
-    )
+    observations = {}
+
+    events = LifecycleReminderEvent.objects.filter(
+        sent_at__gte=start, sent_at__lte=now,
+    ).select_related('item__seller', 'item__category', 'notification')
+    for event in events:
+        item = event.item
+        item_rows = observations.setdefault(item.pk, {'item': item, 'kinds': {}})
+        current = item_rows['kinds'].get(event.kind)
+        if current is None or event.sent_at > current['sent_at']:
+            item_rows['kinds'][event.kind] = {
+                'sent_at': event.sent_at,
+                'notification': event.notification,
+                'source': 'event',
+            }
+
+    legacy_items = Item.objects.filter(
+        Q(attention_reminder_sent_at__gte=start, attention_reminder_sent_at__lte=now)
+        | Q(price_drop_reminder_sent_at__gte=start, price_drop_reminder_sent_at__lte=now),
+    ).select_related('seller', 'category')
+    for item in legacy_items:
+        item_rows = observations.setdefault(item.pk, {'item': item, 'kinds': {}})
+        legacy_fields = (
+            ('attention', item.attention_reminder_sent_at),
+            ('price', item.price_drop_reminder_sent_at),
+        )
+        for kind, sent_at in legacy_fields:
+            if sent_at is None or not start <= sent_at <= now:
+                continue
+            # New events are authoritative. Keeping the legacy timestamp as well
+            # would double-count the same kind when both sources describe one send.
+            if kind in item_rows['kinds']:
+                continue
+            item_rows['kinds'][kind] = {
+                'sent_at': sent_at,
+                'notification': None,
+                'source': 'legacy',
+            }
+
     rows = []
-    for item in items:
-        attention_at = item.attention_reminder_sent_at
-        price_at = item.price_drop_reminder_sent_at
-        stamps = [
-            value for value in (attention_at, price_at)
-            if value is not None and start <= value <= now
-        ]
-        if not stamps:
+    for item_rows in observations.values():
+        kinds = item_rows['kinds']
+        if not kinds:
             continue
+        attention = kinds.get('attention')
+        price = kinds.get('price')
         rows.append({
-            'item': item,
-            'attention_at': attention_at,
-            'price_at': price_at,
-            'reminded_at': max(stamps),
+            'item': item_rows['item'],
+            'attention_at': attention['sent_at'] if attention else None,
+            'price_at': price['sent_at'] if price else None,
+            'reminded_at': max(value['sent_at'] for value in kinds.values()),
+            'sources': {kind: value['source'] for kind, value in kinds.items()},
+            'notifications': {
+                kind: value['notification']
+                for kind, value in kinds.items()
+                if value['notification'] is not None
+            },
         })
+    rows.sort(key=lambda row: row['item'].pk)
     return rows
 
 
@@ -222,8 +261,17 @@ def build_lifecycle_reminder_effect(days=30, *, now=None):
     for row in rows:
         item = row['item']
         refreshed_after, completed_after = _outcome(row, terminal_times)
-        notice = _notice_for(notice_index, item.seller_id, row['reminded_at'])
+        linked_notice = next(iter(row['notifications'].values()), None)
+        notice = linked_notice or _notice_for(
+            notice_index, item.seller_id, row['reminded_at'],
+        )
         level, label, _tone, _reasons, _actions = _level_for(item, now=now)
+        if isinstance(notice, dict):
+            notice_is_read = notice['is_read']
+        elif notice is not None:
+            notice_is_read = notice.is_read
+        else:
+            notice_is_read = False
         outcome_rows.append({
             'item': item,
             'seller': item.seller,
@@ -231,7 +279,8 @@ def build_lifecycle_reminder_effect(days=30, *, now=None):
             'attention_at': row['attention_at'],
             'price_at': row['price_at'],
             'kinds': _kind_keys(row),
-            'read': bool(notice['is_read']) if notice else False,
+            'sources': row['sources'],
+            'read': bool(notice_is_read) if notice else False,
             'reached': notice is not None,
             'refreshed_after': refreshed_after,
             'completed_after': completed_after,
@@ -246,6 +295,10 @@ def build_lifecycle_reminder_effect(days=30, *, now=None):
     untouched_rows = _build_untouched_rows(outcome_rows)
 
     reminded_items = len(outcome_rows)
+    source_values = [set(row['sources'].values()) for row in outcome_rows]
+    event_backed_items = sum(values == {'event'} for values in source_values)
+    mixed_source_items = sum(values == {'event', 'legacy'} for values in source_values)
+    legacy_timestamp_items = sum(values == {'legacy'} for values in source_values)
     acted = sum(
         1 for row in outcome_rows
         if row['refreshed_after'] or row['completed_after']
@@ -286,7 +339,15 @@ def build_lifecycle_reminder_effect(days=30, *, now=None):
             ),
             'untouched': reminded_items - acted,
             'window_days': EFFECT_WINDOW_DAYS,
+            'event_backed_items': event_backed_items,
+            'mixed_source_items': mixed_source_items,
+            'legacy_timestamp_items': legacy_timestamp_items,
         },
+        'source_note': (
+            '新发送优先读取事件台账；旧数据回退商品时间戳。'
+            f'本期事件口径 {event_backed_items} 件，混合口径 {mixed_source_items} 件，'
+            f'旧时间戳口径 {legacy_timestamp_items} 件。'
+        ),
         'kind_rows': kind_rows,
         'category_rows': category_rows,
         'seller_load_rows': seller_load_rows,

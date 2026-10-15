@@ -14,7 +14,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--dry-run', action='store_true',
-            help='只统计会收到提醒的卖家，不写入通知，也不回写冷却字段。',
+            help='只统计会收到提醒的卖家，不写入通知、事件台账或冷却字段。',
         )
 
     def handle(self, *args, **options):
@@ -31,7 +31,7 @@ class Command(BaseCommand):
             f"{prefix}完成：发送 {result['sent']} 条提醒，"
             f"其中待处理 {result['attention_sellers']} 位卖家、"
             f"价格参考 {result['price_sellers']} 位卖家，"
-            f"回写冷却 {result['marked']} 件商品，"
+            f"回写冷却 {result['marked']} 件商品、写入事件 {result['events']} 条，"
             f"{result['skipped_preference']} 位卖家关闭了该类提醒，"
             f"{result['quiet']} 位卖家处于免打扰时段，"
             f"{result['skipped_no_evidence']} 位卖家缺少可引用的价格证据。"

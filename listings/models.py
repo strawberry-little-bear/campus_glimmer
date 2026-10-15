@@ -263,6 +263,57 @@ class Item(models.Model):
         ]
 
 
+class LifecycleReminderEvent(models.Model):
+    """One item-level lifecycle reminder that was actually sent."""
+
+    KIND_CHOICES = (
+        ('attention', '待处理提醒'),
+        ('price', '价格参考提醒'),
+    )
+
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE,
+        related_name='lifecycle_reminder_events', verbose_name='商品',
+    )
+    seller = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='lifecycle_reminder_events', verbose_name='卖家',
+    )
+    kind = models.CharField('提醒类型', max_length=20, choices=KIND_CHOICES)
+    sent_at = models.DateTimeField('发送时间')
+    notification = models.ForeignKey(
+        'Notification', on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='lifecycle_reminder_events', verbose_name='合并通知',
+    )
+
+    class Meta:
+        ordering = ['-sent_at', 'item_id', 'kind']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['item', 'kind', 'sent_at'],
+                name='unique_lifecycle_reminder_event',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['item', 'kind', '-sent_at'],
+                name='lifecycle_event_item_idx',
+            ),
+            models.Index(
+                fields=['seller', 'kind', '-sent_at'],
+                name='lifecycle_event_seller_idx',
+            ),
+            models.Index(
+                fields=['notification'],
+                name='lifecycle_event_notice_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.item_id} · {self.get_kind_display()} · {self.sent_at:%Y-%m-%d %H:%M}'
+
+
 class ItemImage(models.Model):
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField('图片', upload_to='items/')

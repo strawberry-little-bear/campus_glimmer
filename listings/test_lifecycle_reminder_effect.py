@@ -17,6 +17,7 @@ from .models import (
     Category,
     CampusLocation,
     Item,
+    LifecycleReminderEvent,
     Notification,
     NotificationPreference,
     Order,
@@ -90,6 +91,16 @@ class LifecycleReminderEffectTests(TestCase):
         notification.refresh_from_db()
         return notification
 
+    def record_event(self, item, *, kind='attention', notification=None, days_ago=1):
+        """Pin an item-level event row written by the real sender."""
+        return LifecycleReminderEvent.objects.create(
+            item=item,
+            seller=item.seller,
+            kind=kind,
+            sent_at=timezone.now() - timedelta(days=days_ago),
+            notification=notification,
+        )
+
     def complete_order(self, item, *, days_ago=2):
         """Give the listing a terminal order event, as a real sale would."""
         order = Order.objects.create(
@@ -118,6 +129,56 @@ class LifecycleReminderEffectTests(TestCase):
         self.assertEqual(data['untouched_rows'], [])
         self.assertEqual(data['blocked_rows'], [])
         self.assertEqual(data['recommendations'], [])
+
+    def test_event_ledger_is_preferred_over_legacy_timestamp(self):
+        item = self.make_item(age_days=60)
+        # 旧时间戳与另一条不匹配的通知都存在，但不能把同一次提醒拆成两份。
+        self.stamp_reminder(item, days_ago=2)
+        self.make_notice(read=False, days_ago=2)
+        notice = self.make_notice(read=True, days_ago=1)
+        self.record_event(item, kind='attention', notification=notice, days_ago=1)
+
+        data = build_lifecycle_reminder_effect(30)
+        summary = data['summary']
+
+        self.assertEqual(summary['reminded_items'], 1)
+        self.assertEqual(summary['reached_items'], 1)
+        self.assertEqual(summary['read_items'], 1)
+        self.assertEqual(summary['event_backed_items'], 1)
+        self.assertEqual(summary['mixed_source_items'], 0)
+        self.assertEqual(summary['legacy_timestamp_items'], 0)
+        self.assertEqual(data['kind_rows'][0]['items'], 1)
+
+    def test_event_and_legacy_kinds_can_form_one_mixed_item_without_double_counting(self):
+        item = self.make_item(age_days=60)
+        notice = self.make_notice(read=True, days_ago=1)
+        self.record_event(item, kind='attention', notification=notice, days_ago=1)
+        self.stamp_reminder(item, attention=True, price=True, days_ago=2)
+
+        data = build_lifecycle_reminder_effect(30)
+        summary = data['summary']
+
+        self.assertEqual(summary['reminded_items'], 1)
+        self.assertEqual(summary['event_backed_items'], 0)
+        self.assertEqual(summary['mixed_source_items'], 1)
+        self.assertEqual(summary['legacy_timestamp_items'], 0)
+        self.assertEqual(data['kind_rows'][0]['key'], 'both')
+        self.assertEqual(data['kind_rows'][0]['items'], 1)
+
+    def test_event_remains_after_its_merged_notice_is_removed(self):
+        item = self.make_item(age_days=60)
+        notice = self.make_notice(read=True, days_ago=1)
+        self.record_event(item, kind='attention', notification=notice, days_ago=1)
+        notice.delete()
+
+        data = build_lifecycle_reminder_effect(30)
+        summary = data['summary']
+
+        self.assertTrue(data['has_data'])
+        self.assertEqual(summary['reminded_items'], 1)
+        self.assertEqual(summary['event_backed_items'], 1)
+        self.assertEqual(summary['reached_items'], 0)
+        self.assertEqual(summary['read_items'], 0)
 
     def test_reminded_listing_without_action_is_counted_untouched(self):
         item = self.make_item(age_days=60)

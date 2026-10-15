@@ -6,7 +6,10 @@ from django.test import TestCase
 from django.utils import timezone
 
 from .lifecycle_reminders import MAX_LISTED_ITEMS, send_lifecycle_reminders
-from .models import Category, CampusLocation, Item, Notification, NotificationPreference, Order
+from .models import (
+    Category, CampusLocation, Item, LifecycleReminderEvent, Notification,
+    NotificationPreference, Order,
+)
 
 
 class LifecycleReminderTests(TestCase):
@@ -51,6 +54,7 @@ class LifecycleReminderTests(TestCase):
         self.assertEqual(result['sent'], 0)
         self.assertEqual(result['skipped_preference'], 1)
         self.assertEqual(self.notifications().count(), 0)
+        self.assertEqual(LifecycleReminderEvent.objects.count(), 0)
 
     def test_quiet_hours_delay_notice_without_consuming_cooldown(self):
         item = self.make_item(age_days=50)
@@ -107,7 +111,9 @@ class LifecycleReminderTests(TestCase):
 
         self.assertEqual(result['sent'], 1)
         self.assertEqual(result['marked'], 0)
+        self.assertEqual(result['events'], 0)
         self.assertEqual(self.notifications().count(), 0)
+        self.assertEqual(LifecycleReminderEvent.objects.count(), 0)
         item.refresh_from_db()
         self.assertIsNone(item.attention_reminder_sent_at)
 
@@ -124,6 +130,7 @@ class LifecycleReminderTests(TestCase):
         call_command('send_lifecycle_reminders', '--dry-run')
 
         self.assertEqual(self.notifications().count(), 0)
+        self.assertEqual(LifecycleReminderEvent.objects.count(), 0)
 
     def test_fresh_listings_are_never_reminded(self):
         self.make_item(age_days=3, title='还很新鲜')
@@ -273,3 +280,15 @@ class LifecycleReminderTests(TestCase):
         # 两件商品都同时满足待处理和价格两类条件，各回写两个冷却字段，
         # 因此是 2 件商品 × 2 个字段 = 4，而不是重复发送两条通知。
         self.assertEqual(result['marked'], 4)
+        self.assertEqual(result['events'], 4)
+        events = LifecycleReminderEvent.objects.select_related('item').order_by('item__title', 'kind')
+        self.assertEqual(
+            [(event.item.title, event.kind) for event in events],
+            [
+                ('价格偏高', 'attention'), ('价格偏高', 'price'),
+                ('沉底待处理', 'attention'), ('沉底待处理', 'price'),
+            ],
+        )
+        self.assertEqual(
+            {event.notification_id for event in events}, {notice.pk},
+        )

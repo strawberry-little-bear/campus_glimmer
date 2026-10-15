@@ -97,8 +97,8 @@ campus_glimmer/
 | `handoff_code_usage.py` | 当面交付取件码的生成与使用：签发到首次尝试的间隔、尝试次数与用不上的码（只报告不改写） | 读写 |
 | `item_lifecycle.py` | 到期商品的过期处理：从公开商品流和推荐里隐藏并回写状态 | 读写 |
 | `lifecycle_diagnostics.py` | 商品生命周期等级、刷新节奏与卖家侧诊断 | 读写 |
-| `lifecycle_reminders.py` | 商品生命周期提醒的合并发送与冷却回写 | 读写 |
-| `lifecycle_reminder_effect.py` | 提醒后的触达、阅读、行动与分层统计（只报告，不改发送策略） | 只报告 |
+| `lifecycle_reminders.py` | 商品生命周期提醒的合并发送、事件台账写入与冷却回写；真实发送与 dry-run 边界由测试钉住 | 读写 |
+| `lifecycle_reminder_effect.py` | 提醒后的触达、阅读、行动与分层统计；事件台账优先，旧数据回退冷却时间戳且不双计（只报告，不改发送策略） | 只报告 |
 | `lifecycle_reminder_action_trend.py` | 提醒行动率的跨周期对比：只给行动率方向，打开率与商品数只报数 | 只报告 |
 | `supply_lifecycle.py` | 供给侧生命周期健康、卖家在管规模与运营建议 | 读写 |
 | `refresh_quota_drift.py` | 刷新额度为什么是一次性的：累计计数器与「本月」文案的差量（只报告） | 只报告 |
@@ -265,11 +265,11 @@ campus_glimmer/
 
 - **`test_lifecycle_diagnostics.py`**：商品生命周期等级、刷新限流和卖家面板测试
 
-- **`test_lifecycle_reminder_effect.py`**：提醒之后的触达、阅读与行动对照，含分类分层、本周期提醒负担、样本门槛、隐私边界与看板导出
+- **`test_lifecycle_reminder_effect.py`**：提醒之后的触达、阅读与行动对照，含事件优先、混合来源、通知删除后事件保留、分类分层、本周期提醒负担、样本门槛、隐私边界与看板导出
 
 - **`test_lifecycle_reminder_action_trend.py`**：跨周期对比的窗口切分、样本门槛、`both` 桶不判方向、无提醒不报零
 
-- **`test_lifecycle_reminders.py`**：生命周期提醒的合并、冷却、偏好与免打扰测试
+- **`test_lifecycle_reminders.py`**：生命周期提醒的合并、冷却、偏好、免打扰、事件台账同事务写入与 dry-run 边界测试
 
 - **`test_lost_found.py`**：失物招领、匹配和线索流转测试
 
