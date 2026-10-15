@@ -201,7 +201,10 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
 
 
 class ItemImageForm(StyledModelFormMixin, forms.ModelForm):
-    image = forms.ImageField(label='图片', required=False)
+    image = forms.ImageField(
+        label='图片', required=False,
+        widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
+    )
 
     class Meta:
         model = ItemImage

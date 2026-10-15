@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.urls import reverse
 from PIL import Image
 
 from .forms import ItemImageForm, ItemImageFormSet
@@ -168,6 +169,13 @@ class ItemImageFormNormalizationTests(TestCase):
         self.assertIn('图片处理失败', message)
         self.assertNotIn('secret', message)
         self.assertNotIn('decoder.dll', message)
+
+    def test_upload_form_discloses_limits_and_accept_attribute(self):
+        self.client.force_login(self.seller)
+        response = self.client.get(reverse('new_item'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '单张不超过 10 MB 或 2000 万像素')
+        self.assertContains(response, 'accept="image/*"')
 
     def test_invalid_image_still_gets_field_level_validation(self):
         upload = SimpleUploadedFile(
