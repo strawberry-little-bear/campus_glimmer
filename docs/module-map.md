@@ -422,11 +422,12 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（73 篇，持续更新）</summary>
+<summary>设计文档清单（74 篇，持续更新）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
 - **`academic-term-snapshot-read-path-design.md`**：已结束读快照、进行中实时算，判据是计数是否封闭而不是 `refreshed_at`
+- **`academic-snapshot-miss-alert-design.md`**：把实时行拆成进行中与已结束兜底，缺匹配快照不再藏在 live 里
 
 - **`availability-watch-design.md`**：等有货的人等了多久，只数仍挂着的关注，死信与白等分开
 
