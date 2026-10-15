@@ -120,6 +120,7 @@ from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
 from .opportunity_dismissal_quality import build_opportunity_dismissal_quality
 from .favorite_collection_quality import build_favorite_collection_quality
+from .academic_phase_supply_preparation import build_academic_phase_supply_preparation
 from .academic_term_snapshot_quality import build_academic_term_snapshot_quality
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
@@ -2499,6 +2500,10 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('order_deadline_reminders', '订单截止提醒', build_order_deadline_reminders),
     ('opportunity_dismissal_quality', '机会流忽略质量', build_opportunity_dismissal_quality),
     ('favorite_collection_quality', '心愿单分组形状', build_favorite_collection_quality),
+    (
+        'academic_phase_supply_preparation', '学期阶段供给预热',
+        build_academic_phase_supply_preparation,
+    ),
     (
         'academic_term_snapshot_quality', '学期阶段快照质量',
         build_academic_term_snapshot_quality,
@@ -9893,6 +9898,78 @@ def operations_dashboard_export(request):
         '不是窗口，和窗口内的新建规模分开报。本模块只报告，不改任何一条 Favorite.collection、'
         '不删分组、不改分组名、不预设任何分组名。',
     ])
+    preparation = dashboard['academic_phase_supply_preparation']
+    writer.writerow([])
+    writer.writerow(['学期阶段供给预热'])
+    writer.writerow(['指标', '数值', '说明'])
+    writer.writerow([
+        '下一阶段',
+        (
+            f"{preparation['upcoming_phase_label']} "
+            f"{preparation['upcoming_start_date']:%Y-%m-%d}"
+            if preparation['has_upcoming_phase'] else '不在预热窗口'
+        ),
+        (
+            f"距开始 {preparation['days_until']} 天"
+            if preparation['has_upcoming_phase'] else preparation['empty_reason']
+        ),
+    ])
+    writer.writerow([
+        '历史基准阶段',
+        (
+            f"{preparation['benchmark_term_name']} "
+            f"{preparation['benchmark_phase_label']} "
+            f"{preparation['benchmark_start_date']:%Y-%m-%d} 至 "
+            f"{preparation['benchmark_end_date']:%Y-%m-%d}"
+            if preparation['has_benchmark'] else '没有可比阶段'
+        ),
+        (
+            '优先同学期类型；没有可比阶段时不造基线'
+            if preparation['has_benchmark'] else preparation['empty_reason']
+        ),
+    ])
+    if preparation['has_benchmark']:
+        writer.writerow([
+            '当前预热窗口',
+            f"{preparation['lead_start_date']:%Y-%m-%d} 至 {preparation['lead_end_date']:%Y-%m-%d}",
+            f"固定 {preparation['preparation_days']} 天，不随看板周期参数变化",
+        ])
+        writer.writerow([
+            '提示门槛',
+            f"搜索 ≥ {preparation['min_guidance_searches']} 次，"
+            f"无结果 ≥ {preparation['min_guidance_zero_results']} 次",
+            '一次空结果不足以构成需求形状',
+        ])
+        writer.writerow([
+            '节奏阈值',
+            f"当前新增达到 7 天折算基准的 {preparation['pace_threshold_percent']}% 以上为接近基准",
+            '折算值是读数比例，不是运营目标',
+        ])
+        writer.writerow([])
+        writer.writerow([
+            '分类', '基准搜索', '基准无结果', '无结果占比（%）',
+            '基准求购', '基准新增商品', '7 天供给基准',
+            '当前求购', '当前新增商品', '当前现货', '提示', '节奏', '节奏百分比',
+        ])
+        for row in preparation['rows']:
+            writer.writerow([
+                row['category_name'], row['search_count'], row['zero_result_count'],
+                '' if row['zero_result_share'] is None else row['zero_result_share'],
+                row['benchmark_demand_count'], row['benchmark_item_count'],
+                '' if row['lead_baseline_items'] is None else row['lead_baseline_items'],
+                row['lead_demand_count'], row['lead_item_count'],
+                row['available_item_count'], row['guidance_label'], row['pace_label'],
+                '' if row['pace_percent'] is None else row['pace_percent'],
+            ])
+        writer.writerow([
+            '结论', preparation['summary'],
+            '页面保留前 10 行，本 CSV 输出全部分类行；分类行按基准无结果搜索数排序',
+        ])
+        writer.writerow([
+            '隐私与只读边界',
+            '不输出搜索词、标题、用户或链接',
+            '不自动配置专题、不改推荐、不发提醒、不创建任务',
+        ])
     snapshot = dashboard['academic_term_snapshot_quality']
     writer.writerow([])
     writer.writerow(['学期阶段统计快照'])

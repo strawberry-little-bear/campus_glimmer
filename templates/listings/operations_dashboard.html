@@ -101,7 +101,7 @@
         <div><span class="eyebrow eyebrow-soft">Build observability</span><h2>看板自身构建耗时</h2></div>
         <span class="ops-panel-hint">本次请求 · 不含渲染与下载</span>
     </div>
-    <p class="search-rhythm-note mb-3"><i class="bi bi-stopwatch me-1"></i>这里量的是运营看板自己：核心统计和 46 个共享面板各花了多久。数字只属于当前请求，不落库、不做跨请求平均，也不自动优化任何查询。</p>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-stopwatch me-1"></i>这里量的是运营看板自己：核心统计和当前注册的共享面板各花了多久。数字只属于当前请求，不落库、不做跨请求平均，也不自动优化任何查询。</p>
     <div class="row g-3 mb-4">
         <div class="col-md-3"><div class="ops-mini-stat"><span>共享构建器</span><strong>{{ dashboard_build_performance.metrics.builder_total }}</strong><small>核心统计 + 共享面板</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>计入耗时</span><strong>{{ dashboard_build_performance.metrics.total_elapsed_ms }} ms</strong><small>只含共享构建函数</small></div></div>
@@ -2623,7 +2623,58 @@
     {% else %}<div class="empty-inline mt-3">站内还没有任何心愿单分组。第一个分组建出来之后，这里会开始统计。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>空分组按 <code>FavoriteCollection.created_at</code> 拆「刚建」和「早就建了还空着」，{{ favorite_collection_quality.metrics.empty_grace_days }} 天没有理论依据，取的是「一个真心想用分组的人不会一周都想不起来往里放第一条」这个量级。两条占比相差不满 {{ favorite_collection_quality.metrics.noise_points }} 个百分点视为噪声。本模块只报告，不新建分组、不合并分组、不改任何一条 <code>Favorite.collection</code>、不改任何分组名、不动 <code>FavoriteCollectionForm</code> 的任何校验、不给任何用户排名、不预设任何分组名。</div>
 </section>
-<section class="content-card ops-panel mb-4 snapshot-quality-panel">
+<section class="content-card ops-panel mb-4 phase-preparation-panel" id="academic-phase-supply-preparation">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Phase preparation</span><h2>学期阶段供给预热</h2></div>
+        <span class="ops-panel-hint">下一阶段 {{ academic_phase_supply_preparation.lookahead_days }} 天内开始时触发</span>
+    </div>
+    {% if academic_phase_supply_preparation.has_upcoming_phase and academic_phase_supply_preparation.has_benchmark %}
+    <div class="phase-preparation-summary">
+        <div><span>下一阶段</span><strong>{{ academic_phase_supply_preparation.upcoming_phase_label }}</strong><small>{{ academic_phase_supply_preparation.upcoming_start_date|date:"m月d日" }} 开始 · 还有 {{ academic_phase_supply_preparation.days_until }} 天</small></div>
+        <div><span>历史基准</span><strong>{{ academic_phase_supply_preparation.benchmark_term_name }}</strong><small>{{ academic_phase_supply_preparation.benchmark_phase_label }} · {{ academic_phase_supply_preparation.benchmark_day_count }} 天</small></div>
+        <div><span>值得预热分类</span><strong>{{ academic_phase_supply_preparation.guidance_total }}</strong><small>历史搜索 ≥ {{ academic_phase_supply_preparation.min_guidance_searches }} 次且无结果 ≥ {{ academic_phase_supply_preparation.min_guidance_zero_results }} 次</small></div>
+        <div class="phase-preparation-warning"><span>节奏偏慢</span><strong>{{ academic_phase_supply_preparation.slow_total }}</strong><small>当前 {{ academic_phase_supply_preparation.preparation_days }} 天新增未到基准 {{ academic_phase_supply_preparation.pace_threshold_percent }}%</small></div>
+    </div>
+
+    <div class="phase-preparation-reading mt-3">
+        <div class="phase-preparation-block-heading">
+            <strong>分类预热表</strong>
+            <span>基准：{{ academic_phase_supply_preparation.benchmark_start_date|date:"Y-m-d" }} 至 {{ academic_phase_supply_preparation.benchmark_end_date|date:"Y-m-d" }}；当前窗口：{{ academic_phase_supply_preparation.lead_start_date|date:"Y-m-d" }} 至 {{ academic_phase_supply_preparation.lead_end_date|date:"Y-m-d" }}</span>
+        </div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 phase-preparation-table">
+                <thead><tr><th>分类</th><th>基准搜索 / 无结果</th><th>无结果占比</th><th>基准求购 / 新增</th><th>7 天供给基准</th><th>当前求购 / 新增</th><th>当前现货</th><th>提示</th><th>节奏</th></tr></thead>
+                <tbody>
+                    {% for row in academic_phase_supply_preparation.page_rows %}
+                    <tr>
+                        <td><strong>{{ row.category_name }}</strong></td>
+                        <td>{{ row.search_count }} / {{ row.zero_result_count }}</td>
+                        <td>{% if row.zero_result_share != None %}{{ row.zero_result_share }}%{% else %}—{% endif %}</td>
+                        <td>{{ row.benchmark_demand_count }} / {{ row.benchmark_item_count }}</td>
+                        <td>{% if row.lead_baseline_items != None %}{{ row.lead_baseline_items }}{% else %}无基准{% endif %}</td>
+                        <td>{{ row.lead_demand_count }} / {{ row.lead_item_count }}</td>
+                        <td>{{ row.available_item_count }}</td>
+                        <td><span class="phase-preparation-flag phase-preparation-flag-{{ row.is_guidance_candidate|yesno:'candidate,observe' }}">{{ row.guidance_label }}</span></td>
+                        <td><span class="phase-preparation-pace phase-preparation-pace-{{ row.pace_key }}">{{ row.pace_label }}</span>{% if row.pace_percent != None %}<small class="d-block text-muted">{{ row.pace_percent }}%</small>{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9">历史基准阶段没有可按分类观察的搜索、求购或供给。</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if academic_phase_supply_preparation.category_total > academic_phase_supply_preparation.page_rows|length %}
+        <p class="phase-preparation-note mt-2 mb-0">页面保留无结果搜索最多的前 {{ academic_phase_supply_preparation.page_row_limit }} 个分类，共 {{ academic_phase_supply_preparation.category_total }} 个；CSV 导出全量 {{ academic_phase_supply_preparation.category_total }} 行。</p>
+        {% endif %}
+    </div>
+
+    <p class="phase-preparation-note mt-3"><i class="bi bi-info-circle me-1"></i>{{ academic_phase_supply_preparation.summary }}{% if not academic_phase_supply_preparation.benchmark_kind_matched %} 未找到同学期的历史同阶段，基准退到最近的其它学期类型，季节解释要更谨慎。{% endif %}</p>
+    <p class="phase-preparation-note mb-0">7 天供给基准只是把历史阶段的新增商品折算成等长窗口，<b>不是运营目标</b>；当前现货是构建面板那一刻的快照，不预测阶段开始时还剩多少。搜索和求购按记录上的分类外键聚合，分类删除后只能归入未设置分类，不回填历史。</p>
+    {% else %}
+    <div class="empty-inline mt-3">{{ academic_phase_supply_preparation.empty_reason }}</div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里只输出分类聚合，不输出搜索词、标题、用户或链接；不自动配置专题、不改推荐、不发提醒、不创建任务。</div>
+</section><section class="content-card ops-panel mb-4 snapshot-quality-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Snapshot</span><h2>学期阶段统计快照</h2></div>
         <span class="ops-panel-hint">周期 {{ academic_term_snapshot_quality.period_days }} 天·只报告不改任何快照</span>

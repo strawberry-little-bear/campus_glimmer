@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，121 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，122 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（120 个）
+## listings/ 的业务模块（122 个）
 
 
 <details>
-<summary>业务模块清单（120 个，按业务链路归组）</summary>
+<summary>业务模块清单（122 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -137,6 +137,7 @@ campus_glimmer/
 | `reputation.py` | 卖家交易信誉摘要与公开指标 | 读写 |
 | `return_handshake.py` | 借用归还双方确认的顺序、间隔与只点一半：归还闭环的四条损失（只报告不改写） | 读写 |
 | `search_trend.py` | 搜索词与筛选组合的学期窗口趋势、分面跳变与引导词对比（只报告） | 读写 |
+| `academic_phase_supply_preparation.py` | 阶段切换前的分类供给预热：历史同阶段需求 × 当前 7 天供给（只报告） | 只报告 |
 | `academic_term_snapshot_quality.py` | 学期阶段快照的规模、覆盖、孤儿行与过期（只报告不改写） | 只报告 |
 | `academic_calendar.py` | 学期阶段划分、阶段统计与快照读路径（academic_calendar 的读路径见文件内 `_phase_row`） | 读写 |
 | `transaction_safety.py` | 订单交易安全卡、可解释风险提示与安全卡信号指纹 | 读写 |
@@ -162,14 +163,16 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（131 个）
+## 业务链路的测试模块（132 个）
 
 <details>
-<summary>业务链路测试清单（131 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（132 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
 - **`test_academic_calendar.py`**：学期阶段划分、阶段统计与快照写路径
+
+- **`test_academic_phase_supply_preparation.py`**：阶段临近、同学期同阶段基准、分类样本门槛、7 天节奏、隐私与导出契约
 
 - **`test_academic_term_snapshot_quality.py`**：快照规模、覆盖分母、孤儿行与过期残留分开，命令状态与看板导出
 

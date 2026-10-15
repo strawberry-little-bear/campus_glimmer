@@ -214,6 +214,10 @@
 
 关注搜索汇总和互助机会摘要会在通知尾部追加一句当前阶段说明，例如“当前处于秋季学期考试周：复习资料和陈旧资料需求上升。”，让用户理解为什么此刻收到这类提醒。没有配置学时会自动退化成原来的文案，不影响任何已有功能。
 
+**阶段切换预热**
+
+运营看板还会在下一阶段开始前 14 天给出供给预热提示：优先对比上一届同学期的同阶段，把历史搜索、无结果搜索、求购与新增商品按分类聚合，再对照当前 7 天的新增供给和可见现货。提示要求历史搜索至少 3 次且无结果至少 2 次；面板只输出分类聚合，不输出搜索词、标题或用户，也不会自动配置专题或发送提醒。
+
 **维护命令**
 
 ```bash
@@ -290,7 +294,7 @@ campus_glimmer/
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
-| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 56 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
+| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 57 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
 | 需求跟进闭环 | `DemandOpportunityTask.created_at`、`DemandOpportunityTask.radar_key`、`DemandOpportunityTask.available_supply`、`SearchQuery.result_count` | 任务创建时间是唯一稳定的分界线（雷达行是滚动聚合，内容每次刷新都变），创建时的供给数用于判断「动作是否真的发生」，搜索结果数用于判断「需求是否被满足」 |
 | 同义词候选 | `SearchQuery.user_id`、`SearchQuery.query`、`SearchQuery.result_count`、`SearchQuery.created_at`、`SearchSynonym.keyword` / `synonym` / `is_active` | 同一次会话内相邻两次搜索的改口证据；已启用同义词的两个方向都参与去重，停用同义词不屏蔽候选 |
 | 同义词效果回流 | 不新增表，读 `SearchSynonym.created_at` + `SearchQuery` | 确认时间是唯一稳定的分界线；搜索词记录的是学生原本输入的那一串（扩展只发生在查询内部），按扩展词统计会成为自己和自己比、永远报成功 |
