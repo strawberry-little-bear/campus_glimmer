@@ -263,6 +263,53 @@ class Item(models.Model):
         ]
 
 
+class ItemRefreshEvent(models.Model):
+    """One accepted listing refresh, preserved as an immutable event row.
+
+    ``Item.last_refreshed_at`` is a pointer that moves on every refresh and
+    ``Item.refresh_count`` is only a total. Neither can answer *when each of
+    those refreshes happened*, so cross-period action analysis had to avoid the
+    field rather than mistake overwritten history for a decline. This ledger
+    records the successful write itself; rejected refreshes deliberately leave
+    no row because they did not change ranking or the counter.
+    """
+
+    item = models.ForeignKey(
+        Item, on_delete=models.CASCADE,
+        related_name='refresh_events', verbose_name='商品',
+    )
+    seller = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='item_refresh_events', verbose_name='卖家',
+    )
+    refreshed_at = models.DateTimeField('刷新时间')
+    refresh_count_after = models.PositiveIntegerField('刷新后累计次数')
+
+    class Meta:
+        verbose_name = '商品刷新事件'
+        verbose_name_plural = '商品刷新事件'
+        ordering = ['-refreshed_at', 'item_id', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['item', 'refresh_count_after'],
+                name='unique_item_refresh_event',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['item', '-refreshed_at'],
+                name='item_refresh_event_item_idx',
+            ),
+            models.Index(
+                fields=['seller', '-refreshed_at'],
+                name='item_refresh_event_seller_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.item_id} · 第 {self.refresh_count_after} 次刷新 · {self.refreshed_at:%Y-%m-%d %H:%M}'
+
+
 class LifecycleReminderEvent(models.Model):
     """One item-level lifecycle reminder that was actually sent."""
 

@@ -6455,6 +6455,66 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 item-refresh-event-ledger-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Refresh event ledger</span><h2>商品刷新事件台账</h2></div>
+        <span class="ops-panel-hint">先守住“每一次刷新发生在什么时候”，再谈行动效果</span>
+    </div>
+    {% if not item_refresh_event_ledger.has_data %}
+    <div class="empty-inline">{{ item_refresh_event_ledger.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内事件</span><strong>{{ item_refresh_event_ledger.event_count }}</strong><small>{{ item_refresh_event_ledger.days }} 天，只含通过限流的真实刷新</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>商品 / 卖家</span><strong>{{ item_refresh_event_ledger.item_count }} / {{ item_refresh_event_ledger.seller_count }}</strong><small>按事件去重，不输出身份清单</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>完整台账覆盖</span><strong>{{ item_refresh_event_ledger.coverage.full_count }}</strong><small>{% if item_refresh_event_ledger.coverage.full_coverage_rate is None %}暂无累计刷新商品{% else %}占累计刷新商品 {{ item_refresh_event_ledger.coverage.full_coverage_rate }}%{% endif %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat{% if item_refresh_event_ledger.coverage.inconsistent_count %} refresh-quota-drift-mini-stat-warning{% endif %}"><span>需要核对</span><strong>{{ item_refresh_event_ledger.coverage.inconsistent_count }}</strong><small>事件序列与累计计数不一致</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">逐日事件形状</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>日期</th><th>事件</th><th>商品</th><th>卖家</th><th>形状</th></tr></thead>
+                    <tbody>
+                        {% for row in item_refresh_event_ledger.daily_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.event_count }}</td>
+                            <td>{{ row.item_count }}</td>
+                            <td>{{ row.seller_count }}</td>
+                            <td><span class="d-block" style="height:8px;width:{{ row.bar_height }}%;min-width:4px;border-radius:999px;background:var(--bs-primary);opacity:.75"></span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if item_refresh_event_ledger.daily_rows_truncated %}
+            <p class="small text-muted mt-2 mb-0">页面保留最近 {{ item_refresh_event_ledger.daily_row_limit }} 天；CSV 导出同一截断边界，避免两端看起来来自不同窗口。</p>
+            {% endif %}
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">台账覆盖与一致性</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>口径</th><th>商品数 / 次数</th><th>读数</th></tr></thead>
+                    <tbody>
+                        <tr><td>累计刷新商品</td><td>{{ item_refresh_event_ledger.coverage.counted_item_count }}</td><td>分母，只统计 refresh_count &gt; 0</td></tr>
+                        <tr><td>完整事件覆盖</td><td>{{ item_refresh_event_ledger.coverage.full_count }}</td><td>事件数等于累计次数</td></tr>
+                        <tr><td>只有历史字段</td><td>{{ item_refresh_event_ledger.coverage.historical_only_count }}</td><td>台账上线前刷过，之后未再刷</td></tr>
+                        <tr><td>有历史缺口</td><td>{{ item_refresh_event_ledger.coverage.legacy_gap_count }} / {{ item_refresh_event_ledger.coverage.legacy_missing_total }} 次</td><td>不是错误，不回填</td></tr>
+                        <tr><td>最新计数不一致</td><td>{{ item_refresh_event_ledger.coverage.latest_mismatch_count }}</td><td>需要人工核对</td></tr>
+                        <tr><td>事件序号断档</td><td>{{ item_refresh_event_ledger.coverage.sequence_gap_count }}</td><td>需要人工核对</td></tr>
+                        <tr><td>未来时间事件</td><td>{{ item_refresh_event_ledger.future_event_count }}</td><td>容忍 {{ item_refresh_event_ledger.future_tolerance_minutes }} 分钟时钟偏差</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">{{ item_refresh_event_ledger.summary }}</p>
+        </div>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-database me-1"></i>{{ item_refresh_event_ledger.source_note }} {{ item_refresh_event_ledger.history_note }} 本面板只读，不清零、不改额度、不回填、不按卖家排名，也不把刷新次数本身解释为提醒效果。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 refresh-quota-drift-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Refresh quota drift</span><h2>刷新额度为什么是一次性的</h2></div>

@@ -51,6 +51,7 @@ from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
 from .refresh_quota_drift import build_refresh_quota_drift
+from .item_refresh_event_ledger import build_item_refresh_event_ledger_dashboard
 from .refresh_response import build_refresh_response
 from .price_response import build_price_response
 from .category_price_reference import build_category_price_reference
@@ -110,7 +111,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
 from .recommendation_quality import build_recommendation_quality
@@ -2375,6 +2376,12 @@ def refresh_item(request, item_id):
         locked.last_refreshed_at = now
         locked.refresh_count = locked.refresh_count + 1
         locked.save(update_fields=['last_refreshed_at', 'refresh_count', 'updated_at'])
+        ItemRefreshEvent.objects.create(
+            item=locked,
+            seller_id=locked.seller_id,
+            refreshed_at=now,
+            refresh_count_after=locked.refresh_count,
+        )
 
     messages.success(request, f'已刷新《{item.title}》，商品会重新回到列表前排。')
     return redirect('my_items')
@@ -2457,6 +2464,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('meeting_attendance', '面约到场', build_meeting_attendance),
     ('meeting_reschedule', '面约改期', build_meeting_reschedule),
     ('refresh_quota_drift', '刷新额度漂移', build_refresh_quota_drift),
+    ('item_refresh_event_ledger', '商品刷新事件台账', build_item_refresh_event_ledger_dashboard),
     ('relist_freshness', '重新上架新鲜度', build_relist_freshness),
     ('refresh_response', '商品刷新回响', build_refresh_response),
     ('price_response', '价格调整回响', build_price_response),
@@ -7100,6 +7108,59 @@ def operations_dashboard_export(request):
         writer.writerow(['供给侧运营建议'])
         for recommendation in supply['recommendations']:
             writer.writerow([recommendation])
+
+    refresh_ledger = dashboard['item_refresh_event_ledger']
+    writer.writerow([])
+    writer.writerow(['商品刷新事件台账', '数值', '说明'])
+    writer.writerow(['口径', refresh_ledger['summary'], refresh_ledger['source_note']])
+    writer.writerow([
+        '回看天数', refresh_ledger['days'],
+        f"从 {timezone.localtime(refresh_ledger['window_start']):%Y-%m-%d %H:%M} 到 "
+        f"{timezone.localtime(refresh_ledger['window_end']):%Y-%m-%d %H:%M}",
+    ])
+    writer.writerow(['周期内事件', refresh_ledger['event_count'], 'GET 与被限流拒绝的请求不写入'])
+    writer.writerow(['事件口径商品数', refresh_ledger['item_count'], '按商品去重'])
+    writer.writerow(['事件口径卖家数', refresh_ledger['seller_count'], '按卖家去重，不输出身份'])
+    writer.writerow([
+        '首 / 末事件',
+        '' if refresh_ledger['first_event_at'] is None else f"{timezone.localtime(refresh_ledger['first_event_at']):%Y-%m-%d %H:%M}",
+        '' if refresh_ledger['last_event_at'] is None else f"{timezone.localtime(refresh_ledger['last_event_at']):%Y-%m-%d %H:%M}",
+    ])
+    writer.writerow([
+        '累计刷新商品', refresh_ledger['coverage']['counted_item_count'],
+        '覆盖口径分母；从未刷新过的商品不进入',
+    ])
+    writer.writerow([
+        '完整事件覆盖', refresh_ledger['coverage']['full_count'],
+        '' if refresh_ledger['coverage']['full_coverage_rate'] is None else f"覆盖率 {refresh_ledger['coverage']['full_coverage_rate']}%",
+    ])
+    writer.writerow([
+        '只有历史字段', refresh_ledger['coverage']['historical_only_count'],
+        '台账上线前刷过、之后未再刷，不回填',
+    ])
+    writer.writerow([
+        '有历史缺口', refresh_ledger['coverage']['legacy_gap_count'],
+        f"缺口 {refresh_ledger['coverage']['legacy_missing_total']} 次；这是留存边界，不是错误",
+    ])
+    writer.writerow([
+        '序列不一致', refresh_ledger['coverage']['inconsistent_count'],
+        f"最新计数不一致 {refresh_ledger['coverage']['latest_mismatch_count']} 件；序号断档 {refresh_ledger['coverage']['sequence_gap_count']} 件",
+    ])
+    writer.writerow([
+        '未来时间事件', refresh_ledger['future_event_count'],
+        f"容忍 {refresh_ledger['future_tolerance_minutes']} 分钟时钟偏差",
+    ])
+    writer.writerow(['说明', refresh_ledger['history_note'], '只读，不修复、不清零、不排名'])
+
+    writer.writerow([])
+    writer.writerow(['日期', '事件数', '商品数', '卖家数'])
+    for row in refresh_ledger['daily_rows']:
+        writer.writerow([row['day'], row['event_count'], row['item_count'], row['seller_count']])
+    if refresh_ledger['daily_rows_truncated']:
+        writer.writerow([
+            '截断说明', refresh_ledger['daily_row_count'], refresh_ledger['daily_row_limit'],
+            '页面与 CSV 都保留最近这些天数',
+        ])
 
     refresh = dashboard['refresh_quota_drift']
     writer.writerow([])
