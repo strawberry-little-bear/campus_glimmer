@@ -928,6 +928,13 @@ a { color: inherit; text-decoration: none; }
 .price-history-rise { color: #bd7c5d; }
 .price-history-baseline, .price-history-state { color: #8ba094; font-size: .65rem; }
 .price-history-note { display: block; margin-top: 9px; color: #98a99f; font-size: .64rem; line-height: 1.55; }
+.price-history-maintenance { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid #dcebe1; border-radius: 14px; background: #f7fcf8; }
+.price-history-maintenance i { color: #5e9d75; font-size: 1rem; line-height: 1.45; }
+.price-history-maintenance strong { display: block; color: #315946; font-size: .78rem; }
+.price-history-maintenance span { display: block; margin-top: 2px; color: #6e8177; font-size: .72rem; line-height: 1.55; }
+.price-history-maintenance-positive { border-color: #d3ecdb; background: #f4fbf6; }
+.price-history-maintenance-warning { border-color: #ecdcbc; background: #fdf9ee; }
+.price-history-maintenance-warning i { color: #a5762d; }
 .campaign-grid { align-items: stretch; }
 .campaign-card { display: flex; flex-direction: column; overflow: hidden; border-color: #deebe1; background: linear-gradient(145deg, #ffffff, #f8fcf9); }
 .campaign-card-icon { display: grid; width: 52px; height: 52px; margin: 22px 22px 0; place-items: center; color: #3d9667; background: #e5f4e8; border-radius: 16px; font-size: 1.4rem; }

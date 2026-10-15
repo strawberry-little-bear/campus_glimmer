@@ -52,7 +52,7 @@ campus_glimmer/
 | `meeting_scheduling.py` | 交付时间安排与冲突检测 | 读写 |
 | `price_insights.py` | 同类价格参考与需求热度分析 | 读写 |
 | `price_changes.py` | 出售价格轨迹与收藏商品降价提醒 | 读写 |
-| `price_history.py` | 商品详情价格轨迹的连续性校验、最近窗口、走势与隐私粒度（只报告） | 只报告 |
+| `price_history.py` | 商品详情价格轨迹的连续性校验、最近窗口、走势、隐私粒度与卖家维护提示（只报告） | 只报告 |
 | `price_change_quality.py` | 出售价格轨迹的方向、幅度、重复调价与分类视图（只报告不改写） | 只报告 |
 | `campus_pulse.py` | 按校园地点聚合供需热力与运营压力 | 读写 |
 | `location_registry_quality.py` | 校园地点档案形状、字段覆盖、当前引用、近似重名与停用引用（只读观测） | 只报告 |
@@ -330,7 +330,7 @@ campus_glimmer/
 - **`test_price_insights.py`**：同类价格分位数与参考可信度，样本不足时降低提示强度
 
 - **`test_price_change_quality.py`**：出售价格轨迹的方向、幅度、零元基线、重复调价、当前分类视图、隐私边界与看板导出
-- **`test_price_history.py`**：商品详情价格轨迹的展示门槛、连续性、最近窗口、零元基线、隐私粒度与只读边界
+- **`test_price_history.py`**：商品详情价格轨迹的展示门槛、连续性、最近窗口、零元基线、隐私粒度、卖家维护提示与只读边界
 
 - **`test_rating_quality.py`**：覆盖率分母只收已走完、完成时刻取 OrderEvent、双向按方向拆与看板导出测试
 

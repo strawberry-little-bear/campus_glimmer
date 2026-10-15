@@ -98,6 +98,15 @@
 
             {% if user == item.seller %}
             <div class="owner-actions mt-4"><span class="small text-muted">这是你发布的商品</span><div class="d-flex gap-2 mt-2"><a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">编辑</a><a href="{% url 'mark_sold' item.id %}" class="btn btn-sm btn-outline-secondary">更新状态</a>{% if item.trade_mode == 'free' %}<a href="{% url 'manage_gift_applications' item.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-people me-1"></i>领取申请{% if pending_gift_application_count %}（{{ pending_gift_application_count }}）{% endif %}</a>{% endif %}<a href="{% url 'delete_item' item.id %}" class="btn btn-sm btn-outline-danger">删除</a></div></div>
+            {% if price_history_maintenance.visible %}
+            <div class="price-history-maintenance price-history-maintenance-{{ price_history_maintenance.tone }} mt-3" role="status">
+                <i class="bi bi-activity"></i>
+                <div>
+                    <strong>价格轨迹维护 · {{ price_history_maintenance.title }}</strong>
+                    <span>{{ price_history_maintenance.summary }}</span>
+                </div>
+            </div>
+            {% endif %}
             {% elif user.is_authenticated %}
             <div class="mt-4">{% if has_reported %}<span class="small text-muted"><i class="bi bi-check2-circle me-1"></i>你已提交过举报</span>{% else %}<a href="{% url 'report_item' item.id %}" class="small text-muted report-link"><i class="bi bi-flag me-1"></i>举报此商品</a>{% endif %}</div>
             {% endif %}

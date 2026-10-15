@@ -2,14 +2,16 @@
 from datetime import datetime
 from decimal import Decimal
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, User
 from django.db import connection
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import Category, Item, ItemPriceChange
-from .price_history import build_item_price_history
+from .price_history import (
+    build_item_price_history, build_item_price_history_maintenance,
+)
 
 
 class ItemPriceHistoryTests(TestCase):
@@ -21,6 +23,9 @@ class ItemPriceHistoryTests(TestCase):
         )
         self.operator = User.objects.create_user(
             username='history-operator', password='safe-password-123',
+        )
+        self.buyer = User.objects.create_user(
+            username='history-buyer', password='safe-password-123',
         )
         self.category = Category.objects.create(name='详情价格轨迹分类')
         self.item = Item.objects.create(
@@ -197,3 +202,136 @@ class ItemPriceHistoryTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, '最近调价记录')
+
+    def test_maintenance_is_visible_only_to_item_seller(self):
+        self.make_history([
+            ('100.00', '120.00'), ('120.00', '95.00'), ('95.00', '70.00'),
+        ])
+
+        self.assertTrue(
+            build_item_price_history_maintenance(self.item, self.seller)['visible']
+        )
+        self.assertFalse(
+            build_item_price_history_maintenance(self.item, self.buyer)['visible']
+        )
+        self.assertFalse(
+            build_item_price_history_maintenance(self.item, AnonymousUser())['visible']
+        )
+
+    def test_maintenance_only_applies_to_sale_items(self):
+        self.make_history([
+            ('100.00', '120.00'), ('120.00', '95.00'), ('95.00', '70.00'),
+        ])
+        self.item.trade_mode = 'free'
+        self.item.save(update_fields=['trade_mode', 'updated_at'])
+        self.assertFalse(
+            build_item_price_history_maintenance(self.item, self.seller)['visible']
+        )
+
+        self.item.trade_mode = 'borrow'
+        self.item.save(update_fields=['trade_mode', 'updated_at'])
+        self.assertFalse(
+            build_item_price_history_maintenance(self.item, self.seller)['visible']
+        )
+
+    def test_maintenance_distinguishes_empty_waiting_and_public_states(self):
+        empty = build_item_price_history_maintenance(self.item, self.seller)
+        self.assertEqual(empty['state'], 'empty')
+        self.assertEqual(empty['tone'], 'info')
+        self.assertEqual(empty['title'], '暂无轨迹')
+        self.assertEqual(empty['change_count'], 0)
+
+        self.make_history([('100.00', '120.00'), ('120.00', '95.00')])
+        waiting = build_item_price_history_maintenance(self.item, self.seller)
+        self.assertEqual(waiting['state'], 'waiting')
+        self.assertEqual(waiting['title'], '等待积累')
+        self.assertIn('已记录 2 次价格调整', waiting['summary'])
+
+        self.make_history([('95.00', '70.00')])
+        public = build_item_price_history_maintenance(self.item, self.seller)
+        self.assertEqual(public['state'], 'public')
+        self.assertEqual(public['tone'], 'positive')
+        self.assertEqual(public['title'], '正常展示')
+        self.assertIn('最近 3 次价格调整', public['summary'])
+
+    def test_maintenance_reports_broken_window(self):
+        self.make_history([
+            ('100.00', '120.00'), ('95.00', '80.00'), ('80.00', '70.00'),
+        ])
+
+        result = build_item_price_history_maintenance(self.item, self.seller)
+
+        self.assertEqual(result['state'], 'broken')
+        self.assertEqual(result['tone'], 'warning')
+        self.assertEqual(result['title'], '轨迹断链')
+        self.assertIn('买家侧暂不展示', result['summary'])
+
+    def test_maintenance_reports_current_price_mismatch(self):
+        self.make_history([
+            ('100.00', '120.00'), ('120.00', '95.00'), ('95.00', '70.00'),
+        ])
+        self.item.price = Decimal('75.00')
+        self.item.save(update_fields=['price', 'updated_at'])
+
+        result = build_item_price_history_maintenance(self.item, self.seller)
+
+        self.assertEqual(result['state'], 'current_mismatch')
+        self.assertEqual(result['title'], '价格不一致')
+        self.assertIn('¥70.00', result['summary'])
+        self.assertIn('¥75.00', result['summary'])
+
+    def test_maintenance_checks_only_latest_six_changes(self):
+        changes = self.make_history([
+            ('100.00', '110.00'),
+            ('110.00', '120.00'),
+            ('120.00', '130.00'),
+            ('130.00', '140.00'),
+            ('140.00', '150.00'),
+            ('150.00', '160.00'),
+            ('160.00', '170.00'),
+        ])
+        ItemPriceChange.objects.filter(pk=changes[0].pk).update(
+            new_price=Decimal('90.00')
+        )
+
+        result = build_item_price_history_maintenance(self.item, self.seller)
+
+        self.assertEqual(result['state'], 'public')
+        self.assertEqual(result['change_count'], 7)
+        self.assertIn('最近 6 次价格调整（共 7 次）', result['summary'])
+
+    def test_maintenance_builder_is_read_only_and_does_not_expose_operator(self):
+        self.make_history([
+            ('100.00', '120.00'), ('120.00', '95.00'), ('95.00', '70.00'),
+        ])
+        connection.queries_log.clear()
+
+        with self.assertNumQueries(2):
+            result = build_item_price_history_maintenance(self.item, self.seller)
+
+        statements = [query['sql'].lstrip().upper() for query in connection.queries]
+        self.assertEqual(len(statements), 2)
+        self.assertTrue(all(statement.startswith('SELECT') for statement in statements))
+        self.assertNotIn(self.operator.username, str(result))
+        self.assertNotIn('changed_by', str(result))
+
+    def test_item_detail_renders_maintenance_for_seller_only(self):
+        self.make_history([
+            ('100.00', '120.00'), ('120.00', '95.00'), ('95.00', '70.00'),
+        ])
+        url = reverse('item_detail', args=[self.item.pk])
+
+        self.client.force_login(self.seller)
+        seller_response = self.client.get(url)
+        self.assertContains(seller_response, '正常展示')
+        self.assertContains(seller_response, '买家侧正在展示最近 3 次价格调整')
+        self.assertNotContains(seller_response, self.operator.username)
+
+        self.client.force_login(self.buyer)
+        buyer_response = self.client.get(url)
+        self.assertNotContains(buyer_response, '价格轨迹维护提示')
+        self.assertNotContains(buyer_response, '买家侧正在展示最近 3 次价格调整')
+
+        self.client.logout()
+        anonymous_response = self.client.get(url)
+        self.assertNotContains(anonymous_response, '价格轨迹维护提示')

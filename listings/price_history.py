@@ -71,19 +71,26 @@ def _chart(prices):
     }
 
 
-def build_item_price_history(item):
-    """Return a renderable, date-granularity price window for a sale item."""
-    if item.trade_mode != 'sale' or item.price is None:
-        return _hidden()
-
+def _load_recent_changes(item):
     total_change_count = item.price_changes.count()
     if total_change_count < MIN_CHANGE_COUNT:
-        return _hidden()
+        return total_change_count, []
 
     changes = list(
         item.price_changes.order_by('-created_at', '-pk')[:MAX_CHANGE_COUNT]
     )
     changes.reverse()
+    return total_change_count, changes
+
+
+def build_item_price_history(item):
+    """Return a renderable, date-granularity price window for a sale item."""
+    if item.trade_mode != 'sale' or item.price is None:
+        return _hidden()
+
+    total_change_count, changes = _load_recent_changes(item)
+    if len(changes) < MIN_CHANGE_COUNT:
+        return _hidden()
 
     for previous, current in zip(changes, changes[1:]):
         if previous.new_price != current.old_price:
@@ -134,4 +141,91 @@ def build_item_price_history(item):
             f'价格走势图：{scope_label}，区间 '
             f'{_money(chart["lowest_price"])} 到 {_money(chart["highest_price"])}'
         ),
+    }
+
+
+def build_item_price_history_maintenance(item, viewer):
+    """Return a read-only price-history diagnosis for the item seller."""
+    if (
+        item.trade_mode != 'sale'
+        or item.price is None
+        or not getattr(viewer, 'is_authenticated', False)
+        or viewer.pk != item.seller_id
+    ):
+        return {'visible': False}
+
+    total_change_count, changes = _load_recent_changes(item)
+    if total_change_count == 0:
+        return {
+            'visible': True,
+            'state': 'empty',
+            'tone': 'info',
+            'title': '暂无轨迹',
+            'summary': '还没有价格轨迹记录。出售商品成功改价后会自动开始记录。',
+            'change_count': total_change_count,
+        }
+
+    if total_change_count < MIN_CHANGE_COUNT:
+        return {
+            'visible': True,
+            'state': 'waiting',
+            'tone': 'info',
+            'title': '等待积累',
+            'summary': (
+                f'已记录 {total_change_count} 次价格调整，'
+                f'达到 {MIN_CHANGE_COUNT} 次连续调整后会向买家展示。'
+            ),
+            'change_count': total_change_count,
+        }
+
+    is_broken = any(
+        previous.new_price != current.old_price
+        for previous, current in zip(changes, changes[1:])
+    )
+    current_mismatch = changes[-1].new_price != item.price
+    mismatch_summary = (
+        f'最近轨迹记录为 {_money(changes[-1].new_price)}，当前价是 {_money(item.price)}。'
+        if current_mismatch else ''
+    )
+
+    if is_broken:
+        summary = (
+            '最近窗口内有价格不衔接的记录，买家侧暂不展示。继续通过正常编辑积累轨迹；'
+            '若确认没有绕过系统编辑，再联系管理员。'
+        )
+        if current_mismatch:
+            summary = f'{summary}{mismatch_summary}'
+        return {
+            'visible': True,
+            'state': 'broken',
+            'tone': 'warning',
+            'title': '轨迹断链',
+            'summary': summary,
+            'change_count': total_change_count,
+        }
+
+    if current_mismatch:
+        return {
+            'visible': True,
+            'state': 'current_mismatch',
+            'tone': 'warning',
+            'title': '价格不一致',
+            'summary': (
+                f'{mismatch_summary}两者不一致时买家侧不会展示价格轨迹，'
+                '请核对最近一次价格修改来源。'
+            ),
+            'change_count': total_change_count,
+        }
+
+    return {
+        'visible': True,
+        'state': 'public',
+        'tone': 'positive',
+        'title': '正常展示',
+        'summary': (
+            f'买家侧正在展示最近 {len(changes)} 次价格调整。'
+            if len(changes) == total_change_count
+            else f'买家侧正在展示最近 {len(changes)} 次价格调整（共 {total_change_count} 次）。'
+        ),
+        'change_count': total_change_count,
     }
