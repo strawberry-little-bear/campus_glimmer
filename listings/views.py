@@ -52,6 +52,7 @@ from .meeting_reschedule import build_meeting_reschedule
 from .refresh_quota_drift import build_refresh_quota_drift
 from .refresh_response import build_refresh_response
 from .price_response import build_price_response
+from .category_price_reference import build_category_price_reference
 from .relist_freshness import build_relist_freshness
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2458,6 +2459,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('relist_freshness', '重新上架新鲜度', build_relist_freshness),
     ('refresh_response', '商品刷新回响', build_refresh_response),
     ('price_response', '价格调整回响', build_price_response),
+    ('category_price_reference', '分类调价参考', build_category_price_reference),
     ('price_change_quality', '出售价格轨迹质量', build_price_change_quality_panel),
     (
         'search_impression_pairing_quality', '搜索曝光与点击配对质量',
@@ -7443,6 +7445,56 @@ def operations_dashboard_export(request):
     writer.writerow(['因果解释', '只描述共同变化；后窗高于前窗不代表调价带来因果提升'])
     writer.writerow(['身份与自由文本', '不输出用户名、商品标题、描述、搜索词、订单号或通知原文'])
     writer.writerow(['运营动作', '不排名、不建议自动改价、不改排序、不写回推荐或风控'])
+
+    category_reference = dashboard['category_price_reference']
+    writer.writerow([])
+    writer.writerow(['分类调价参考'])
+    writer.writerow([])
+    writer.writerow(['口径'])
+    writer.writerow(['字段', '数值', '说明'])
+    writer.writerow([
+        '快照时间', f"{timezone.localtime(category_reference['snapshot_at']):%Y-%m-%d %H:%M}",
+        '当前价格快照；看板周期天数不筛选本面板',
+    ])
+    writer.writerow([
+        '样本范围', f"优先近 {category_reference['recent_sample_days']} 天",
+        '近期没有样本时回退历史样本，每个分类最多取 500 件',
+    ])
+    writer.writerow([
+        '样本状态', f"少于 {category_reference['min_share_sample_count']} 件只报数量",
+        '低可信分类不输出区间外占比',
+    ])
+    writer.writerow([
+        '当前在售', 'available 且未过期',
+        'reserved / sold 只参与价格参考，不进入区间外行动计数',
+    ])
+    writer.writerow([
+        '区间宽度', f"超过 {category_reference['wide_range_ratio'] * 100}% 标为过宽",
+        '只说明分类内价格差异大，不判卖家定价错误',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['分类价格参考'])
+    writer.writerow([
+        '分类', '样本范围', '样本数', '中位数', '常见区间下限', '常见区间上限',
+        '当前在售', '低于区间', '区间内', '高于区间', '区间外',
+        '区间外占比（%）', '区间宽度（%）', '状态', '读法',
+    ])
+    for row in category_reference['rows']:
+        writer.writerow([
+            row['name'], row['sample_scope'], row['sample_count'],
+            f"{row['median_price']:.2f}", f"{row['lower_price']:.2f}",
+            f"{row['upper_price']:.2f}", row['active_count'], row['below_count'],
+            row['within_count'], row['above_count'], row['out_of_range_count'],
+            row['out_of_range_share'] if row['out_of_range_share'] is not None else '—',
+            row['width_percent'], row['status_label'], row['hint'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['只读与隐私边界'])
+    writer.writerow(['项目', '约束'])
+    writer.writerow(['身份与自由文本', '不输出用户名、商品标题、描述或卖家名单'])
+    writer.writerow(['运营动作', '不自动改价、不发提醒、不把区间外读成定价错误'])
 
     price_quality = dashboard['price_change_quality']
     writer.writerow([])

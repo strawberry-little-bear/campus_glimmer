@@ -142,6 +142,7 @@
 2. **聚合指标**：按统计周期计算供给、需求、活跃度、转化漏斗、回访率和治理队列；求购撮合还会关联匹配通知、卖家响应和求购确认，形成从触达到成交意向的独立漏斗；
    - 地点热力会进一步把供给、有效求购、周期预约和完成交易放到同一口径下，输出地点级供需压力，支持从“看见问题”进入“补充供给”的运营动作；
    - 价格调整后的搜索回响会把一次出售商品改价前后的搜索曝光、点击、收藏和预约放在同表对照，只描述共同变化，不把相关读成因果；
+   - 分类调价参考会把同类出售价格聚合成中位数和四分位区间，并只统计当前在售商品的区间外规模；样本不足或区间过宽时降级为观察，不自动改价；
 
    - 专题分析会把“活动内容 → 商品曝光 → 收藏 → 预约 → 完成交易”串成专题级漏斗，并输出低转化提示，让运营数据能够反向影响下一轮活动策划；
 3. **识别问题**：识别无结果搜索、待处理举报堆积、完成交易下降等运营告警；
@@ -257,7 +258,7 @@ campus_glimmer/
 └── README.md
 ```
 
-`listings/` 内 117 个业务模块、127 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
+`listings/` 内 118 个业务模块、128 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
 
 ## 核心数据模型
 
@@ -275,6 +276,7 @@ campus_glimmer/
 | 地点维护决策 | `CampusLocationMaintenanceDecision` | 保存同一地点同一组信号的人工结论、理由、复核人与时间；决策不隐藏当前信号，也不代替地点或业务记录修改 |
 | 商品生命周期 | `Item.last_refreshed_at`、`Item.refresh_count`、`Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at` | 商品刷新时间与次数、待处理提醒和降价提醒的发送记录，用于生命周期诊断、刷新限流和供给侧统计 |
 | 生命周期提醒效果 | `Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at`、`Item.category`、`Notification.read_at`、`OrderEvent.created_at` | 提醒时间戳、通知是否被打开，以及订单何时走到终态；三者共同决定「提醒之后有没有动作」，分类字段只用于只读分层 |
+| 分类调价参考 | 不新增表，只读 `Item.category` / `price` / `status` / `expires_at` / `created_at` | 分类级当前供给价格形状：优先近 180 天样本、每分类最多 500 件，当前在售单列低于 / 区间内 / 高于；样本不足、四分位退化与区间过宽都显式标记，只报告不自动改价 |
 | 校园活动 | `CampusCampaign` | 有起止时间的专题活动，以及专题与在售商品的可选关联 |
 | 学期日历 | `AcademicTerm`、`AcademicPhase`、`AcademicTermSnapshot` | 学期起止日期、按偏移天数划分的阶段规则、阶段级统计快照（已结束阶段由 `build_academic_calendar` 读取，进行中阶段实时算） |
 | 互动 | `Favorite`、`ItemAvailabilityWatch`、`Comment`、`PrivateMessage` | 收藏、有货提醒、公开留言和私信 |
@@ -288,7 +290,7 @@ campus_glimmer/
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
-| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 51 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
+| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 53 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
 | 需求跟进闭环 | `DemandOpportunityTask.created_at`、`DemandOpportunityTask.radar_key`、`DemandOpportunityTask.available_supply`、`SearchQuery.result_count` | 任务创建时间是唯一稳定的分界线（雷达行是滚动聚合，内容每次刷新都变），创建时的供给数用于判断「动作是否真的发生」，搜索结果数用于判断「需求是否被满足」 |
 | 同义词候选 | `SearchQuery.user_id`、`SearchQuery.query`、`SearchQuery.result_count`、`SearchQuery.created_at`、`SearchSynonym.keyword` / `synonym` / `is_active` | 同一次会话内相邻两次搜索的改口证据；已启用同义词的两个方向都参与去重，停用同义词不屏蔽候选 |
 | 同义词效果回流 | 不新增表，读 `SearchSynonym.created_at` + `SearchQuery` | 确认时间是唯一稳定的分界线；搜索词记录的是学生原本输入的那一串（扩展只发生在查询内部），按扩展词统计会成为自己和自己比、永远报成功 |
@@ -715,7 +717,7 @@ CI 的目标不是替代本地验证，而是确保每个独立迭代至少满�
 
 | 方向 | 下一步重点 |
 | --- | --- |
-| 供给侧与提醒 | 继续评估提醒后的处理率、跨学期生命周期对比和分类调价参考 |
+| 供给侧与提醒 | 继续评估提醒后的处理率和跨学期生命周期对比 |
 | 搜索、供需与机会流 | 补齐空结果诊断、需求承接和推荐解释，避免只增加入口 |
 | 交易、交付与借用 | 强化交付异常、归还质量、催收效果和安全确认的闭环 |
 | 治理与通知 | 继续做治理分组、申诉质量、通知降噪和偏好覆盖观测 |
