@@ -4058,7 +4058,7 @@ def operations_dashboard_export(request):
         f"分母是已完结的 {feedback['closed_count']} 条；未回访 {feedback['waiting_count']} 条是右删失样本",
     ])
     writer.writerow([])
-    writer.writerow(['结果回访分布', '条数', '占比（%）', '已处理结局', '已驳回结局'])
+    writer.writerow(['结果回访说了什么', '条数', '占比（%）', '已处理结局', '已驳回结局'])
     for row in feedback['choice_rows']:
         writer.writerow([
             row['label'], row['count'],
@@ -4071,7 +4071,7 @@ def operations_dashboard_export(request):
             '—' if row['response_rate'] is None else row['response_rate'],
             '', f"已{row['label']} {row['closed_count']} 条",
         ])
-    writer.writerow(['结果回访时延', '条数', '占比（%）', '口径说明'])
+    writer.writerow(['结果回访隔了多久', '条数', '占比（%）', '口径说明'])
     for row in feedback['latency_rows']:
         writer.writerow([
             row['label'], row['count'],
