@@ -25,6 +25,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
 from .dashboard_build_performance import build_dashboard_build_performance
+from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
 from .search_combo_shift import build_search_combo_shift
 from .search_threshold_feedback import build_search_threshold_feedback
 from .search_trend import build_search_trend
@@ -2507,6 +2508,10 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     (
         'task_run_ledger_integrity', '定时任务台账完整性审计',
         build_task_run_ledger_integrity,
+    ),
+    (
+        'lifecycle_reminder_term_trend', '生命周期提醒的跨学期终态转化',
+        build_lifecycle_reminder_term_trend_dashboard,
     ),
 )
 
@@ -8451,6 +8456,65 @@ def operations_dashboard_export(request):
     writer.writerow([
         '此处只报告，不改发送频率、不改阈值、不自动调频、不按行动率给卖家排序。' +
         '比例说的是「提醒之后有动作的比例变了」，不是「提醒变得更有说服力了」。',
+    ])
+
+    term_trend = dashboard['lifecycle_reminder_term_trend']
+    writer.writerow([])
+    writer.writerow(['生命周期提醒的跨学期终态转化'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', term_trend['days'],
+        '观察窗口（天）', term_trend['window_days'],
+        '最小事件口径商品数', term_trend['min_items'],
+        '值得回看差值（百分点）', term_trend['gap_points'],
+        '已封闭同学期阶段格子', term_trend['closed_cell_count'],
+        '无学期日历事件数', term_trend['no_term_events'],
+        '学期内未划分阶段事件数', term_trend['unassigned_events'],
+        '观察窗口未满事件数', term_trend['open_cell_events'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '阶段', '学期', '阶段区间', '事件数', '事件口径商品数', '卖家数',
+        '重复提醒比（%）', '终态动作数', '终态动作率（%）', '样本',
+        '上一学期', '上一学期终态动作率（%）', '差值（百分点）', '方向', '值得回看',
+    ])
+    if not term_trend['phase_groups']:
+        writer.writerow(['回看期内还没有已封闭的同学期阶段格子。'])
+    else:
+        for group in term_trend['phase_groups']:
+            current = group['current']
+            previous = group['previous']
+            writer.writerow([
+                group['label'],
+                current['term_name'],
+                f"{current['start_date']:%Y-%m-%d} 至 {current['end_date']:%Y-%m-%d}",
+                current['event_count'],
+                current['item_count'],
+                current['seller_count'],
+                current['repeat_reminder_rate'] if current['repeat_reminder_rate'] is not None else '—',
+                current['terminal_action_count'],
+                current['terminal_action_rate'] if current['terminal_action_rate'] is not None else '—',
+                '足样本' if current['has_sample'] else '样本不足',
+                previous['term_name'] if previous else '—',
+                previous['terminal_action_rate'] if previous and previous['terminal_action_rate'] is not None else '—',
+                group['gap_points'] if group['gap_points'] is not None else '—',
+                group['direction_label'] or ('不判方向' if previous else '无上一学期基线'),
+                '是' if group['is_flagged'] else '否',
+            ])
+    writer.writerow([])
+    writer.writerow(['运营读数'])
+    writer.writerow([term_trend['summary']])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([term_trend['source_note']])
+    writer.writerow([term_trend['refresh_note']])
+    writer.writerow([
+        '终态动作只说明出现在最晚提醒后的 14 天内，不说明由提醒引起；'
+        '事件数、商品数、卖家数和重复提醒比都只是规模，不带方向。',
+    ])
+    writer.writerow([
+        '无学期日历、学期内未划分阶段和观察窗口未满的事件均单独计数；'
+        '本面板不回填伪事件、不输出卖家身份、不排名、不自动调频。',
     ])
 
     writer.writerow([])

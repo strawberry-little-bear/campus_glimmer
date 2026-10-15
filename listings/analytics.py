@@ -29,6 +29,7 @@ from .task_run_trend import build_task_run_trend
 from .task_run_hour_load import build_task_run_hour_load
 from .lifecycle_reminder_effect import build_lifecycle_reminder_effect
 from .lifecycle_reminder_action_trend import build_lifecycle_reminder_action_trend
+from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend
 from .borrow_escalation import build_borrow_escalation_report
 from .borrow_risk import build_borrow_risk
 from .borrow_escalation_trend import build_borrow_escalation_trend
@@ -1659,6 +1660,7 @@ def build_operations_dashboard(days=30):
         'demand_radar_phase_trend': demand_radar_phase_trend,
         'lifecycle_reminder_effect': build_lifecycle_reminder_effect(days=days, now=now),
         'lifecycle_reminder_action_trend': build_lifecycle_reminder_action_trend(days=days, now=now),
+        'lifecycle_reminder_term_trend': build_lifecycle_reminder_term_trend(now=now),
         'demand_radar': demand_radar,
         'demand_radar_outcomes': demand_radar_outcomes,
         'order_statuses': order_statuses,

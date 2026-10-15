@@ -3035,6 +3035,55 @@
         </ul>
     </div>
 </section>
+<section class="content-card ops-panel mb-4 lifecycle-reminder-term-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Term trend</span><h2>生命周期提醒的跨学期终态转化</h2></div>
+        <span class="ops-panel-hint">回看 {{ lifecycle_reminder_term_trend.days }} 天·同一阶段对比相邻学期</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>已封闭阶段格子</span><strong>{{ lifecycle_reminder_term_trend.closed_cell_count }}</strong><small>覆盖 {{ lifecycle_reminder_term_trend.phase_groups|length }} 个阶段</small></div>
+        <div><span>事件总数</span><strong>{{ lifecycle_reminder_term_trend.event_count }}</strong><small>分母只读事件台账</small></div>
+        <div{% if lifecycle_reminder_term_trend.no_term_events or lifecycle_reminder_term_trend.unassigned_events or lifecycle_reminder_term_trend.open_cell_events %} class="supply-lifecycle-summary-warning"{% endif %}><span>覆盖缺口</span><strong>{{ lifecycle_reminder_term_trend.no_term_events }} / {{ lifecycle_reminder_term_trend.unassigned_events }} / {{ lifecycle_reminder_term_trend.open_cell_events }}</strong><small>无学期 / 未划分 / 未满窗口</small></div>
+        <div{% if not lifecycle_reminder_term_trend.has_sample %} class="supply-lifecycle-summary-warning"{% endif %}><span>样本门槛</span><strong>{{ lifecycle_reminder_term_trend.min_items }}</strong><small>{% if lifecycle_reminder_term_trend.has_sample %}至少一个阶段可比{% else %}不足，方向扣下{% endif %}</small></div>
+    </div>
+
+    {% if lifecycle_reminder_term_trend.phase_groups %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>同学期阶段的终态转化</strong><span>相差 {{ lifecycle_reminder_term_trend.gap_points }} 个百分点才标记值得回看</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-term-trend-table">
+                <thead><tr><th>阶段</th><th>学期</th><th>事件 / 商品 / 卖家</th><th>重复提醒比</th><th>终态动作</th><th>与上一学期</th><th>读数</th></tr></thead>
+                <tbody>
+                    {% for group in lifecycle_reminder_term_trend.phase_groups %}
+                    <tr>
+                        <td data-label="阶段"><strong>{{ group.label }}</strong><small class="d-block text-muted">{{ group.current.start_date|date:'m-d' }} 至 {{ group.current.end_date|date:'m-d' }}</small></td>
+                        <td data-label="学期">{{ group.current.term_name }}<small class="d-block text-muted">{% if group.previous %}上一学期：{{ group.previous.term_name }}{% else %}暂无上一学期基线{% endif %}</small></td>
+                        <td data-label="事件 / 商品 / 卖家">{{ group.current.event_count }} / {{ group.current.item_count }} / {{ group.current.seller_count }}<small class="d-block text-muted">{% if group.current.has_sample %}足样本{% else %}样本不足{% endif %}</small></td>
+                        <td data-label="重复提醒比">{% if group.current.repeat_reminder_rate != None %}{{ group.current.repeat_reminder_rate|floatformat:'-1' }}%{% else %}—{% endif %}</td>
+                        <td data-label="终态动作">{% if group.current.terminal_action_rate != None %}{{ group.current.terminal_action_count }} 件 · {{ group.current.terminal_action_rate|floatformat:'-1' }}%{% else %}—{% endif %}</td>
+                        <td data-label="与上一学期">{% if group.previous and group.previous.terminal_action_rate != None %}{{ group.previous.terminal_action_rate|floatformat:'-1' }}% → {{ group.current.terminal_action_rate|floatformat:'-1' }}%{% else %}—{% endif %}{% if group.gap_points != None %}<small class="d-block text-muted">{{ group.gap_points|floatformat:'-1' }} 个百分点</small>{% endif %}</td>
+                        <td data-label="读数">{% if group.is_flagged %}<span class="supply-lifecycle-flag">值得回看</span>{% elif group.direction %}{{ group.direction_label }}{% elif group.previous %}<span class="text-muted">样本不足，不判方向</span>{% else %}<span class="text-muted">无基线</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-inline mt-3">还没有已封闭的同学期阶段格子；无学期、未划分阶段或观察窗口未满的事件会先在上方单独计数。</div>
+    {% endif %}
+
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>怎么读这张表</strong><span>只报告，不调频也不改冷却期</span></div>
+        <ul>
+            <li><i class="bi bi-info-circle me-1"></i>{{ lifecycle_reminder_term_trend.summary }}</li>
+            <li><i class="bi bi-database me-1"></i>{{ lifecycle_reminder_term_trend.source_note }}</li>
+            <li><i class="bi bi-slash-circle me-1"></i>{{ lifecycle_reminder_term_trend.refresh_note }}</li>
+            <li><i class="bi bi-clock-history me-1"></i>每个商品取阶段内最晚一次提醒，观察 14 天；只有阶段结束后再过 14 天的格子才进入对比，避免用半截窗口比较完整历史窗口。</li>
+            <li><i class="bi bi-shield-check me-1"></i>终态转化只说明共同变化，不说明提醒引起成交或归还；不输出卖家身份、不排名、不打标签、不自动调整提醒频率。</li>
+        </ul>
+    </div>
+</section>
 <section class="content-card ops-panel mb-4 task-run-health-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Schedule health</span><h2>定时任务运行台账与健康统计</h2></div>
