@@ -415,7 +415,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（71 篇，持续更新）</summary>
+<summary>设计文档清单（72 篇，持续更新）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -472,6 +472,7 @@ campus_glimmer/
 - **`item-image-coverage-design.md`**：在架商品的图片覆盖度与无图商品清单
 - **`item-image-display-metadata-design.md`**：商品图内在宽高、列表懒加载、详情立即加载与历史元数据补齐
 - **`item-price-drop-notifications-design.md`**：出售价格轨迹、收藏商品降价提醒、偏好开关与历史边界
+- **`price-change-quality-design.md`**：出售价格轨迹的方向、幅度、重复调价与分类视图，只读运营口径
 - **`item-responsive-image-variants-design.md`**：960px 预览档、列表与详情响应式候选及历史回填边界
 - **`item-upload-image-optimization-design.md`**：新上传商品图的硬限制、降采样、方向与隐私边界
 - **`item-thumbnail-backfill-design.md`**：列表缩略图规格、历史图片分批回填、失败回退与任务台账
