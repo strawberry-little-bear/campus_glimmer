@@ -3842,7 +3842,7 @@ campus_glimmer/
 ### docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（64 篇）</summary>
+<summary>设计文档清单（65 篇）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -3958,6 +3958,7 @@ campus_glimmer/
 - **`location-maintenance-decision-design.md`**：校园地点维护决策的信号指纹、三类结果、后台留痕与队列复核口径
 - **`dashboard-export-subhead-alignment-design.md`**：面板与下载件的标题必须是同一句话，以及第一版为什么选错了数——`field_total` 恒为 25、`rows|length` 空平台是 0，两者问的不是同一个问题
 - **`task-run-ledger-integrity-design.md`**：定时任务台账的时间、状态、失败备注与指标形状完整性审计口径
+- **`deployment-health-endpoints-design.md`**：存活检查与数据库就绪检查拆分，失败不泄露部署细节
 
 - **`delivery-handshake-design.md`**：当面交付两次确认的顺序四档、双方同秒单列、挂起不按周期切
 
@@ -4130,6 +4131,10 @@ campus_glimmer/
 
 - 面向真实用户时，应进一步配置反向代理、限流、备份、日志和媒体文件访问策略。
 
+- `/healthz/` 是存活检查，只确认 Django 进程能处理请求，不访问数据库。
+- `/readyz/` 是就绪检查，会对默认数据库执行一次轻量查询；数据库不可用时返回 503。
+- 反向代理和编排系统应以 `/readyz/` 判断实例是否接流量。数据库故障不必等同于进程崩溃，避免把所有 worker 同时重启。
+
 ## 本地运行
 
 ### 1. 获取代码并创建虚拟环境
@@ -4193,7 +4198,8 @@ python manage.py runserver
 | 举报队列（管理员） | <http://127.0.0.1:8000/listings/reports/> |
 | 交易争议（管理员） | <http://127.0.0.1:8000/listings/disputes/> |
 | 管理后台 | <http://127.0.0.1:8000/admin/> |
-| 健康检查 | <http://127.0.0.1:8000/healthz/> |
+| 存活检查 | <http://127.0.0.1:8000/healthz/> |
+| 数据库就绪检查 | <http://127.0.0.1:8000/readyz/> |
 
 ## 配置说明
 
@@ -4233,6 +4239,8 @@ docker compose up --build
 ```
 
 启动后访问 <http://127.0.0.1:8000/>。Docker 配置默认使用 SQLite，数据库和上传文件分别通过 `campus_data`、`campus_media` 数据卷持久化。停止容器后再次启动时，数据不会因为容器重建而自动消失。
+
+镜像内置 `HEALTHCHECK`，探针访问 `/readyz/`；数据库不可用时容器会转为 `unhealthy`。这只是健康状态上报，是否重启或摘除实例由容器编排配置决定。
 
 如果要停止服务：
 
@@ -4381,7 +4389,7 @@ GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行以下检查�
 5. 检查是否存在未生成的数据库迁移；
 6. 运行完整测试集。
 
-CI 的目标不是替代本地验证，而是确保每个独立迭代至少满足“能导入、能启动、迁移一致、测试通过”这组基本条件。
+CI 的目标不是替代本地验证，而是确保每个独立迭代至少满足“能导入、能启动、迁移一致、测试通过”这组基本条件。项目根配置的存活 / 就绪探针和容器健康检查由 `campus_glimmer/tests.py` 覆盖。
 
 ## 当前取舍与边界
 
@@ -4855,7 +4863,7 @@ CI 的目标不是替代本地验证，而是确保每个独立迭代至少满�
 
 <summary>展开这 2 个方向</summary>
 
-- **基础设施**：支持 PostgreSQL、缓存、对象存储、结构化日志、备份和更完整的生产部署。
+- **基础设施**：支持 PostgreSQL、缓存、对象存储、结构化日志、备份和更完整的生产部署；存活与数据库就绪检查已拆分，后续新依赖可逐步纳入 `readyz` 的组件检查。
 
 - **体验完善**：优化移动端布局、无障碍、图片处理、校园配置和运营工具。
 
