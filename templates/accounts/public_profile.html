@@ -91,7 +91,7 @@
                 <div class="public-profile-items">
                     {% for item in active_items %}
                     <a href="{% url 'item_detail' item.id %}" class="public-profile-item">
-                        {% with image=item.images.first %}{% if image %}<img src="{{ image.image.url }}" alt="{{ item.title }}">{% else %}<div class="public-profile-item-placeholder"><i class="bi bi-image"></i></div>{% endif %}{% endwith %}
+                        {% with image=item.images.first %}{% if image %}<img src="{{ image.list_image_url }}" alt="{{ item.title }}">{% else %}<div class="public-profile-item-placeholder"><i class="bi bi-image"></i></div>{% endif %}{% endwith %}
                         <div><strong>{{ item.title }}</strong><small>{{ item.category.name }}{% if item.location %} · {{ item.location.name }}{% endif %}</small><b>{% if item.trade_mode == 'free' %}免费{% elif item.trade_mode == 'borrow' %}限期借用{% else %}¥{{ item.price|floatformat:2 }}{% endif %}</b></div>
                     </a>
                     {% empty %}<p class="empty-inline mb-0">当前没有公开中的商品。</p>{% endfor %}

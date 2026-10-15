@@ -21,7 +21,7 @@
     <div class="col">
         <div class="card h-100 shadow-sm">
             {% if item.images.first %}
-            <img src="{{ item.images.first.image.url }}" class="card-img-top" alt="{{ item.title }}">
+            <img src="{{ item.images.first.list_image_url }}" class="card-img-top" alt="{{ item.title }}">
             {% else %}
             <img src="/static/img/no-image.png" class="card-img-top" alt="无图片">
             {% endif %}

@@ -1,3 +1,4 @@
+import logging
 from datetime import time, timedelta
 from pathlib import Path
 
@@ -6,6 +7,10 @@ from django.db import models
 from django.db.models import Q
 from django.contrib.auth.models import User
 from django.utils import timezone
+
+from .image_processing import build_item_thumbnail
+
+logger = logging.getLogger(__name__)
 
 
 class Category(models.Model):
@@ -258,6 +263,58 @@ class Item(models.Model):
 class ItemImage(models.Model):
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField('图片', upload_to='items/')
+    thumbnail = models.ImageField(
+        '列表缩略图', upload_to='items/thumbnails/', null=True, blank=True,
+        editable=False,
+    )
+
+    @property
+    def list_image_url(self):
+        """Prefer the small variant, but always keep the original as fallback."""
+        if self.thumbnail:
+            return self.thumbnail.url
+        return self.image.url
+
+    def _existing_image_name(self):
+        if not self.pk:
+            return None
+        return ItemImage.objects.filter(pk=self.pk).values_list(
+            'image', flat=True,
+        ).first()
+
+    def _replace_thumbnail(self):
+        old_thumbnail = self.thumbnail.name if self.thumbnail else None
+        generated = build_item_thumbnail(self.image)
+        self.thumbnail.save(generated.name, generated, save=False)
+        self._thumbnail_touched = True
+        if old_thumbnail and old_thumbnail != self.thumbnail.name:
+            self.thumbnail.storage.delete(old_thumbnail)
+
+    def save(self, *args, update_fields=None, **kwargs):
+        """Keep the list thumbnail aligned with the currently stored photo.
+
+        Thumbnail generation is deliberately best-effort: an already valid
+        product photo must still be saveable if a small variant cannot be
+        encoded. In that case any stale thumbnail is removed so list pages fall
+        back to the new original instead of showing the previous image.
+        """
+        previous_image = self._existing_image_name()
+        thumbnail_is_missing = not self.thumbnail
+        image_changed = previous_image != self.image.name
+        if self.image and (thumbnail_is_missing or image_changed):
+            try:
+                self._replace_thumbnail()
+            except Exception as exc:
+                logger.warning(
+                    'Item thumbnail generation failed (%s)', type(exc).__name__,
+                )
+                if self.thumbnail:
+                    self.thumbnail.delete(save=False)
+                    self._thumbnail_touched = True
+        if update_fields is not None and getattr(self, '_thumbnail_touched', False):
+            update_fields = set(update_fields)
+            update_fields.add('thumbnail')
+        super().save(*args, **kwargs, update_fields=update_fields)
 
     def __str__(self):
         return f'{self.item.title}的图片'

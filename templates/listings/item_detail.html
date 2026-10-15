@@ -13,7 +13,7 @@
             </div>
             {% if item.images.count > 1 %}
             <div class="detail-thumbs">
-                {% for image in item.images.all %}<button type="button" class="detail-thumb {% if forloop.first %}active{% endif %}" data-image="{{ image.image.url }}"><img src="{{ image.image.url }}" alt="{{ item.title }} 图片{{ forloop.counter }}"></button>{% endfor %}
+                {% for image in item.images.all %}<button type="button" class="detail-thumb {% if forloop.first %}active{% endif %}" data-image="{{ image.image.url }}"><img src="{{ image.list_image_url }}" alt="{{ item.title }} 图片{{ forloop.counter }}"></button>{% endfor %}
             </div>
             {% endif %}
         </div>
@@ -124,7 +124,7 @@
         {% if related_items %}
         <section class="content-card">
             <div class="card-section-heading"><h2>同类好物</h2><a href="{% url 'item_list_by_category' item.category.id %}" class="text-link">更多</a></div>
-            {% for related_item in related_items %}<a class="related-item" href="{% url 'item_detail' related_item.id %}">{% if related_item.images.first %}<img src="{{ related_item.images.first.image.url }}" alt="{{ related_item.title }}">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片">{% endif %}<span><strong>{{ related_item.title }}</strong><small>¥{{ related_item.price|floatformat:2 }}</small></span></a>{% endfor %}
+            {% for related_item in related_items %}<a class="related-item" href="{% url 'item_detail' related_item.id %}">{% if related_item.images.first %}<img src="{{ related_item.images.first.list_image_url }}" alt="{{ related_item.title }}">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片">{% endif %}<span><strong>{{ related_item.title }}</strong><small>¥{{ related_item.price|floatformat:2 }}</small></span></a>{% endfor %}
         </section>
         {% endif %}
     </div>

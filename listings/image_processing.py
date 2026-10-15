@@ -22,6 +22,8 @@ MAX_UPLOAD_PIXELS = 20_000_000
 OPTIMIZE_THRESHOLD_BYTES = 1536 * 1024
 MAX_EDGE_PIXELS = 1600
 WEBP_QUALITY_LADDER = (85, 75, 65)
+THUMBNAIL_MAX_EDGE_PIXELS = 480
+THUMBNAIL_QUALITY = 80
 
 
 class ItemImageLimitError(ValueError):
@@ -87,5 +89,44 @@ def normalize_item_image(uploaded):
 
     output.seek(0)
     result = ContentFile(output.read(), name=f'{uuid4().hex}.webp')
+    result.content_type = 'image/webp'
+    return result
+
+
+def build_item_thumbnail(source):
+    """Build the small WebP variant used by list pages.
+
+    The source may be a Django field file or any seekable binary file. The
+    function never upscales: an already-small product photo keeps its pixel
+    dimensions and only changes container format.
+    """
+    # Keep the caller's handle open. On an unsaved upload that handle is the
+    # original SimpleUploadedFile; closing it here would make the later
+    # ImageField save in Django fail with ``ValueError: I/O operation on
+    # closed file``.
+    if hasattr(source, 'open'):
+        source.open('rb')
+    else:
+        source.seek(0)
+
+    with Image.open(source) as image:
+        if image.width * image.height > MAX_UPLOAD_PIXELS:
+            raise ItemImageLimitError('source-pixel-count-too-large')
+        oriented = ImageOps.exif_transpose(image)
+        oriented.thumbnail(
+            (THUMBNAIL_MAX_EDGE_PIXELS, THUMBNAIL_MAX_EDGE_PIXELS),
+            Image.Resampling.LANCZOS,
+            reducing_gap=2.0,
+        )
+        normalized = _as_rgb_or_rgba(oriented)
+        output = BytesIO()
+        normalized.save(
+            output, format='WEBP', quality=THUMBNAIL_QUALITY, method=4,
+        )
+    source.seek(0)
+    output.seek(0)
+    result = ContentFile(
+        output.read(), name=f'{uuid4().hex}-thumbnail.webp',
+    )
     result.content_type = 'image/webp'
     return result
