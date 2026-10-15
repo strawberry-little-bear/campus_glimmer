@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，113 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，114 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（113 个）
+## listings/ 的业务模块（114 个）
 
 
 <details>
-<summary>业务模块清单（113 个，按业务链路归组）</summary>
+<summary>业务模块清单（114 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -51,6 +51,7 @@ campus_glimmer/
 | `order_workflow.py` | 订单状态流转和交付相关逻辑 | 读写 |
 | `meeting_scheduling.py` | 交付时间安排与冲突检测 | 读写 |
 | `price_insights.py` | 同类价格参考与需求热度分析 | 读写 |
+| `price_changes.py` | 出售价格轨迹与收藏商品降价提醒 | 读写 |
 | `campus_pulse.py` | 按校园地点聚合供需热力与运营压力 | 读写 |
 | `location_registry_quality.py` | 校园地点档案形状、字段覆盖、当前引用、近似重名与停用引用（只读观测） | 只报告 |
 | `location_maintenance_queue.py` | 校园地点维护信号的主优先级、重叠信号、行动提示与 20 条人工核对清单（只读分诊） | 只报告 |
@@ -78,7 +79,7 @@ campus_glimmer/
 | `notification_snooze_return.py` | 延后的通知到期后是否回来：把用户主动要求的等待从处理时长里拆出来 | 读写 |
 | `notification_kind_coverage.py` | 通知类型的三张表对齐情况：KIND_CHOICES、偏好开关、表单字段现读对齐，上一轮的两个窟窿已补上，现在差集为空、由测试守住（只报告） | 只报告 |
 | `notification_preference_bypass_diagnosis.py` | 通知偏好关闭后的异常链路诊断：与后关一致、偏好写入后仍出现、可疑行数下界与已知写入路径 | 只报告 |
-| `notification_preference_usage.py` | 25 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
+| `notification_preference_usage.py` | 26 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
 | `notification_quiet_hours_shape.py` | 免打扰时段的形状：默认窗口采用率、同日 / 跨午夜、时长档、开始与结束小时、逐分钟叠加成小时曲线 | 只读 |
 | `notification_aggregation_quality.py` | 通知聚合的质量：被聚合过的行 vs 从没被聚合过的行，阅读率与处理时长对照（只报告） | 只报告 |
 | `report_resolution_quality.py` | 商品举报按原因的驳回率、审核意见填写情况、集中度与举报人分布（只报告） | 只报告 |
@@ -154,10 +155,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（123 个）
+## 业务链路的测试模块（124 个）
 
 <details>
-<summary>业务链路测试清单（123 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（124 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
@@ -255,6 +256,8 @@ campus_glimmer/
 - **`test_item_thumbnails.py`**：列表缩略图、大图预览、响应式候选与展示宽高生成、替换重建、失败回退、历史回填、只补元数据不重建文件、分批限制与任务台账
 
 - **`test_item_lifecycle.py`**：到期商品从公开流与推荐里隐藏并回写状态
+
+- **`test_item_price_changes.py`**：出售价格轨迹、收藏商品降价提醒、偏好开关、重新上架边界与通知失败隔离
 
 - **`test_lifecycle_diagnostics.py`**：商品生命周期等级、刷新限流和卖家面板测试
 

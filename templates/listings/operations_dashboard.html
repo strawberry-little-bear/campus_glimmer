@@ -1086,7 +1086,7 @@
 
 <section class="content-card ops-panel mb-4 notification-preference-usage-panel">
     <div class="ops-panel-heading">
-        <div><span class="eyebrow eyebrow-soft">Preference usage</span><h2>通知偏好开关：25 个开关各自的形状</h2></div>
+        <div><span class="eyebrow eyebrow-soft">Preference usage</span><h2>通知偏好开关：{{ notification_preference_usage.field_total }} 个开关各自的形状</h2></div>
         <span class="ops-panel-hint">设置页上每一个开关，第一次被运营读到</span>
     </div>
     <p class="search-rhythm-note mb-3"><i class="bi bi-toggles me-1"></i><code>NotificationPreference</code> 上有 {{ notification_preference_usage.field_total }} 个通知类型开关，加上一个免打扰总闸。每个开关都有真实的读取路径：<code>create_notification</code> 的第一件事就是 <code>if not getattr(preference, kind, True): return None</code><strong>&mdash;&mdash;开关关掉的通知，在写入那一刻就被静默丢弃，库里连一行都没有。</strong>此前只有 <code>moderation_update</code> 一个开关被读过。其余 {{ notification_preference_usage.field_total|add:"-1" }} 个关没关、谁关的，一处都答不上来。本面板把它们一次读完，只报形状，不报效果。</p>
@@ -1094,7 +1094,7 @@
         <div class="col-md-3"><div class="ops-mini-stat"><span>有偏好行的用户</span><strong>{{ notification_preference_usage.coverage.rows_total }}</strong><small>逐用户一行，默认全开</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>收到过通知却没有偏好行</span><strong>{{ notification_preference_usage.coverage.users_without_row }}</strong><small>单列一格，不并入「开着」</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>开着免打扰总闸</span><strong>{{ notification_preference_usage.quiet_hours.on }}</strong><small>只压角标，不挡通知本身</small></div></div>
-        <div class="col-md-3"><div class="ops-mini-stat"><span>关掉免打扰总闸</span><strong>{{ notification_preference_usage.quiet_hours.off }}</strong><small>和 25 个开关同一张表单</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>关掉免打扰总闸</span><strong>{{ notification_preference_usage.quiet_hours.off }}</strong><small>和 {{ notification_preference_usage.field_total }} 个开关同一张表单</small></div></div>
     </div>
     <h3 class="h6 mb-3">按「关掉它有没有交易后果」分组</h3>
     <div class="table-responsive">

@@ -60,7 +60,7 @@ class NotificationPreferenceUsageSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         usage = response.context['notification_preference_usage']
         self.assertTrue(usage['has_data'])
-        self.assertEqual(len(usage['rows']), 25)
+        self.assertEqual(len(usage['rows']), 26)
         self.assertEqual(len(usage['by_group']), 4)
         order_row = next(r for r in usage['rows'] if r['field'] == 'order_created')
         self.assertEqual(order_row['off'], 5)
@@ -69,9 +69,9 @@ class NotificationPreferenceUsageSmokeTests(TestCase):
         export = self.client.get(reverse('operations_dashboard_export'))
         self.assertEqual(export.status_code, 200)
         text = export.content.decode('utf-8-sig')
-        self.assertIn('通知偏好开关：25 个开关各自的形状', text)
+        self.assertIn('通知偏好开关：26 个开关各自的形状', text)
         self.assertIn('按「关掉它有没有交易后果」分组', text)
-        self.assertIn('25 个开关逐个看', text)
+        self.assertIn('26 个开关逐个看', text)
         self.assertIn('关着却仍收到过', text)
 
     def test_dashboard_and_export_render_on_an_empty_campus(self):

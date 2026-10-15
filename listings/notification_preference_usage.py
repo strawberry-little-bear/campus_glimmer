@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""通知偏好开关：25 个开关各自的形状，第一次被运营读到。
+"""通知偏好开关：26 个开关各自的形状，第一次被运营读到。
 
-`NotificationPreference` 上有 26 个布尔字段，其中 25 个是通知类型的开关、
+`NotificationPreference` 上有 27 个布尔字段，其中 26 个是通知类型的开关、
 1 个是免打扰总闸（`quiet_hours_enabled`）。每个开关都有真实的读取路径：
 `notifications.py:66` 的 `create_notification` 第一件事就是
 `if not getattr(preference, kind, True): return None`——**开关关掉的通知，在写入那一刻
@@ -11,7 +11,7 @@
 `operations_digest.py:52`、`opportunity_digest.py:46`、`saved_search_digest.py:124`、
 `lifecycle_reminder_effect.py:392`）和一处展示侧（`forms.py:40` 的表单字段），
 **运营侧只有 `moderation_notice_preference` 读过一行值，而它只读 `moderation_update` 一个
-开关。** 其余 24 个开关关没关、谁关的、关了之后通知还来不来，一处都答不上来。
+开关。** 其余 25 个开关关没关、谁关的、关了之后通知还来不来，一处都答不上来。
 
 本模块把它们一次读完，只报告：不加迁移、不加字段、不改 `create_notification`、
 不改表单、不给任何人自动打开开关。`create_notification` 那句静默的 `return None`
@@ -121,12 +121,12 @@ PREFERENCE_GROUPS = (
     ('other', '其余', (
         'saved_search_match', 'item_available', 'item_expired',
         'report_update', 'moderation_update', 'demand_match',
-        'lost_found_match', 'lost_found_lead', 'mutual_aid_feedback',
+        'lost_found_match', 'lost_found_lead', 'mutual_aid_feedback', 'item_price_drop',
         'lifecycle_reminder',
     )),
 )
 
-# 免打扰总闸单独一组——它不是通知类型，但和 25 个开关摆在同一个模型上、
+# 免打扰总闸单独一组——它不是通知类型，但和 26 个开关摆在同一个模型上、
 # 同一张表单里，用户关掉它的频率是最能说明「这一页好不好用」的信号。
 QUIET_HOURS_FIELD = 'quiet_hours_enabled'
 
@@ -180,7 +180,7 @@ def _recently_notified_users(kind, start, end):
 
 
 def build_notification_preference_usage(days=30, now=None):
-    """把 25 个通知类型开关各自的四格形状读出来。"""
+    """把 26 个通知类型开关各自的四格形状读出来。"""
     now = now or timezone.now()
     start = now - timedelta(days=days)
     fields = _preference_fields()

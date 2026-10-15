@@ -567,6 +567,46 @@ class Favorite(models.Model):
         super().save(*args, **kwargs)
 
 
+class ItemPriceChange(models.Model):
+    """A successful sale-price edit, kept for future buyer-facing history."""
+
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name='price_changes',
+        verbose_name='商品',
+    )
+    old_price = models.DecimalField('调整前价格', max_digits=10, decimal_places=2)
+    new_price = models.DecimalField('调整后价格', max_digits=10, decimal_places=2)
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='item_price_changes',
+        verbose_name='操作人',
+    )
+    created_at = models.DateTimeField('调整时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '商品价格轨迹'
+        verbose_name_plural = '商品价格轨迹'
+        ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(old_price=models.F('new_price')),
+                name='item_price_change_prices_differ',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['item', '-created_at']),
+            models.Index(fields=['changed_by', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.item.title}：¥{self.old_price} → ¥{self.new_price}'
+
+
 class ItemAvailabilityWatch(models.Model):
     """One-shot reminders for a user waiting for an unavailable item."""
 
@@ -1331,6 +1371,7 @@ class Notification(models.Model):
         ('comment_received', '收到商品留言'),
         ('saved_search_match', '关注的搜索有新商品'),
         ('item_available', '商品重新有货'),
+        ('item_price_drop', '收藏商品降价'),
         ('item_expired', '商品展示已到期'),
         ('order_dispute', '交易争议更新'),
         ('meeting_incident', '交付预约异常'),
@@ -1474,6 +1515,9 @@ class NotificationPreference(models.Model):
     )
     item_available = models.BooleanField(
         '商品重新有货', default=True, help_text='你关注的商品恢复为在售时提醒。',
+    )
+    item_price_drop = models.BooleanField(
+        '收藏商品降价', default=True, help_text='你收藏的出售商品降价时提醒。',
     )
     item_expired = models.BooleanField(
         '商品展示已到期', default=True, help_text='你发布的商品自动下架时提醒。',

@@ -118,6 +118,7 @@ from .favorite_collection_quality import build_favorite_collection_quality
 from .academic_term_snapshot_quality import build_academic_term_snapshot_quality
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
+from .price_changes import notify_item_price_drop, record_item_price_change
 from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
 from .meeting_scheduling import (
     find_appointment_conflicts,
@@ -2245,11 +2246,43 @@ def edit_item(request, item_id):
         form = ItemForm(request.POST, instance=item)
         formset = ItemImageFormSet(request.POST, request.FILES, instance=item)
         if form.is_valid() and formset.is_valid():
-            saved_item = form.save()
-            if saved_item.status == 'expired' and saved_item.expires_at and saved_item.expires_at > timezone.now():
-                saved_item.status = 'available'
-                saved_item.save(update_fields=['status', 'updated_at'])
-                messages.info(request, '商品已重新上架，并按新的展示截止时间继续展示。')
+            price_change = None
+            with transaction.atomic():
+                # Lock the row only for the main listing edit. The old price is
+                # read after locking so two concurrent edits cannot both use the
+                # same stale “before” value as their trajectory source. Rebinding
+                # the already validated POST data to the locked instance keeps
+                # concurrent safety without losing the seller's submitted price.
+                locked_item = Item.objects.select_for_update().get(pk=item.pk)
+                previous_price = locked_item.price
+                previous_trade_mode = locked_item.trade_mode
+                locked_form = ItemForm(request.POST, instance=locked_item)
+                if not locked_form.is_valid():
+                    messages.error(request, '商品信息刚被其他修改更新，请确认内容后重试。')
+                    return render(request, 'listings/item_form.html', {
+                        'form': locked_form,
+                        'formset': formset,
+                        'title': '编辑商品',
+                        'item': item,
+                    })
+
+                saved_item = locked_form.save()
+                price_change = record_item_price_change(
+                    saved_item,
+                    old_price=previous_price,
+                    changed_by=request.user,
+                    old_trade_mode=previous_trade_mode,
+                )
+                if saved_item.status == 'expired' and saved_item.expires_at and saved_item.expires_at > timezone.now():
+                    saved_item.status = 'available'
+                    saved_item.save(update_fields=['status', 'updated_at'])
+                    messages.info(request, '商品已重新上架，并按新的展示截止时间继续展示。')
+
+            # The edit and its trajectory are committed first. A notification
+            # problem is logged by the helper and must not roll back either one.
+            if price_change is not None:
+                notify_item_price_drop(saved_item, price_change, actor=request.user)
+            formset.instance = saved_item
             formset.save()
             messages.success(request, '商品信息已更新。')
             return redirect('item_detail', item_id=item.id)
