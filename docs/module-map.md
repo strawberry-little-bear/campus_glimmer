@@ -420,7 +420,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（72 篇，持续更新）</summary>
+<summary>设计文档清单（73 篇，持续更新）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -457,6 +457,7 @@ campus_glimmer/
 - **`refresh-quota-drift-fixups-design.md`**：两个挂了很久的测试失败，一个同一行两个口径，一个扫描把查询参数当归零
 
 - **`refresh-response-design.md`**：商品刷新后的搜索回响：最新一次刷新、前后各 72 小时和只读隐私边界
+- **`price-response-design.md`**：价格调整后的搜索回响：调价事件、前后各 72 小时、方向与幅度档和只读隐私边界
 
 - **`relist-freshness-design.md`**：新鲜度欠账的四条证据与「先看板后改口径」的三条路
 
