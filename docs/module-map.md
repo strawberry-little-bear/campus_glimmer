@@ -535,6 +535,7 @@ campus_glimmer/
 - **`moderation-risk-tier-design.md`**：内容审核规则按严重风险、脱离平台联系与低权重线索给出不同复核节奏
 
 - **`moderation-appeal-design.md`**：确认违规后的单次申诉、改判留痕与恢复闭环
+- **`moderation-appeal-quality-design.md`**：内容申诉的提交线与处理线分窗、积压等待、成立与恢复缺口
 
 - **`notification-aggregation-quality-design.md`**：被聚合过的行与从没被聚合过的行，阅读率与时长对照
 
