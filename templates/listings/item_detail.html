@@ -54,6 +54,31 @@
             </section>
             {% endif %}
 
+            {% if price_history.available %}
+            <section class="price-history-card mt-4" aria-labelledby="price-history-title">
+                <div class="price-history-heading">
+                    <div>
+                        <span class="eyebrow eyebrow-soft">价格轨迹</span>
+                        <h3 id="price-history-title" class="mt-2 mb-1">最近调价记录</h3>
+                    </div>
+                    <span class="price-history-scope"><i class="bi bi-clock-history me-1"></i>{{ price_history.scope_label }}</span>
+                </div>
+                <svg class="price-history-chart" viewBox="{{ price_history.chart.view_box }}" role="img" aria-label="{{ price_history.aria_label }}" preserveAspectRatio="xMidYMid meet">
+                    <polyline points="{{ price_history.chart.polyline }}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                    {% for marker in price_history.chart.markers %}<circle cx="{{ marker.x }}" cy="{{ marker.y }}" r="{% if marker.is_start or marker.is_current %}5{% else %}3.5{% endif %}" class="price-history-marker{% if marker.is_start %} is-start{% endif %}{% if marker.is_current %} is-current{% endif %}"></circle>{% endfor %}
+                </svg>
+                <div class="price-history-table-wrap">
+                    <table class="price-history-table">
+                        <caption class="visually-hidden">商品价格轨迹明细</caption>
+                        <thead><tr><th scope="col">日期</th><th scope="col">价格</th><th scope="col">变化</th></tr></thead>
+                        <tbody>
+                            {% for point in price_history.points %}<tr><td>{{ point.date_label }}</td><td>{% if point.is_current %}<strong>¥{{ point.price|floatformat:2 }}</strong>{% else %}¥{{ point.price|floatformat:2 }}{% endif %}</td><td><span class="price-history-change price-history-{{ point.direction }}">{{ point.change_label }}</span>{% if point.is_current %}<small class="price-history-state">当前价</small>{% endif %}</td></tr>{% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <small class="price-history-note">只记录功能上线后的成功改价，不回填历史；页面仅展示日期，不展示操作人。起始价是本窗口第一条轨迹的价格，不代表发布价。</small>
+            </section>
+            {% endif %}
             <div class="d-flex flex-wrap gap-2 mt-4">
                 {% if user.is_authenticated %}
                     <form method="post" action="{% url 'toggle_favorite' item.id %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn {% if is_favorite %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi {% if is_favorite %}bi-heart-fill{% else %}bi-heart{% endif %} me-2"></i>{% if is_favorite %}已收藏{% else %}收藏商品{% endif %}</button></form>

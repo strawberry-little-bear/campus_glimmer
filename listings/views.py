@@ -119,6 +119,7 @@ from .academic_term_snapshot_quality import build_academic_term_snapshot_quality
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .price_changes import notify_item_price_drop, record_item_price_change
+from .price_history import build_item_price_history
 from .price_change_quality import build_price_change_quality_panel
 from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
 from .meeting_scheduling import (
@@ -590,6 +591,7 @@ def item_detail(request, item_id):
         'rating_summary': rating_summary,
         'seller_reputation': build_seller_reputation(item.seller),
         'price_insight': build_price_insight(item),
+        'price_history': build_item_price_history(item),
         'seller_ratings': seller_ratings,
         'seller_verification': CampusVerification.objects.filter(
             user=item.seller, status='verified', verified_at__isnull=False,
