@@ -435,7 +435,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（83 篇，持续更新）</summary>
+<summary>设计文档清单（84 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -464,6 +464,7 @@ campus_glimmer/
 
 - **`meeting-reschedule-design.md`**：改期计数的四条损失与「一次谈成是主档」的口径
 
+- **`report-outcome-feedback-design.md`**：举报人侧的结果回访：三档结构化反馈、一次性提交与运营回访质量口径
 - **`report-priority-design.md`**：商品举报的可解释优先级：风险原因、在售曝光与多人交叉信号只影响人工查看顺序
 - **`report-resolution-quality-design.md`**：商品举报按 reason 拆驳回率，意见只读长度，不把驳回率和处理人挂钩
 
