@@ -6693,6 +6693,109 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读搜索曝光、搜索点击、收藏和预约的发生时间，<strong>不读 <code>BrowsingHistory.view_count</code></strong>——浏览历史里的浏览次数是累计聚合，不是逐次浏览事件，切开看会像很精确、实际无法核对。输出不包含用户、商品标题、搜索词或订单号，不排名、不建议自动刷新，也不把统计写回推荐或风控；后窗高于前窗只表示共同变化，不解释为因果提升。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 price-change-quality-panel" id="price-change-quality">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Price change quality</span><h2>出售价格轨迹质量</h2></div>
+        <span class="ops-panel-hint">卖家改价的方向、幅度、重复调价与当前分类视图</span>
+    </div>
+    <p class="small text-muted mb-3"><i class="bi bi-graph-down-arrow me-1"></i>收藏商品降价提醒让普通出售商品的每次成功改价都进入 <code>ItemPriceChange</code>。对买家这是一条提醒；对运营，它同时说明供给侧在什么时候真的动了价格。本面板只读聚合，<strong>不读商品标题、卖家用户名、通知原文或收藏人名单</strong>。</p>
+    {% if not price_change_quality.has_data %}
+    <div class="empty-inline">{{ price_change_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>价格轨迹</span><strong>{{ price_change_quality.totals.change_count }}</strong><small>看板周期内的出售商品改价</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>涉及商品</span><strong>{{ price_change_quality.totals.item_count }}</strong><small>按商品去重</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>涉及卖家</span><strong>{{ price_change_quality.totals.seller_count }}</strong><small>不输出任何卖家名单</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>降价轨迹</span><strong>{{ price_change_quality.totals.drop_count }}</strong><small>{% if price_change_quality.totals.drop_share is None %}样本不足，不报占比{% else %}占全部轨迹 {{ price_change_quality.totals.drop_share }}%{% endif %}</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>上涨轨迹</span><strong>{{ price_change_quality.totals.rise_count }}</strong><small>{% if price_change_quality.totals.rise_share is None %}样本不足，不报占比{% else %}占全部轨迹 {{ price_change_quality.totals.rise_share }}%{% endif %}</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>零元基线</span><strong>{{ price_change_quality.totals.zero_base_count }}</strong><small>从 0 元调到正价，不进幅度</small></div></div>
+    </div>
+    {% if price_change_quality.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>有效轨迹少于 {{ price_change_quality.min_sample }} 条，本面板只报数字，不给方向结论、占比或分档解读。</p>
+    {% endif %}
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">方向与幅度</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>方向</th><th>条数</th><th>占全部轨迹（%）</th><th>中位幅度（%）</th><th>P90 幅度（%）</th></tr></thead>
+                <tbody>
+                    {% for direction in price_change_quality.directions.values %}
+                    <tr>
+                        <td>{{ direction.label }}</td>
+                        <td>{{ direction.count }}</td>
+                        <td>{% if direction.share is None %}—{% else %}{{ direction.share }}{% endif %}</td>
+                        <td>{% if direction.median_ratio is None %}—{% else %}{{ direction.median_ratio }}{% endif %}</td>
+                        <td>{% if direction.p90_ratio is None %}—{% else %}{{ direction.p90_ratio }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">零元基线会计入总览和小样本判断，但没有可解释的方向幅度，因此不进入这张表的中位数、P90 或分档分母。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">幅度分档</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>方向</th><th>档位</th><th>条数</th><th>占同方向（%）</th></tr></thead>
+                <tbody>
+                    {% for row in price_change_quality.magnitude_rows %}
+                    <tr>
+                        <td>{{ row.direction }}</td>
+                        <td>{{ row.bucket }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <h3 class="h6 mb-3">同一件商品改了几次</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>重复调价</th><th>商品数</th></tr></thead>
+                    <tbody>
+                        {% for row in price_change_quality.repeat_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.item_count }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">这里只看见统计窗口内的轨迹，功能上线前的编辑没有流水，所以「多次调价」是下界，不是完整历史。</p>
+        </div>
+        <div class="col-lg-8">
+            <h3 class="h6 mb-3">出售价格轨迹 · 当前分类视图</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>当前分类</th><th>轨迹数</th><th>降价</th><th>上涨</th><th>零元基线</th><th>降价占比（%）</th><th>小样本</th></tr></thead>
+                    <tbody>
+                        {% for row in price_change_quality.category_rows %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.change_count }}</td>
+                            <td>{{ row.drop_count }}</td>
+                            <td>{{ row.rise_count }}</td>
+                            <td>{{ row.zero_base_count }}</td>
+                            <td>{% if row.drop_share is None %}—{% else %}{{ row.drop_share }}{% endif %}</td>
+                            <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">少于 {{ price_change_quality.min_sample }} 条</span>{% else %}<span class="badge text-bg-secondary">样本可用</span>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分类读商品<strong>当前分类</strong>；商品后来改分类时，旧轨迹无法还原当时的分类，所以这是当前视图，不伪装成历史分类。分类行不足 {{ price_change_quality.min_sample }} 条时只报数字。</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只报告：<strong>不回填历史轨迹、不把降价率解释成成交率或卖家意愿、不给卖家打分、不自动改价、不把统计写回任何记录</strong>。商品详情页仍不展示价格历史，这一产品口径等轨迹积累后再单独评估。</div>
+    {% endif %}
+</section>
+
 <section class="ops-panel relist-freshness-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Relist freshness</span><h2>重新上架的那件商品，为什么一回来就沉底</h2></div>

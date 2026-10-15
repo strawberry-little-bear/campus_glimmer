@@ -119,6 +119,7 @@ from .academic_term_snapshot_quality import build_academic_term_snapshot_quality
 from .opportunity_feed import build_opportunity_feed
 from .price_insights import build_price_insight
 from .price_changes import notify_item_price_drop, record_item_price_change
+from .price_change_quality import build_price_change_quality_panel
 from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
 from .meeting_scheduling import (
     find_appointment_conflicts,
@@ -2448,6 +2449,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('refresh_quota_drift', '刷新额度漂移', build_refresh_quota_drift),
     ('relist_freshness', '重新上架新鲜度', build_relist_freshness),
     ('refresh_response', '商品刷新回响', build_refresh_response),
+    ('price_change_quality', '出售价格轨迹质量', build_price_change_quality_panel),
     (
         'search_impression_pairing_quality', '搜索曝光与点击配对质量',
         build_search_impression_pairing_quality,
@@ -7344,6 +7346,72 @@ def operations_dashboard_export(request):
     writer.writerow(['因果解释', '只描述共同变化；后窗高于前窗不代表刷新带来因果提升'])
     writer.writerow(['身份与自由文本', '不输出用户名、商品标题、描述、搜索词或订单号'])
     writer.writerow(['运营动作', '不排名、不建议自动刷新、不改排序、不写回推荐或风控'])
+
+    price_quality = dashboard['price_change_quality']
+    writer.writerow([])
+    writer.writerow(['出售价格轨迹质量', '数值', '说明'])
+    writer.writerow([
+        '统计周期',
+        f"{timezone.localtime(price_quality['period_start']):%Y-%m-%d %H:%M} 至 "
+        f"{timezone.localtime(price_quality['period_end']):%Y-%m-%d %H:%M}",
+        '左闭右开；不回填轨迹功能上线前的历史编辑',
+    ])
+    writer.writerow([
+        '样本门槛', price_quality['min_sample'],
+        '少于该条数只报数字，不给方向结论',
+    ])
+    for label, key, note in (
+        ('轨迹条数', 'change_count', '窗口内全部 ItemPriceChange，不要求商品当前仍在售'),
+        ('涉及商品数', 'item_count', '按商品去重；同一商品多次调价只计 1 件'),
+        ('涉及卖家数', 'seller_count', '按商品卖家去重，不输出卖家名单'),
+        ('降价条数', 'drop_count', '调整后价格低于调整前价格'),
+        ('上涨条数', 'rise_count', '调整后价格高于调整前价格'),
+        ('零元基线', 'zero_base_count', '调整前价格为 0，能计数但没有可解释幅度'),
+        ('降价占比（%）', 'drop_share', '分母是窗口内全部轨迹；样本不足时留空'),
+    ):
+        value = price_quality['totals'][key]
+        writer.writerow([label, '—' if value is None else value, note])
+
+    writer.writerow([])
+    writer.writerow(['方向与幅度', '条数', '占全部轨迹（%）', '中位幅度（%）', 'P90 幅度（%）'])
+    for direction in price_quality['directions'].values():
+        writer.writerow([
+            direction['label'], direction['count'],
+            '—' if direction['share'] is None else direction['share'],
+            '—' if direction['median_ratio'] is None else direction['median_ratio'],
+            '—' if direction['p90_ratio'] is None else direction['p90_ratio'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['幅度分档', '条数', '占同方向（%）'])
+    for row in price_quality['magnitude_rows']:
+        writer.writerow([
+            f"{row['direction']} {row['bucket']}", row['count'],
+            '—' if row['share'] is None else row['share'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['重复调价', '商品数'])
+    for row in price_quality['repeat_rows']:
+        writer.writerow([row['label'], row['item_count']])
+
+    writer.writerow([])
+    writer.writerow(['出售价格轨迹 · 当前分类视图', '轨迹数', '降价', '上涨', '零元基线', '降价占比（%）', '小样本'])
+    for row in price_quality['category_rows']:
+        writer.writerow([
+            row['name'], row['change_count'], row['drop_count'], row['rise_count'],
+            row['zero_base_count'],
+            '—' if row['drop_share'] is None else row['drop_share'],
+            '是' if row['is_small_sample'] else '否',
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '说明',
+        '分类是当前分类视图；重复调价是统计窗口内的下界；零元基线不进入涨跌幅分档；'
+        '本面板只报告聚合，不读取商品标题、卖家用户名、通知原文或收藏人名单，'
+        '也不把降价率解释成成交率或自动干预价格。',
+    ])
 
     relist = dashboard['relist_freshness']
     writer.writerow([])

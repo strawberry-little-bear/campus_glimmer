@@ -84,7 +84,7 @@
 | 借用双方 | 借用下单、催收阶梯、归还两次握手登记 |
 | 普通用户 | 站内通知中心、延后通知、通知偏好、关注搜索汇总、延后提醒 |
 | 校园认证 | 校园邮箱域名配置、一次性验证链接、认证标识、公开交易档案 |
-| 管理员 | 治理工作台、需求雷达与跟进闭环、运营看板、告警日报、脱敏 CSV 导出 |
+| 管理员 | 治理工作台、需求雷达与跟进闭环、运营看板（含出售价格轨迹洞察）、告警日报、脱敏 CSV 导出 |
 
 所有运营面板遵循同一条纪律：只报告、不自动改任何业务状态，具体见[功能手册第 7 章](docs/feature-handbook.md#7-运营看板与运营告警)。
 
@@ -256,7 +256,7 @@ campus_glimmer/
 └── README.md
 ```
 
-`listings/` 内 114 个业务模块、124 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
+`listings/` 内 115 个业务模块、125 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
 
 ## 核心数据模型
 
@@ -287,7 +287,7 @@ campus_glimmer/
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
-| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 50 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
+| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 51 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
 | 需求跟进闭环 | `DemandOpportunityTask.created_at`、`DemandOpportunityTask.radar_key`、`DemandOpportunityTask.available_supply`、`SearchQuery.result_count` | 任务创建时间是唯一稳定的分界线（雷达行是滚动聚合，内容每次刷新都变），创建时的供给数用于判断「动作是否真的发生」，搜索结果数用于判断「需求是否被满足」 |
 | 同义词候选 | `SearchQuery.user_id`、`SearchQuery.query`、`SearchQuery.result_count`、`SearchQuery.created_at`、`SearchSynonym.keyword` / `synonym` / `is_active` | 同一次会话内相邻两次搜索的改口证据；已启用同义词的两个方向都参与去重，停用同义词不屏蔽候选 |
 | 同义词效果回流 | 不新增表，读 `SearchSynonym.created_at` + `SearchQuery` | 确认时间是唯一稳定的分界线；搜索词记录的是学生原本输入的那一串（扩展只发生在查询内部），按扩展词统计会成为自己和自己比、永远报成功 |
