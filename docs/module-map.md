@@ -479,6 +479,7 @@ campus_glimmer/
 - **`item-price-drop-notifications-design.md`**：出售价格轨迹、收藏商品降价提醒、偏好开关与历史边界
 - **`price-change-quality-design.md`**：出售价格轨迹的方向、幅度、重复调价与分类视图，只读运营口径
 - **`item-price-history-design.md`**：商品详情价格轨迹的展示门槛、日期粒度、连续性校验与隐私边界
+- **`price-history-maintenance-design.md`**：卖家侧价格轨迹维护提示的可见性、五种状态与只读边界
 - **`item-responsive-image-variants-design.md`**：960px 预览档、列表与详情响应式候选及历史回填边界
 - **`item-upload-image-optimization-design.md`**：新上传商品图的硬限制、降采样、方向与隐私边界
 - **`item-thumbnail-backfill-design.md`**：列表缩略图规格、历史图片分批回填、失败回退与任务台账
