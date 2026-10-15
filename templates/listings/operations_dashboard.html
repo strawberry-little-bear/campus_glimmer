@@ -2281,6 +2281,98 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>本面板只读 <code>RecommendationImpression</code>：不新增渲染批次，不修改首页推荐和写入路径，不把结构形状读成推荐效果，不按用户、商品或卖家排名。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 opportunity-impression-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Exposure ledger</span><h2>机会流曝光日志质量</h2></div>
+        <span class="ops-panel-hint">周期 {{ opportunity_impression_quality.period_days }} 天·只读落库行</span>
+    </div>
+    {% if opportunity_impression_quality.has_data %}
+    <div class="opportunity-impression-quality-summary">
+        <div><span>周期内展示行</span><strong>{{ opportunity_impression_quality.summary.total_impressions }}</strong><small>容忍 {{ opportunity_impression_quality.summary_metrics.future_tolerance_minutes }} 分钟时钟偏差</small></div>
+        <div><span>用户 / 目标</span><strong>{{ opportunity_impression_quality.summary.user_count }} / {{ opportunity_impression_quality.summary.target_count }}</strong><small>只输出去重计数</small></div>
+        <div><span>重复展示行</span><strong>{{ opportunity_impression_quality.summary.repeat_rows }}</strong><small>第一次之后多出的独立展示</small></div>
+        <div><span>同刻重复组</span><strong>{{ opportunity_impression_quality.summary.same_timestamp_pairs }}</strong><small>只提示核对，不自动删除</small></div>
+    </div>
+
+    <div class="opportunity-impression-quality-reading mt-3">
+        <div class="opportunity-impression-quality-block-heading"><strong>类型分布</strong><span>当前类型固定列出，历史或异常值聚合</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>类型</th><th>展示行</th><th>占比（%）</th><th>状态</th><th>怎么读</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_impression_quality.kind_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share != None %}{{ row.share }}{% else %}—{% endif %}</td>
+                        <td><span class="opportunity-impression-quality-{% if row.is_anomaly %}attention{% else %}ok{% endif %}">{{ row.status }}</span></td>
+                        <td>{{ row.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-impression-quality-block-heading mt-3"><strong>目标一致性</strong><span>四类互斥，异常行不从总数扣除</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>口径</th><th>展示行</th><th>占比（%）</th><th>状态</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_impression_quality.target_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong><br><small class="text-muted">{{ row.definition }}</small></td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share != None %}{{ row.share }}{% else %}—{% endif %}</td>
+                        <td><span class="opportunity-impression-quality-{% if row.is_anomaly %}attention{% else %}ok{% endif %}">{{ row.status }}</span></td>
+                        <td>{{ row.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-impression-quality-block-heading mt-3"><strong>重复与覆盖</strong><span>重复不是错误；间隙不能判失败</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>窗口内第一次被看见</strong></td><td>{{ opportunity_impression_quality.summary.first_seen_pairs }}</td><td>忽略率分母按（用户, 机会）去重</td></tr>
+                    <tr><td><strong>重复展示的用户目标对</strong></td><td>{{ opportunity_impression_quality.summary.repeat_pairs }}</td><td>同一用户在不同时刻再次看见同一机会</td></tr>
+                    <tr><td><strong>重复展示行占比</strong></td><td>{% if opportunity_impression_quality.summary.repeat_share != None %}{{ opportunity_impression_quality.summary.repeat_share }}%{% else %}—{% endif %}</td><td>分母是周期内全部展示行</td></tr>
+                    <tr><td><strong>时间在未来</strong></td><td>{{ opportunity_impression_quality.summary.future_count }}</td><td>超过当前时间 {{ opportunity_impression_quality.summary_metrics.future_tolerance_minutes }} 分钟才单列</td></tr>
+                    <tr><td><strong>覆盖自然日</strong></td><td>{{ opportunity_impression_quality.summary.active_days }} / {{ opportunity_impression_quality.summary.calendar_days }}</td><td>零展示日 {{ opportunity_impression_quality.summary.zero_days }} 天</td></tr>
+                    <tr><td><strong>最长观测间隙</strong></td><td>{% if opportunity_impression_quality.summary.longest_gap_hours != None %}{{ opportunity_impression_quality.summary.longest_gap_hours }} 小时{% else %}—{% endif %}</td><td>只描述已落库行的间隔</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-impression-quality-block-heading mt-3"><strong>逐日展示</strong><span>页面与 CSV 都只保留最近 {{ opportunity_impression_quality.daily_row_limit }} 天</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>自然日</th><th>展示行</th><th>用户数</th><th>目标数</th><th>重复行</th><th>状态</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_impression_quality.daily_rows %}
+                    <tr>
+                        <td>{{ row.date }}</td>
+                        <td>{{ row.impressions }}</td>
+                        <td>{{ row.user_count }}</td>
+                        <td>{{ row.target_count }}</td>
+                        <td>{{ row.repeat_rows }}</td>
+                        <td>{% if row.has_data %}<span class="opportunity-impression-quality-ok">有展示</span>{% else %}<span class="text-muted">零展示</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if opportunity_impression_quality.daily_rows_truncated %}
+        <p class="opportunity-impression-quality-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>本窗口逐日明细超过 {{ opportunity_impression_quality.daily_row_limit }} 天，页面与 CSV 同步截断为最近 {{ opportunity_impression_quality.daily_row_limit }} 天；汇总指标仍覆盖完整回看周期。</p>
+        {% endif %}
+        <p class="opportunity-impression-quality-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ opportunity_impression_quality.note }}</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有机会流曝光行。机会流第一次渲染机会并成功写入后，这里会开始读它的落库形状。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>本面板只读 <code>OpportunityImpression</code>：不修改机会流和写入失败策略，不输出用户名、标题、内容或目标链接，不按用户、目标或类型排名。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 opportunity-dismissal-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Opportunity</span><h2>机会流上被按「不再显示」的机会</h2></div>

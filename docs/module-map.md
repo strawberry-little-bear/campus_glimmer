@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，120 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，121 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -130,6 +130,7 @@ campus_glimmer/
 | `recommendation_impression_quality.py` | 首页推荐曝光日志的字段形状、重复曝光、匿名流量、位置与时间异常，以及自然日覆盖（只报告，不推断写入失败或每屏缺失） | 只报告 |
 | `recommendation_quality.py` | 首页推荐卡的反馈率、正负比例、改口数与理由拆分，以及按推荐当时的理由和分数档拆开的反馈率（只报告不改权重） | 只报告 |
 | `opportunity_dismissal_quality.py` | 机会流负反馈的规模、分数档与理由拆分、重复忽略，以及第一次可测的忽略率（只报告不改静默期） | 只报告 |
+| `opportunity_impression_quality.py` | 机会流曝光日志的类型、目标一致性、重复展示、同刻重复、未来时间与自然日覆盖审计（只报告，不推断写入失败或每屏缺失） | 只报告 |
 | `OpportunityImpression`（`listings/models.py`） | 机会流每次渲染落一行的「被看见」记录，是忽略率的分母 | 只追加 |
 | `RecommendationImpression`（`listings/models.py`） | 首页每次渲染落一行的「被看见」记录，是反馈率真正的分母；同时存 `reason_key` 与 `score`，因为推荐那一刻它们就在内存里，落库零成本；刻意不设 (用户, 目标) 唯一约束——忽略该折叠，展示不该 | 只追加 |
 | `favorite_collection_quality.py` | 心愿单分组的大小分布、空分组、渗透、命名收敛与先收藏后归类的四类分布（只报告不改任何分组） | 只报告 |
@@ -161,10 +162,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（130 个）
+## 业务链路的测试模块（131 个）
 
 <details>
-<summary>业务链路测试清单（130 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（131 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
@@ -325,6 +326,8 @@ campus_glimmer/
 - **`test_opportunity_dismissal_quality.py`**：忽略规模、分数档与理由拆分、重复忽略，第一次可测的忽略率
 
 - **`test_opportunity_feed.py`**：互助机会匹配、过期过滤和去重测试
+
+- **`test_opportunity_impression_quality.py`**：机会流曝光日志的周期边界、类型与目标一致性、重复与同刻重复、未来容忍、逐日截断与页面 / CSV 同构
 
 - **`test_opportunity_impression_write.py`**：机会流渲染一次落一行「被看见」，写入失败不影响页面
 

@@ -114,6 +114,7 @@ from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, Disput
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
+from .opportunity_impression_quality import build_opportunity_impression_quality
 from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
 from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
@@ -2507,6 +2508,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
     ('recommendation_impression_quality', '推荐曝光日志质量', build_recommendation_impression_quality),
+    ('opportunity_impression_quality', '机会流曝光日志质量', build_opportunity_impression_quality),
     ('location_registry_quality', '校园地点档案质量', build_location_registry_quality),
     ('location_maintenance_queue', '校园地点维护队列', build_location_maintenance_queue),
     (
@@ -9559,6 +9561,74 @@ def operations_dashboard_export(request):
     ])
     writer.writerow(['说明'])
     writer.writerow([impression_quality['note']])
+    opportunity_impressions = dashboard['opportunity_impression_quality']
+    writer.writerow([])
+    writer.writerow(['机会流曝光日志质量'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '回看天数', opportunity_impressions['period_days'],
+        '未来时间容忍（分钟）', opportunity_impressions['summary_metrics']['future_tolerance_minutes'],
+        '逐日表保留天数', opportunity_impressions['summary_metrics']['daily_row_limit'],
+    ])
+    writer.writerow(['类型分布'])
+    writer.writerow(['类型', '展示行', '占比（%）', '状态', '怎么读'])
+    for row in opportunity_impressions['kind_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            row['share'] if row['share'] is not None else '—',
+            row['status'], row['note'],
+        ])
+    writer.writerow([])
+    writer.writerow(['目标一致性'])
+    writer.writerow(['口径', '展示行', '占比（%）', '状态', '说明'])
+    for row in opportunity_impressions['target_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            row['share'] if row['share'] is not None else '—',
+            row['status'], row['note'],
+        ])
+    writer.writerow([])
+    writer.writerow(['重复与时间覆盖'])
+    writer.writerow(['指标', '数值', '说明'])
+    impression_shape = opportunity_impressions['summary']
+    writer.writerow(['周期内展示行', impression_shape['total_impressions'], '读取本地自然日窗口，容忍 1 分钟时钟偏差'])
+    writer.writerow(['用户数', impression_shape['user_count'], '按 user 去重，只输出计数'])
+    writer.writerow(['目标数', impression_shape['target_count'], '按求购或失物目标去重，不输出清单'])
+    writer.writerow(['首次展示', impression_shape['first_seen_at'].isoformat() if impression_shape['first_seen_at'] else '—', '已落库行里的最早 shown_at'])
+    writer.writerow(['末次展示', impression_shape['last_seen_at'].isoformat() if impression_shape['last_seen_at'] else '—', '已落库行里的最晚 shown_at'])
+    writer.writerow(['窗口内第一次被看见', impression_shape['first_seen_pairs'], '忽略率分母按（用户, 机会）去重'])
+    writer.writerow(['重复展示的用户目标对', impression_shape['repeat_pairs'], '同一用户在不同时刻再次看见同一机会'])
+    writer.writerow(['第一次之后多出的重复行', impression_shape['repeat_rows'], '重复展示合法，本面板不折叠'])
+    writer.writerow(['重复展示行占比（%）', impression_shape['repeat_share'] if impression_shape['repeat_share'] is not None else '—', '分母是周期内全部展示行'])
+    writer.writerow(['同刻重复的用户目标时刻组', impression_shape['same_timestamp_pairs'], '只提示核对写入路径'])
+    writer.writerow(['同刻重复多出的行', impression_shape['same_timestamp_rows'], '不自动删除，不判定数据库或业务重复'])
+    writer.writerow(['未来时间事件', impression_shape['future_count'], '超过当前时间 1 分钟才单列，不进周期主统计'])
+    writer.writerow(['覆盖自然日', impression_shape['calendar_days'], '从本地周期开始到容忍边界所在自然日'])
+    writer.writerow(['有展示自然日', impression_shape['active_days'], '至少一行曝光落库'])
+    writer.writerow(['零展示自然日', impression_shape['zero_days'], '低流量、无请求或写入失败都可能造成，本表不可区分'])
+    writer.writerow([
+        '最长观测间隙（小时）',
+        impression_shape['longest_gap_hours'] if impression_shape['longest_gap_hours'] is not None else '—',
+        '只描述已落库行的间隔，不判写入失败',
+    ])
+    writer.writerow([])
+    truncated_note = (
+        f"窗口共生成 {opportunity_impressions['daily_row_count'] + opportunity_impressions['daily_rows_truncated']} 天，"
+        f"仅保留最近 {opportunity_impressions['daily_row_limit']} 天"
+        if opportunity_impressions['daily_rows_truncated']
+        else '窗口未超过逐日表保留上限'
+    )
+    writer.writerow(['逐日展示'])
+    writer.writerow(['自然日', '展示行', '用户数', '目标数', '重复行', '状态'])
+    for row in opportunity_impressions['daily_rows']:
+        writer.writerow([
+            row['date'].isoformat(), row['impressions'], row['user_count'],
+            row['target_count'], row['repeat_rows'],
+            '有展示' if row['has_data'] else '零展示',
+        ])
+    writer.writerow(['截断说明', truncated_note])
+    writer.writerow(['说明'])
+    writer.writerow([opportunity_impressions['note']])
     dismissal = dashboard['opportunity_dismissal_quality']
     writer.writerow([])
     writer.writerow(['机会流上被按「不再显示」的机会'])

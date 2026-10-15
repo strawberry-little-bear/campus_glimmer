@@ -3005,6 +3005,23 @@ a { color: inherit; text-decoration: none; }
 .recommendation-impression-quality-note { margin-top: 6px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
 @media (max-width: 575px) { .recommendation-impression-quality-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.recommendation-impression-quality-summary > div { min-height: 72px; padding: 11px; }.recommendation-impression-quality-table td { white-space: normal; } }
 
+/* 机会流曝光日志质量面板：审计忽略率分母自己的形状。 */
+.opportunity-impression-quality-panel .opportunity-impression-quality-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.opportunity-impression-quality-panel .opportunity-impression-quality-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e6efe9; border-radius: 14px; background: #fbfdfb; }
+.opportunity-impression-quality-panel .opportunity-impression-quality-summary span { color: #83938b; font-size: .71rem; }
+.opportunity-impression-quality-panel .opportunity-impression-quality-summary small { color: #9aa8a0; font-size: .69rem; }
+.opportunity-impression-quality-panel .opportunity-impression-quality-summary strong { color: #315946; font-size: 1.45rem; line-height: 1; }
+.opportunity-impression-quality-block-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.opportunity-impression-quality-block-heading strong { color: #2f5344; font-size: .92rem; }
+.opportunity-impression-quality-block-heading span { color: #8b9a91; font-size: .74rem; }
+.opportunity-impression-quality-table td { vertical-align: middle; }
+.opportunity-impression-quality-table td:nth-child(2), .opportunity-impression-quality-table td:nth-child(3) { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.opportunity-impression-quality-ok, .opportunity-impression-quality-attention { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .73rem; white-space: nowrap; }
+.opportunity-impression-quality-ok { color: #2f6a4f; background: #e8f4ec; }
+.opportunity-impression-quality-attention { color: #8a5a2f; background: #f8efe3; }
+.opportunity-impression-quality-note { margin-top: 6px; color: #8b9a91; font-size: .74rem; line-height: 1.6; }
+@media (max-width: 575px) { .opportunity-impression-quality-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.opportunity-impression-quality-summary > div { min-height: 72px; padding: 11px; }.opportunity-impression-quality-table td { white-space: normal; } }
+
 .opportunity-dismissal-panel .opportunity-dismissal-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .opportunity-dismissal-panel .opportunity-dismissal-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
 .opportunity-dismissal-panel .opportunity-dismissal-summary span { color: #83938b; font-size: .71rem; }
