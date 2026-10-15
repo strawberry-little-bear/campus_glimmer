@@ -5,6 +5,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
+from .image_processing import ItemImageLimitError, normalize_item_image
 from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
@@ -205,6 +206,21 @@ class ItemImageForm(StyledModelFormMixin, forms.ModelForm):
     class Meta:
         model = ItemImage
         fields = ['image']
+
+    def clean_image(self):
+        image = self.cleaned_data.get('image')
+        if image is None:
+            return image
+        try:
+            return normalize_item_image(image)
+        except ItemImageLimitError:
+            raise forms.ValidationError(
+                '图片过大：单张不能超过 10 MB 或 2000 万像素。'
+            )
+        except Exception:
+            # Pillow 的异常可能携带路径或解码细节；用户只需要知道下一步该
+            # 换哪一张图，不需要看见底层库的实现。
+            raise forms.ValidationError('图片处理失败，请换一张清晰的图片再试。')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
