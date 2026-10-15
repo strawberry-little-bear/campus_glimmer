@@ -429,7 +429,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（80 篇，持续更新）</summary>
+<summary>设计文档清单（81 篇，持续更新）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -531,6 +531,7 @@ campus_glimmer/
 - **`opportunity-dismissal-quality-design.md`**：按过「不再显示」的机会的规模、理由与重复忽略
 
 - **`opportunity-impression-design.md`**：忽略率的分母为什么值得落库、曝光表的四条口径与「仍然报下界」的理由
+- **`opportunity-impression-quality-design.md`**：机会流曝光行自身的类型、目标一致性、重复与自然日覆盖审计
 
 - **`order-deadline-reminders-design.md`**：确认与归还截止的等待分档、催收四种结局与距截止余量
 
