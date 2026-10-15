@@ -85,6 +85,7 @@
 | 数据库 | SQLite（默认） | 适合本地开发、演示和轻量部署；生产环境可替换 |
 | 页面层 | Django Templates + 静态资源 | 服务端渲染为主，未读提醒和部分筛选交互使用轻量 JavaScript |
 | 文件存储 | 本地 media 目录 | 商品图片和头像；容器运行时使用独立数据卷 |
+| 图片处理 | Pillow | 新上传商品图的尺寸、像素上限、EXIF 方向与 WebP 重编码 |
 | Web 服务 | Django 开发服务器 / Gunicorn | Docker 镜像默认使用 Gunicorn |
 | 自动化 | GitHub Actions | 语法检查、Django 系统检查、迁移检查和测试 |
 
@@ -115,9 +116,11 @@
 <a id="item-g1"></a>
 
 <details>
-<summary>发布、编辑与三种交易方式（6 条，含缩进子项）</summary>
+<summary>发布、编辑与三种交易方式（7 条，含缩进子项）</summary>
 
 - 发布、编辑、删除商品，支持标题、描述、价格、分类、成色和多图上传。
+
+- **多图上传在入库前做体积治理**：单张超过 10 MB 或 2000 万像素会被拒绝；超过 1600 像素或 1.5 MB 时等比降采样并重编码为 WebP，同时保留 EXIF 方向。小图不重复编码，历史图片也不做批量迁移。
 
 - 商品状态覆盖“在售、已预订、已售出、已过期”等主要阶段。
 
@@ -3440,7 +3443,7 @@ python manage.py sync_academic_calendar --term-slug autumn-2026
 
 ## 项目结构
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，112 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，113 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -3463,11 +3466,11 @@ campus_glimmer/
 └── README.md
 ```
 
-### listings/ 的业务模块（112 个）
+### listings/ 的业务模块（113 个）
 
 
 <details>
-<summary>业务模块清单（112 个，按业务链路归组）</summary>
+<summary>业务模块清单（113 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -3477,6 +3480,7 @@ campus_glimmer/
 | `availability.py` | 商品可用性与有货提醒 | 读写 |
 | `first_viewed.py` | 商品第一次被看见之后的收藏与下单时延、来源与后续一步（只报告不改写） | 读写 |
 | `forms.py` | 商品、搜索、通知偏好等表单 | 读写 |
+| `image_processing.py` | 商品图片上传的硬限制、降采样、EXIF 方向与 WebP 重编码 | 读写 |
 | `models.py` | 商品、地点、领取申请、订单、通知和机会忽略记录等核心模型 | 读写 |
 | `notifications.py` | 通知生成和通知相关业务 | 读写 |
 | `operations_digest.py` | 运营告警日报构建与幂等投递 | 读写 |
@@ -3588,10 +3592,10 @@ campus_glimmer/
 
 </details>
 
-### 业务链路的测试模块（121 个）
+### 业务链路的测试模块（122 个）
 
 <details>
-<summary>业务链路测试清单（121 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（122 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
@@ -3683,6 +3687,8 @@ campus_glimmer/
 - **`test_handoff_code_usage.py`**：取件码的签发间隔、尝试次数分档、重复签发与用不上的码
 
 - **`test_item_image_coverage.py`**：商品图片覆盖度，只报告不改写
+
+- **`test_item_image_processing.py`**：上传硬限制、等比降采样、WebP 重编码、EXIF 方向、表单错误与页面提示
 
 - **`test_item_lifecycle.py`**：到期商品从公开流与推荐里隐藏并回写状态
 
@@ -3842,7 +3848,7 @@ campus_glimmer/
 ### docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（65 篇）</summary>
+<summary>设计文档清单（66 篇）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -3897,6 +3903,7 @@ campus_glimmer/
 - **`gift-application-queue-design.md`**：免费领取申请队列的长度、处理时长与说明填写率
 
 - **`item-image-coverage-design.md`**：在架商品的图片覆盖度与无图商品清单
+- **`item-upload-image-optimization-design.md`**：新上传商品图的硬限制、降采样、方向与隐私边界
 
 - **`lifecycle-reminder-action-trend-design.md`**：行动率的跨周期对比，为什么只有行动率带方向、为什么先不做按卖家的分层
 
@@ -4865,7 +4872,7 @@ CI 的目标不是替代本地验证，而是确保每个独立迭代至少满�
 
 - **基础设施**：支持 PostgreSQL、缓存、对象存储、结构化日志、备份和更完整的生产部署；存活与数据库就绪检查已拆分，后续新依赖可逐步纳入 `readyz` 的组件检查。
 
-- **体验完善**：优化移动端布局、无障碍、图片处理、校园配置和运营工具。
+- **体验完善**：优化移动端布局、无障碍、校园配置和运营工具；新上传商品图已接入体积治理，后续可继续评估响应式图片与历史图片的缩略图策略。
 
 </details>
 
