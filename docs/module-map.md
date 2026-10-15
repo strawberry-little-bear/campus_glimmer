@@ -426,7 +426,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（79 篇，持续更新）</summary>
+<summary>设计文档清单（80 篇，持续更新）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -496,6 +496,7 @@ campus_glimmer/
 
 - **`lifecycle-reminder-action-trend-design.md`**：行动率的跨周期对比，为什么只有行动率带方向、为什么先不做按卖家的分层
 - **`lifecycle-reminder-event-ledger-design.md`**：生命周期提醒从“最新时间戳”升级为逐商品逐类型事件台账，为跨学期对比保留稳定分母
+- **`item-refresh-event-ledger-design.md`**：商品刷新从累计计数与最新时间戳升级为逐次事件台账，先守住事实，不急着判效果
 - **`lifecycle-reminder-term-trend-design.md`**：同一学期阶段的跨学期终态转化对比，只用事件台账分母，并把可覆盖的刷新动作排除在纵向方向外
 
 - **`lifecycle-reminder-segment-effect-design.md`**：分类与本周期提醒负担的行动率分层、12 件样本门槛和只读隐私边界
