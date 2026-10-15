@@ -1,4 +1,7 @@
+import importlib.util
+import io
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 from django.db import OperationalError
@@ -57,3 +60,40 @@ class ReadyCheckTests(TestCase):
         self.assertNotIn('database is locked', response.content.decode())
         self.assertIn('OperationalError', '\n'.join(logged.output))
         self.assertNotIn('secret.sqlite3', '\n'.join(logged.output))
+
+
+class ContainerHealthcheckTests(SimpleTestCase):
+    def load_healthcheck(self):
+        path = Path(__file__).resolve().parents[1] / 'docker' / 'healthcheck.py'
+        spec = importlib.util.spec_from_file_location('docker_healthcheck', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_container_healthcheck_accepts_ready_endpoint(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+
+            self.assertTrue(module.is_ready())
+
+        urlopen.assert_called_once_with('http://127.0.0.1:8000/readyz/', timeout=4)
+
+    def test_container_healthcheck_rejects_unready_endpoint(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 503
+
+            self.assertFalse(module.is_ready())
+
+    def test_container_healthcheck_hides_probe_error_details(self):
+        module = self.load_healthcheck()
+        with patch.object(
+            module.urllib.request,
+            'urlopen',
+            side_effect=OSError('secret connection failure'),
+        ), patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            self.assertFalse(module.is_ready())
+
+        self.assertIn('readiness check failed', stderr.getvalue())
+        self.assertNotIn('secret connection failure', stderr.getvalue())

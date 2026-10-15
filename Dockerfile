@@ -14,5 +14,8 @@ RUN mkdir -p /app/data /app/media /app/staticfiles
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD ["python", "/app/docker/healthcheck.py"]
+
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]
