@@ -46,6 +46,7 @@ from .notification_preference_usage import build_notification_preference_usage
 from .notification_preference_bypass_diagnosis import build_notification_preference_bypass_diagnosis
 from .notification_quiet_hours_shape import build_notification_quiet_hours_shape
 from .notification_aggregation_quality import build_notification_aggregation_quality
+from .report_priority import build_report_priority_for_report, build_report_queue
 from .report_resolution_quality import build_report_resolution_quality
 from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
@@ -1746,16 +1747,23 @@ def download_dispute_evidence(request, evidence_id):
 def report_list(request):
     if not request.user.is_staff:
         raise PermissionDenied
-    reports = Report.objects.select_related(
+    all_reports = Report.objects.select_related(
         'item__seller', 'item__category', 'item__location', 'reporter', 'reviewer',
     )
     status_filter = request.GET.get('status', 'all')
     if status_filter in dict(Report.STATUS_CHOICES):
-        reports = reports.filter(status=status_filter)
+        reports = all_reports.filter(status=status_filter)
     else:
         status_filter = 'all'
+        reports = all_reports
+    priority_queue = build_report_queue(
+        reports, summary_queryset=all_reports,
+    )
     return render(request, 'listings/reports.html', {
-        'reports': reports,
+        'report_rows': priority_queue['rows'],
+        'priority_counts': priority_queue['priority_counts'],
+        'priority_labels': priority_queue['priority_labels'],
+        'open_priority_total': priority_queue['open_total'],
         'status_filter': status_filter,
         'report_statuses': Report.STATUS_CHOICES,
         'pending_report_count': Report.objects.filter(status__in={'pending', 'reviewing'}).count(),
@@ -1799,6 +1807,7 @@ def review_report(request, report_id):
     return render(request, 'listings/report_review.html', {
         'form': form,
         'report': report,
+        'priority': build_report_priority_for_report(report),
         'title': '审核商品举报',
     })
 

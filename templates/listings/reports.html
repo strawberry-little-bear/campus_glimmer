@@ -2,19 +2,27 @@
 {% block title %}商品举报审核 - 拾光校园{% endblock %}
 {% block content %}
 <div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust & safety</span><h1 class="mt-2">商品举报审核</h1><p class="text-muted mb-0">集中核查社区反馈，保留处理依据，让每一次治理都有迹可循。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
-<div class="report-queue-note mb-4"><i class="bi bi-flag me-2"></i>当前有 <strong>{{ pending_report_count }}</strong> 条举报待处理或审核中</div>
+<div class="report-queue-note mb-4"><i class="bi bi-flag me-2"></i>当前有 <strong>{{ pending_report_count }}</strong> 条举报待处理或审核中，其中 <strong>{{ priority_counts.urgent }}</strong> 条建议优先查看。</div>
+<div class="report-priority-summary mb-4">
+    <div class="{% if priority_counts.urgent %}is-urgent{% endif %}"><span>{{ priority_labels.urgent }}</span><strong>{{ priority_counts.urgent }}</strong><small>疑似诈骗且商品仍在售</small></div>
+    <div class="{% if priority_counts.high %}is-high{% endif %}"><span>{{ priority_labels.high }}</span><strong>{{ priority_counts.high }}</strong><small>风险仍在曝光或多人交叉举报</small></div>
+    <div><span>{{ priority_labels.normal }}</span><strong>{{ priority_counts.normal }}</strong><small>常规核查顺序</small></div>
+</div>
 <div class="report-filter-bar mb-4">
     <span class="small text-muted">筛选状态</span>
     <a class="report-filter {% if status_filter == 'all' %}is-active{% endif %}" href="{% url 'report_list' %}">全部</a>
     {% for status, label in report_statuses %}<a class="report-filter {% if status_filter == status %}is-active{% endif %}" href="{% url 'report_list' %}?status={{ status }}">{{ label }}</a>{% endfor %}
 </div>
 <section class="report-list">
-{% for report in reports %}
+{% for row in report_rows %}
+{% with report=row.report %}
 <article class="content-card report-admin-card {% if report.status in 'resolved rejected' %}is-closed{% endif %}">
-    <div class="report-admin-head"><div><span class="report-status report-status-{{ report.status }}">{{ report.get_status_display }}</span><h2>{{ report.item.title }}</h2><p class="mb-0 small text-muted">{{ report.get_reason_display }} · {{ report.reporter.username }} 举报 · {{ report.created_at|date:'Y-m-d H:i' }}</p></div><span class="small text-muted">发布者：{{ report.item.seller.username }}</span></div>
+    <div class="report-admin-head"><div><span class="report-status report-status-{{ report.status }}">{{ report.get_status_display }}</span><span class="report-priority report-priority-{{ row.priority_key }}">{{ row.priority_label }}</span><h2>{{ report.item.title }}</h2><p class="mb-0 small text-muted">{{ report.get_reason_display }} · {{ report.reporter.username }} 举报 · {{ report.created_at|date:'Y-m-d H:i' }} · {{ row.priority_signals|join:'、' }}</p></div><span class="small text-muted">发布者：{{ report.item.seller.username }}</span></div>
     <div class="report-admin-body"><p>{{ report.detail|default:'举报人未补充说明。'|linebreaksbr }}</p>{% if report.item.location %}<p class="small text-muted mb-0"><i class="bi bi-geo-alt me-1"></i>{{ report.item.location.name }} · 当前商品状态：{{ report.item.get_status_display }}</p>{% endif %}{% if report.review_note %}<div class="report-review-note mt-3"><strong>审核备注</strong><p class="mb-0 mt-1">{{ report.review_note|linebreaksbr }}</p></div>{% endif %}</div>
-    <div class="report-admin-footer"><span class="small text-muted">{% if report.reviewer %}{{ report.reviewer.username }} · {{ report.reviewed_at|date:'Y-m-d H:i' }} 审核{% else %}尚未分配审核人{% endif %}</span>{% if report.status not in 'resolved rejected' %}<a class="btn btn-sm btn-primary" href="{% url 'review_report' report.id %}"><i class="bi bi-check2-circle me-1"></i>处理举报</a>{% else %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'review_report' report.id %}">查看记录</a>{% endif %}</div>
+    <div class="report-admin-footer"><span class="small text-muted">{% if row.open_report_count and row.open_report_count > 1 %}同一商品当前 {{ row.open_report_count }} 条待处理举报 · {% endif %}{% if report.reviewer %}{{ report.reviewer.username }} · {{ report.reviewed_at|date:'Y-m-d H:i' }} 审核{% else %}尚未分配审核人{% endif %}</span>{% if report.status not in 'resolved rejected' %}<a class="btn btn-sm btn-primary" href="{% url 'review_report' report.id %}"><i class="bi bi-check2-circle me-1"></i>处理举报</a>{% else %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'review_report' report.id %}">查看记录</a>{% endif %}</div>
 </article>
-{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-flag"></i><h2>暂时没有举报记录</h2><p>用户提交举报后，会在这里形成审核队列。</p></div>{% endfor %}
+{% endwith %}
+{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-flag"></i><h2>当前筛选下没有举报记录</h2><p>用户提交举报后，会在这里形成审核队列。</p></div>{% endfor %}
 </section>
+<div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>优先级只来自举报原因、商品当前是否在售和同一商品的待处理举报数，它建议先看哪一条，不是违规结论；这里不自动下架、不自动通知卖家，也不公开举报人。</div>
 {% endblock %}

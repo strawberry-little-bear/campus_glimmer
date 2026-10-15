@@ -37,6 +37,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from .models import BorrowReturnEscalation, MeetingIncident, OrderDispute, Report
+from .report_priority import build_report_priority, open_report_counts
 
 
 # Each queue's handling deadline. These are deliberately different: a meeting
@@ -147,12 +148,23 @@ def normalise_case(*, kind, status, created_at, closed_at, reviewer_id, target=N
     return case
 
 
-def _report_cases(queryset):
+def _report_cases(queryset, now):
     rows = []
+    open_counts = open_report_counts()
     for row in queryset.values(
-        'id', 'status', 'created_at', 'reviewed_at', 'reviewer_id', 'reason',
-        'item__title', 'item__seller__username', 'reporter__username',
+        'id', 'item_id', 'status', 'created_at', 'reviewed_at', 'reviewer_id', 'reason',
+        'item__status', 'item__expires_at', 'item__title', 'item__seller__username',
+        'reporter__username',
     ):
+        is_open = row['status'] in OPEN_STATUSES
+        priority = build_report_priority(
+            reason=row['reason'],
+            item_status=row['item__status'],
+            item_expires_at=row['item__expires_at'],
+            open_report_count=open_counts.get(row['item_id'], 1 if is_open else 0),
+            is_open=is_open,
+            now=now,
+        )
         rows.append(normalise_case(
             case_id=row['id'],
             kind='report',
@@ -166,6 +178,7 @@ def _report_cases(queryset):
             counterparty=row['item__seller__username'],
             reporter=row['reporter__username'],
             url=f"/listings/reports/{row['id']}/review/",
+            **priority,
         ))
     return rows
 
@@ -261,7 +274,7 @@ def _fetch_cases(*, days, now):
     """Load every case created in the period, whatever queue it came from."""
     start = now - timedelta(days=days)
     cases = []
-    cases += _report_cases(Report.objects.filter(created_at__gte=start, created_at__lte=now))
+    cases += _report_cases(Report.objects.filter(created_at__gte=start, created_at__lte=now), now)
     cases += _dispute_cases(OrderDispute.objects.filter(created_at__gte=start, created_at__lte=now))
     cases += _incident_cases(MeetingIncident.objects.filter(created_at__gte=start, created_at__lte=now))
     cases += _borrow_cases(BorrowReturnEscalation.objects.filter(
@@ -270,7 +283,7 @@ def _fetch_cases(*, days, now):
     return cases
 
 
-def _fetch_open_cases():
+def _fetch_open_cases(*, now):
     """Load every case still waiting, regardless of when it was opened.
 
     Overdue work must not be hidden by the statistics window: a case opened
@@ -278,7 +291,7 @@ def _fetch_open_cases():
     to see, so the open backlog is fetched without a date filter.
     """
     cases = []
-    cases += _report_cases(Report.objects.filter(status__in=OPEN_STATUSES))
+    cases += _report_cases(Report.objects.filter(status__in=OPEN_STATUSES), now=now)
     cases += _dispute_cases(OrderDispute.objects.filter(status__in=OPEN_STATUSES))
     cases += _incident_cases(MeetingIncident.objects.filter(status__in=OPEN_STATUSES))
     cases += _borrow_cases(BorrowReturnEscalation.objects.filter(
@@ -400,7 +413,7 @@ def build_governance_sla(*, days=30, now=None):
     now = now or timezone.now()
 
     period_cases = _fetch_cases(days=days, now=now)
-    open_cases = _fetch_open_cases()
+    open_cases = _fetch_open_cases(now=now)
 
     queues = []
     for kind in ('report', 'dispute', 'incident', 'borrow'):

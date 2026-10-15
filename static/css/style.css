@@ -571,7 +571,20 @@ a { color: inherit; text-decoration: none; }
 .report-status-pending { color: #a1543e; background: #fff0eb; }.report-status-reviewing { color: #9b762e; background: #fff8e8; }.report-status-resolved { color: #3d815d; background: #eef9f1; }.report-status-rejected { color: #7f8b84; background: #f0f3f1; }
 .report-review-note { padding: 11px 13px; border-left: 3px solid #d2a25a; border-radius: 8px; color: #64786d; background: #fffbf3; font-size: .78rem; }
 .report-review-card { padding: 24px; }.report-review-context { padding-bottom: 18px; border-bottom: 1px solid #edf2ee; color: #60746a; font-size: .85rem; }
-@media (max-width: 575px) { .report-admin-head, .report-admin-footer { align-items: flex-start; flex-direction: column; gap: 8px; } }
+.report-priority-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.report-priority-summary > div { padding: 13px 15px; border: 1px solid #e4ece6; border-radius: 12px; background: #fff; }
+.report-priority-summary span, .report-priority-summary small { display: block; color: #73857b; font-size: .72rem; }
+.report-priority-summary strong { display: block; margin-top: 3px; color: #315746; font-size: 1.25rem; }
+.report-priority-summary .is-urgent { border-color: #efc7bd; background: #fff5f2; }
+.report-priority-summary .is-urgent strong { color: #a1543e; }
+.report-priority-summary .is-high { border-color: #efdcb5; background: #fffbef; }
+.report-priority-summary .is-high strong { color: #9b762e; }
+.report-priority { display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 999px; font-size: .7rem; font-weight: 700; }
+.report-priority-urgent { color: #a1543e; background: #fff0eb; }
+.report-priority-high { color: #9b762e; background: #fff8e8; }
+.report-priority-normal { color: #7f8b84; background: #f0f3f1; }
+.governance-case-head .report-priority { margin-left: 6px; }
+@media (max-width: 575px) { .report-priority-summary { grid-template-columns: 1fr; } }@media (max-width: 575px) { .report-admin-head, .report-admin-footer { align-items: flex-start; flex-direction: column; gap: 8px; } }
 
 .search-period-comparison { padding-bottom: 20px; }
 .search-comparison-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 8px 0 18px; }

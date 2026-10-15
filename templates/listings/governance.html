@@ -46,7 +46,7 @@
     <article class="content-card governance-case{% if case.is_overdue %} is-overdue{% elif case.sla_level == 'warning' %} is-warning{% endif %}">
         <div class="governance-case-head">
             <div>
-                <span class="governance-case-kind governance-case-kind-{{ case.kind }}">{{ case.kind_label }}</span>
+                <span class="governance-case-kind governance-case-kind-{{ case.kind }}">{{ case.kind_label }}</span>{% if case.kind == 'report' %}<span class="report-priority report-priority-{{ case.priority_key }}">{{ case.priority_label }}</span>{% endif %}
                 <h2>{{ case.subject }}</h2>
                 <p class="mb-0 small text-muted">{{ case.reason_label }} · {{ case.reporter }} 提交 · {{ case.created_at|date:'Y-m-d H:i' }}</p>
             </div>
@@ -60,7 +60,7 @@
         </div>
         <div class="governance-case-body">
             <span class="small text-muted">涉及对方：{{ case.counterparty }}</span>
-            <span class="small text-muted">已等待 {{ case.age_label }}（时限 {{ case.sla_label }}）</span>
+            <span class="small text-muted">已等待 {{ case.age_label }}（时限 {{ case.sla_label }}）</span>{% if case.kind == 'report' %}<span class="small text-muted">举报优先级：{{ case.priority_label }} · {{ case.priority_signals|join:'、' }}</span>{% endif %}
             {% if case.kind == 'borrow' %}<span class="small text-muted">催收等级 三级 · 累计升级 {{ case.escalation_count }} 次</span>
             {% elif case.reviewer_id %}<span class="small text-muted">已分配处理人</span>{% else %}<span class="small text-muted">尚未分配处理人</span>{% endif %}
         </div>
