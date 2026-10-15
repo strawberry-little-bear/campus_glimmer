@@ -58,7 +58,7 @@ class NotificationPreferenceBypassDiagnosisTests(TestCase):
             days=self.days, now=self.now,
         )
 
-        self.assertEqual(report['field_total'], 25)
+        self.assertEqual(report['field_total'], 26)
         self.assertEqual(
             [row['field'] for row in report['rows']], list(_preference_fields()),
         )
