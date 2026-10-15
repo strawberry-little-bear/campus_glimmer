@@ -127,6 +127,55 @@ class ModerationEvent(models.Model):
     def __str__(self):
         return f'{self.get_channel_display()} · {self.get_status_display()} · {self.created_at:%Y-%m-%d %H:%M}'
 
+class ModerationAppeal(models.Model):
+    """确认违规后的单次人工申诉与处理留痕。"""
+
+    REASON_CHOICES = (
+        ('not_violation', '内容不违规'),
+        ('missing_context', '缺少语境'),
+        ('other', '其他需要补充的情况'),
+    )
+    STATUS_CHOICES = (
+        ('pending', '待处理'),
+        ('upheld', '维持原判'),
+        ('accepted', '申诉成立并恢复内容'),
+        ('accepted_without_restore', '申诉成立但缺少恢复材料'),
+    )
+
+    event = models.OneToOneField(
+        ModerationEvent, on_delete=models.CASCADE, related_name='appeal',
+        verbose_name='审核事件',
+    )
+    appellant = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='moderation_appeals',
+        verbose_name='申诉人',
+    )
+    reason = models.CharField('申诉原因', max_length=30, choices=REASON_CHOICES)
+    statement = models.TextField('申诉说明', max_length=1000)
+    submitted_at = models.DateTimeField('提交时间', auto_now_add=True)
+    status = models.CharField('处理状态', max_length=30, choices=STATUS_CHOICES, default='pending')
+    original_reviewed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='original_moderation_appeals', verbose_name='原复核人快照',
+    )
+    original_reviewed_at = models.DateTimeField('原复核时间快照', null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='resolved_moderation_appeals', verbose_name='申诉处理人',
+    )
+    resolved_at = models.DateTimeField('申诉处理时间', null=True, blank=True)
+    resolution_note = models.TextField('处理说明', blank=True)
+
+    class Meta:
+        verbose_name = '内容申诉'
+        verbose_name_plural = '内容申诉'
+        ordering = ['status', '-submitted_at', '-id']
+        indexes = [models.Index(fields=['status', '-submitted_at'])]
+
+    def __str__(self):
+        return f'{self.appellant_id} 对审核事件 {self.event_id} 的申诉'
+
+
 class PrivateMessage(models.Model):
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
     receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='received_messages')

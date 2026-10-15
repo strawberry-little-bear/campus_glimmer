@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% block title %}我的内容申诉 · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-heading">
+    <div>
+        <span class="eyebrow">社区安全与内容治理</span>
+        <h1 class="mt-2">我的内容申诉</h1>
+        <p class="text-muted mb-0">这里显示被确认违规的留言和私信。每条内容只能提交一次申诉，处理后会在这里看到说明。</p>
+    </div>
+    <a class="btn btn-outline-primary" href="{% url 'notification_list' %}"><i class="bi bi-bell me-1"></i>查看通知</a>
+</div>
+
+<section class="content-card">
+    <div class="list-group list-group-flush">
+        {% for event in events %}
+        <article class="list-group-item px-0 py-4">
+            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge text-bg-light">{{ event.get_channel_display }}</span>
+                    <span class="badge {% if event.risk_tier == 'critical' %}text-bg-danger{% elif event.risk_tier == 'elevated' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.get_risk_tier_display }}</span>
+                    <span class="badge text-bg-danger">确认违规</span>
+                    <small class="text-muted">{{ event.reviewed_at|date:'Y-m-d H:i' }} 复核</small>
+                </div>
+                {% if event.item %}<a class="small" href="{% url 'item_detail' event.item.id %}">查看关联商品</a>{% endif %}
+            </div>
+            <div class="p-3 rounded-3 bg-light mb-3">
+                <p class="mb-2" style="white-space: pre-wrap; word-break: break-word;">{{ event.content }}</p>
+                <small class="text-danger">命中规则：{{ event.matched_terms }}</small>
+            </div>
+
+            {% if event.appeal %}
+            <div class="p-3 rounded-3 border">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span class="badge {% if event.appeal.status == 'pending' %}text-bg-warning{% elif event.appeal.status == 'accepted' %}text-bg-success{% elif event.appeal.status == 'accepted_without_restore' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.appeal.get_status_display }}</span>
+                    <span class="badge text-bg-light">{{ event.appeal.get_reason_display }}</span>
+                    <small class="text-muted">{{ event.appeal.submitted_at|date:'Y-m-d H:i' }} 提交</small>
+                </div>
+                <p class="small" style="white-space: pre-wrap;">{{ event.appeal.statement }}</p>
+                {% if event.appeal.status == 'pending' %}<small class="text-muted">管理员会结合原始内容、命中规则和你的说明再次复核。</small>{% else %}<div class="small text-muted"><strong>处理说明</strong><br>{{ event.appeal.resolution_note|linebreaksbr }}</div>{% endif %}
+            </div>
+            {% else %}
+            <form method="post" action="{% url 'submit_moderation_appeal' event.id %}">
+                {% csrf_token %}
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label class="form-label small" for="appeal-reason-{{ event.id }}">申诉原因</label>
+                        <select id="appeal-reason-{{ event.id }}" name="reason" class="form-select">
+                            <option value="not_violation">内容不违规</option>
+                            <option value="missing_context">缺少语境</option>
+                            <option value="other">其他需要补充的情况</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label small" for="appeal-statement-{{ event.id }}">申诉说明</label>
+                        <textarea id="appeal-statement-{{ event.id }}" name="statement" rows="3" maxlength="1000" class="form-control" required placeholder="请补充当时的语境或你认为需要复核的原因。"></textarea>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm mt-3" type="submit"><i class="bi bi-send me-1"></i>提交申诉</button>
+            </form>
+            {% endif %}
+        </article>
+        {% empty %}
+        <div class="text-center py-5 text-muted"><i class="bi bi-shield-check fs-2 d-block mb-2"></i>当前没有确认违规的内容记录。</div>
+        {% endfor %}
+    </div>
+</section>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-4" aria-label="我的内容申诉分页"><ul class="pagination justify-content-center mb-0">
+    {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a></li>{% endif %}
+    <li class="page-item active"><span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a></li>{% endif %}
+</ul></nav>
+{% endif %}
+{% endblock %}

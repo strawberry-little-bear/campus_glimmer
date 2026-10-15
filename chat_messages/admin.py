@@ -1,6 +1,6 @@
 # messages/admin.py
 from django.contrib import admin
-from .models import Comment, ModerationEvent, PrivateMessage
+from .models import Comment, ModerationAppeal, ModerationEvent, PrivateMessage
 
 @admin.register(Comment)
 class CommentAdmin(admin.ModelAdmin):
@@ -27,3 +27,34 @@ class ModerationEventAdmin(admin.ModelAdmin):
         ('拦截内容', {'fields': ('channel', 'author', 'item', 'receiver', 'risk_tier', 'risk_level', 'risk_score', 'content', 'matched_terms', 'created_at')}),
         ('复核结果', {'fields': ('status', 'reviewed_by', 'reviewed_at', 'released_at')}),
     )
+
+
+@admin.register(ModerationAppeal)
+class ModerationAppealAdmin(admin.ModelAdmin):
+    list_display = (
+        'event', 'appellant', 'reason', 'status', 'original_reviewed_by',
+        'original_reviewed_at', 'resolved_by', 'resolved_at', 'submitted_at',
+    )
+    list_filter = ('status', 'reason', 'submitted_at', 'resolved_at')
+    search_fields = ('statement', 'resolution_note', 'appellant__username')
+    autocomplete_fields = ('appellant', 'original_reviewed_by', 'resolved_by')
+    actions = None
+    readonly_fields = (
+        'event', 'appellant', 'reason', 'statement', 'submitted_at', 'status',
+        'original_reviewed_by', 'original_reviewed_at', 'resolved_by',
+        'resolved_at', 'resolution_note',
+    )
+    fieldsets = (
+        ('申诉内容', {'fields': ('event', 'appellant', 'reason', 'statement', 'submitted_at')}),
+        ('原复核快照', {'fields': ('original_reviewed_by', 'original_reviewed_at')}),
+        ('处理结果', {'fields': ('status', 'resolved_by', 'resolved_at', 'resolution_note')}),
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

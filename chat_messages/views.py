@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.contrib import messages as django_messages
@@ -11,9 +12,9 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models.functions import Coalesce
 from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
-from .models import Comment, ModerationEvent, PrivateMessage
+from .models import Comment, ModerationAppeal, ModerationEvent, PrivateMessage
 from .moderation import moderate_submission
-from .forms import CommentForm, PrivateMessageForm
+from .forms import CommentForm, ModerationAppealForm, PrivateMessageForm
 from listings.models import Item
 from listings.notifications import create_notification
 
@@ -366,15 +367,25 @@ def moderation_queue(request):
     tier_filter = request.GET.get('tier', 'all').strip()
     if tier_filter not in {'all', 'critical', 'elevated', 'caution'}:
         tier_filter = 'all'
+    appeal_filter = request.GET.get('appeal', 'all').strip()
+    if appeal_filter not in {
+        'all', 'pending', 'upheld', 'accepted', 'accepted_without_restore',
+    }:
+        appeal_filter = 'all'
     release_filter = request.GET.get('release', 'all').strip()
     if release_filter not in {'all', 'closed', 'unreleased', 'missing_material'}:
         release_filter = 'all'
-    if 'status' not in request.GET and release_filter in {'closed', 'unreleased'}:
+    if 'status' not in request.GET and (
+        release_filter in {'closed', 'unreleased'} or appeal_filter != 'all'
+    ):
         status_filter = 'all'
     search_query = request.GET.get('q', '').strip()[:120]
 
     base_events = ModerationEvent.objects.all()
-    events = base_events.select_related('author', 'item__seller', 'receiver', 'reviewed_by')
+    events = base_events.select_related(
+        'author', 'item__seller', 'receiver', 'reviewed_by',
+        'appeal__appellant', 'appeal__original_reviewed_by', 'appeal__resolved_by',
+    )
     if status_filter != 'all':
         events = events.filter(status=status_filter)
     if channel_filter != 'all':
@@ -383,6 +394,8 @@ def moderation_queue(request):
         events = events.filter(risk_level=risk_filter)
     if tier_filter != 'all':
         events = events.filter(risk_tier=tier_filter)
+    if appeal_filter != 'all':
+        events = events.filter(appeal__status=appeal_filter)
     if release_filter == 'closed':
         events = events.filter(status='dismissed', released_at__isnull=False)
     elif release_filter == 'unreleased':
@@ -402,6 +415,10 @@ def moderation_queue(request):
         )
 
     events = events.order_by(
+        Case(
+            When(appeal__status='pending', then=Value(0)), default=Value(1),
+            output_field=IntegerField(),
+        ),
         Case(
             When(status='pending', then=Value(0)), default=Value(1),
             output_field=IntegerField(),
@@ -436,7 +453,14 @@ def moderation_queue(request):
         'moderation_channel_filter': channel_filter,
         'moderation_risk_filter': risk_filter,
         'moderation_tier_filter': tier_filter,
+        'moderation_appeal_filter': appeal_filter,
         'moderation_search_query': search_query,
+        'moderation_appeal_pending_count': base_events.filter(
+            appeal__status='pending',
+        ).count(),
+        'moderation_appeal_resolved_count': base_events.exclude(
+            appeal__isnull=True,
+        ).exclude(appeal__status='pending').count(),
         'moderation_pending_high_count': base_events.filter(status='pending', risk_level='high').count(),
         'moderation_released_count': base_events.filter(
             status='dismissed', released_at__isnull=False,
@@ -470,6 +494,11 @@ def moderation_queue(request):
         'moderation_tier_options': (
             ('all', '全部复核分级'), ('critical', '严重风险'),
             ('elevated', '脱离平台联系'), ('caution', '低权重线索'),
+        ),
+        'moderation_appeal_options': (
+            ('all', '全部申诉状态'), ('pending', '待处理申诉'),
+            ('upheld', '维持原判'), ('accepted', '申诉成立并恢复'),
+            ('accepted_without_restore', '成立但未恢复'),
         ),
         **{f'moderation_pending_{tier}_count': count for tier, count in tier_counts.items()},
         **{f'moderation_overdue_{tier}_count': count for tier, count in overdue_counts.items()},
@@ -576,5 +605,137 @@ def review_moderation_event(request, event_id):
                 )
             else:
                 django_messages.success(request, '审核结果已保存，并已通知内容作者。')
+
+    return redirect(next_url or 'moderation_queue')
+
+
+@login_required
+def moderation_appeals(request):
+    """只给当前用户看自己被确认违规的内容和单次申诉状态。"""
+    events = (
+        ModerationEvent.objects.filter(author=request.user, status='confirmed')
+        .select_related(
+            'item__seller', 'receiver', 'reviewed_by',
+            'appeal__original_reviewed_by', 'appeal__resolved_by',
+        )
+        .order_by('-reviewed_at', '-created_at', '-id')
+    )
+    paginator = Paginator(events, 10)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'chat_messages/moderation_appeals.html', {
+        'events': page_obj.object_list,
+        'page_obj': page_obj,
+        'appeal_form': ModerationAppealForm(),
+        'appeal_reasons': dict(ModerationAppeal.REASON_CHOICES),
+    })
+
+
+@login_required
+@require_POST
+def submit_moderation_appeal(request, event_id):
+    """让确认违规事件的作者提交一次申诉，并保存原复核快照。"""
+    with transaction.atomic():
+        event = get_object_or_404(
+            ModerationEvent.objects.select_for_update().select_related('reviewed_by'),
+            id=event_id, author=request.user,
+        )
+        if event.status != 'confirmed':
+            django_messages.info(request, '这条内容还不是确认违规状态，暂不能申诉。')
+            return redirect('moderation_appeals')
+        if hasattr(event, 'appeal'):
+            django_messages.info(request, '这条审核记录已经提交过申诉，不能重复提交。')
+            return redirect('moderation_appeals')
+
+        form = ModerationAppealForm(request.POST)
+        if form.is_valid():
+            appeal = form.save(commit=False)
+            appeal.event = event
+            appeal.appellant = request.user
+            appeal.original_reviewed_by = event.reviewed_by
+            appeal.original_reviewed_at = event.reviewed_at
+            appeal.save()
+            django_messages.success(request, '申诉已提交，管理员会再次复核这条内容。')
+        else:
+            django_messages.error(request, '申诉原因和说明不能为空，说明不能超过 1000 字。')
+
+    return redirect('moderation_appeals')
+
+
+def _safe_moderation_next_url(request):
+    next_url = request.POST.get('next', '').strip()
+    if not url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure(),
+    ):
+        return ''
+    return next_url
+
+
+@login_required
+@require_POST
+def resolve_moderation_appeal(request, appeal_id):
+    """在同一个事务里处理申诉；改判必须走既有内容恢复路径。"""
+    if not request.user.is_staff:
+        raise PermissionDenied
+
+    next_url = _safe_moderation_next_url(request)
+    with transaction.atomic():
+        appeal = get_object_or_404(
+            ModerationAppeal.objects.select_for_update().select_related(
+                'event__author', 'event__item__seller', 'event__receiver',
+            ),
+            id=appeal_id,
+        )
+        event = appeal.event
+        decision = request.POST.get('decision', '').strip()
+        note = request.POST.get('resolution_note', '').strip()
+
+        if appeal.status != 'pending':
+            django_messages.info(request, '这条申诉已经处理过了。')
+        elif event.status != 'confirmed':
+            django_messages.error(request, '关联审核事件状态已变化，请先确认当前记录。')
+        elif decision not in {'upheld', 'accepted'}:
+            django_messages.error(request, '申诉处理结果无效，请重新选择。')
+        elif not note or len(note) > 1000:
+            django_messages.error(request, '请填写 1000 字以内的申诉处理说明。')
+        else:
+            now = timezone.now()
+            released = False
+            if decision == 'accepted':
+                event.released_at = None
+                released = _release_moderated_content(event, released_at=now)
+                event.status = 'dismissed'
+                event.reviewed_by = request.user
+                event.reviewed_at = now
+                event.save(update_fields=[
+                    'status', 'reviewed_by', 'reviewed_at', 'released_at',
+                ])
+                appeal.status = 'accepted' if released else 'accepted_without_restore'
+            else:
+                appeal.status = 'upheld'
+
+            appeal.resolved_by = request.user
+            appeal.resolved_at = now
+            appeal.resolution_note = note
+            appeal.save(update_fields=[
+                'status', 'resolved_by', 'resolved_at', 'resolution_note',
+            ])
+
+            if appeal.appellant_id:
+                if appeal.status == 'accepted':
+                    message = '申诉成立，这条内容已按原渠道恢复发布。'
+                elif appeal.status == 'accepted_without_restore':
+                    message = '申诉成立；这条历史记录缺少恢复材料，系统未能自动放行。'
+                else:
+                    message = '管理员复核后维持原确认违规结论。'
+                create_notification(
+                    appeal.appellant, actor=request.user, kind='moderation_update',
+                    title='内容申诉已处理', message=message,
+                    item=event.item, target_url=reverse('moderation_appeals'),
+                )
+
+            if appeal.status == 'accepted_without_restore':
+                django_messages.warning(request, '申诉已改判，但历史记录缺少恢复材料，内容未能自动放行。')
+            else:
+                django_messages.success(request, '申诉处理结果已保存，并已通知申诉人。')
 
     return redirect(next_url or 'moderation_queue')
