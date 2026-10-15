@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
-"""学期阶段统计快照，第一次被运营读到。
+"""学期阶段统计快照的自身质量。
 
-`AcademicTermSnapshot` 是站内最安静的一张表：`refresh_academic_term_snapshots` 按学期阶
-段一行一行往里写，`sync_academic_calendar` 每周刷一次，admin 里注册了、`refreshed_at` 还是
-只读字段。**但它从头到尾没有任何一条读路径。** `academic_calendar.build_academic_calendar`
-是学期日历唯一的消费方，而它一次都没读过这张表——它拿 `AcademicPhase` 的日期区间在渲染的
-那一刻实时聚合 `Item`、`DemandPost`、`Order`、`SearchQuery`。全仓库搜 `AcademicTermSnapshot`
-只有模型定义、admin 注册、`update_or_create` 和测试四处，模板里连 snapshot 这个词都没有。
+`AcademicTermSnapshot` 曾长期只有写入路径：`refresh_academic_term_snapshots` 按阶段写入，
+`sync_academic_calendar` 每周刷新，admin 里也能看到。现在 `build_academic_calendar` 已经会
+对已结束且区间完全匹配的阶段读取它，读路径上的缺行告警由学期日历面板负责。
 
-也就是说这个函数每周都在往一张没人看的表里写数。数据是真的，口径是真的，存储是真的，只
-是从来没有人读过它一眼。本模块把这个表的真实状态第一次读出来。
+本模块看的是另一层：这张持久化设施自身的规模、覆盖、孤儿行、刷新陈旧度和命令状态。它不
+重算七个业务计数，也不替代读路径告警。
 
 站内已有二十多个「量我们自己的功能」的模块，量的是「平台做了一个判断准不准」或「平台给了
 一个工具好不好用」。本模块量的是第三种东西：**一个已经存在很久的持久化设施，它到底还在
@@ -31,10 +28,9 @@
 此**本模块不报「内容陈旧度」，只报「刷新陈旧度」**，并把这句话写在面板上。把刷新时间当成
 内容时间报出去，会让一条早就不会再变的阶段一直显示为刚刚更新——比没有数字更糟。
 
-**同理不报快照数和实时数的偏差。** 理论上可以把两者都算一遍再相比，但那是拿一个已知没人
-读的缓存和实时值比大小，得出的是「这个缓存确实不准」，而它不准的原因恰恰是没人读。报一个
-没有消费方受害者的偏差，只是在给一个已经没人用的缓存做体检。要做这个对比，正确做法是先给
-它一个读路径（让 `build_academic_calendar` 改读快照），那是一个功能改动，不是一次度量。
+**这里仍不重算快照数与实时数的偏差。** 读路径已经存在，但它的职责是选择数据来源：匹配的
+封闭阶段读快照，进行中或无匹配行则实时算并说明原因。质量面板再全量复算七个业务计数，只
+会重复那条路径的职责并增加一次看板请求的查询负担；缺行与区间失配应交给读路径告警。
 
 **孤儿行的判据是匹配键失效，不是学期停用。** `AcademicPhase.start_date` 不是数据库列，是
 模型上的 `@property`（`term.starts_on + start_offset`），而快照的唯一约束是
@@ -312,7 +308,7 @@ def _recommendations(scale, coverage, orphan_rows, stale_rows, command_state, ga
     if not scale['row_total']:
         notes.append(
             '快照表还是空的。第一次运行 `sync_academic_calendar` 之后，这里会开始统计；'
-            '也要留意它至今没有任何读路径，`build_academic_calendar` 一直是实时计算的。'
+            '学期日历此刻会实时兜底，并在来源汇总里提示已结束阶段缺匹配快照。'
         )
     if orphan_rows['orphan_total']:
         notes.append(
@@ -347,9 +343,8 @@ def _recommendations(scale, coverage, orphan_rows, stale_rows, command_state, ga
         )
     if not command_state['ran_in_period']:
         notes.append(
-            f'最近这些天里 `{COMMAND_NAME}` 一次都没跑过。这张表本来就没人读，命令再停掉'
-            f'的话，它连「每周被写一次」这个最后的动作都不会再有。本模块只报告，不替你跑'
-            f'这个命令。'
+            f'最近这些天里 `{COMMAND_NAME}` 一次都没跑过。学期日历读取快照之后，命令停掉'
+            f'会让已结束阶段继续实时兜底；本模块只报告，不替你跑这个命令。'
         )
     if command_state['failed_total']:
         notes.append(
@@ -358,14 +353,14 @@ def _recommendations(scale, coverage, orphan_rows, stale_rows, command_state, ga
         )
     if not notes:
         notes.append(
-            '这张表的规模和覆盖没有明显异常。但要注意：它仍然没有任何读路径，'
-            '`build_academic_calendar` 至今是实时计算的。本模块只报告。'
+            '这张表的规模和覆盖没有明显异常。读路径若遇到缺行或区间不匹配，'
+            '会在学期日历的来源汇总中单独告警。本模块只报告。'
         )
     return notes
 
 
 def build_academic_term_snapshot_quality(days=30, now=None):
-    """量学期阶段统计快照：这张没人读的表，现在是什么状态。"""
+    """量学期阶段统计快照：这张被读路径依赖的表，自身是什么状态。"""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
         days = 30

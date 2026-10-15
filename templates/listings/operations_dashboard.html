@@ -1797,8 +1797,11 @@
     {% if academic_calendar.context.phase_note %}
     <div class="academic-calendar-note mt-3"><i class="bi bi-calendar3 me-1"></i>{{ academic_calendar.context.term_name }}{{ academic_calendar.context.phase_label }}：{{ academic_calendar.context.phase_note }}。</div>
     {% endif %}
-    <div class="academic-source-summary mt-3">
-        <i class="bi bi-database me-1"></i>本页 {{ academic_calendar.source.row_total }} 个阶段行里，<strong>{{ academic_calendar.source.snapshot_row_total }}</strong> 行读的是每周刷新的阶段快照，<strong>{{ academic_calendar.source.live_row_total }}</strong> 行是实时算的{% if academic_calendar.source.snapshot_share is not None %}，快照占 {{ academic_calendar.source.snapshot_share }}%{% endif %}。已结束阶段的计数早就封闭（四张业务表的 <code>created_at</code> 全是 <code>auto_now_add</code>，没有写入路径回头改它们），读快照与实时算在数值上一致；<strong>进行中的阶段一律实时算</strong>——快照最多是上周的，而当前阶段恰好是这块看板上唯一有人盯着的一行。
+    <div class="academic-source-summary mt-3{% if academic_calendar.source.has_snapshot_miss %} academic-source-miss{% endif %}">
+        <i class="bi bi-database me-1"></i>本页 {{ academic_calendar.source.row_total }} 个阶段行里，<strong>{{ academic_calendar.source.snapshot_row_total }}</strong> 行读的是每周刷新的阶段快照，<strong>{{ academic_calendar.source.live_row_total }}</strong> 行是实时算的（其中 {{ academic_calendar.source.running_live_row_total }} 行是阶段未结束，{{ academic_calendar.source.fallback_live_row_total }} 行是已结束后的兜底）{% if academic_calendar.source.snapshot_share is not None %}，快照占 {{ academic_calendar.source.snapshot_share }}%{% endif %}{% if academic_calendar.source.closed_snapshot_share is not None %}，已结束阶段里快照占 {{ academic_calendar.source.closed_snapshot_share }}%{% endif %}。已结束阶段的计数早就封闭（四张业务表的 <code>created_at</code> 全是 <code>auto_now_add</code>，没有写入路径回头改它们），读快照与实时算在数值上一致；<strong>进行中的阶段一律实时算</strong>——快照最多是上周的，而当前阶段恰好是这块看板上唯一有人盯着的一行。
+        {% if academic_calendar.source.has_snapshot_miss %}
+        <div class="academic-source-miss-alert"><i class="bi bi-exclamation-triangle me-1"></i><strong>{{ academic_calendar.source.fallback_live_row_total }} 个已结束阶段没有读到匹配快照</strong>，当前用实时计算兜底：缺行 {{ academic_calendar.source.missing_snapshot_total }} 个，区间不匹配 {{ academic_calendar.source.range_mismatch_total }} 个。请核对 <code>sync_academic_calendar</code> 的运行记录和阶段边界；这里只报告，不自动补刷。</div>
+        {% endif %}
     </div>
     {% for term in academic_calendar.terms %}
     <div class="academic-term-block mt-3">
@@ -1810,7 +1813,7 @@
         <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 academic-calendar-table"><thead><tr><th>阶段</th><th>区间</th><th>新增商品</th><th>新增求购</th><th>完成交易</th><th>搜索质量</th><th>供给趋势</th></tr></thead><tbody>
             {% for row in term.phases %}
             <tr class="{% if row.is_current %}academic-calendar-current{% endif %}">
-                <td><strong>{{ row.phase_label }}</strong>{% if row.is_current %}<small class="d-block text-muted">进行中 · 进度 {{ academic_calendar.context.progress_percent }}%</small>{% else %}<small class="d-block text-muted">{{ row.day_count }} 天</small>{% endif %}<span class="academic-source academic-source-{{ row.source }}">{{ row.source_label }}</span></td>
+                <td><strong>{{ row.phase_label }}</strong>{% if row.is_current %}<small class="d-block text-muted">进行中 · 进度 {{ academic_calendar.context.progress_percent }}%</small>{% else %}<small class="d-block text-muted">{{ row.day_count }} 天</small>{% endif %}<span class="academic-source academic-source-{{ row.source }}">{{ row.source_label }}</span>{% if row.source_reason == 'missing_snapshot' or row.source_reason == 'range_mismatch' %}<small class="d-block text-danger">{{ row.source_note }}</small>{% endif %}</td>
                 <td>{{ row.start_date|date:'m-d' }} 至 {{ row.end_date|date:'m-d' }}</td>
                 <td><strong>{{ row.new_items }}</strong>{% if row.previous_phase_label %}<small class="d-block text-muted">较{{ row.previous_phase_label }} {% if row.delta_new_items > 0 %}+{% endif %}{{ row.delta_new_items }}</small>{% else %}<small class="d-block text-muted">学期首阶段</small>{% endif %}</td>
                 <td>{{ row.new_demands }}<small class="d-block text-muted">{% if row.previous_phase_label %}{% if row.delta_new_demands > 0 %}+{% endif %}{{ row.delta_new_demands }}{% else %}—{% endif %}</small></td>
@@ -2663,7 +2666,7 @@
         <p class="snapshot-quality-note mb-0">本模块只报告，不刷新任何快照、不删任何孤儿行、不改任何 <code>AcademicTerm.starts_on</code>、不删任何 <code>AcademicPhase</code>、不改唯一约束、不加迁移。</p>
     </div>
     {% else %}<div class="empty-inline mt-3">快照表还是空的。第一次运行 <code>sync_academic_calendar</code> 之后，这里会开始统计。</div>{% endif %}
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这张表从迁移 0052 起就存在，<code>refresh_academic_term_snapshots</code> 每周往里写一次，而它<b>至今没有任何一条读路径</b>——全仓库只有模型定义、admin 注册、<code>update_or_create</code> 和测试四处提到它。本模块只把这个表的真实状态读出来。覆盖率低于 {{ academic_term_snapshot_quality.metrics.coverage_warn_percent }}% 时才单独提示，百分之几的缺口可以是手工维护的正常痕迹。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这张表从迁移 0052 起长期只被写；学期日历现在会按封闭阶段读取它，本面板继续负责表自身的规模、覆盖、孤儿行与刷新状态。覆盖率低于 {{ academic_term_snapshot_quality.metrics.coverage_warn_percent }}% 时才单独提示，百分之几的缺口可以是手工维护的正常痕迹。</div>
 </section>
 <section class="content-card ops-panel mb-4 order-stage-panel">
     <div class="ops-panel-heading">

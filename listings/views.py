@@ -7730,14 +7730,28 @@ def operations_dashboard_export(request):
         writer.writerow(['还没有配置学期日历，后台录入起止日期后这里会开始统计。'])
     source = calendar['source']
     writer.writerow([])
-    writer.writerow(['数据来源汇总', '读快照', '实时算', '合计', '快照占比（%）'])
+    writer.writerow([
+        '数据来源汇总', '读快照', '实时算', '合计', '快照占比（%）',
+        '实时：阶段未结束', '实时：已结束兜底', '已结束阶段', '已结束快照占比（%）',
+    ])
     writer.writerow([
         '阶段行',
         source['snapshot_row_total'],
         source['live_row_total'],
         source['row_total'],
         '' if source['snapshot_share'] is None else source['snapshot_share'],
+        source['running_live_row_total'],
+        source['fallback_live_row_total'],
+        source['closed_row_total'],
+        '' if source['closed_snapshot_share'] is None else source['closed_snapshot_share'],
     ])
+    if source['has_snapshot_miss']:
+        writer.writerow([
+            '快照缺行告警',
+            f"{source['fallback_live_row_total']} 个已结束阶段没有读到匹配快照，当前实时兜底",
+            f"缺行 {source['missing_snapshot_total']} 个；区间不匹配 {source['range_mismatch_total']} 个",
+            '请核对 sync_academic_calendar 与阶段边界；本面板只报告，不自动补刷',
+        ])
     writer.writerow([])
     writer.writerow(['学期', '学期类型', '阶段', '开始', '结束', '天数', '进行中',
                      '新增商品', '新增求购', '完成交易', '新增预约',
@@ -7790,6 +7804,10 @@ def operations_dashboard_export(request):
         '封闭（Item / DemandPost / Order / SearchQuery 的 created_at 全是 auto_now_add，'
         '没有写入路径回头改它们），读每周刷新的快照与实时算在数值上一致；'
         '进行中的阶段永远实时算，因为快照最多是上周的，而当前阶段是看板上唯一有人盯的一行。',
+    ])
+    writer.writerow([
+        '实时行再分成“阶段未结束”和“已结束兜底”。前者是既定策略，后者意味着快照'
+        '缺行或区间不匹配；缺行告警不推断原因，也不自动补刷。',
     ])
     writer.writerow([
         '快照占比的分母是实际渲染出来的阶段行数。占比为空的含义是"一行快照都没读到"，'

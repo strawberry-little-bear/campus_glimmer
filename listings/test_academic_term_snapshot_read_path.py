@@ -103,6 +103,11 @@ class AcademicTermSnapshotReadPathTests(TestCase):
             )
         self.assertEqual(calendar['source']['snapshot_row_total'], 4)
         self.assertEqual(calendar['source']['live_row_total'], 0)
+        self.assertEqual(calendar['source']['running_live_row_total'], 0)
+        self.assertEqual(calendar['source']['fallback_live_row_total'], 0)
+        self.assertEqual(calendar['source']['closed_snapshot_share'], 100.0)
+        self.assertFalse(calendar['source']['has_snapshot_miss'])
+        self.assertEqual(row['source_reason'], 'snapshot_closed')
 
     def test_snapshot_rows_match_the_live_numbers(self):
         """读快照和实时算在数值上必须完全一致，否则看板会因为来源不同而变脸。"""
@@ -177,6 +182,10 @@ class AcademicTermSnapshotReadPathTests(TestCase):
         # 进行中的那一个学期贡献 1 行 live，已结束学期贡献 4 行 snapshot。
         self.assertEqual(calendar['source']['snapshot_row_total'], 4)
         self.assertEqual(calendar['source']['live_row_total'], 4)
+        self.assertEqual(calendar['source']['running_live_row_total'], 4)
+        self.assertEqual(calendar['source']['fallback_live_row_total'], 0)
+        self.assertFalse(calendar['source']['has_snapshot_miss'])
+        self.assertEqual(current['source_reason'], 'running_live')
 
     def test_running_phase_sees_rows_created_after_the_last_refresh(self):
         """实时路径要能看到上次刷新之后新落库的数据。"""
@@ -221,6 +230,11 @@ class AcademicTermSnapshotReadPathTests(TestCase):
                 rows[(self.term.slug, phase_key)]['source'], 'live',
                 f'{phase_key} 的区间已经平移，旧快照是孤儿行，不能读',
             )
+        for row in rows.values():
+            self.assertEqual(row['source_reason'], 'range_mismatch')
+        self.assertEqual(calendar['source']['fallback_live_row_total'], 4)
+        self.assertEqual(calendar['source']['range_mismatch_total'], 4)
+        self.assertTrue(calendar['source']['has_snapshot_miss'])
         # 孤儿行还在表里，一行都没被删。
         self.assertEqual(AcademicTermSnapshot.objects.filter(term=self.term).count(), 4)
 
@@ -241,6 +255,9 @@ class AcademicTermSnapshotReadPathTests(TestCase):
         rows = dict(_phase_rows(calendar))
 
         self.assertEqual(rows[(self.term.slug, 'registration')]['source'], 'live')
+        self.assertEqual(
+            rows[(self.term.slug, 'registration')]['source_reason'], 'range_mismatch',
+        )
 
     # ---------- 缺行时不静默退回 ----------
 
@@ -256,6 +273,14 @@ class AcademicTermSnapshotReadPathTests(TestCase):
             self.assertEqual(rows[(self.term.slug, phase_key)]['source'], 'live')
         self.assertEqual(calendar['source']['snapshot_row_total'], 0)
         self.assertEqual(calendar['source']['live_row_total'], 4)
+        self.assertEqual(calendar['source']['running_live_row_total'], 0)
+        self.assertEqual(calendar['source']['fallback_live_row_total'], 4)
+        self.assertEqual(calendar['source']['missing_snapshot_total'], 4)
+        self.assertEqual(calendar['source']['closed_snapshot_share'], 0.0)
+        self.assertTrue(calendar['source']['has_snapshot_miss'])
+        self.assertEqual(
+            rows[(self.term.slug, 'registration')]['source_reason'], 'missing_snapshot',
+        )
         self.assertEqual(rows[(self.term.slug, 'registration')]['new_items'], 2)
 
     def test_empty_snapshot_table_reports_no_share(self):
@@ -286,7 +311,9 @@ class AcademicTermSnapshotReadPathTests(TestCase):
         self.assertEqual(rows[(self.term.slug, 'registration')]['new_items'], 99)
         self.assertEqual(calendar['source']['snapshot_row_total'], 1)
         self.assertEqual(calendar['source']['live_row_total'], 3)
+        self.assertEqual(calendar['source']['fallback_live_row_total'], 3)
         self.assertEqual(calendar['source']['snapshot_share'], 25.0)
+        self.assertEqual(calendar['source']['closed_snapshot_share'], 25.0)
 
     # ---------- 形状 ----------
 
@@ -322,7 +349,11 @@ class AcademicTermSnapshotReadPathTests(TestCase):
         calendar = build_academic_calendar(day=self.today, limit_terms=3)
         self.assertFalse(calendar['has_terms'])
         self.assertEqual(calendar['source']['row_total'], 0)
+        self.assertEqual(calendar['source']['live_row_total'], 0)
+        self.assertEqual(calendar['source']['fallback_live_row_total'], 0)
         self.assertIsNone(calendar['source']['snapshot_share'])
+        self.assertIsNone(calendar['source']['closed_snapshot_share'])
+        self.assertFalse(calendar['source']['has_snapshot_miss'])
 
     def test_phase_note_comes_from_the_live_phase_row(self):
         """快照表不存 note，note 必须仍从 AcademicPhase 上取。"""
@@ -402,6 +433,22 @@ class AcademicSnapshotSourceSurfaceTests(TestCase):
         # 已结束学期的四个阶段都该标成读快照。
         self.assertContains(response, '读快照')
         self.assertContains(response, '本页 4 个阶段行里')
+        self.assertNotContains(response, '没有读到匹配快照')
+
+    def test_dashboard_warns_when_finished_phases_fall_back(self):
+        """缺行不能藏在 live 里：面板必须把它报成快照缺口。"""
+        self.seed_counters()
+        # 故意不刷新快照，四个已结束阶段只能实时兜底。
+        self.client.login(
+            username='snapshot-surface-staff', password='safe-password-123',
+        )
+
+        response = self.client.get(reverse('operations_dashboard'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '4 个已结束阶段没有读到匹配快照')
+        self.assertContains(response, 'sync_academic_calendar')
+        self.assertContains(response, '已结束阶段缺匹配快照，本轮实时兜底')
 
     def test_csv_export_carries_the_source_columns(self):
         """CSV 每一行都要带来源，否则离线看这份导出无法分辨哪行是缓存。"""
@@ -432,6 +479,19 @@ class AcademicSnapshotSourceSurfaceTests(TestCase):
         self.assertEqual(len(phase_rows), 4)
         for line in phase_rows:
             self.assertIn('读快照', line)
+
+    def test_csv_export_carries_the_snapshot_miss_alert(self):
+        self.seed_counters()
+        self.client.login(
+            username='snapshot-surface-staff', password='safe-password-123',
+        )
+
+        response = self.client.get(reverse('operations_dashboard_export'))
+        content = response.content.decode('utf-8-sig')
+
+        self.assertIn('快照缺行告警', content)
+        self.assertIn('4 个已结束阶段没有读到匹配快照', content)
+        self.assertIn('已结束阶段缺匹配快照，本轮实时兜底', content)
 
     def test_csv_notes_explain_the_empty_share(self):
         """占比为空要说清它的含义，别让读者拿它当 0%。"""

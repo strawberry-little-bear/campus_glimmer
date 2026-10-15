@@ -1661,6 +1661,10 @@ a { color: inherit; text-decoration: none; }
 .academic-source-summary { padding: 11px 14px; border: 1px dashed #cfe0d4; border-radius: 12px; background: #f6faf7; color: #4c6b5c; font-size: .79rem; line-height: 1.7; }
 .academic-source-summary strong { color: #2f6a4f; }
 .academic-source-summary code { padding: 1px 5px; border-radius: 5px; background: #eaf2ec; font-size: .74rem; }
+.academic-source-summary.academic-source-miss { border-color: #edc9bd; background: #fff8f5; color: #7d4a37; }
+.academic-source-summary.academic-source-miss strong { color: #a44b2f; }
+.academic-source-miss-alert { margin-top: 7px; padding-top: 7px; border-top: 1px dashed #edc9bd; color: #8d5340; }
+.academic-source-miss-alert strong { color: #a44b2f; }
 .academic-calendar-panel .academic-calendar-table td { vertical-align: middle; }
 .academic-calendar-panel .academic-calendar-table { min-width: 820px; }
 .academic-calendar-panel .academic-calendar-current { background: #f4faf6; }

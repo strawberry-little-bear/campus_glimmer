@@ -316,7 +316,7 @@ class AcademicTermSnapshotQualityTests(TestCase):
         # 空表提示要置顶，不能被「命令一次都没跑过」挤掉——表里连行都没有，比命令这周没跑
         # 更要紧。
         self.assertEqual(report['recommendations'][0].count('还是空的'), 1)
-        self.assertIn('没有任何读路径', report['recommendations'][0])
+        self.assertIn('实时兜底', report['recommendations'][0])
 
     def test_a_table_without_expected_phases_still_reports_row_total(self):
         """没有任何启用学期时，快照行仍然可数，只是没有覆盖率的分母。"""

@@ -209,21 +209,27 @@ def _phase_stat_payload(term, phase, *, now):
 
 
 def _load_phase_snapshots(terms):
-    """按学期取回快照行，键是 (term_id, phase_key, start_date, end_date)。
+    """按学期取回快照行，同时保留精确键与同阶段键。
 
-    键里带上 end_date 是有意的：改一次 `AcademicTerm.starts_on`，四个阶段的
-    start_date 会整体平移，旧行不会被更新而是被旁置成孤儿行，新键下另插一批新
-    行。用四元组当键，只有区间和当前 `AcademicPhase` 算出来完全一致的那一行
-    才会被读走——孤儿行的 start_date 对不上，自然落不到这个键上。
+    精确键是 `(term_id, phase_key, start_date, end_date)`。键里带上 end_date 是
+    有意的：改一次 `AcademicTerm.starts_on`，四个阶段的 start_date 会整体平移，
+    旧行不会被更新而是被旁置成孤儿行，新键下另插一批新行。只有区间和当前
+    `AcademicPhase` 算出来完全一致的那一行才会被读走。
+
+    同阶段键 `(term_id, phase_key)` 不能丢：它用于区分「快照从来没写过这一行」
+    和「写过一版，但区间已经不一致」。这两种情况都实时兜底，但前者更像漏跑，
+    后者更像边界调整后的残留，运营需要的提示不同。
     """
     if not terms:
-        return {}
+        return {'exact': {}, 'by_phase': {}}
     term_ids = [term.pk for term in terms]
     rows = AcademicTermSnapshot.objects.filter(term_id__in=term_ids)
-    return {
-        (row.term_id, row.phase_key, row.start_date, row.end_date): row
-        for row in rows
-    }
+    exact = {}
+    by_phase = {}
+    for row in rows:
+        exact[(row.term_id, row.phase_key, row.start_date, row.end_date)] = row
+        by_phase.setdefault((row.term_id, row.phase_key), []).append(row)
+    return {'exact': exact, 'by_phase': by_phase}
 
 
 def _snapshot_payload(snapshot, *, term, phase, today):
@@ -253,6 +259,7 @@ def _snapshot_payload(snapshot, *, term, phase, today):
         'new_searches': snapshot.new_searches,
         'zero_result_searches': snapshot.zero_result_searches,
         'source': 'snapshot',
+        'source_reason': 'snapshot_closed',
         'source_label': SOURCE_LABELS['snapshot'],
         'source_note': (
             '已结束阶段，计数已封闭，读每周刷新的快照'
@@ -277,17 +284,46 @@ def _phase_row(term, phase, *, snapshots, now):
     """
     today = now.date()
     key = (term.pk, phase.phase, phase.start_date, phase.end_date)
-    snapshot = snapshots.get(key)
+    snapshot = snapshots['exact'].get(key)
+    phase_snapshots = snapshots['by_phase'].get((term.pk, phase.phase), ())
     if snapshot is not None and phase.end_date < today:
-        payload = _snapshot_payload(snapshot, term=term, phase=phase, today=today)
-    else:
-        payload = _phase_stat_payload(term, phase, now=now)
-        payload['source'] = 'live'
-        payload['source_label'] = SOURCE_LABELS['live']
+        return _snapshot_payload(snapshot, term=term, phase=phase, today=today)
+
+    payload = _phase_stat_payload(term, phase, now=now)
+    payload['source'] = 'live'
+    payload['source_label'] = SOURCE_LABELS['live']
+    if phase.end_date >= today:
+        payload['source_reason'] = 'running_live'
         payload['source_note'] = (
-            '实时算' if snapshot is None else '阶段进行中，快照最多是上周的'
+            '阶段未结束，实时算；快照最多是上周的'
+            if snapshot is not None
+            else '阶段未结束，实时算'
         )
+    elif phase_snapshots:
+        payload['source_reason'] = 'range_mismatch'
+        payload['source_note'] = (
+            '已结束阶段有旧快照但区间不匹配，不读旧值，本轮实时兜底'
+        )
+    else:
+        payload['source_reason'] = 'missing_snapshot'
+        payload['source_note'] = '已结束阶段缺匹配快照，本轮实时兜底'
     return payload
+
+
+def _empty_source_summary():
+    return {
+        'snapshot_row_total': 0,
+        'running_live_row_total': 0,
+        'fallback_live_row_total': 0,
+        'missing_snapshot_total': 0,
+        'range_mismatch_total': 0,
+        'live_row_total': 0,
+        'closed_row_total': 0,
+        'row_total': 0,
+        'snapshot_share': None,
+        'closed_snapshot_share': None,
+        'has_snapshot_miss': False,
+    }
 
 
 def build_academic_calendar(*, day=None, limit_terms=3):
@@ -305,19 +341,15 @@ def build_academic_calendar(*, day=None, limit_terms=3):
             'current': None,
             'context': academic_phase_context(day),
             'terms': [],
-            'source': {
-                'snapshot_row_total': 0,
-                'live_row_total': 0,
-                'row_total': 0,
-                'snapshot_share': None,
-            },
+            'source': _empty_source_summary(),
         }
 
     snapshots = _load_phase_snapshots(terms)
 
     term_rows = []
-    snapshot_row_total = 0
-    live_row_total = 0
+    reason_totals = {reason: 0 for reason in (
+        'snapshot_closed', 'running_live', 'missing_snapshot', 'range_mismatch',
+    )}
     for term in terms:
         phases = []
         for phase in term.phases.all():
@@ -326,10 +358,7 @@ def build_academic_calendar(*, day=None, limit_terms=3):
         _annotate_phase_trends(phases)
         if phases:
             for row in phases:
-                if row['source'] == 'snapshot':
-                    snapshot_row_total += 1
-                else:
-                    live_row_total += 1
+                reason_totals[row['source_reason']] += 1
             term_rows.append({
                 'term': term,
                 'term_name': term.name,
@@ -341,6 +370,13 @@ def build_academic_calendar(*, day=None, limit_terms=3):
             })
 
     current_term, current_phase = resolve_academic_phase(day)
+    snapshot_row_total = reason_totals['snapshot_closed']
+    running_live_row_total = reason_totals['running_live']
+    missing_snapshot_total = reason_totals['missing_snapshot']
+    range_mismatch_total = reason_totals['range_mismatch']
+    fallback_live_row_total = missing_snapshot_total + range_mismatch_total
+    live_row_total = running_live_row_total + fallback_live_row_total
+    closed_row_total = snapshot_row_total + fallback_live_row_total
     row_total = snapshot_row_total + live_row_total
     return {
         'has_terms': True,
@@ -353,12 +389,22 @@ def build_academic_calendar(*, day=None, limit_terms=3):
         'terms': term_rows,
         'source': {
             'snapshot_row_total': snapshot_row_total,
+            'running_live_row_total': running_live_row_total,
+            'fallback_live_row_total': fallback_live_row_total,
+            'missing_snapshot_total': missing_snapshot_total,
+            'range_mismatch_total': range_mismatch_total,
             'live_row_total': live_row_total,
+            'closed_row_total': closed_row_total,
             'row_total': row_total,
             'snapshot_share': (
                 round(snapshot_row_total / row_total * 100, 1)
                 if snapshot_row_total else None
             ),
+            'closed_snapshot_share': (
+                round(snapshot_row_total / closed_row_total * 100, 1)
+                if closed_row_total else None
+            ),
+            'has_snapshot_miss': bool(fallback_live_row_total),
         },
     }
 
