@@ -271,7 +271,7 @@ class RefreshResponseDashboardTests(TestCase):
         self.assertEqual(export.status_code, 200)
         html = page.content.decode('utf-8')
         panel = html.split('商品刷新后的搜索回响', 1)[1].split(
-            '重新上架的那件商品，为什么一回来就沉底', 1,
+            '价格调整后的搜索回响', 1,
         )[0]
         for label in ('第 1 次', '第 2 次', '第 3 次', '第 4 次', '全部次序'):
             self.assertIn(label, panel)
@@ -281,7 +281,7 @@ class RefreshResponseDashboardTests(TestCase):
         rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
         titles = [row[0] if row else '' for row in rows]
         start = titles.index('商品刷新后的搜索回响')
-        end = titles.index('重新上架的那件商品，为什么一回来就沉底')
+        end = titles.index('价格调整后的搜索回响')
         section = rows[start:end]
 
         self.assertIn(

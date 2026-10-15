@@ -51,6 +51,7 @@ from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
 from .refresh_quota_drift import build_refresh_quota_drift
 from .refresh_response import build_refresh_response
+from .price_response import build_price_response
 from .relist_freshness import build_relist_freshness
 from .handoff_code_usage import (
     NOISE_POINTS as HANDOFF_NOISE_POINTS, build_handoff_code_usage,
@@ -2456,6 +2457,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('refresh_quota_drift', '刷新额度漂移', build_refresh_quota_drift),
     ('relist_freshness', '重新上架新鲜度', build_relist_freshness),
     ('refresh_response', '商品刷新回响', build_refresh_response),
+    ('price_response', '价格调整回响', build_price_response),
     ('price_change_quality', '出售价格轨迹质量', build_price_change_quality_panel),
     (
         'search_impression_pairing_quality', '搜索曝光与点击配对质量',
@@ -7353,6 +7355,94 @@ def operations_dashboard_export(request):
     writer.writerow(['因果解释', '只描述共同变化；后窗高于前窗不代表刷新带来因果提升'])
     writer.writerow(['身份与自由文本', '不输出用户名、商品标题、描述、搜索词或订单号'])
     writer.writerow(['运营动作', '不排名、不建议自动刷新、不改排序、不写回推荐或风控'])
+
+    price_response = dashboard['price_response']
+    writer.writerow([])
+    writer.writerow(['价格调整后的搜索回响'])
+    writer.writerow([])
+    writer.writerow(['口径与门槛'])
+    writer.writerow(['字段', '数值', '说明'])
+    writer.writerow([
+        '回看天数', price_response['period_days'],
+        f"看板周期从 {timezone.localtime(price_response['period_start']):%Y-%m-%d %H:%M} 起",
+    ])
+    writer.writerow([
+        '观察窗口', price_response['window_hours'],
+        '调价前后各固定小时数，共享端点只计入后窗',
+    ])
+    writer.writerow([
+        '分析单位', '一条 ItemPriceChange',
+        '同一商品的相邻调价重叠时，两条都不进入对照',
+    ])
+    writer.writerow([
+        '样本门槛', price_response['min_group_changes'],
+        '每个分组达到该成熟轨迹数才标记样本可用',
+    ])
+    writer.writerow([
+        '只读事件', '搜索曝光、搜索点击、收藏、预约',
+        '点击率使用同一窗口的搜索曝光作分母',
+    ])
+    writer.writerow([
+        '刻意不读', 'BrowsingHistory.view_count',
+        '浏览次数是累计聚合，不是逐次浏览事件，不能按调价切开核对',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['方向对照（前 72 小时 / 后 72 小时）'])
+    writer.writerow([
+        '方向', '成熟样本', '前窗曝光', '后窗曝光', '后窗中位曝光',
+        '前窗点击率（%）', '后窗点击率（%）', '前窗收藏', '后窗收藏',
+        '前窗预约', '后窗预约', '样本状态',
+    ])
+    for row in [*price_response['direction_rows'], price_response['overall']]:
+        sample_state = (
+            '样本可用' if row['has_sample'] else
+            ('少于 %d 条' % price_response['min_group_changes'] if row['changes'] else '无样本')
+        )
+        writer.writerow([
+            row['label'], row['changes'], row['before_impressions'],
+            row['after_impressions'],
+            row['after_median_impressions'] if row['after_median_impressions'] is not None else '—',
+            row['before_click_rate'] if row['before_click_rate'] is not None else '—',
+            row['after_click_rate'] if row['after_click_rate'] is not None else '—',
+            row['before_favorites'], row['after_favorites'],
+            row['before_orders'], row['after_orders'], sample_state,
+        ])
+
+    writer.writerow([])
+    writer.writerow(['幅度档对照（前 72 小时 / 后 72 小时）'])
+    writer.writerow([
+        '方向', '幅度档', '成熟样本', '前窗曝光', '后窗曝光', '后窗中位曝光',
+        '前窗点击率（%）', '后窗点击率（%）', '前窗收藏', '后窗收藏',
+        '前窗预约', '后窗预约', '样本状态',
+    ])
+    for row in price_response['magnitude_rows']:
+        sample_state = (
+            '样本可用' if row['has_sample'] else
+            ('少于 %d 条' % price_response['min_group_changes'] if row['changes'] else '无样本')
+        )
+        writer.writerow([
+            row['direction'], row['bucket'], row['changes'], row['before_impressions'],
+            row['after_impressions'],
+            row['after_median_impressions'] if row['after_median_impressions'] is not None else '—',
+            row['before_click_rate'] if row['before_click_rate'] is not None else '—',
+            row['after_click_rate'] if row['after_click_rate'] is not None else '—',
+            row['before_favorites'], row['after_favorites'],
+            row['before_orders'], row['after_orders'], sample_state,
+        ])
+
+    writer.writerow([])
+    writer.writerow(['哪些调价没有进入对照'])
+    writer.writerow(['状态', '数量', '处理方式'])
+    for label, count, handling in price_response['exclusion_rows']:
+        writer.writerow([label, count, handling])
+
+    writer.writerow([])
+    writer.writerow(['只读与隐私边界'])
+    writer.writerow(['项目', '约束'])
+    writer.writerow(['因果解释', '只描述共同变化；后窗高于前窗不代表调价带来因果提升'])
+    writer.writerow(['身份与自由文本', '不输出用户名、商品标题、描述、搜索词、订单号或通知原文'])
+    writer.writerow(['运营动作', '不排名、不建议自动改价、不改排序、不写回推荐或风控'])
 
     price_quality = dashboard['price_change_quality']
     writer.writerow([])

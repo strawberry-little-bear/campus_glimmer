@@ -6693,6 +6693,116 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读搜索曝光、搜索点击、收藏和预约的发生时间，<strong>不读 <code>BrowsingHistory.view_count</code></strong>——浏览历史里的浏览次数是累计聚合，不是逐次浏览事件，切开看会像很精确、实际无法核对。输出不包含用户、商品标题、搜索词或订单号，不排名、不建议自动刷新，也不把统计写回推荐或风控；后窗高于前窗只表示共同变化，不解释为因果提升。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 price-response-panel" id="price-response">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Price response</span><h2>价格调整后的搜索回响</h2></div>
+        <span class="ops-panel-hint">只对照调价前后各 72 小时</span>
+    </div>
+    <p class="refresh-response-note mb-3"><i class="bi bi-cash-coin me-1"></i>这里的分析单位是<strong>一条出售价格轨迹</strong>。前后窗各 {{ price_response.window_hours }} 小时，中间以调价时间为界，共享端点只计入后窗；一条轨迹的六天窗口里若还落着同商品的另一次调价，这条轨迹先退出对照，不把同一批事件拆给两次调价。</p>
+    <div class="row g-3 mb-4 refresh-response-summary">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内观察到调价</span><strong>{{ price_response.summary.observed_changes }}</strong><small>只登记统计周期内的轨迹</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>成熟且可对照</span><strong>{{ price_response.summary.eligible_changes }}</strong><small>进入方向表和幅度表</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未满 {{ price_response.window_hours }} 小时</span><strong>{{ price_response.summary.immature_changes }}</strong><small>先不比较，避免截断后窗</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>相邻调价重叠</span><strong>{{ price_response.summary.adjacent_change_changes }}</strong><small>不把同一事件算两次</small></div></div>
+    </div>
+
+    <div class="refresh-response-table">
+        <h3 class="h6 mb-3">方向对照（前 72 小时 / 后 72 小时）</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-grid">
+                <thead>
+                    <tr>
+                        <th>方向</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in price_response.direction_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.changes }}</td>
+                        <td>{{ row.before_impressions }}</td>
+                        <td>{{ row.after_impressions }}</td>
+                        <td>{% if row.after_median_impressions is None %}—{% else %}{{ row.after_median_impressions }}{% endif %}</td>
+                        <td>{% if row.before_click_rate is None %}—{% else %}{{ row.before_click_rate }}{% endif %}</td>
+                        <td>{% if row.after_click_rate is None %}—{% else %}{{ row.after_click_rate }}{% endif %}</td>
+                        <td>{{ row.before_favorites }}</td>
+                        <td>{{ row.after_favorites }}</td>
+                        <td>{{ row.before_orders }}</td>
+                        <td>{{ row.after_orders }}</td>
+                        <td>{% if row.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif row.changes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ price_response.min_group_changes }} 条</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>全部</td>
+                        <td>{{ price_response.overall.changes }}</td>
+                        <td>{{ price_response.overall.before_impressions }}</td>
+                        <td>{{ price_response.overall.after_impressions }}</td>
+                        <td>{% if price_response.overall.after_median_impressions is None %}—{% else %}{{ price_response.overall.after_median_impressions }}{% endif %}</td>
+                        <td>{% if price_response.overall.before_click_rate is None %}—{% else %}{{ price_response.overall.before_click_rate }}{% endif %}</td>
+                        <td>{% if price_response.overall.after_click_rate is None %}—{% else %}{{ price_response.overall.after_click_rate }}{% endif %}</td>
+                        <td>{{ price_response.overall.before_favorites }}</td>
+                        <td>{{ price_response.overall.after_favorites }}</td>
+                        <td>{{ price_response.overall.before_orders }}</td>
+                        <td>{{ price_response.overall.after_orders }}</td>
+                        <td>{% if price_response.overall.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif price_response.overall.changes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ price_response.min_group_changes }} 条</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">零元基线保留在方向表和总览中，但它没有可解释的幅度，不进入幅度档分母。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">幅度档对照（前 72 小时 / 后 72 小时）</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-grid">
+                <thead>
+                    <tr>
+                        <th>方向</th><th>幅度档</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in price_response.magnitude_rows %}
+                    <tr>
+                        <td>{{ row.direction }}</td>
+                        <td>{{ row.bucket }}</td>
+                        <td>{{ row.changes }}</td>
+                        <td>{{ row.before_impressions }}</td>
+                        <td>{{ row.after_impressions }}</td>
+                        <td>{% if row.after_median_impressions is None %}—{% else %}{{ row.after_median_impressions }}{% endif %}</td>
+                        <td>{% if row.before_click_rate is None %}—{% else %}{{ row.before_click_rate }}{% endif %}</td>
+                        <td>{% if row.after_click_rate is None %}—{% else %}{{ row.after_click_rate }}{% endif %}</td>
+                        <td>{{ row.before_favorites }}</td>
+                        <td>{{ row.after_favorites }}</td>
+                        <td>{{ row.before_orders }}</td>
+                        <td>{{ row.after_orders }}</td>
+                        <td>{% if row.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif row.changes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ price_response.min_group_changes }} 条</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">幅度阈值直接复用出售价格轨迹质量面板的 <code>MAGNITUDE_BUCKETS</code>，避免同一项目里出现两套相近但不同的价格分档。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">哪些调价没有进入对照</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>状态</th><th>数量</th><th>处理方式</th></tr></thead>
+                <tbody>
+                    {% for row in price_response.exclusion_rows %}
+                    <tr><td>{{ row.0 }}</td><td>{{ row.1 }}</td><td>{{ row.2 }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读 <code>SearchImpression</code>、<code>SearchClick</code>、<code>Favorite</code> 和 <code>Order</code> 的时间；刻意不读累计的 <code>BrowsingHistory.view_count</code>，也不输出用户名、商品标题、描述、搜索词、订单号或通知原文。后窗高于前窗不代表调价带来因果提升，本面板不预测价格、不自动改价、不给卖家定价评分。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 price-change-quality-panel" id="price-change-quality">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Price change quality</span><h2>出售价格轨迹质量</h2></div>
