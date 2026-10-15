@@ -437,7 +437,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（84 篇，持续更新）</summary>
+<summary>设计文档清单（85 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -527,6 +527,8 @@ campus_glimmer/
 - **`moderation-release-closure-design.md`**：误判放行必须真正回到原渠道；拦截时保存材料，历史缺材料不伪装成已放行
 
 - **`moderation-rule-quality-design.md`**：四条审核规则的误判率、漏判率与复核时效
+
+- **`moderation-risk-tier-design.md`**：内容审核规则按严重风险、脱离平台联系与低权重线索给出不同复核节奏
 
 - **`notification-aggregation-quality-design.md`**：被聚合过的行与从没被聚合过的行，阅读率与时长对照
 
