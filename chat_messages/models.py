@@ -1,6 +1,9 @@
 # messages/models.py
+from datetime import timedelta
+
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from listings.models import Item
 
 class Comment(models.Model):
@@ -28,6 +31,16 @@ class ModerationEvent(models.Model):
         ('medium', '中风险'),
         ('high', '高风险'),
     )
+    RISK_TIER_CHOICES = (
+        ('critical', '严重风险'),
+        ('elevated', '脱离平台联系'),
+        ('caution', '低权重线索'),
+    )
+    RISK_TIER_REVIEW_TARGETS = {
+        'critical': timedelta(hours=4),
+        'elevated': timedelta(hours=12),
+        'caution': timedelta(hours=48),
+    }
 
     channel = models.CharField('内容渠道', max_length=30, choices=CHANNEL_CHOICES)
     author = models.ForeignKey(
@@ -48,6 +61,10 @@ class ModerationEvent(models.Model):
     risk_score = models.PositiveSmallIntegerField('风险分数', default=0)
     risk_level = models.CharField(
         '风险等级', max_length=10, choices=RISK_LEVEL_CHOICES, default='low',
+    )
+    risk_tier = models.CharField(
+        '复核分级', max_length=20, choices=RISK_TIER_CHOICES, default='caution',
+        help_text='拦截时由命中的最高规则档位写入；只影响人工复核节奏，不是违规结论。',
     )
     status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='pending')
     reviewed_by = models.ForeignKey(
@@ -71,6 +88,30 @@ class ModerationEvent(models.Model):
             models.Index(fields=['channel', '-created_at']),
             models.Index(fields=['author', '-created_at']),
         ]
+
+    @property
+    def review_target_at(self):
+        """按分级给出的内部复核目标时间，不是对外承诺的 SLA。"""
+        target = self.RISK_TIER_REVIEW_TARGETS.get(self.risk_tier)
+        return self.created_at + target if self.created_at and target else None
+
+    @property
+    def review_target_hours(self):
+        target = self.RISK_TIER_REVIEW_TARGETS.get(self.risk_tier)
+        return target.days * 24 + target.seconds // 3600 if target else None
+
+    @property
+    def review_timing_state(self):
+        """待复核记录相对目标时间的节奏：正常、即将超时或已超时。"""
+        target = self.review_target_at
+        if self.status != 'pending' or target is None:
+            return None
+        now = timezone.now()
+        if now >= target:
+            return 'overdue'
+        if now >= target - (target - self.created_at) / 4:
+            return 'due_soon'
+        return 'on_time'
 
     @property
     def has_release_material(self):

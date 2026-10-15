@@ -10,7 +10,7 @@ from django.contrib import messages as django_messages
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.db.models.functions import Coalesce
-from django.db.models import Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models import Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When
 from .models import Comment, ModerationEvent, PrivateMessage
 from .moderation import moderate_submission
 from .forms import CommentForm, PrivateMessageForm
@@ -363,6 +363,9 @@ def moderation_queue(request):
     risk_filter = request.GET.get('risk', 'all').strip()
     if risk_filter not in {'all', 'low', 'medium', 'high'}:
         risk_filter = 'all'
+    tier_filter = request.GET.get('tier', 'all').strip()
+    if tier_filter not in {'all', 'critical', 'elevated', 'caution'}:
+        tier_filter = 'all'
     release_filter = request.GET.get('release', 'all').strip()
     if release_filter not in {'all', 'closed', 'unreleased', 'missing_material'}:
         release_filter = 'all'
@@ -378,6 +381,8 @@ def moderation_queue(request):
         events = events.filter(channel=channel_filter)
     if risk_filter != 'all':
         events = events.filter(risk_level=risk_filter)
+    if tier_filter != 'all':
+        events = events.filter(risk_tier=tier_filter)
     if release_filter == 'closed':
         events = events.filter(status='dismissed', released_at__isnull=False)
     elif release_filter == 'unreleased':
@@ -396,6 +401,33 @@ def moderation_queue(request):
             | Q(item__title__icontains=search_query)
         )
 
+    events = events.order_by(
+        Case(
+            When(status='pending', then=Value(0)), default=Value(1),
+            output_field=IntegerField(),
+        ),
+        Case(
+            When(risk_tier='critical', then=Value(0)),
+            When(risk_tier='elevated', then=Value(1)),
+            When(risk_tier='caution', then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        ),
+        '-risk_score', '-created_at',
+    )
+    now = timezone.now()
+    tier_counts = {
+        tier: base_events.filter(status='pending', risk_tier=tier).count()
+        for tier in ('critical', 'elevated', 'caution')
+    }
+    overdue_counts = {
+        tier: base_events.filter(
+            status='pending', risk_tier=tier,
+            created_at__lt=now - ModerationEvent.RISK_TIER_REVIEW_TARGETS[tier],
+        ).count()
+        for tier in ('critical', 'elevated', 'caution')
+    }
+
     return render(request, 'chat_messages/moderation_queue.html', {
         'moderation_events': events,
         'moderation_pending_count': base_events.filter(status='pending').count(),
@@ -403,6 +435,7 @@ def moderation_queue(request):
         'moderation_status_filter': status_filter,
         'moderation_channel_filter': channel_filter,
         'moderation_risk_filter': risk_filter,
+        'moderation_tier_filter': tier_filter,
         'moderation_search_query': search_query,
         'moderation_pending_high_count': base_events.filter(status='pending', risk_level='high').count(),
         'moderation_released_count': base_events.filter(
@@ -434,6 +467,12 @@ def moderation_queue(request):
             ('all', '全部风险等级'), ('high', '高风险'),
             ('medium', '中风险'), ('low', '低风险'),
         ),
+        'moderation_tier_options': (
+            ('all', '全部复核分级'), ('critical', '严重风险'),
+            ('elevated', '脱离平台联系'), ('caution', '低权重线索'),
+        ),
+        **{f'moderation_pending_{tier}_count': count for tier, count in tier_counts.items()},
+        **{f'moderation_overdue_{tier}_count': count for tier, count in overdue_counts.items()},
     })
 
 

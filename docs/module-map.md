@@ -10,7 +10,7 @@
 ```text
 campus_glimmer/
 ├── accounts/                  # 注册、登录、个人资料和账户测试
-├── chat_messages/             # 商品留言、私信、内容审核、误判放行闭环、私信响应时效、响应场景分层、响应时效跨周期对比和会话测试
+├── chat_messages/             # 商品留言、私信、内容审核分级、误判放行闭环、私信响应时效、响应场景分层、响应时效跨周期对比和会话测试
 ├── campus_glimmer/            # Django 项目配置、根路由和健康检查
 ├── listings/                  # 商品、订单、搜索、通知、运营和治理业务（见下面的模块表）
 │   ├── migrations/            # 数据库迁移
@@ -420,11 +420,13 @@ campus_glimmer/
 ## chat_messages/ 的关键测试
 
 <details>
-<summary>消息、私信与审核测试（4 组）</summary>
+<summary>消息、私信与审核测试（5 组）</summary>
 
 - **`tests.py`**：留言、私信、会话、审核队列和通知路径的基础流程测试。
 
 - **`test_moderation_release.py`**：误判放行后内容真的回到原渠道、接收方收到通知、历史缺材料不伪称放行、重复复核不重复发布。
+
+- **`test_moderation_risk_tier.py`**：规则最高档、拦截持久化、历史标签回填、复核节奏、队列排序筛选和后台只读测试。
 
 - **`test_chat_response.py`**：私信第一次被打开的响应时效、静默样本、商品分类与交易方式分层、未关联商品边界、样本门槛、看板与 CSV 同构测试。
 
