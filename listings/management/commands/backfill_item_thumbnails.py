@@ -4,6 +4,7 @@
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
+from listings.image_processing import PREVIEW_MAX_EDGE_PIXELS
 from listings.models import ItemImage
 from listings.task_runs import normalise_metrics, record_task_run
 
@@ -19,7 +20,7 @@ def positive_int(value):
 
 
 class Command(BaseCommand):
-    help = '为历史商品图片分批生成列表页缩略图并补齐展示宽高；可重复执行。'
+    help = '为历史商品图片分批生成列表页缩略图、大图预览并补齐展示宽高；可重复执行。'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -38,11 +39,12 @@ class Command(BaseCommand):
             pending = self.pending_queryset()
 
             if dry_run:
-                pending_count = pending.count()
+                total_count = pending.count()
+                pending_count = pending[:limit].count() if limit is not None else total_count
                 run.metrics = normalise_metrics({'marked': pending_count})
-                message = f'待补齐商品图片缩略图或展示宽高 {pending_count} 条。'
+                message = f'本次待补齐商品图片缩略图、预览图或展示宽高 {pending_count} 条。'
                 if limit is not None:
-                    message += f'本次限制为 {limit} 条。'
+                    message += f'当前总待处理量为 {total_count} 条。'
                 self.stdout.write(self.style.WARNING(message))
                 return
 
@@ -54,25 +56,54 @@ class Command(BaseCommand):
                 if not item_image.image:
                     skipped += 1
                     continue
-                try:
-                    if not item_image.thumbnail:
+                update_fields = set()
+                failures = []
+
+                if not item_image.thumbnail:
+                    try:
                         item_image._replace_thumbnail()
-                        update_fields = [
+                        update_fields.update({
                             'thumbnail', 'image_width', 'image_height',
                             'thumbnail_width', 'thumbnail_height',
-                        ]
-                    else:
-                        update_fields = item_image.refresh_display_dimensions()
-                    if not update_fields:
-                        skipped += 1
-                        continue
-                    item_image.save(update_fields=update_fields)
-                    updated += 1
-                except Exception as exc:
+                        })
+                    except Exception as exc:
+                        failures.append(f'缩略图 {type(exc).__name__}')
+                else:
+                    try:
+                        update_fields.update(item_image.refresh_display_dimensions())
+                    except Exception as exc:
+                        failures.append(f'展示宽高 {type(exc).__name__}')
+
+                if item_image.image_width is not None and item_image.image_height is not None:
+                    source_edge = max(item_image.image_width, item_image.image_height)
+                    if source_edge > PREVIEW_MAX_EDGE_PIXELS and not item_image.preview:
+                        try:
+                            item_image._replace_preview()
+                            update_fields.update({
+                                'preview', 'preview_width', 'preview_height',
+                            })
+                        except Exception as exc:
+                            failures.append(f'预览图 {type(exc).__name__}')
+                    elif item_image.preview and (
+                        item_image.preview_width is None
+                        or item_image.preview_height is None
+                    ):
+                        try:
+                            update_fields.update(item_image.refresh_display_dimensions())
+                        except Exception as exc:
+                            failures.append(f'预览图宽高 {type(exc).__name__}')
+
+                if failures:
                     failed += 1
                     self.stdout.write(self.style.WARNING(
-                        f'商品图片档案补齐失败：{type(exc).__name__}。'
+                        f'商品图片档案补齐失败：{", ".join(failures)}。'
                     ))
+                if update_fields:
+                    item_image.save(update_fields=list(update_fields))
+                    updated += 1
+                elif not failures:
+                    skipped += 1
+                    continue
 
             remaining = self.pending_queryset().count()
             run.metrics = normalise_metrics({
@@ -80,17 +111,21 @@ class Command(BaseCommand):
                 'failed': failed, 'skipped': skipped,
             })
             self.stdout.write(self.style.SUCCESS(
-                f'检查 {marked} 条商品图片，补齐 {updated} 条缩略图或展示宽高，'
+                f'检查 {marked} 条商品图片，补齐 {updated} 条缩略图、预览图或展示宽高，'
                 f'失败 {failed} 条，跳过 {skipped} 条，剩余 {remaining} 条待处理。'
             ))
 
     @staticmethod
     def pending_queryset():
         missing_thumbnail = Q(thumbnail__isnull=True) | Q(thumbnail='')
+        has_preview = ~Q(preview__isnull=True) & ~Q(preview='')
         missing_dimensions = (
             Q(image_width__isnull=True) | Q(image_height__isnull=True)
             | Q(thumbnail_width__isnull=True) | Q(thumbnail_height__isnull=True)
+            | (has_preview & (Q(preview_width__isnull=True) | Q(preview_height__isnull=True)))
         )
+        missing_preview = Q(preview__isnull=True) | Q(preview='')
+        large_source = Q(image_width__gt=PREVIEW_MAX_EDGE_PIXELS) | Q(image_height__gt=PREVIEW_MAX_EDGE_PIXELS)
         return ItemImage.objects.filter(
-            missing_thumbnail | missing_dimensions,
+            missing_thumbnail | missing_dimensions | (large_source & missing_preview),
         ).order_by('id')

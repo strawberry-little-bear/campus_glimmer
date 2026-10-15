@@ -8,12 +8,12 @@
     <div class="col-lg-7">
         <div class="detail-gallery">
             <div class="detail-main-image">
-                {% if item.images.first %}<img src="{{ item.images.first.image.url }}" alt="{{ item.title }}" id="mainProductImage"{% if item.images.first.image_width %} width="{{ item.images.first.image_width }}" height="{{ item.images.first.image_height }}"{% endif %} decoding="async">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage" decoding="async">{% endif %}
+                {% if item.images.first %}<img src="{{ item.images.first.detail_image_url }}" alt="{{ item.title }}" id="mainProductImage"{% if item.images.first.detail_image_width %} width="{{ item.images.first.detail_image_width }}" height="{{ item.images.first.detail_image_height }}"{% endif %}{% if item.images.first.detail_image_srcset %} srcset="{{ item.images.first.detail_image_srcset }}" sizes="(max-width: 576px) 100vw, 60vw"{% endif %} decoding="async">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage" decoding="async">{% endif %}
                 <span class="detail-status status-{% if item.status == 'available' and item.is_expired %}expired{% else %}{{ item.status }}{% endif %}">{% if item.status == 'available' and item.is_expired %}已过期{% else %}{{ item.get_status_display }}{% endif %}</span>
             </div>
             {% if item.images.count > 1 %}
             <div class="detail-thumbs">
-                {% for image in item.images.all %}<button type="button" class="detail-thumb {% if forloop.first %}active{% endif %}" data-image="{{ image.image.url }}"><img src="{{ image.list_image_url }}" alt="{{ item.title }} 图片{{ forloop.counter }}"{% if image.list_image_width %} width="{{ image.list_image_width }}" height="{{ image.list_image_height }}"{% endif %} loading="lazy" decoding="async"></button>{% endfor %}
+                {% for image in item.images.all %}<button type="button" class="detail-thumb {% if forloop.first %}active{% endif %}" data-image="{{ image.image.url }}"{% if image.detail_image_srcset %} data-srcset="{{ image.detail_image_srcset }}"{% endif %}{% if image.detail_image_width %} data-width="{{ image.detail_image_width }}" data-height="{{ image.detail_image_height }}"{% endif %}><img src="{{ image.list_image_url }}" alt="{{ item.title }} 图片{{ forloop.counter }}"{% if image.list_image_width %} width="{{ image.list_image_width }}" height="{{ image.list_image_height }}"{% endif %} loading="lazy" decoding="async"></button>{% endfor %}
             </div>
             {% endif %}
         </div>
@@ -130,4 +130,4 @@
     </div>
 </div>
 {% endblock %}
-{% block extra_js %}<script>document.querySelectorAll('.detail-thumb').forEach(function (thumb) { thumb.addEventListener('click', function () { document.getElementById('mainProductImage').src = this.dataset.image; document.querySelectorAll('.detail-thumb').forEach(t => t.classList.remove('active')); this.classList.add('active'); }); });</script>{% endblock %}
+{% block extra_js %}<script>document.querySelectorAll('.detail-thumb').forEach(function (thumb) { thumb.addEventListener('click', function () { var mainImage = document.getElementById('mainProductImage'); mainImage.src = this.dataset.image; if (this.dataset.srcset) { mainImage.srcset = this.dataset.srcset; } else { mainImage.removeAttribute('srcset'); } if (this.dataset.width) { mainImage.width = this.dataset.width; mainImage.height = this.dataset.height; } document.querySelectorAll('.detail-thumb').forEach(t => t.classList.remove('active')); this.classList.add('active'); }); });</script>{% endblock %}

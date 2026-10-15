@@ -8,7 +8,10 @@ from django.db.models import Q
 from django.contrib.auth.models import User
 from django.utils import timezone
 
-from .image_processing import build_item_thumbnail, read_item_image_dimensions
+from .image_processing import (
+    PREVIEW_MAX_EDGE_PIXELS, build_item_preview, build_item_thumbnail,
+    read_item_image_dimensions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +270,10 @@ class ItemImage(models.Model):
         '列表缩略图', upload_to='items/thumbnails/', null=True, blank=True,
         editable=False,
     )
+    preview = models.ImageField(
+        '大图预览', upload_to='items/previews/', null=True, blank=True,
+        editable=False,
+    )
     image_width = models.PositiveIntegerField(
         '原图宽度', null=True, blank=True, editable=False,
     )
@@ -278,6 +285,12 @@ class ItemImage(models.Model):
     )
     thumbnail_height = models.PositiveIntegerField(
         '列表缩略图高度', null=True, blank=True, editable=False,
+    )
+    preview_width = models.PositiveIntegerField(
+        '大图预览宽度', null=True, blank=True, editable=False,
+    )
+    preview_height = models.PositiveIntegerField(
+        '大图预览高度', null=True, blank=True, editable=False,
     )
 
     @property
@@ -300,6 +313,55 @@ class ItemImage(models.Model):
             return self.thumbnail_height
         return self.image_height
 
+    @property
+    def list_image_srcset(self):
+        """Offer 480px and 960px candidates for genuinely large cards."""
+        if (
+            not self.thumbnail or not self.preview
+            or self.thumbnail_width is None or self.thumbnail_height is None
+            or self.preview_width is None or self.preview_height is None
+            or self.thumbnail_width == self.preview_width
+        ):
+            return ''
+        return (
+            f'{self.thumbnail.url} {self.thumbnail_width}w, '
+            f'{self.preview.url} {self.preview_width}w'
+        )
+
+    @property
+    def detail_image_url(self):
+        """Use the medium variant first, then fall back to the original."""
+        if self.preview:
+            return self.preview.url
+        return self.image.url
+
+    @property
+    def detail_image_width(self):
+        if self.preview:
+            return self.preview_width
+        return self.image_width
+
+    @property
+    def detail_image_height(self):
+        if self.preview:
+            return self.preview_height
+        return self.image_height
+
+    @property
+    def detail_image_srcset(self):
+        """Let the detail page keep the original only as a large-screen option."""
+        if (
+            not self.preview
+            or self.image_width is None or self.image_height is None
+            or self.preview_width is None or self.preview_height is None
+            or self.preview_width == self.image_width
+        ):
+            return ''
+        return (
+            f'{self.preview.url} {self.preview_width}w, '
+            f'{self.image.url} {self.image_width}w'
+        )
+
     def _existing_image_name(self):
         if not self.pk:
             return None
@@ -319,6 +381,33 @@ class ItemImage(models.Model):
         if old_thumbnail and old_thumbnail != self.thumbnail.name:
             self.thumbnail.storage.delete(old_thumbnail)
 
+    def _replace_preview(self):
+        old_preview = self.preview.name if self.preview else None
+        generated = build_item_preview(self.image)
+        self.preview.save(generated.name, generated, save=False)
+        self.preview_width = generated.preview_width
+        self.preview_height = generated.preview_height
+        self._preview_touched = True
+        if old_preview and old_preview != self.preview.name:
+            self.preview.storage.delete(old_preview)
+
+    def _delete_preview(self):
+        if self.preview:
+            self.preview.delete(save=False)
+        self.preview_width = None
+        self.preview_height = None
+        self._preview_touched = True
+
+    def _replace_preview_if_needed(self):
+        """Avoid a duplicate file when the original is already preview-sized."""
+        if self.image_width is None or self.image_height is None:
+            self._delete_preview()
+            return
+        if max(self.image_width, self.image_height) <= PREVIEW_MAX_EDGE_PIXELS:
+            self._delete_preview()
+            return
+        self._replace_preview()
+
     def refresh_display_dimensions(self):
         """Fill missing dimensions from stored files; return changed fields."""
         changed = []
@@ -332,15 +421,21 @@ class ItemImage(models.Model):
             width, height = read_item_image_dimensions(self.thumbnail)
             self.thumbnail_width, self.thumbnail_height = width, height
             changed.extend(['thumbnail_width', 'thumbnail_height'])
+        if self.preview and (
+            self.preview_width is None or self.preview_height is None
+        ):
+            width, height = read_item_image_dimensions(self.preview)
+            self.preview_width, self.preview_height = width, height
+            changed.extend(['preview_width', 'preview_height'])
         return changed
 
     def save(self, *args, update_fields=None, **kwargs):
-        """Keep the list thumbnail aligned with the currently stored photo.
+        """Keep image variants aligned with the currently stored photo.
 
-        Thumbnail generation is deliberately best-effort: an already valid
-        product photo must still be saveable if a small variant cannot be
-        encoded. In that case any stale thumbnail is removed so list pages fall
-        back to the new original instead of showing the previous image.
+        Variant generation is deliberately best-effort and independent: an
+        already valid product photo must remain saveable when one variant
+        cannot be encoded. Failed variants are cleared so pages fall back to
+        the current original rather than showing a stale file.
         """
         previous_image = self._existing_image_name()
         thumbnail_is_missing = not self.thumbnail
@@ -354,18 +449,38 @@ class ItemImage(models.Model):
                 )
                 if self.thumbnail:
                     self.thumbnail.delete(save=False)
-                self.image_width = None
-                self.image_height = None
                 self.thumbnail_width = None
                 self.thumbnail_height = None
                 self._thumbnail_touched = True
-        if update_fields is not None and getattr(self, '_thumbnail_touched', False):
-            update_fields = set(update_fields)
-            update_fields.update({
-                'thumbnail', 'image_width', 'image_height',
-                'thumbnail_width', 'thumbnail_height',
-            })
+                try:
+                    self.image_width, self.image_height = read_item_image_dimensions(self.image)
+                except Exception:
+                    self.image_width = None
+                    self.image_height = None
+        if self.image and image_changed:
+            try:
+                self._replace_preview_if_needed()
+            except Exception as exc:
+                logger.warning(
+                    'Item preview generation failed (%s)', type(exc).__name__,
+                )
+                self._delete_preview()
+        if update_fields is not None:
+            touched_fields = set()
+            if getattr(self, '_thumbnail_touched', False):
+                touched_fields.update({
+                    'thumbnail', 'image_width', 'image_height',
+                    'thumbnail_width', 'thumbnail_height',
+                })
+            if getattr(self, '_preview_touched', False):
+                touched_fields.update({
+                    'preview', 'preview_width', 'preview_height',
+                })
+            if touched_fields:
+                update_fields = set(update_fields) | touched_fields
         super().save(*args, **kwargs, update_fields=update_fields)
+        self._thumbnail_touched = False
+        self._preview_touched = False
 
     def __str__(self):
         return f'{self.item.title}的图片'

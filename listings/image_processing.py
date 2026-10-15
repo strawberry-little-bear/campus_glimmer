@@ -24,6 +24,8 @@ MAX_EDGE_PIXELS = 1600
 WEBP_QUALITY_LADDER = (85, 75, 65)
 THUMBNAIL_MAX_EDGE_PIXELS = 480
 THUMBNAIL_QUALITY = 80
+PREVIEW_MAX_EDGE_PIXELS = 960
+PREVIEW_QUALITY = 82
 
 
 class ItemImageLimitError(ValueError):
@@ -93,17 +95,12 @@ def normalize_item_image(uploaded):
     return result
 
 
-def build_item_thumbnail(source):
-    """Build the small WebP variant used by list pages.
-
-    The source may be a Django field file or any seekable binary file. The
-    function never upscales: an already-small product photo keeps its pixel
-    dimensions and only changes container format.
-    """
+def _build_item_variant(source, max_edge, quality, label):
+    """Build one bounded WebP variant and report both source and output sizes."""
     # Keep the caller's handle open. On an unsaved upload that handle is the
     # original SimpleUploadedFile; closing it here would make the later
-    # ImageField save in Django fail with ``ValueError: I/O operation on
-    # closed file``.
+    # ImageField save in Django fail with ``ValueError: I/O operation on closed
+    # file``.
     if hasattr(source, 'open'):
         source.open('rb')
     else:
@@ -115,27 +112,50 @@ def build_item_thumbnail(source):
         oriented = ImageOps.exif_transpose(image) or image
         source_width, source_height = oriented.size
         oriented.thumbnail(
-            (THUMBNAIL_MAX_EDGE_PIXELS, THUMBNAIL_MAX_EDGE_PIXELS),
+            (max_edge, max_edge),
             Image.Resampling.LANCZOS,
             reducing_gap=2.0,
         )
-        thumbnail_width, thumbnail_height = oriented.size
+        variant_width, variant_height = oriented.size
         normalized = _as_rgb_or_rgba(oriented)
         output = BytesIO()
-        normalized.save(
-            output, format='WEBP', quality=THUMBNAIL_QUALITY, method=4,
-        )
+        normalized.save(output, format='WEBP', quality=quality, method=4)
     source.seek(0)
     output.seek(0)
     result = ContentFile(
-        output.read(), name=f'{uuid4().hex}-thumbnail.webp',
+        output.read(), name=f'{uuid4().hex}-{label}.webp',
     )
     result.content_type = 'image/webp'
     result.source_width = source_width
     result.source_height = source_height
-    result.thumbnail_width = thumbnail_width
-    result.thumbnail_height = thumbnail_height
+    setattr(result, f'{label}_width', variant_width)
+    setattr(result, f'{label}_height', variant_height)
     return result
+
+
+def build_item_thumbnail(source):
+    """Build the small WebP variant used by list pages.
+
+    The source may be a Django field file or any seekable binary file. The
+    function never upscales: an already-small product photo keeps its pixel
+    dimensions and only changes container format.
+    """
+    return _build_item_variant(
+        source,
+        max_edge=THUMBNAIL_MAX_EDGE_PIXELS,
+        quality=THUMBNAIL_QUALITY,
+        label='thumbnail',
+    )
+
+
+def build_item_preview(source):
+    """Build the medium WebP variant used by large cards and detail pages."""
+    return _build_item_variant(
+        source,
+        max_edge=PREVIEW_MAX_EDGE_PIXELS,
+        quality=PREVIEW_QUALITY,
+        label='preview',
+    )
 
 
 def read_item_image_dimensions(source):

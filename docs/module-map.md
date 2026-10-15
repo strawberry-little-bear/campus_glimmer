@@ -42,7 +42,7 @@ campus_glimmer/
 | `availability.py` | 商品可用性与有货提醒 | 读写 |
 | `first_viewed.py` | 商品第一次被看见之后的收藏与下单时延、来源与后续一步（只报告不改写） | 读写 |
 | `forms.py` | 商品、搜索、通知偏好等表单 | 读写 |
-| `image_processing.py` | 商品图片上传硬限制、降采样、EXIF 方向、WebP 重编码、列表缩略图生成与内在宽高读取 | 读写 |
+| `image_processing.py` | 商品图片上传硬限制、降采样、EXIF 方向、WebP 重编码、列表缩略图与大图预览生成、内在宽高读取 | 读写 |
 | `models.py` | 商品、地点、领取申请、订单、通知和机会忽略记录等核心模型 | 读写 |
 | `notifications.py` | 通知生成和通知相关业务 | 读写 |
 | `operations_digest.py` | 运营告警日报构建与幂等投递 | 读写 |
@@ -252,7 +252,7 @@ campus_glimmer/
 
 - **`test_item_image_processing.py`**：上传硬限制、等比降采样、WebP 重编码、EXIF 方向、表单错误与页面提示
 
-- **`test_item_thumbnails.py`**：列表缩略图与展示宽高生成、替换重建、失败回退、历史回填、只补元数据不重建文件、分批限制与任务台账
+- **`test_item_thumbnails.py`**：列表缩略图、大图预览、响应式候选与展示宽高生成、替换重建、失败回退、历史回填、只补元数据不重建文件、分批限制与任务台账
 
 - **`test_item_lifecycle.py`**：到期商品从公开流与推荐里隐藏并回写状态
 
