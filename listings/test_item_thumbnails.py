@@ -34,6 +34,10 @@ def image_upload(name='photo.png', width=960, height=600, format='PNG', mode='RG
 class BuildItemThumbnailTests(TestCase):
     def test_output_is_bounded_webp_without_upscaling(self):
         result = build_item_thumbnail(image_upload(width=180, height=120))
+        self.assertEqual(
+            (result.source_width, result.source_height, result.thumbnail_width, result.thumbnail_height),
+            (180, 120, 180, 120),
+        )
         with Image.open(result) as thumbnail:
             self.assertEqual(thumbnail.format, 'WEBP')
             self.assertEqual(thumbnail.size, (180, 120))
@@ -41,6 +45,10 @@ class BuildItemThumbnailTests(TestCase):
     def test_exif_orientation_and_alpha_are_preserved(self):
         result = build_item_thumbnail(
             image_upload(width=800, height=400, format='JPEG', orientation=6),
+        )
+        self.assertEqual(
+            (result.source_width, result.source_height, result.thumbnail_width, result.thumbnail_height),
+            (400, 800, 240, 480),
         )
         with Image.open(result) as thumbnail:
             self.assertEqual(thumbnail.format, 'WEBP')
@@ -70,6 +78,10 @@ class ItemThumbnailModelTests(TestCase):
             item=self.item, image=image_upload(name='new-cover.png'),
         )
         self.assertTrue(item_image.thumbnail.name.startswith('items/thumbnails/'))
+        self.assertEqual(item_image.image_width, 960)
+        self.assertEqual(item_image.image_height, 600)
+        self.assertEqual(item_image.thumbnail_width, 480)
+        self.assertEqual(item_image.thumbnail_height, 300)
         with Image.open(item_image.thumbnail) as thumbnail:
             self.assertEqual(thumbnail.format, 'WEBP')
             self.assertLessEqual(max(thumbnail.size), THUMBNAIL_MAX_EDGE_PIXELS)
@@ -86,6 +98,13 @@ class ItemThumbnailModelTests(TestCase):
 
         self.assertNotEqual(item_image.thumbnail.name, old_thumbnail)
         self.assertFalse(item_image.thumbnail.storage.exists(old_thumbnail))
+        self.assertEqual(
+            (
+                item_image.image_width, item_image.image_height,
+                item_image.thumbnail_width, item_image.thumbnail_height,
+            ),
+            (700, 900, 373, 480),
+        )
         with Image.open(item_image.thumbnail) as thumbnail:
             self.assertEqual(thumbnail.size, (373, 480))
 
@@ -113,6 +132,10 @@ class ItemThumbnailModelTests(TestCase):
 
         self.assertFalse(item_image.thumbnail)
         self.assertFalse(item_image.thumbnail.storage.exists(stale_thumbnail))
+        self.assertIsNone(item_image.image_width)
+        self.assertIsNone(item_image.image_height)
+        self.assertIsNone(item_image.thumbnail_width)
+        self.assertIsNone(item_image.thumbnail_height)
         self.assertEqual(item_image.list_image_url, item_image.image.url)
 
     def test_item_list_prefers_the_thumbnail(self):
@@ -128,6 +151,10 @@ class ItemThumbnailModelTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, photo.thumbnail.url)
         self.assertNotContains(response, photo.image.url)
+        self.assertContains(response, 'width="480"')
+        self.assertContains(response, 'height="300"')
+        self.assertContains(response, 'loading="lazy"')
+        self.assertContains(response, 'decoding="async"')
 
 
 class BackfillItemThumbnailsTests(TestCase):
@@ -165,7 +192,10 @@ class BackfillItemThumbnailsTests(TestCase):
 
         call_command('backfill_item_thumbnails', stdout=StringIO())
         run = TaskRun.objects.filter(name='backfill_item_thumbnails').order_by('id').last()
-        self.assertEqual(run.metrics, {'marked': 0, 'failed': 0, 'skipped': 0})
+        self.assertEqual(
+            run.metrics,
+            {'marked': 0, 'updated': 0, 'failed': 0, 'skipped': 0},
+        )
         self.assertIn('剩余 0 条', output.getvalue())
 
     def test_limit_processes_the_oldest_rows_first(self):
@@ -194,7 +224,30 @@ class BackfillItemThumbnailsTests(TestCase):
         run = TaskRun.objects.get(name='backfill_item_thumbnails')
         self.assertEqual(run.note, 'dry-run')
         self.assertEqual(run.metrics, {'marked': 1})
-        self.assertIn('待回填商品图片缩略图 1 条', output.getvalue())
+        self.assertIn('待补齐商品图片缩略图或展示宽高 1 条', output.getvalue())
+
+    def test_existing_thumbnail_only_backfills_missing_dimensions(self):
+        photo = self.make_image('metadata-only.png')
+        thumbnail_name = photo.thumbnail.name
+        ItemImage.objects.filter(pk=photo.pk).update(
+            image_width=None, image_height=None,
+            thumbnail_width=None, thumbnail_height=None,
+        )
+
+        with patch('listings.models.build_item_thumbnail', side_effect=RuntimeError('boom')):
+            call_command('backfill_item_thumbnails', stdout=StringIO())
+
+        photo.refresh_from_db()
+        self.assertEqual(photo.thumbnail.name, thumbnail_name)
+        self.assertEqual(photo.image_width, 960)
+        self.assertEqual(photo.image_height, 600)
+        self.assertEqual(photo.thumbnail_width, 480)
+        self.assertEqual(photo.thumbnail_height, 300)
+        run = TaskRun.objects.get(name='backfill_item_thumbnails')
+        self.assertEqual(
+            run.metrics,
+            {'marked': 1, 'updated': 1, 'failed': 0, 'skipped': 0},
+        )
 
     def test_a_broken_historical_image_does_not_stop_the_batch(self):
         valid = self.make_image('valid-history.png')
@@ -212,6 +265,7 @@ class BackfillItemThumbnailsTests(TestCase):
         self.assertFalse(broken.thumbnail)
         run = TaskRun.objects.get(name='backfill_item_thumbnails')
         self.assertEqual(
-            run.metrics, {'marked': 2, 'failed': 1, 'skipped': 0},
+            run.metrics,
+            {'marked': 2, 'updated': 1, 'failed': 1, 'skipped': 0},
         )
         self.assertIn('失败 1 条', output.getvalue())

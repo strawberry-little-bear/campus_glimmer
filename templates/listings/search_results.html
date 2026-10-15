@@ -21,9 +21,9 @@
     <div class="col">
         <div class="card h-100 shadow-sm">
             {% if item.images.first %}
-            <img src="{{ item.images.first.list_image_url }}" class="card-img-top" alt="{{ item.title }}">
+            <img src="{{ item.images.first.list_image_url }}" class="card-img-top" alt="{{ item.title }}"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
             {% else %}
-            <img src="/static/img/no-image.png" class="card-img-top" alt="无图片">
+            <img src="/static/img/no-image.png" class="card-img-top" alt="无图片" decoding="async">
             {% endif %}
             <div class="card-body">
                 <h5 class="card-title">{{ item.title }}</h5>

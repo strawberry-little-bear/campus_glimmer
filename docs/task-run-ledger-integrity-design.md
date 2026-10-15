@@ -46,7 +46,7 @@
 
 指标形状与 `task_runs.normalise_metrics` 同一套契约：
 
-- 只接受 `sent`、`skipped`、`failed`、`marked`、`expired`、`reminded`；
+- 只接受 `sent`、`skipped`、`failed`、`marked`、`updated`、`expired`、`reminded`；
 - 值必须是数字标量；
 - 布尔值不算数字；
 - 负数不算次数；

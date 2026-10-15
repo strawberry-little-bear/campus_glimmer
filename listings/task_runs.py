@@ -38,7 +38,7 @@ from .models import TaskRun
 # The fixed metric fields. Every command maps its result onto these scalars,
 # and keys that do not map are dropped. Adding a command never requires
 # touching this list; it only needs to return keys that line up.
-METRIC_FIELDS = ("sent", "skipped", "failed", "marked", "expired", "reminded")
+METRIC_FIELDS = ("sent", "skipped", "failed", "marked", "updated", "expired", "reminded")
 
 
 def normalise_metrics(result):

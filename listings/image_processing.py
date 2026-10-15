@@ -112,12 +112,14 @@ def build_item_thumbnail(source):
     with Image.open(source) as image:
         if image.width * image.height > MAX_UPLOAD_PIXELS:
             raise ItemImageLimitError('source-pixel-count-too-large')
-        oriented = ImageOps.exif_transpose(image)
+        oriented = ImageOps.exif_transpose(image) or image
+        source_width, source_height = oriented.size
         oriented.thumbnail(
             (THUMBNAIL_MAX_EDGE_PIXELS, THUMBNAIL_MAX_EDGE_PIXELS),
             Image.Resampling.LANCZOS,
             reducing_gap=2.0,
         )
+        thumbnail_width, thumbnail_height = oriented.size
         normalized = _as_rgb_or_rgba(oriented)
         output = BytesIO()
         normalized.save(
@@ -129,4 +131,22 @@ def build_item_thumbnail(source):
         output.read(), name=f'{uuid4().hex}-thumbnail.webp',
     )
     result.content_type = 'image/webp'
+    result.source_width = source_width
+    result.source_height = source_height
+    result.thumbnail_width = thumbnail_width
+    result.thumbnail_height = thumbnail_height
     return result
+
+
+def read_item_image_dimensions(source):
+    """Return the browser-facing dimensions after EXIF orientation."""
+    if hasattr(source, 'open'):
+        source.open('rb')
+    else:
+        source.seek(0)
+    try:
+        with Image.open(source) as image:
+            oriented = ImageOps.exif_transpose(image) or image
+            return oriented.size
+    finally:
+        source.seek(0)

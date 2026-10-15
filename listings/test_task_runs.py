@@ -91,7 +91,14 @@ class RecordTaskRunTests(TestCase):
         self.assertEqual(len(TaskRun.objects.get().note), 255)
 
     def test_metric_fields_list_is_stable(self):
-        self.assertEqual(METRIC_FIELDS, ('sent', 'skipped', 'failed', 'marked', 'expired', 'reminded'))
+        self.assertEqual(
+            METRIC_FIELDS,
+            ('sent', 'skipped', 'failed', 'marked', 'updated', 'expired', 'reminded'),
+        )
+        self.assertEqual(
+            normalise_metrics({'updated': 3}),
+            {'updated': 3},
+        )
 
 
 class TaskRunHealthTests(TestCase):

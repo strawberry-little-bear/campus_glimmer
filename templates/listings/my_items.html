@@ -118,7 +118,7 @@
                                 <td>
                                     <div class="d-flex align-items-center">
                                         {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
@@ -196,7 +196,7 @@
                                 <td>
                                     <div class="d-flex align-items-center">
                                         {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
@@ -244,7 +244,7 @@
                                 <td>
                                     <div class="d-flex align-items-center">
                                         {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
@@ -292,7 +292,7 @@
                                 <td>
                                     <div class="d-flex align-items-center">
                                         {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2">
+                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>

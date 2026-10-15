@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Incrementally build list-page thumbnails for historical item photos."""
+"""Incrementally build list-page thumbnails and display metadata."""
 
 from django.core.management.base import BaseCommand
 from django.db.models import Q
@@ -19,7 +19,7 @@ def positive_int(value):
 
 
 class Command(BaseCommand):
-    help = '为历史商品图片分批生成列表页缩略图；可重复执行，已有缩略图的记录会跳过。'
+    help = '为历史商品图片分批生成列表页缩略图并补齐展示宽高；可重复执行。'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -40,13 +40,13 @@ class Command(BaseCommand):
             if dry_run:
                 pending_count = pending.count()
                 run.metrics = normalise_metrics({'marked': pending_count})
-                message = f'待回填商品图片缩略图 {pending_count} 条。'
+                message = f'待补齐商品图片缩略图或展示宽高 {pending_count} 条。'
                 if limit is not None:
                     message += f'本次限制为 {limit} 条。'
                 self.stdout.write(self.style.WARNING(message))
                 return
 
-            marked = failed = skipped = 0
+            marked = updated = failed = skipped = 0
             for item_image in pending.iterator():
                 if limit is not None and marked >= limit:
                     break
@@ -55,25 +55,42 @@ class Command(BaseCommand):
                     skipped += 1
                     continue
                 try:
-                    item_image._replace_thumbnail()
-                    item_image.save(update_fields=['thumbnail'])
+                    if not item_image.thumbnail:
+                        item_image._replace_thumbnail()
+                        update_fields = [
+                            'thumbnail', 'image_width', 'image_height',
+                            'thumbnail_width', 'thumbnail_height',
+                        ]
+                    else:
+                        update_fields = item_image.refresh_display_dimensions()
+                    if not update_fields:
+                        skipped += 1
+                        continue
+                    item_image.save(update_fields=update_fields)
+                    updated += 1
                 except Exception as exc:
                     failed += 1
                     self.stdout.write(self.style.WARNING(
-                        f'缩略图生成失败：{type(exc).__name__}。'
+                        f'商品图片档案补齐失败：{type(exc).__name__}。'
                     ))
 
             remaining = self.pending_queryset().count()
             run.metrics = normalise_metrics({
-                'marked': marked, 'failed': failed, 'skipped': skipped,
+                'marked': marked, 'updated': updated,
+                'failed': failed, 'skipped': skipped,
             })
             self.stdout.write(self.style.SUCCESS(
-                f'检查 {marked} 条商品图片，生成 {marked - failed - skipped} 条缩略图，'
+                f'检查 {marked} 条商品图片，补齐 {updated} 条缩略图或展示宽高，'
                 f'失败 {failed} 条，跳过 {skipped} 条，剩余 {remaining} 条待处理。'
             ))
 
     @staticmethod
     def pending_queryset():
+        missing_thumbnail = Q(thumbnail__isnull=True) | Q(thumbnail='')
+        missing_dimensions = (
+            Q(image_width__isnull=True) | Q(image_height__isnull=True)
+            | Q(thumbnail_width__isnull=True) | Q(thumbnail_height__isnull=True)
+        )
         return ItemImage.objects.filter(
-            Q(thumbnail__isnull=True) | Q(thumbnail=''),
+            missing_thumbnail | missing_dimensions,
         ).order_by('id')

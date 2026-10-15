@@ -42,7 +42,7 @@ campus_glimmer/
 | `availability.py` | 商品可用性与有货提醒 | 读写 |
 | `first_viewed.py` | 商品第一次被看见之后的收藏与下单时延、来源与后续一步（只报告不改写） | 读写 |
 | `forms.py` | 商品、搜索、通知偏好等表单 | 读写 |
-| `image_processing.py` | 商品图片上传硬限制、降采样、EXIF 方向、WebP 重编码与列表缩略图生成 | 读写 |
+| `image_processing.py` | 商品图片上传硬限制、降采样、EXIF 方向、WebP 重编码、列表缩略图生成与内在宽高读取 | 读写 |
 | `models.py` | 商品、地点、领取申请、订单、通知和机会忽略记录等核心模型 | 读写 |
 | `notifications.py` | 通知生成和通知相关业务 | 读写 |
 | `operations_digest.py` | 运营告警日报构建与幂等投递 | 读写 |
@@ -252,7 +252,7 @@ campus_glimmer/
 
 - **`test_item_image_processing.py`**：上传硬限制、等比降采样、WebP 重编码、EXIF 方向、表单错误与页面提示
 
-- **`test_item_thumbnails.py`**：列表缩略图生成、替换重建、失败回退、历史回填、分批限制与任务台账
+- **`test_item_thumbnails.py`**：列表缩略图与展示宽高生成、替换重建、失败回退、历史回填、只补元数据不重建文件、分批限制与任务台账
 
 - **`test_item_lifecycle.py`**：到期商品从公开流与推荐里隐藏并回写状态
 
@@ -412,7 +412,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（68 篇，持续更新）</summary>
+<summary>设计文档清单（69 篇，持续更新）</summary>
 
 - **`academic-term-snapshot-quality-design.md`**：阶段快照的规模、覆盖、孤儿行与过期，照实报不伪装
 
@@ -467,6 +467,7 @@ campus_glimmer/
 - **`gift-application-queue-design.md`**：免费领取申请队列的长度、处理时长与说明填写率
 
 - **`item-image-coverage-design.md`**：在架商品的图片覆盖度与无图商品清单
+- **`item-image-display-metadata-design.md`**：商品图内在宽高、列表懒加载、详情立即加载与历史元数据补齐
 - **`item-upload-image-optimization-design.md`**：新上传商品图的硬限制、降采样、方向与隐私边界
 - **`item-thumbnail-backfill-design.md`**：列表缩略图规格、历史图片分批回填、失败回退与任务台账
 - **`readme-information-architecture-design.md`**：README 短首页、阅读路径和深文档分层口径

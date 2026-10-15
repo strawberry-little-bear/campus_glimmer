@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.contrib.auth.models import User
 from django.utils import timezone
 
-from .image_processing import build_item_thumbnail
+from .image_processing import build_item_thumbnail, read_item_image_dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +267,18 @@ class ItemImage(models.Model):
         '列表缩略图', upload_to='items/thumbnails/', null=True, blank=True,
         editable=False,
     )
+    image_width = models.PositiveIntegerField(
+        '原图宽度', null=True, blank=True, editable=False,
+    )
+    image_height = models.PositiveIntegerField(
+        '原图高度', null=True, blank=True, editable=False,
+    )
+    thumbnail_width = models.PositiveIntegerField(
+        '列表缩略图宽度', null=True, blank=True, editable=False,
+    )
+    thumbnail_height = models.PositiveIntegerField(
+        '列表缩略图高度', null=True, blank=True, editable=False,
+    )
 
     @property
     def list_image_url(self):
@@ -274,6 +286,19 @@ class ItemImage(models.Model):
         if self.thumbnail:
             return self.thumbnail.url
         return self.image.url
+
+    @property
+    def list_image_width(self):
+        """Let templates reserve space without loading the list variant."""
+        if self.thumbnail:
+            return self.thumbnail_width
+        return self.image_width
+
+    @property
+    def list_image_height(self):
+        if self.thumbnail:
+            return self.thumbnail_height
+        return self.image_height
 
     def _existing_image_name(self):
         if not self.pk:
@@ -286,9 +311,28 @@ class ItemImage(models.Model):
         old_thumbnail = self.thumbnail.name if self.thumbnail else None
         generated = build_item_thumbnail(self.image)
         self.thumbnail.save(generated.name, generated, save=False)
+        self.image_width = generated.source_width
+        self.image_height = generated.source_height
+        self.thumbnail_width = generated.thumbnail_width
+        self.thumbnail_height = generated.thumbnail_height
         self._thumbnail_touched = True
         if old_thumbnail and old_thumbnail != self.thumbnail.name:
             self.thumbnail.storage.delete(old_thumbnail)
+
+    def refresh_display_dimensions(self):
+        """Fill missing dimensions from stored files; return changed fields."""
+        changed = []
+        if self.image and (self.image_width is None or self.image_height is None):
+            width, height = read_item_image_dimensions(self.image)
+            self.image_width, self.image_height = width, height
+            changed.extend(['image_width', 'image_height'])
+        if self.thumbnail and (
+            self.thumbnail_width is None or self.thumbnail_height is None
+        ):
+            width, height = read_item_image_dimensions(self.thumbnail)
+            self.thumbnail_width, self.thumbnail_height = width, height
+            changed.extend(['thumbnail_width', 'thumbnail_height'])
+        return changed
 
     def save(self, *args, update_fields=None, **kwargs):
         """Keep the list thumbnail aligned with the currently stored photo.
@@ -310,10 +354,17 @@ class ItemImage(models.Model):
                 )
                 if self.thumbnail:
                     self.thumbnail.delete(save=False)
-                    self._thumbnail_touched = True
+                self.image_width = None
+                self.image_height = None
+                self.thumbnail_width = None
+                self.thumbnail_height = None
+                self._thumbnail_touched = True
         if update_fields is not None and getattr(self, '_thumbnail_touched', False):
             update_fields = set(update_fields)
-            update_fields.add('thumbnail')
+            update_fields.update({
+                'thumbnail', 'image_width', 'image_height',
+                'thumbnail_width', 'thumbnail_height',
+            })
         super().save(*args, **kwargs, update_fields=update_fields)
 
     def __str__(self):
