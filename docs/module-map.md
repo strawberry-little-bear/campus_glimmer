@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，130 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，131 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（130 个）
+## listings/ 的业务模块（131 个）
 
 
 <details>
-<summary>业务模块清单（130 个，按业务链路归组）</summary>
+<summary>业务模块清单（131 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -56,6 +56,7 @@ campus_glimmer/
 | `meeting_scheduling.py` | 交付时间安排、冲突检测与开放时段推荐信号 | 读写 |
 | `campus_location_service_hours.py` | 校园地点每周服务时段、单日开放例外、跨午夜截断与相邻窗口覆盖判断 | 只读 |
 | `meeting_service_window_quality.py` | 未来交付安排对照每周开放时段与单日例外的只读风险审计、地点聚合与脱敏清单 | 只报告 |
+| `campus_location_service_rule_quality.py` | 校园地点每周时段与单日例外的配置形状、例外生命周期、五类只读核对信号与脱敏清单 | 只报告 |
 | `price_insights.py` | 同类价格参考与需求热度分析 | 读写 |
 | `price_changes.py` | 出售价格轨迹与收藏商品降价提醒 | 读写 |
 | `price_history.py` | 商品详情价格轨迹的连续性校验、最近窗口、走势、隐私粒度与卖家维护提示（只报告） | 只报告 |
@@ -171,10 +172,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（148 个）
+## 业务链路的测试模块（149 个）
 
 <details>
-<summary>业务链路测试清单（148 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（149 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -311,6 +312,7 @@ campus_glimmer/
 - **`test_campus_location_service_hours.py`**：每周时段模型约束、跨午夜与相邻窗口判断、交付推荐解释和时段外提交提醒
 - **`test_campus_location_service_exceptions.py`**：单日关闭与替换例外、跨午夜截断、推荐解释、原因提醒与约束测试
 - **`test_meeting_service_window_quality.py`**：未来安排开放状态分类、例外识别、未登记与无地点边界、分页、页面与 CSV 同构和只读测试
+- **`test_campus_location_service_rule_quality.py`**：开放规则配置信号、例外生命周期、跨午夜截断、页面与 CSV 同构和只读测试
 
 - **`test_meeting_reschedule.py`**：下界只认「更新了」备注、首次提议不算改期、没约上的不进分母、响应分档与 attendance 一致、地点只和当前版比、清单只列改过两次以上、只报告不改写与空态导出测试
 

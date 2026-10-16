@@ -4247,6 +4247,58 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>{{ meeting_service_window_quality.boundary_note }}清单只带订单号、地点和时间，不带用户名、商品标题或联系方式；页面与 CSV 共用同一个构建器。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 campus-service-rule-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Service rule audit</span><h2>校园开放规则配置审计</h2></div>
+        <span class="ops-panel-hint">先解释规则形状，再交给人工确认</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-sliders me-1"></i>{{ campus_location_service_rule_quality.period_note }}这里的“信号”不是错误判定：未登记、重叠和跨午夜截断都可以是刻意选择；本面板只把它们会得到的实际解释集中摆出来。</p>
+    {% if not campus_location_service_rule_quality.has_data %}
+    <div class="empty-inline">{{ campus_location_service_rule_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>启用地点</span><strong>{{ campus_location_service_rule_quality.metrics.active_location_count }}</strong><small>已登记 {{ campus_location_service_rule_quality.metrics.registered_location_count }} · 未登记 {{ campus_location_service_rule_quality.metrics.unregistered_location_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>启用每周时段</span><strong>{{ campus_location_service_rule_quality.metrics.active_window_count }}</strong><small>跨午夜 {{ campus_location_service_rule_quality.metrics.cross_midnight_window_count }} · 重叠或相邻组合 {{ campus_location_service_rule_quality.metrics.weekly_overlap_or_adjacent_group_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>启用单日例外</span><strong>{{ campus_location_service_rule_quality.metrics.active_exception_count }}</strong><small>过去 {{ campus_location_service_rule_quality.metrics.past_exception_count }} · 今天 {{ campus_location_service_rule_quality.metrics.today_exception_count }} · 未来 {{ campus_location_service_rule_quality.metrics.future_exception_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>配置信号</span><strong>{{ campus_location_service_rule_quality.metrics.signal_total }}</strong><small>只提示含义确认，不自动修复规则</small></div></div>
+    </div>
+    {% if campus_location_service_rule_quality.location_rows %}
+    <h3 class="h6 mb-3">按地点聚合</h3>
+    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>状态</th><th>启用每周时段</th><th>停用每周时段</th><th>启用例外</th><th>配置信号</th></tr></thead><tbody>
+        {% for row in campus_location_service_rule_quality.location_rows %}<tr{% if row.signal_count %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ row.location_name }}</strong></td>
+            <td>{{ row.location_active_label }}</td>
+            <td>{{ row.active_window_count }}</td>
+            <td>{{ row.inactive_window_count }}</td>
+            <td>{{ row.active_exception_count }}</td>
+            <td><strong>{{ row.signal_count }}</strong></td>
+        </tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+    {% if campus_location_service_rule_quality.rule_page_rows %}
+    <h3 class="h6 mb-3">配置核对清单</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>生效日期</th><th>状态</th><th>信号</th><th>配置</th><th>解释</th></tr></thead><tbody>
+        {% for row in campus_location_service_rule_quality.rule_page_rows %}
+        <tr>
+            <td><strong>{{ row.location_name }}</strong></td>
+            <td>{% if row.effective_date %}{{ row.effective_date|date:'Y-m-d' }}{% else %}—{% endif %}</td>
+            <td>{{ row.location_active_label }}</td>
+            <td>{{ row.signal_label }}</td>
+            <td>{{ row.config }}</td>
+            <td class="meeting-service-window-reason">{{ row.reason }}</td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% if campus_location_service_rule_quality.rule_total_count > campus_location_service_rule_quality.rule_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>页面最多列 {{ campus_location_service_rule_quality.rule_row_limit }} 条，完整清单在 CSV 导出中，本次共 {{ campus_location_service_rule_quality.rule_total_count }} 条。</p>
+    {% endif %}
+    {% else %}
+    <div class="empty-inline">当前开放规则没有需要确认含义的配置信号。</div>
+    {% endif %}
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>{{ campus_location_service_rule_quality.boundary_note }}清单只包含地点、日期和规则文本，不关联订单、预约或用户；页面与 CSV 共用同一个构建器。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 handoff-code-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Handover proof</span><h2>在现场念出来的那六位数字</h2></div>

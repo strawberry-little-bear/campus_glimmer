@@ -59,6 +59,7 @@ from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
 from .meeting_service_window_quality import build_meeting_service_window_quality
+from .campus_location_service_rule_quality import build_campus_location_service_rule_quality
 from .refresh_quota_drift import build_refresh_quota_drift
 from .item_refresh_event_ledger import build_item_refresh_event_ledger_dashboard
 from .refresh_response import build_refresh_response
@@ -3113,6 +3114,10 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('meeting_attendance', '面约到场', build_meeting_attendance),
     ('meeting_reschedule', '面约改期', build_meeting_reschedule),
     ('meeting_service_window_quality', '交付开放时段风险', build_meeting_service_window_quality),
+    (
+        'campus_location_service_rule_quality', '校园开放规则配置审计',
+        build_campus_location_service_rule_quality,
+    ),
     ('refresh_quota_drift', '刷新额度漂移', build_refresh_quota_drift),
     ('item_refresh_event_ledger', '商品刷新事件台账', build_item_refresh_event_ledger_dashboard),
     ('relist_freshness', '重新上架新鲜度', build_relist_freshness),
@@ -3549,6 +3554,67 @@ def operations_dashboard_export(request):
             row['status_label'], row['kind_label'], row['reason'], row['rule_summary'],
         ])
     writer.writerow(['边界', service_window_quality['boundary_note']])
+
+    rule_quality = dashboard['campus_location_service_rule_quality']
+    rule_metrics = rule_quality['metrics']
+    writer.writerow([])
+    writer.writerow(['校园开放规则配置审计', '数值', '说明'])
+    writer.writerow([
+        '口径', rule_quality['summary'], rule_quality['period_note'],
+    ])
+    writer.writerow([
+        '启用地点', rule_metrics['active_location_count'],
+        f"停用地点 {rule_metrics['inactive_location_count']} 个；两者都只描述当前档案开关",
+    ])
+    writer.writerow([
+        '已登记每周时段的启用地点', rule_metrics['registered_location_count'],
+        '至少有一条启用每周时段；未登记地点单独列出，不当成错误',
+    ])
+    writer.writerow([
+        '启用地点未登记每周时段', rule_metrics['unregistered_location_count'],
+        '可以表示全天协商开放，也可以表示档案待补，本面板不替维护者选择',
+    ])
+    writer.writerow([
+        '启用每周时段', rule_metrics['active_window_count'],
+        f"停用时段 {rule_metrics['inactive_window_count']} 条；跨午夜 {rule_metrics['cross_midnight_window_count']} 条",
+    ])
+    writer.writerow([
+        '每周时段重叠或相邻组合', rule_metrics['weekly_overlap_or_adjacent_group_count'],
+        '统一评估器会合并这些区间；这是维护复杂度信号，不是功能故障',
+    ])
+    writer.writerow([
+        '启用单日例外', rule_metrics['active_exception_count'],
+        f"过去 {rule_metrics['past_exception_count']} · 今天 {rule_metrics['today_exception_count']} · 未来 {rule_metrics['future_exception_count']}；停用 {rule_metrics['inactive_exception_count']}",
+    ])
+    writer.writerow([
+        '例外类型', rule_metrics['closed_exception_count'],
+        f"临时关闭；替换时段 {rule_metrics['replacement_exception_count']} 条",
+    ])
+    writer.writerow([
+        '配置信号总数', rule_metrics['signal_total'],
+        '例外挂在停用地点、替换无时段、替换重叠、跨午夜截断与未登记地点可重叠计数',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['按地点聚合'])
+    writer.writerow(['地点', '状态', '启用每周时段', '停用每周时段', '启用例外', '配置信号'])
+    for row in rule_quality['location_rows']:
+        writer.writerow([
+            row['location_name'], row['location_active_label'],
+            row['active_window_count'], row['inactive_window_count'],
+            row['active_exception_count'], row['signal_count'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['配置核对清单'])
+    writer.writerow(['地点', '生效日期', '状态', '信号', '配置', '解释'])
+    for row in rule_quality['rule_rows']:
+        writer.writerow([
+            row['effective_date'].strftime('%Y-%m-%d') if row['effective_date'] else '—',
+            row['location_name'], row['location_active_label'],
+            row['signal_label'], row['config'], row['reason'],
+        ])
+    writer.writerow(['边界', rule_quality['boundary_note']])
 
     writer.writerow([])
     writer.writerow(['求购匹配转化', '数量', '相对上一步转化率（%）', '口径说明'])
