@@ -451,7 +451,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（90 篇，持续更新）</summary>
+<summary>设计文档清单（91 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -467,6 +467,7 @@ campus_glimmer/
 - **`graduation-bulk-listing-csv-import-design.md`**：批量发布 CSV 导入预览，UTF-8 固定表头、行级错误与不直接写入边界
 - **`graduation-bulk-listing-xlsx-import-design.md`**：批量发布 XLSX 导入预览，只读第一工作表、安全单元格转换与共用预览发布边界
 - **`graduation-bulk-listing-image-followup-design.md`**：批量发布后的卖家补图队列，session 短期草稿、逐件编辑与不做批量上传边界
+- **`graduation-bulk-listing-image-upload-design.md`**：本批次补图上传，商品行与文件一一映射、整批校验失败不写入与复用图片治理
 
 - **`dispute-evidence-shape-design.md`**：证据文件的形状，attachment.name 与 size 第一次被数字读到
 
