@@ -22,9 +22,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
+from .bulk_listing_csv import parse_bulk_listing_csv
 from .dashboard_build_performance import build_dashboard_build_performance
 from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
 from .search_combo_shift import build_search_combo_shift
@@ -2451,9 +2452,69 @@ def refresh_item(request, item_id):
     return redirect('my_items')
 
 
+BULK_LISTING_IMPORT_SESSION_KEY = 'listings:bulk_listing_csv_import'
+BULK_LISTING_IMPORT_MAX_ROWS = 20
+
+
+def _load_bulk_listing_import(request, token=None):
+    """Return the current CSV draft after its shape and optional token check."""
+    state = request.session.get(BULK_LISTING_IMPORT_SESSION_KEY)
+    if not isinstance(state, dict):
+        return None
+    state_token = state.get('token')
+    rows = state.get('rows')
+    if not isinstance(state_token, str) or not isinstance(rows, list):
+        return None
+    if not 1 <= len(rows) <= BULK_LISTING_IMPORT_MAX_ROWS:
+        return None
+    if not all(isinstance(row, dict) for row in rows):
+        return None
+    if token is not None and not secrets.compare_digest(state_token, str(token)):
+        return None
+    return state
+
+
+def _store_bulk_listing_import(request, rows):
+    token = secrets.token_urlsafe(18)
+    request.session[BULK_LISTING_IMPORT_SESSION_KEY] = {
+        'token': token,
+        'rows': rows,
+    }
+    return token
+
+
+def _clear_bulk_listing_import(request, token=None):
+    state = _load_bulk_listing_import(request, token=token)
+    if state is not None:
+        del request.session[BULK_LISTING_IMPORT_SESSION_KEY]
+
+
+def _render_bulk_create_page(
+    request,
+    *,
+    settings_form=None,
+    formset=None,
+    import_file_error='',
+    import_row_errors=(),
+    import_preview_count=0,
+    import_token='',
+):
+    return render(request, 'listings/bulk_item_create.html', {
+        'settings_form': settings_form if settings_form is not None else BulkListingSettingsForm(),
+        'formset': formset if formset is not None else BulkListingRowFormSet(),
+        'max_bulk_rows': BULK_LISTING_IMPORT_MAX_ROWS,
+        'title': '批量发布商品',
+        'import_file_error': import_file_error,
+        'import_row_errors': import_row_errors,
+        'import_preview_count': import_preview_count,
+        'import_token': import_token,
+    })
+
+
 @login_required
 def bulk_create_items(request):
     """一次创建最多 20 件商品；全部校验通过前不写入任何一行。"""
+    import_token = request.POST.get('bulk_import_token', '').strip()
     if request.method == 'POST':
         settings_form = BulkListingSettingsForm(request.POST)
         formset = BulkListingRowFormSet(request.POST)
@@ -2489,19 +2550,54 @@ def bulk_create_items(request):
                 notify_saved_search_matches(item)
                 notify_demand_matches(item)
 
+            _clear_bulk_listing_import(request, token=import_token)
             messages.success(request, f'已批量发布 {len(items)} 件商品。')
             return redirect('my_items')
-    else:
-        settings_form = BulkListingSettingsForm()
-        formset = BulkListingRowFormSet()
 
-    return render(request, 'listings/bulk_item_create.html', {
-        'settings_form': settings_form,
-        'formset': formset,
-        'max_bulk_rows': 20,
-        'title': '批量发布商品',
-    })
+        import_state = _load_bulk_listing_import(request, token=import_token)
+        preview_count = len(import_state['rows']) if import_state else 0
+        return _render_bulk_create_page(
+            request,
+            settings_form=settings_form,
+            formset=formset,
+            import_preview_count=preview_count,
+            import_token=import_token if preview_count else '',
+        )
 
+    return _render_bulk_create_page(request)
+
+
+@login_required
+@require_POST
+def bulk_create_items_import(request):
+    """Parse a UTF-8 CSV draft; never create items or notifications here."""
+    result = parse_bulk_listing_csv(request.FILES.get('csv_file'))
+    if not result.can_preview:
+        formset = BulkListingRowFormSet(initial=result.rows) if result.rows else None
+        return _render_bulk_create_page(
+            request,
+            formset=formset,
+            import_file_error=result.file_error,
+            import_row_errors=[error.display for error in result.row_errors],
+        )
+
+    token = _store_bulk_listing_import(request, result.rows)
+    return redirect('bulk_create_items_import_preview', token=token)
+
+
+@login_required
+@require_GET
+def bulk_create_items_import_preview(request, token):
+    state = _load_bulk_listing_import(request, token=token)
+    if state is None:
+        messages.warning(request, '这份 CSV 预览已失效，请重新上传文件。')
+        return redirect('bulk_create_items')
+    return _render_bulk_create_page(
+        request,
+        formset=BulkListingRowFormSet(initial=state['rows']),
+        import_preview_count=len(state['rows']),
+        import_token=state['token'],
+    )
 
 @login_required
 def my_items(request):
