@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，129 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，130 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -465,7 +465,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（100 篇，持续更新）</summary>
+<summary>设计文档清单（101 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -490,6 +490,7 @@ campus_glimmer/
 
 - **`dispute-evidence-shape-design.md`**：证据文件的形状，attachment.name 与 size 第一次被数字读到
 - **`meeting-service-window-quality-design.md`**：未来交付安排对照开放时段与单日例外的只读风险审计
+- **`campus-location-service-rule-quality-design.md`**：校园地点每周时段与单日例外的配置形状、生命周期与只读核对清单
 
 - **`campus-verification-friction-design.md`**：校园认证最后一公里的等待时延，只收认证成功，慢的清单按耗时倒序
 
