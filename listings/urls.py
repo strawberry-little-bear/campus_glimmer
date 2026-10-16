@@ -64,6 +64,7 @@ urlpatterns = [
     path('my_items/', views.my_items, name='my_items'),
 path('item/<int:item_id>/refresh/', views.refresh_item, name='refresh_item'),
     path('my_items/bulk-campaign/', views.bulk_assign_campaign, name='bulk_assign_campaign'),
+    path('my_items/bulk-create/', views.bulk_create_items, name='bulk_create_items'),
     path('search/', views.search_items, name='search_items'),
     path('search/suggestions/', views.search_suggestions, name='search_suggestions'),
     path('operations/', views.operations_dashboard, name='operations_dashboard'),

@@ -1,0 +1,181 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="form-page-heading">
+    <a href="{% url 'my_items' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回我的商品</a>
+    <span class="eyebrow eyebrow-soft">毕业季清仓</span>
+    <h1>{{ title }}</h1>
+    <p>共同设置填一次，最多一次发布 20 件闲置；任何一行不合格，本批次都不会写入。</p>
+</div>
+
+<div class="form-card content-card">
+    <form method="post" id="bulk-listing-form">
+        {% csrf_token %}
+
+        {% if settings_form.non_field_errors or formset.non_form_errors %}
+        <div class="alert alert-danger">
+            {{ settings_form.non_field_errors }}
+            {{ formset.non_form_errors }}
+        </div>
+        {% endif %}
+
+        <div class="form-section">
+            <h2><span>01</span>本批次共同设置</h2>
+            <p class="text-muted small">分类、地点和专题会应用到本批次所有商品；展示截止时间适合统一设为离校前的下架时间。</p>
+            <div class="row g-3">
+                {% for field in settings_form %}
+                <div class="col-md-6">
+                    <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|striptags }}</div>{% endif %}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-section">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <div>
+                    <h2 class="mb-1"><span>02</span>商品清单</h2>
+                    <p class="text-muted small mb-0">空行会被忽略；标题在同一批次内不能重复。免费赠送和限期借用的价格会归零。</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="small text-muted">已生成 <strong data-row-count>5</strong> / {{ max_bulk_rows }} 行</span>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-add-row>
+                        <i class="bi bi-plus-lg me-1"></i>再添加一件
+                    </button>
+                </div>
+            </div>
+
+            {{ formset.management_form }}
+            <div id="bulk-listing-rows">
+                {% for form in formset %}
+                <div class="bulk-listing-row border rounded-3 p-3 mb-3" data-row>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <strong>第 <span data-row-number>{{ forloop.counter }}</span> 件</strong>
+                        <label class="form-check small text-muted">
+                            {{ form.DELETE }}
+                            <span class="ms-1">删除这一行</span>
+                        </label>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="{{ form.title.id_for_label }}" class="form-label">{{ form.title.label }}</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}<div class="text-danger small mt-1">{{ form.title.errors|striptags }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-3">
+                            <label for="{{ form.trade_mode.id_for_label }}" class="form-label">{{ form.trade_mode.label }}</label>
+                            {{ form.trade_mode }}
+                            {% if form.trade_mode.errors %}<div class="text-danger small mt-1">{{ form.trade_mode.errors|striptags }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-2">
+                            <label for="{{ form.price.id_for_label }}" class="form-label">{{ form.price.label }}</label>
+                            {{ form.price }}
+                            {% if form.price.errors %}<div class="text-danger small mt-1">{{ form.price.errors|striptags }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-3">
+                            <label for="{{ form.condition.id_for_label }}" class="form-label">{{ form.condition.label }}</label>
+                            {{ form.condition }}
+                            {% if form.condition.errors %}<div class="text-danger small mt-1">{{ form.condition.errors|striptags }}</div>{% endif %}
+                        </div>
+                        <div class="col-12">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">{{ form.description.label }}</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="text-danger small mt-1">{{ form.description.errors|striptags }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-3">
+                            <label for="{{ form.deposit_amount.id_for_label }}" class="form-label">{{ form.deposit_amount.label }}</label>
+                            {{ form.deposit_amount }}
+                            {% if form.deposit_amount.errors %}<div class="text-danger small mt-1">{{ form.deposit_amount.errors|striptags }}</div>{% endif %}
+                            <div class="form-text">仅限期借用需要。</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="{{ form.borrow_days.id_for_label }}" class="form-label">{{ form.borrow_days.label }}</label>
+                            {{ form.borrow_days }}
+                            {% if form.borrow_days.errors %}<div class="text-danger small mt-1">{{ form.borrow_days.errors|striptags }}</div>{% endif %}
+                            <div class="form-text">未填写时默认 7 天。</div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="alert alert-light border">
+                <i class="bi bi-images me-2"></i>这一步先创建商品信息；发布后可在单件编辑页逐件补充最多五张图片。
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <a href="{% url 'my_items' %}" class="btn btn-light">取消</a>
+            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2 me-2"></i>批量发布</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const container = document.getElementById('bulk-listing-rows');
+    const addButton = document.querySelector('[data-add-row]');
+    const totalInput = document.getElementById('id_form-TOTAL_FORMS');
+    const maxRows = {{ max_bulk_rows }};
+    if (!container || !addButton || !totalInput) return;
+
+    const rows = () => Array.from(container.querySelectorAll('[data-row]'));
+    const countLabel = document.querySelector('[data-row-count]');
+
+    function updateLabels() {
+        rows().forEach((row, index) => {
+            row.querySelector('[data-row-number]').textContent = index + 1;
+        });
+        if (countLabel) countLabel.textContent = totalInput.value;
+        addButton.disabled = Number(totalInput.value) >= maxRows;
+    }
+
+    function reindexRows() {
+        rows().forEach((row, rowIndex) => {
+            row.querySelectorAll('[name], [id], [for]').forEach(node => {
+                ['name', 'id', 'for', 'aria-describedby'].forEach(attribute => {)
+                    if (node.hasAttribute(attribute)) {
+                        node.setAttribute(attribute, node.getAttribute(attribute).replace(/form-\\d+-/, `form-${rowIndex}-`));
+                    }
+                });
+            });
+        });
+    }
+
+    function clearRow(row) {
+        row.querySelectorAll('input, textarea, select').forEach(input => {
+            input.classList.remove('is-invalid');
+            if (input.type === 'checkbox') {
+                input.checked = false;
+            } else if (input.tagName === 'SELECT') {
+                input.selectedIndex = 0;
+            } else {
+                input.value = '';
+            }
+        });
+        row.querySelectorAll('.text-danger, .invalid-feedback').forEach(node => node.remove());
+    }
+
+    addButton.addEventListener('click', () => {
+        const currentRows = rows();
+        if (!currentRows.length || Number(totalInput.value) >= maxRows) return;
+        const clone = currentRows[currentRows.length - 1].cloneNode(true);
+        clearRow(clone);
+        container.appendChild(clone);
+        totalInput.value = Number(totalInput.value) + 1;
+        reindexRows();
+        updateLabels();
+        clone.querySelector('input:not([type="hidden"])')?.focus();
+    });
+
+    updateLabels();
+})();
+</script>
+{% endblock %}

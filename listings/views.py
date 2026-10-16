@@ -113,7 +113,7 @@ from .dispute_evidence_shape import build_dispute_evidence_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .forms import BulkListingRowFormSet, BulkListingSettingsForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -2449,6 +2449,58 @@ def refresh_item(request, item_id):
 
     messages.success(request, f'已刷新《{item.title}》，商品会重新回到列表前排。')
     return redirect('my_items')
+
+
+@login_required
+def bulk_create_items(request):
+    """一次创建最多 20 件商品；全部校验通过前不写入任何一行。"""
+    if request.method == 'POST':
+        settings_form = BulkListingSettingsForm(request.POST)
+        formset = BulkListingRowFormSet(request.POST)
+        if settings_form.is_valid() and formset.is_valid():
+            rows = [
+                form for form in formset
+                if form.cleaned_data.get('title') and not form.cleaned_data.get('DELETE')
+            ]
+            settings = settings_form.cleaned_data
+            with transaction.atomic():
+                items = Item.objects.bulk_create([
+                    Item(
+                        seller=request.user,
+                        status='available',
+                        category=settings['category'],
+                        location=settings.get('location'),
+                        campaign=settings.get('campaign'),
+                        expires_at=settings.get('expires_at'),
+                        title=row.cleaned_data['title'],
+                        description=row.cleaned_data['description'],
+                        trade_mode=row.cleaned_data['trade_mode'],
+                        price=row.cleaned_data['price'],
+                        deposit_amount=row.cleaned_data['deposit_amount'],
+                        borrow_days=row.cleaned_data['borrow_days'],
+                        condition=row.cleaned_data['condition'],
+                    )
+                    for row in rows
+                ])
+
+            # 匹配通知不属于商品事实事务的一部分；这里逐件复用单件发布的
+            # 通知路径，避免批量发布绕过原有偏好、免打扰和去重规则。
+            for item in items:
+                notify_saved_search_matches(item)
+                notify_demand_matches(item)
+
+            messages.success(request, f'已批量发布 {len(items)} 件商品。')
+            return redirect('my_items')
+    else:
+        settings_form = BulkListingSettingsForm()
+        formset = BulkListingRowFormSet()
+
+    return render(request, 'listings/bulk_item_create.html', {
+        'settings_form': settings_form,
+        'formset': formset,
+        'max_bulk_rows': 20,
+        'title': '批量发布商品',
+    })
 
 
 @login_required

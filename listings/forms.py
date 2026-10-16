@@ -149,27 +149,36 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._style_fields()
-        self.fields['trade_mode'].widget.attrs['class'] = 'form-select'
-        self.fields['deposit_amount'].required = False
-        self.fields['borrow_days'].required = False
-        self.fields['deposit_amount'].widget.attrs['class'] = 'form-control'
-        self.fields['borrow_days'].widget.attrs['class'] = 'form-control'
+        # 批量发布的“共同设置”和“商品行”会继承这份表单，但各字段子集不同；
+        # 初始化时按实际存在的字段处理，避免子类碰到 KeyError。
+        for field_name in ('trade_mode', 'category', 'location', 'campaign'):
+            if field_name in self.fields:
+                self.fields[field_name].widget.attrs['class'] = 'form-select'
+        # 押金和借用天数只有“限期借用”需要；出售和赠送可以留空。
+        for field_name in ('deposit_amount', 'borrow_days'):
+            if field_name in self.fields:
+                self.fields[field_name].required = False
+                self.fields[field_name].widget.attrs['class'] = 'form-control'
         # Keep existing integrations and older saved forms compatible: sale is the
         # historical default when the new field is omitted from a POST.
-        self.fields['trade_mode'].required = False
-        self.fields['trade_mode'].initial = self.instance.trade_mode or 'sale'
-        self.fields['category'].widget.attrs['class'] = 'form-select'
-        self.fields['location'].widget.attrs['class'] = 'form-select'
-        self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
-        self.fields['location'].empty_label = '请选择交易地点（可选）'
-        campaign_filter = Q(is_active=True)
-        if self.instance and self.instance.campaign_id:
-            campaign_filter |= Q(pk=self.instance.campaign_id)
-        self.fields['campaign'].queryset = CampusCampaign.objects.filter(campaign_filter).order_by('-starts_at', 'title')
-        self.fields['campaign'].empty_label = '不加入专题（可选）'
-        self.fields['campaign'].help_text = '可加入毕业季、教材交换周等正在运营的校园专题。'
-        self.fields['campaign'].widget.attrs['class'] = 'form-select'
-        self.fields['expires_at'].widget.attrs['class'] = 'form-control'
+        if 'trade_mode' in self.fields:
+            self.fields['trade_mode'].required = False
+            self.fields['trade_mode'].initial = self.instance.trade_mode or 'sale'
+        if 'location' in self.fields:
+            self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
+            self.fields['location'].empty_label = '请选择交易地点（可选）'
+            self.fields['location'].help_text = '填写方便见面的地点，让交易更清晰。'
+        if 'campaign' in self.fields:
+            campaign_filter = Q(is_active=True)
+            if self.instance and self.instance.campaign_id:
+                campaign_filter |= Q(pk=self.instance.campaign_id)
+            self.fields['campaign'].queryset = CampusCampaign.objects.filter(
+                campaign_filter,
+            ).order_by('-starts_at', 'title')
+            self.fields['campaign'].empty_label = '不加入专题（可选）'
+            self.fields['campaign'].help_text = '可加入毕业季、教材交换周等正在运营的校园专题。'
+        if 'expires_at' in self.fields:
+            self.fields['expires_at'].widget.attrs['class'] = 'form-control'
 
     def clean(self):
         cleaned_data = super().clean()
@@ -198,6 +207,103 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
         if value and value <= timezone.now():
             raise forms.ValidationError('展示截止时间必须晚于当前时间。')
         return value
+
+
+class BulkListingSettingsForm(ItemForm):
+    """毕业季批量发布本批次共用的设置。"""
+
+    class Meta(ItemForm.Meta):
+        fields = ['category', 'location', 'campaign', 'expires_at']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['category'].label = '本批次分类'
+        self.fields['location'].label = '本批次交易地点'
+        self.fields['campaign'].label = '加入校园专题'
+
+
+class BulkListingRowForm(ItemForm):
+    """批量发布中的单件商品行；分类、地点和专题由本批次共同设置提供。"""
+
+    class Meta(ItemForm.Meta):
+        fields = [
+            'title', 'description', 'trade_mode', 'price', 'deposit_amount',
+            'borrow_days', 'condition',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 浏览器会提交空行里的空输入。若这里保持模型必填，空行会先在字段
+        # 校验阶段失败，无法进入“完全空行忽略”的批次规则。
+        for field_name in ('title', 'description', 'price', 'condition'):
+            self.fields[field_name].required = False
+        self.fields['price'].label = '价格（元）'
+        self.fields['borrow_days'].widget.attrs['min'] = '1'
+
+    def clean(self):
+        # ItemForm 会把空押金、空借用天数整理成默认值；判断“是否空行”
+        # 必须先看用户原始输入，不能看整理后的 cleaned_data。
+        raw_row_fields = (
+            'title', 'description', 'price', 'deposit_amount',
+            'borrow_days', 'condition',
+        )
+        has_row_data = any(
+            str(self.data.get(self.add_prefix(field_name)) or '').strip()
+            for field_name in raw_row_fields
+        )
+        if (self.data.get(self.add_prefix('trade_mode')) or 'sale') != 'sale':
+            has_row_data = True
+
+        cleaned_data = super().clean()
+        title = (cleaned_data.get('title') or '').strip()
+        if not title and has_row_data:
+            self.add_error('title', '请填写商品标题，或清空整行。')
+        if title:
+            if not cleaned_data.get('description'):
+                self.add_error('description', '填写商品后需要补充描述。')
+            if not cleaned_data.get('condition'):
+                self.add_error('condition', '填写商品后需要说明成色。')
+            if (cleaned_data.get('trade_mode') or 'sale') == 'sale' and cleaned_data.get('price') is None:
+                self.add_error('price', '出售商品需要填写价格。')
+        return cleaned_data
+
+
+class BulkListingFormSet(forms.BaseFormSet):
+    """守住批量发布的服务端边界：至少一件、同批标题不重复。"""
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+
+        seen_titles = {}
+        filled_count = 0
+        for form in self.forms:
+            if self._should_delete_form(form):
+                continue
+            title = (form.cleaned_data.get('title') or '').strip()
+            if not title:
+                continue
+            filled_count += 1
+            key = title.casefold()
+            if key in seen_titles:
+                form.add_error('title', '同一批次内不能重复填写这个标题。')
+                seen_titles[key].add_error('title', '同一批次内不能重复填写这个标题。')
+            else:
+                seen_titles[key] = form
+
+        if not filled_count:
+            raise forms.ValidationError('请至少填写一件商品。')
+
+
+BulkListingRowFormSet = forms.formset_factory(
+    BulkListingRowForm,
+    formset=BulkListingFormSet,
+    extra=5,
+    max_num=20,
+    validate_max=True,
+    can_delete=True,
+)
 
 
 class ItemImageForm(StyledModelFormMixin, forms.ModelForm):
