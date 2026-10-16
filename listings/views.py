@@ -86,6 +86,7 @@ from .location_maintenance_queue import build_location_maintenance_queue
 from .order_deadline_reminders import build_order_deadline_reminders
 from .moderation_notice_preference import build_moderation_notice_preference
 from .moderation_rule_quality import build_moderation_rule_quality
+from .moderation_appeal_quality import build_moderation_appeal_quality
 from .availability_watch_quality import build_availability_watch_quality
 from .rating_quality import build_rating_quality
 from .dispute_resolution_quality import build_dispute_resolution_quality
@@ -2553,6 +2554,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('gift_application_queue', '赠送申请队列', build_gift_application_queue),
     ('item_image_coverage', '商品图片覆盖', build_item_image_coverage),
     ('moderation_rule_quality', '治理规则命中', build_moderation_rule_quality),
+    ('moderation_appeal_quality', '内容申诉处理质量', build_moderation_appeal_quality),
     ('availability_watch_quality', '到货提醒关注', build_availability_watch_quality),
     ('rating_quality', '交易评价质量', build_rating_quality),
     ('dispute_resolution_quality', '申诉处理质量', build_dispute_resolution_quality),
@@ -6316,6 +6318,122 @@ def operations_dashboard_export(request):
         ])
 
     writer.writerow([])
+    writer.writerow([])
+    appeal_quality = dashboard['moderation_appeal_quality']
+    writer.writerow([
+        '内容申诉处理质量，第一次被运营读到', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', appeal_quality['summary'],
+        '提交按 submitted_at、处理按 resolved_at、待处理按当前时刻分三条线；'
+        '不读申诉说明与处理说明内容，不展示用户名和被拦截正文',
+    ])
+    writer.writerow([
+        '当前待处理申诉', appeal_quality['pending']['measured_count'], '',
+        f"最久等待 {appeal_quality['pending']['oldest_label']}，"
+        f"超过一天 {appeal_quality['pending']['over_one_day_count']} 条",
+    ])
+    writer.writerow([
+        '周期内已处理申诉', appeal_quality['outcome']['measured_count'], '',
+        f"成立 {appeal_quality['outcome']['accepted_total']} 条；"
+        f"样本不足 {appeal_quality['min_direction_sample']} 条时比例只作参考",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['确认违规之后，有多少人提出申诉'])
+    writer.writerow(['口径', '数值', '说明'])
+    submission = appeal_quality['submission']
+    writer.writerow(['周期内提交', submission['submitted_count'], '按 submitted_at 归期'])
+    writer.writerow(['申诉人数', submission['appellant_count'], '只报计数，不列用户'])
+    writer.writerow([
+        '同期确认违规', submission['original_decision_count'],
+        '包含后来被申诉改判的记录；靠原复核时间快照找回原判事实',
+    ])
+    writer.writerow([
+        '可见申诉率（%）', submission['appeal_rate'],
+        f"同期已申诉 {submission['cohort_appeal_count']} 条；无申诉时效，只是当前下界",
+    ])
+    writer.writerow([
+        '历史结论进入本周期', submission['historical_decision_count'],
+        '提交在周期内、原判在周期外，不进入同期申诉率分母',
+    ])
+    writer.writerow([
+        '原判到提交（中位 / P90 / 平均）', '',
+        f"{submission['delay']['median_label']} / "
+        f"{submission['delay']['p90_label']} / {submission['delay']['mean_label']}",
+    ])
+    writer.writerow([
+        '原复核时间快照缺失', submission['missing_snapshot_count'],
+        '缺失行不进入提交间隔分布',
+    ])
+    writer.writerow([
+        '申诉说明字数（中位 / P90 / 平均 / 最大）', '',
+        f"{submission['statement']['median']} / {submission['statement']['p90']} / "
+        f"{submission['statement']['mean']} / {submission['statement']['max']}",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['申诉人为什么提交'])
+    writer.writerow(['原因', '申诉', '申诉人', '提交占比（%）', '样本'])
+    for row in appeal_quality['reason_rows']:
+        writer.writerow([
+            row['label'], row['count'], row['appellant_count'], row['share'],
+            '样本不足' if row['is_small_sample'] else '可看方向',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['处理结论与恢复缺口'])
+    writer.writerow(['结论', '数量', '已处理占比（%）', '口径'])
+    for row in appeal_quality['outcome']['rows']:
+        writer.writerow([
+            row['label'], row['count'], row['share'],
+            '计入申诉成立，另报恢复缺口'
+            if row['status'] == 'accepted_without_restore' else '按 resolved_at 归期',
+        ])
+    writer.writerow([
+        '成立但未恢复 / 两种成立',
+        appeal_quality['outcome']['counts']['accepted_without_restore'],
+        appeal_quality['outcome']['accepted_without_restore_rate'],
+        '缺历史恢复材料，不伪装成已恢复',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['从提交到处理完成，隔了多久'])
+    writer.writerow(['处理时长', '条数', '占比（%）', '说明'])
+    for row in appeal_quality['resolution']['duration']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '中位 / P90 / 平均', appeal_quality['resolution']['duration']['median_label'],
+        appeal_quality['resolution']['duration']['p90_label'],
+        appeal_quality['resolution']['duration']['mean_label'],
+    ])
+
+    writer.writerow([])
+    writer.writerow(['换人复核了吗'])
+    writer.writerow(['复核人关系', '条数', '占比（%）', '口径'])
+    reviewer = appeal_quality['resolution']['reviewer']
+    writer.writerow(['同一人', reviewer['same_count'], reviewer['same_rate'], '不评价对错，只报事实'])
+    writer.writerow(['换过人', reviewer['different_count'], reviewer['different_rate'], '不评价对错，只报事实'])
+    writer.writerow(['留痕缺失', reviewer['unknown_count'], '', '缺任一人时不猜同人或换人'])
+    writer.writerow([
+        '处理说明填写率（%）', appeal_quality['resolution']['note']['fill_rate'],
+        appeal_quality['resolution']['note']['filled_count'],
+        f"平均 {appeal_quality['resolution']['note']['mean']} 字，只数长度不读内容",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['当前待处理申诉与等待年龄'])
+    writer.writerow(['申诉', '渠道', '原因', '提交于', '等待', '说明字数', '原复核留痕'])
+    for row in appeal_quality['pending']['rows']:
+        writer.writerow([
+            f"#{row['appeal_id']}", row['channel_label'], row['reason_label'],
+            row['submitted_at'].strftime('%Y-%m-%d %H:%M'), row['wait_label'],
+            row['statement_length'], '有' if row['has_original_reviewer'] else '缺',
+        ])
+    writer.writerow([
+        '清单说明', appeal_quality['pending']['row_total'], '',
+        f"页面最多列 {appeal_quality['pending']['row_limit']} 条，CSV 输出完整清单",
+    ])
     watch = dashboard['availability_watch_quality']
     writer.writerow([
         '等一个有货的人等了多久，第一次被运营读到', '数值', '说明',

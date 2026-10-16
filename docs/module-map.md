@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，122 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，123 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（122 个）
+## listings/ 的业务模块（123 个）
 
 
 <details>
-<summary>业务模块清单（122 个，按业务链路归组）</summary>
+<summary>业务模块清单（123 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -148,6 +148,7 @@ campus_glimmer/
 | `campus_verification_friction.py` | 校园认证从发邮件到点开链接的等待时延统计 | 读写 |
 | `gift_application_queue.py` | 免费领取申请队列的长度、处理时长与说明填写率统计 | 读写 |
 | `moderation_rule_quality.py` | 内容审核四条规则的误判率、漏判率与复核时效统计 | 读写 |
+| `moderation_appeal_quality.py` | 内容申诉的提交线、处理线、当前积压、恢复缺口与换人复核统计 | 只报告 |
 | `availability_watch_quality.py` | 有货提醒的等待时长、死信来源、白等规模与触达质量统计 | 读写 |
 | `rating_quality.py` | 交易评价的覆盖率、提交时延、双向分布与文字填写率统计 | 读写 |
 | `dispute_resolution_quality.py` | 交易争议按类型的驳回率、证据到达时刻、发起方向与处理意见填写率统计 | 读写 |
@@ -163,10 +164,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（132 个）
+## 业务链路的测试模块（133 个）
 
 <details>
-<summary>业务链路测试清单（132 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（133 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
@@ -294,6 +295,7 @@ campus_glimmer/
 
 - **`test_moderation_notice_preference.py`**：触达四种成因不合成、免打扰只压徽章通知照格落库、已读率带同期全部通知作照局分母
 
+- **`test_moderation_appeal_quality.py`**：提交线与处理线分窗、申诉率下界、成立但未恢复、积压清单脱敏与换人复核口径
 - **`test_moderation_rule_quality.py`**：按规则拆的误判率与漏判率、右删失样本、权重只报分布与看板导出测试
 
 - **`test_mutual_aid_feedback.py`**：求购响应与失物线索的完成反馈闭环测试
