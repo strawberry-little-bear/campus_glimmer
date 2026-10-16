@@ -1,6 +1,8 @@
+from django.contrib.auth.models import User
+from django.db import transaction
 from django.db.models import Count, Sum
 
-from .models import CommunityContribution
+from .models import CommunityContribution, ContributionMilestoneEvent
 
 
 CONTRIBUTION_DEFAULTS = {
@@ -91,8 +93,65 @@ CONTRIBUTION_BADGE_RULES = (
 )
 
 
+def calculate_contribution_milestones(
+    contribution, *, previous_points, previous_events, previous_kind_counts,
+    levels=None, badge_rules=None,
+):
+    """Return threshold crossings caused by one newly created contribution.
+
+    The zero-point level is an initial state rather than an earned milestone, so
+    it is intentionally excluded.  This helper is pure so the online write path
+    and the historical migration can share exactly the same explanation.
+    """
+    current_points = previous_points + contribution.points
+    current_events = previous_events + 1
+    current_kind_counts = dict(previous_kind_counts)
+    current_kind_counts[contribution.kind] = current_kind_counts.get(contribution.kind, 0) + 1
+    rows = []
+    levels = CONTRIBUTION_LEVELS if levels is None else levels
+    badge_rules = CONTRIBUTION_BADGE_RULES if badge_rules is None else badge_rules
+
+    for threshold, title in levels:
+        if threshold <= 0 or not previous_points < threshold <= current_points:
+            continue
+        rows.append({
+            'user_id': contribution.user_id,
+            'contribution': contribution,
+            'milestone_type': 'level',
+            'milestone_code': f'level-{threshold}',
+            'milestone_title': title,
+            'threshold': threshold,
+            'previous_value': previous_points,
+            'reached_value': current_points,
+            'reached_at': contribution.occurred_at,
+        })
+
+    for rule in badge_rules:
+        threshold = rule['threshold']
+        if rule['metric'] == 'kind':
+            previous_value = previous_kind_counts.get(rule['kind'], 0)
+            current_value = current_kind_counts.get(rule['kind'], 0)
+        else:
+            previous_value = previous_events
+            current_value = current_events
+        if not previous_value < threshold <= current_value:
+            continue
+        rows.append({
+            'user_id': contribution.user_id,
+            'contribution': contribution,
+            'milestone_type': 'badge',
+            'milestone_code': rule['code'],
+            'milestone_title': rule['title'],
+            'threshold': threshold,
+            'previous_value': previous_value,
+            'reached_value': current_value,
+            'reached_at': contribution.occurred_at,
+        })
+    return rows
+
+
 def record_contribution(*, user, kind, points, title, description='', source_key, occurred_at=None):
-    'Create one contribution record; source_key makes the award idempotent.'
+    'Create one contribution record and its first milestone crossings idempotently.'
     defaults = {
         'user': user,
         'kind': kind,
@@ -102,10 +161,40 @@ def record_contribution(*, user, kind, points, title, description='', source_key
     }
     if occurred_at is not None:
         defaults['occurred_at'] = occurred_at
-    contribution, created = CommunityContribution.objects.get_or_create(
-        source_key=source_key,
-        defaults=defaults,
-    )
+
+    with transaction.atomic():
+        # Serialize writes for one user so two concurrent contributions cannot
+        # both observe the same pre-contribution totals.
+        User.objects.select_for_update().get(pk=user.pk)
+        contribution, created = CommunityContribution.objects.get_or_create(
+            source_key=source_key,
+            defaults=defaults,
+        )
+        if not created:
+            return contribution, created
+
+        previous_rows = CommunityContribution.objects.filter(user=user).exclude(
+            pk=contribution.pk,
+        ).values('kind').annotate(event_count=Count('id'), point_total=Sum('points'))
+        previous_kind_counts = {}
+        previous_points = 0
+        previous_events = 0
+        for row in previous_rows:
+            previous_kind_counts[row['kind']] = row['event_count']
+            previous_points += row['point_total'] or 0
+            previous_events += row['event_count']
+
+        milestone_rows = calculate_contribution_milestones(
+            contribution,
+            previous_points=previous_points,
+            previous_events=previous_events,
+            previous_kind_counts=previous_kind_counts,
+        )
+        if milestone_rows:
+            ContributionMilestoneEvent.objects.bulk_create(
+                ContributionMilestoneEvent(**row) for row in milestone_rows
+            )
+
     return contribution, created
 
 

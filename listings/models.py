@@ -1528,6 +1528,53 @@ class CommunityContribution(models.Model):
         return f'{self.user.username} · {self.title} · {self.points}分'
 
 
+class ContributionMilestoneEvent(models.Model):
+    """The first verified crossing of a contribution level or badge threshold."""
+
+    MILESTONE_TYPES = (
+        ('level', '积分等级'),
+        ('badge', '贡献徽章'),
+    )
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='contribution_milestones',
+        verbose_name='用户',
+    )
+    contribution = models.ForeignKey(
+        CommunityContribution, on_delete=models.CASCADE,
+        related_name='milestone_events', verbose_name='触发贡献',
+    )
+    milestone_type = models.CharField('里程碑类型', max_length=20, choices=MILESTONE_TYPES)
+    milestone_code = models.CharField('里程碑代码', max_length=60)
+    milestone_title = models.CharField('里程碑名称', max_length=120)
+    threshold = models.PositiveIntegerField('达成门槛')
+    previous_value = models.PositiveIntegerField('跨越前指标')
+    reached_value = models.PositiveIntegerField('跨越后指标')
+    reached_at = models.DateTimeField('达成时间')
+    backfilled = models.BooleanField('历史回填', default=False)
+    created_at = models.DateTimeField('记录时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '贡献里程碑事件'
+        verbose_name_plural = '贡献里程碑事件'
+        ordering = ['user_id', 'milestone_type', 'milestone_code']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'milestone_type', 'milestone_code'],
+                name='unique_user_contribution_milestone',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(previous_value__lt=models.F('threshold')) &
+                models.Q(reached_value__gte=models.F('threshold')),
+                name='contribution_milestone_threshold_crossed',
+            ),
+        ]
+        indexes = [models.Index(fields=['user', 'reached_at'])]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.milestone_title}'
+
+
 class MutualAidFeedback(models.Model):
     """A lightweight, owner-confirmed outcome for a non-order interaction."""
 

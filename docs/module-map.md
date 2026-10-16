@@ -133,7 +133,7 @@ campus_glimmer/
 | `lost_found_matching.py` | 失物招领规则匹配与可解释分数 | 读写 |
 | `opportunity_feed.py` | 面向当前用户的互助机会聚合与去重 | 读写 |
 | `circular_impact.py` | 隐私安全的校园循环影响力报告聚合 | 读写 |
-| `contributions.py` | 校园互助贡献积分与徽章的记录、分级与汇总（只累计自己的行为，不排名不公开） | 读写 |
+| `contributions.py` | 校园互助贡献积分、等级与徽章的幂等记录、首次达成里程碑和历史回填（只累计自己的行为，不排名不公开） | 读写 |
 | `contribution_tier_shape.py` | 积分等级与徽章的门槛形状：五级等级、七枚徽章、六种类型、幂等键业务域与重复分布（只报告，复用产品侧判定规则不本地复制） | 只报告 |
 | `recommendations.py` | 推荐结果和推荐反馈 | 读写 |
 | `recommendation_impression_quality.py` | 首页推荐曝光日志的字段形状、重复曝光、匿名流量、位置与时间异常，以及自然日覆盖（只报告，不推断写入失败或每屏缺失） | 只报告 |
@@ -173,10 +173,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（150 个）
+## 业务链路的测试模块（151 个）
 
 <details>
-<summary>业务链路测试清单（150 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（151 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -231,6 +231,8 @@ campus_glimmer/
 - **`test_circular_impact.py`**：循环影响力统计、趋势和隐私边界测试
 
 - **`test_contributions.py`**：贡献积分只累计自己的行为、不排名不公开、徽章分级
+
+- **`test_contribution_milestones.py`**：一次跨多级、类型徽章、总事件徽章、幂等写入、业务时间、历史回填、回滚与唯一约束
 
 - **`test_contribution_tier_shape.py`**：五级全列、四级跨度全列、空样本报 None 不报 0、复用产品侧判定规则、组合数不数用户数、只读性与周期回退
 

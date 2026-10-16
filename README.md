@@ -262,7 +262,7 @@ campus_glimmer/
 └── README.md
 ```
 
-`listings/` 内 132 个业务模块、150 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
+`listings/` 内 132 个业务模块、151 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
 
 ## 核心数据模型
 
@@ -270,7 +270,7 @@ campus_glimmer/
 
 
 <details>
-<summary>模型分组（51 行，按业务领域归组）</summary>
+<summary>模型分组（52 行，按业务领域归组）</summary>
 
 | 领域 | 主要模型 | 作用 |
 | --- | --- | --- |
@@ -293,6 +293,7 @@ campus_glimmer/
 | 需求撮合 | `DemandPost`、`DemandResponse` | 求购发布、商品响应、确认匹配和需求转化 |
 | 机会流曝光 | `OpportunityImpression`、`OpportunityDismissal` | 一次机会流渲染落一行的「被看见」，和一次「不再显示」落的「不看了」；两者口径对偶，忽略率的分母来自前者 |
 | 通知 | `Notification`、`NotificationPreference` | 站内提醒、未读状态、阅读时间、通知偏好、求购关联、到期提醒和幂等键；通知类型包含商品生命周期提醒，可单独关闭。偏好开关先报形状；关闭后仍出现的历史通知再按发生时间与偏好行最后写入拆开，只给可疑下界，不把整行 `updated_at` 当成逐开关关闭时间 |
+| 互助贡献 | `CommunityContribution`、`ContributionMilestoneEvent` | 可审计的贡献积分流水，以及等级与徽章首次达成的事件台账；里程碑只作运营事实，不触发额外通知或排名 |
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
