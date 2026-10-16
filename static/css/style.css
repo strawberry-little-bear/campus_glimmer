@@ -3336,3 +3336,13 @@ a { color: inherit; text-decoration: none; }
 .phase-preparation-pace-no_baseline, .phase-preparation-pace-observe { color: #577078; background: #e9f1f3; }
 .phase-preparation-note { margin-top: 6px; color: #87989d; font-size: .74rem; line-height: 1.6; }
 @media (max-width: 575px) { .phase-preparation-panel .phase-preparation-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .phase-preparation-panel .phase-preparation-summary > div { min-height: 72px; padding: 11px; } .phase-preparation-table td { white-space: normal; } }
+
+
+/* 学期批量发布模板 */
+.bulk-template-panel { margin-top: 14px; padding: 14px; border: 1px solid #dcebe1; border-radius: 15px; background: linear-gradient(145deg, #f7fcf8, #fff); }
+.bulk-template-list { display: grid; gap: 8px; margin-top: 12px; }
+.bulk-template-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border-radius: 11px; background: rgba(255,255,255,.82); }
+.bulk-template-row > a { flex: 0 0 auto; color: #315946; font-size: .82rem; font-weight: 750; text-decoration: none; }
+.bulk-template-row > a:hover { color: #1f6644; text-decoration: underline; }
+.bulk-template-row > span { flex: 1 1 auto; overflow: hidden; color: #7f938a; font-size: .72rem; white-space: nowrap; text-overflow: ellipsis; }
+@media (max-width: 575px) { .bulk-template-row { align-items: flex-start; flex-direction: column; } .bulk-template-row > span { white-space: normal; } }

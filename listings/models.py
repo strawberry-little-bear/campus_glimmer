@@ -160,6 +160,62 @@ class ItemQuerySet(models.QuerySet):
         )
 
 
+class SemesterListingTemplate(models.Model):
+    """A seller-private set of common settings for repeated bulk listings.
+
+    The expiry is stored as an offset rather than a calendar timestamp: the
+    same "three weeks before leaving campus" rhythm should survive into the
+    next term without silently bringing back a date that is already in the
+    past. Row content and import drafts deliberately do not live here.
+    """
+
+    seller = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='semester_listing_templates', verbose_name='卖家',
+    )
+    name = models.CharField('模板名称', max_length=30)
+    category = models.ForeignKey(
+        Category, on_delete=models.CASCADE,
+        related_name='semester_listing_templates', verbose_name='本批次分类',
+    )
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='semester_listing_templates', verbose_name='交易地点',
+    )
+    campaign = models.ForeignKey(
+        CampusCampaign, on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='semester_listing_templates', verbose_name='校园专题',
+    )
+    expiry_days = models.PositiveSmallIntegerField(
+        '相对展示天数', null=True, blank=True,
+        help_text='为空表示长期展示；套用时按当天重新计算展示截止时间。',
+    )
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    def __str__(self):
+        expiry = '长期展示' if self.expiry_days is None else f'{self.expiry_days} 天'
+        return f'{self.seller.username} · {self.name} · {expiry}'
+
+    class Meta:
+        verbose_name = '学期批量发布模板'
+        verbose_name_plural = '学期批量发布模板'
+        ordering = ['-updated_at', 'name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['seller', 'name'], name='unique_seller_semester_template_name',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(expiry_days__isnull=True)
+                | models.Q(expiry_days__gte=1, expiry_days__lte=365),
+                name='semester_template_expiry_days_range',
+            ),
+        ]
+        indexes = [models.Index(fields=['seller', '-updated_at'])]
+
+
 class Item(models.Model):
     STATUS_CHOICES = (
         ('available', '在售'),

@@ -115,6 +115,48 @@
                 </div>
                 {% endfor %}
             </div>
+
+            <div class="bulk-template-panel">
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div class="flex-grow-1">
+                        <label for="id_semester_template_name" class="form-label">模板名称</label>
+                        <input
+                            type="text"
+                            id="id_semester_template_name"
+                            name="semester_template_name"
+                            value="{{ semester_template_name }}"
+                            maxlength="30"
+                            class="form-control"
+                            placeholder="例如：开学教材周"
+                        >
+                    </div>
+                    <button
+                        type="submit"
+                        formaction="{% url 'bulk_listing_semester_template_save' %}"
+                        class="btn btn-outline-primary"
+                    ><i class="bi bi-bookmark-plus me-1"></i>保存为学期模板</button>
+                </div>
+                <div class="form-text">
+                    模板只保存这些共同设置；展示截止时间会换算成相对天数，下次套用时按当天重新计算。
+                </div>
+                {% if semester_templates %}
+                <div class="bulk-template-list">
+                    {% for template in semester_templates %}
+                    <div class="bulk-template-row">
+                        <a href="{% url 'bulk_create_items' %}?template={{ template.id }}">{{ template.name }}</a>
+                        <span>{{ template.category.name }}{% if template.location %} · {{ template.location.name }}{% endif %}{% if template.campaign %} · {{ template.campaign.title }}{% endif %} · {% if template.expiry_days is None %}长期展示{% else %}距今 {{ template.expiry_days }} 天{% endif %}</span>
+                        <button
+                            type="submit"
+                            form="semester-template-delete-form"
+                            formaction="{% url 'bulk_listing_semester_template_delete' template.id %}"
+                            class="btn btn-sm btn-outline-danger"
+                            aria-label="删除模板 {{ template.name }}"
+                        >删除</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
         </div>
 
         <div class="form-section">
@@ -196,6 +238,8 @@
         </div>
     </form>
 </div>
+
+<form id="semester-template-delete-form" method="post" action="{% url 'bulk_create_items' %}">{% csrf_token %}</form>
 {% endblock %}
 
 {% block extra_js %}

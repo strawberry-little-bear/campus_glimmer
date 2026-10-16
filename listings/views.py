@@ -6,6 +6,7 @@ from time import perf_counter
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from datetime import datetime, timedelta
+from math import ceil
 from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
@@ -119,7 +120,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -2531,6 +2532,30 @@ def _store_bulk_listing_image_queue(request, items):
     }
 
 
+BULK_LISTING_TEMPLATE_LIMIT = 10
+
+
+def _semester_template_initial(template):
+    """Turn a stored term rhythm into editable form values for today."""
+    initial = {
+        'category': template.category_id,
+        'location': None,
+        'campaign': None,
+    }
+    skipped = []
+    if template.location_id and template.location.is_active:
+        initial['location'] = template.location_id
+    elif template.location_id:
+        skipped.append('交易地点')
+    if template.campaign_id and template.campaign.is_active:
+        initial['campaign'] = template.campaign_id
+    elif template.campaign_id:
+        skipped.append('校园专题')
+    if template.expiry_days is not None:
+        initial['expires_at'] = timezone.now() + timedelta(days=template.expiry_days)
+    return initial, skipped
+
+
 def _render_bulk_create_page(
     request,
     *,
@@ -2541,6 +2566,7 @@ def _render_bulk_create_page(
     import_preview_count=0,
     import_token='',
     import_error_summary=None,
+    semester_template_name='',
 ):
     return render(request, 'listings/bulk_item_create.html', {
         'settings_form': settings_form if settings_form is not None else BulkListingSettingsForm(),
@@ -2552,6 +2578,10 @@ def _render_bulk_create_page(
         'import_preview_count': import_preview_count,
         'import_token': import_token,
         'import_error_summary': import_error_summary,
+        'semester_template_name': semester_template_name,
+        'semester_templates': SemesterListingTemplate.objects.filter(
+            seller=request.user,
+        ).select_related('category', 'location', 'campaign')[:BULK_LISTING_TEMPLATE_LIMIT],
     })
 
 
@@ -2609,7 +2639,24 @@ def bulk_create_items(request):
             import_token=import_token if preview_count else '',
         )
 
-    return _render_bulk_create_page(request)
+    settings_form = None
+    raw_template_id = request.GET.get('template', '').strip()
+    if raw_template_id.isdigit():
+        template = SemesterListingTemplate.objects.filter(
+            seller=request.user, pk=raw_template_id,
+        ).select_related('category', 'location', 'campaign').first()
+        if template is None:
+            messages.warning(request, '这份学期模板不存在或已删除。')
+        else:
+            initial, skipped_fields = _semester_template_initial(template)
+            settings_form = BulkListingSettingsForm(initial=initial)
+            if skipped_fields:
+                messages.warning(
+                    request,
+                    f'模板中的{"、".join(skipped_fields)}已停用，本次未回填；其他共同设置已带入。',
+                )
+
+    return _render_bulk_create_page(request, settings_form=settings_form)
 
 
 def _parse_bulk_listing_import(upload) -> BulkListingCsvParseResult:
@@ -2623,6 +2670,90 @@ def _parse_bulk_listing_import(upload) -> BulkListingCsvParseResult:
     if extension == '.xlsx':
         return parse_bulk_listing_xlsx(upload)
     return BulkListingCsvParseResult(file_error='仅支持 .csv 或 .xlsx 文件，请重新选择。')
+
+
+@login_required
+@require_POST
+def bulk_listing_semester_template_save(request):
+    """Save only the common settings; listing rows stay outside this write."""
+    template_name = request.POST.get('semester_template_name', '').strip()
+    settings_form = BulkListingSettingsForm(request.POST)
+
+    invalid_name = not template_name or len(template_name) > 30
+    if settings_form.is_valid():
+        expires_at = settings_form.cleaned_data.get('expires_at')
+        expiry_days = None
+        if expires_at is not None:
+            expiry_days = ceil((expires_at - timezone.now()).total_seconds() / 86400)
+            if expiry_days > 365:
+                settings_form.add_error(
+                    'expires_at', '学期模板最多保存当前时间后 365 天。'
+                )
+
+    if invalid_name or not settings_form.is_valid():
+        if invalid_name:
+            messages.warning(request, '请填写 1 到 30 个字符的模板名称。')
+        else:
+            messages.warning(request, '学期模板未保存：请先修正本批次共同设置。')
+        formset = BulkListingRowFormSet(request.POST) if 'form-TOTAL_FORMS' in request.POST else None
+        return _render_bulk_create_page(
+            request,
+            settings_form=settings_form,
+            formset=formset,
+            semester_template_name=template_name,
+        )
+
+    settings = settings_form.cleaned_data
+    with transaction.atomic():
+        seller_templates = SemesterListingTemplate.objects.select_for_update().filter(
+            seller=request.user,
+        )
+        template = seller_templates.filter(name=template_name).first()
+        created = template is None
+        if created and seller_templates.count() >= BULK_LISTING_TEMPLATE_LIMIT:
+            messages.warning(
+                request,
+                f'每名卖家最多保留 {BULK_LISTING_TEMPLATE_LIMIT} 个学期模板，请先删除一个或覆盖同名模板。',
+            )
+            formset = BulkListingRowFormSet(request.POST) if 'form-TOTAL_FORMS' in request.POST else None
+            return _render_bulk_create_page(
+                request,
+                settings_form=settings_form,
+                formset=formset,
+                semester_template_name=template_name,
+            )
+        if created:
+            template = SemesterListingTemplate.objects.create(
+                seller=request.user,
+                name=template_name,
+                category=settings['category'],
+                location=settings.get('location'),
+                campaign=settings.get('campaign'),
+                expiry_days=expiry_days,
+            )
+        else:
+            template.name = template_name
+            template.category = settings['category']
+            template.location = settings.get('location')
+            template.campaign = settings.get('campaign')
+            template.expiry_days = expiry_days
+            template.save()
+
+    action = '已创建' if created else '已覆盖'
+    messages.success(request, f'{action}学期模板“{template_name}”。')
+    return redirect(f"{reverse('bulk_create_items')}?template={template.id}")
+
+
+@login_required
+def bulk_listing_semester_template_delete(request, template_id):
+    if request.method != 'POST':
+        return redirect('bulk_create_items')
+    template = get_object_or_404(
+        SemesterListingTemplate, pk=template_id, seller=request.user,
+    )
+    template.delete()
+    messages.success(request, f'已删除学期模板“{template.name}”。')
+    return redirect('bulk_create_items')
 
 
 @login_required
