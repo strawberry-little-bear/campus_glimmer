@@ -14,7 +14,7 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
-from django.http import FileResponse, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.db import IntegrityError, transaction
 from django.db.models import Avg, Case, Count, ExpressionWrapper, F, FloatField, IntegerField, Q, Value, When
 from django.db.models.functions import Cast
@@ -27,6 +27,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
 from .bulk_listing_csv import BulkListingCsvParseResult, parse_bulk_listing_csv
+from .bulk_listing_template import build_bulk_listing_import_template
 from .bulk_listing_xlsx import parse_bulk_listing_xlsx
 from .dashboard_build_performance import build_dashboard_build_performance
 from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
@@ -2637,6 +2638,21 @@ def bulk_create_items_import(request):
 
     token = _store_bulk_listing_import(request, result.rows)
     return redirect('bulk_create_items_import_preview', token=token)
+
+
+@login_required
+@require_GET
+def bulk_listing_import_template(request, template_format):
+    """Generate the fixed-header CSV/XLSX template without storing a file."""
+    try:
+        template = build_bulk_listing_import_template(template_format)
+    except ValueError as exc:
+        raise Http404(str(exc)) from exc
+
+    response = HttpResponse(template.content, content_type=template.content_type)
+    response['Content-Disposition'] = f'attachment; filename="{template.filename}"'
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @login_required

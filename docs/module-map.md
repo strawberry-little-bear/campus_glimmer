@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，125 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，127 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（125 个）
+## listings/ 的业务模块（127 个）
 
 
 <details>
-<summary>业务模块清单（125 个，按业务链路归组）</summary>
+<summary>业务模块清单（127 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -43,6 +43,7 @@ campus_glimmer/
 | `first_viewed.py` | 商品第一次被看见之后的收藏与下单时延、来源与后续一步（只报告不改写） | 读写 |
 | `bulk_listing_csv.py` | 毕业季批量发布 CSV 的 UTF-8 解码、固定表头、行级校验与预览草稿 | 只读 |
 | `bulk_listing_xlsx.py` | 毕业季批量发布 XLSX 的第一工作表读取、安全单元格转换与共享行校验 | 只读 |
+| `bulk_listing_template.py` | 毕业季批量发布 CSV / XLSX 固定表头模板的内存生成，含 XLSX 交易方式下拉 | 只读 |
 | `forms.py` | 商品、搜索、通知偏好等表单 | 读写 |
 | `image_processing.py` | 商品图片上传硬限制、降采样、EXIF 方向、WebP 重编码、列表缩略图与大图预览生成、内在宽高读取 | 读写 |
 | `models.py` | 商品、地点、领取申请、订单、通知和机会忽略记录等核心模型 | 读写 |
@@ -88,6 +89,7 @@ campus_glimmer/
 | `notification_preference_usage.py` | 26 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
 | `notification_quiet_hours_shape.py` | 免打扰时段的形状：默认窗口采用率、同日 / 跨午夜、时长档、开始与结束小时、逐分钟叠加成小时曲线 | 只读 |
 | `notification_aggregation_quality.py` | 通知聚合的质量：被聚合过的行 vs 从没被聚合过的行，阅读率与处理时长对照（只报告） | 只报告 |
+| `report_priority.py` | 商品举报队列的优先处理、较高关注、常规处理分层与具名解释信号，只排序不写回事实 | 只报告 |
 | `report_resolution_quality.py` | 商品举报按原因的驳回率、审核意见填写情况、集中度、举报人分布与结果回访质量（只报告） | 只报告 |
 | `meeting_attendance.py` | 交付预约的实际到场情况：响应分档、迟到区间与缺席分母（只报告不改写） | 读写 |
 | `meeting_incident_quality.py` | 交付预约异常按类型的驳回率、处理意见填写情况、提交方向与提交人分布（只报告） | 只报告 |
@@ -166,10 +168,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（137 个）
+## 业务链路的测试模块（140 个）
 
 <details>
-<summary>业务链路测试清单（137 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（140 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
@@ -203,6 +205,7 @@ campus_glimmer/
 
 - **`test_bulk_listing_csv_import.py`**：批量发布 CSV 的 UTF-8 与表头校验、行级错误、预览不写入、token 失效与确认发布闭环
 - **`test_bulk_listing_xlsx_import.py`**：批量发布 XLSX 的数字转换、公式 / 日期 / 布尔拒绝、第一工作表边界、文件上限与确认发布闭环
+- **`test_bulk_listing_import_template.py`**：批量发布 CSV / XLSX 模板的固定表头、XLSX 下拉与冻结行、空模板回读、格式白名单与登录边界
 - **`test_bulk_listing_image_queue.py`**：批量发布后的短期补图队列、本人与展示状态过滤、完成进度、行内补图上传、整批校验失败不写入、session 覆盖与失效边界
 
 - **`test_campaign_analytics.py`**：专题周期内的新增、在售与转化漏斗
@@ -372,6 +375,7 @@ campus_glimmer/
 
 - **`test_relist_freshness.py`**：重新上架新鲜度欠账的判据、分母、额度与无互动测试
 
+- **`test_report_priority.py`**：举报优先级的具名信号、开放队列排序、管理页解释与治理工作台联动
 - **`test_report_resolution_quality.py`**：驳回率按 reason 拆、意见只读长度与空否、不把驳回率和处理人挂钩
 
 - **`test_report_outcome_feedback.py`**：我的举报、一次性三档回访、管理员只读、统计分母与页面 / 导出契约
