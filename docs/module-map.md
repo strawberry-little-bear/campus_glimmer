@@ -443,7 +443,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（86 篇，持续更新）</summary>
+<summary>设计文档清单（87 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -455,6 +455,7 @@ campus_glimmer/
 - **`availability-watch-design.md`**：等有货的人等了多久，只数仍挂着的关注，死信与白等分开
 
 - **`borrow-days-shape-design.md`**：默认借用天数的形状，borrow_days 第一次被数字读到
+- **`graduation-bulk-listing-design.md`**：毕业季批量发布第一刀，20 行全成或全不写，图片与导入另做
 
 - **`dispute-evidence-shape-design.md`**：证据文件的形状，attachment.name 与 size 第一次被数字读到
 
