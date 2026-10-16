@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（132 个）
+## listings/ 的业务模块（133 个）
 
 
 <details>
-<summary>业务模块清单（132 个，按业务链路归组）</summary>
+<summary>业务模块清单（133 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -135,6 +135,7 @@ campus_glimmer/
 | `circular_impact.py` | 隐私安全的校园循环影响力报告聚合 | 读写 |
 | `contributions.py` | 校园互助贡献积分、等级与徽章的幂等记录、首次达成里程碑和历史回填（只累计自己的行为，不排名不公开） | 读写 |
 | `contribution_tier_shape.py` | 积分等级与徽章的门槛形状：五级等级、七枚徽章、六种类型、幂等键业务域与重复分布（只报告，复用产品侧判定规则不本地复制） | 只报告 |
+| `contribution_milestone_coverage.py` | 里程碑事实与贡献流水的全量覆盖审计：缺失、多余、规则快照差异与事实一致性分开报（只报告不修复） | 只报告 |
 | `recommendations.py` | 推荐结果和推荐反馈 | 读写 |
 | `recommendation_impression_quality.py` | 首页推荐曝光日志的字段形状、重复曝光、匿名流量、位置与时间异常，以及自然日覆盖（只报告，不推断写入失败或每屏缺失） | 只报告 |
 | `recommendation_quality.py` | 首页推荐卡的反馈率、正负比例、改口数与理由拆分，以及按推荐当时的理由和分数档拆开的反馈率（只报告不改权重） | 只报告 |
@@ -173,10 +174,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（151 个）
+## 业务链路的测试模块（152 个）
 
 <details>
-<summary>业务链路测试清单（151 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（152 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -235,6 +236,8 @@ campus_glimmer/
 - **`test_contribution_milestones.py`**：一次跨多级、类型徽章、总事件徽章、幂等写入、业务时间、历史回填、回滚与唯一约束
 
 - **`test_contribution_tier_shape.py`**：五级全列、四级跨度全列、空样本报 None 不报 0、复用产品侧判定规则、组合数不数用户数、只读性与周期回退
+
+- **`test_contribution_milestone_coverage.py`**：稳定重放、缺失与多余分开、快照差异不进入事实不一致、触发贡献指向、空分母与页面 / CSV 只读契约
 
 - **`test_dashboard_build_performance.py`**：请求内构建耗时的空态、单样本、最近秩分位、重复 key、共享组装契约与页面 / CSV 导出一致性
 - **`test_dashboard_export_columns.py`**：面板与导出的层级与表头：子标题归节、表头可判别、摘要不冒充表头

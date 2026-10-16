@@ -116,6 +116,7 @@ from .contributions import (
 # 积分等级与徽章的门槛形状。它和 contributions.py 读同一套规则表，import 排在它
 # 后面，改表的人一眼能看出这里也跟着动。
 from .contribution_tier_shape import build_contribution_tier_shape
+from .contribution_milestone_coverage import build_contribution_milestone_coverage
 from .availability import notify_item_available
 from .borrow_days_shape import build_borrow_days_shape
 from .dispute_evidence_shape import build_dispute_evidence_shape
@@ -3165,6 +3166,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
         build_academic_term_snapshot_quality,
     ),
     ('contribution_tier_shape', '积分等级与徽章形状', build_contribution_tier_shape),
+    ('contribution_milestone_coverage', '贡献里程碑覆盖审计', build_contribution_milestone_coverage),
     ('borrow_days_shape', '默认借用天数形状', build_borrow_days_shape),
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
@@ -11286,6 +11288,76 @@ def operations_dashboard_export(request):
         '不重复 analytics 的周期口径：它报流量，本模块报结构',
     ])
 
+
+    milestone_coverage = dashboard['contribution_milestone_coverage']
+    milestone_audit = milestone_coverage['audit']
+    writer.writerow([])
+    writer.writerow(['贡献里程碑覆盖审计', '数值', '说明'])
+    writer.writerow([
+        '稳定重放应有', milestone_audit['expected_count'],
+        '按用户、occurred_at、id 稳定重放贡献流水，复用在线写入的计算函数',
+    ])
+    writer.writerow([
+        '台账已有', milestone_audit['actual_count'],
+        '唯一键是用户 + 里程碑类型 + 里程碑代码',
+    ])
+    writer.writerow([
+        '已覆盖', milestone_audit['covered_count'],
+        f"覆盖率 {milestone_audit['coverage_rate'] if milestone_audit['coverage_rate'] is not None else '—'}%；空分母报 —，不报 0",
+    ])
+    writer.writerow([
+        '回填 / 在线', f"{milestone_audit['backfilled_count']} / {milestone_audit['online_count']}",
+        '只区分写入来源，不解读运营效果',
+    ])
+    writer.writerow([
+        '缺失 / 多余', f"{milestone_audit['missing_count']} / {milestone_audit['extra_count']}",
+        '只聚合报数量，不输出用户或贡献明细',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['一、按里程碑类型看覆盖'])
+    writer.writerow(['类型', '应有', '已覆盖', '缺失', '多余', '覆盖率（%）', '回填', '在线'])
+    for row in milestone_coverage['type_rows']:
+        writer.writerow([
+            row['type_label'], row['expected'], row['covered'], row['missing'],
+            row['extra'],
+            '—' if row['coverage_rate'] is None else row['coverage_rate'],
+            row['backfilled'], row['online'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['二、按里程碑代码看差异'])
+    writer.writerow(['类型', '代码', '名称 / 快照', '应有', '已有', '缺失', '多余', '快照差异'])
+    for row in milestone_coverage['code_rows']:
+        writer.writerow([
+            row['type_label'], row['milestone_code'], row['title'],
+            row['expected'], row['actual'], row['missing'], row['extra'],
+            row['snapshot_diff'],
+        ])
+    writer.writerow([
+        '口径', '', '', '', '', '', '',
+        '快照差异表示事件保存的门槛或名称与当前规则不同，可能是规则演进痕迹，不自动改历史事件',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['三、事实一致性信号'])
+    writer.writerow(['信号', '行数', '读法'])
+    for label, key, note in (
+        ('触发贡献用户不一致', 'owner_mismatch_count', '事件用户与触发贡献用户不是同一人'),
+        ('触发贡献指向不一致', 'trigger_mismatch_count', '与稳定重放得到的触发贡献不是同一条记录'),
+        ('达成时间不一致', 'time_mismatch_count', '事件 reached_at 与贡献 occurred_at 必须相等'),
+        ('跨越前后指标不一致', 'value_mismatch_count', '与稳定重放得到的跨越前后指标对不上'),
+        ('跨越不等式失效', 'boundary_mismatch_count', '必须满足 previous < threshold <= reached'),
+    ):
+        writer.writerow([label, milestone_audit[key], note])
+    writer.writerow([
+        '事实不一致合计', milestone_audit['fact_mismatch_count'],
+        '按事件行去重，同一行多个信号只计一次；本面板只报告，不自动修复',
+    ])
+    writer.writerow([
+        '隐私边界', '',
+        '不输出用户、贡献标题、描述或幂等键；缺失与多余只聚合到类型或代码',
+    ])
 
     location_quality = dashboard['location_registry_quality']
     writer.writerow([])

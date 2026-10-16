@@ -7670,6 +7670,8 @@
 
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不在重新上架时重置 <code>last_refreshed_at</code>、不给重新上架记时间戳、不加字段、不改 <code>_level_for</code> 的等级判据、不自动帮卖家刷新</strong>。刻意没有推断「它是否重新上架过」——重新上架不留时间戳，而 <code>expires_at</code> 在未来这个信号新发布的商品也会有。这里报的是<strong>新鲜度欠账</strong>这个可观测量，不是重新上架这个不可观测量。</div>
     {% endif %}
+</section>
+
 <section class="content-card ops-panel mb-4 contribution-tier-shape-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Contribution tier shape</span><h2>积分等级与徽章的门槛形状</h2></div>
@@ -7826,6 +7828,87 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 contribution-milestone-coverage-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Contribution milestone coverage</span><h2>贡献里程碑覆盖审计</h2></div>
+        <span class="ops-panel-hint">稳定重放贡献流水，核对首次跨越事实有没有漏记或错记</span>
+    </div>
+    {% if not contribution_milestone_coverage.has_data %}
+    <div class="empty-inline">{{ contribution_milestone_coverage.summary }}</div>
+    {% endif %}
+    {% if contribution_milestone_coverage.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>稳定重放应有</span><strong>{{ contribution_milestone_coverage.audit.expected_count }}</strong><small>按用户、业务时间与记录 ID 重放</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>台账已覆盖</span><strong>{{ contribution_milestone_coverage.audit.covered_count }}</strong><small>{% if contribution_milestone_coverage.audit.coverage_rate is None %}无分母{% else %}{{ contribution_milestone_coverage.audit.coverage_rate }}%{% endif %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>回填 / 在线</span><strong>{{ contribution_milestone_coverage.audit.backfilled_count }} / {{ contribution_milestone_coverage.audit.online_count }}</strong><small>只区分写入来源</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>缺失 / 多余</span><strong>{{ contribution_milestone_coverage.audit.missing_count }} / {{ contribution_milestone_coverage.audit.extra_count }}</strong><small>只报数量，不输出用户</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>一、按里程碑类型看覆盖</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>类型</th><th>应有</th><th>已覆盖</th><th>缺失</th><th>多余</th><th>覆盖率</th><th>回填 / 在线</th></tr></thead>
+                <tbody>
+                    {% for row in contribution_milestone_coverage.type_rows %}
+                    <tr>
+                        <td>{{ row.type_label }}</td>
+                        <td>{{ row.expected }}</td>
+                        <td>{{ row.covered }}</td>
+                        <td>{% if row.missing %}<span class="badge text-bg-danger">缺 {{ row.missing }}</span>{% else %}0{% endif %}</td>
+                        <td>{% if row.extra %}<span class="badge text-bg-warning">多 {{ row.extra }}</span>{% else %}0{% endif %}</td>
+                        <td>{% if row.coverage_rate is None %}—{% else %}{{ row.coverage_rate }}%{% endif %}</td>
+                        <td>{{ row.backfilled }} / {{ row.online }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>二、按里程碑代码看差异</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>类型</th><th>代码</th><th>名称 / 快照</th><th>应有</th><th>已有</th><th>缺失</th><th>多余</th><th>快照差异</th></tr></thead>
+                <tbody>
+                    {% for row in contribution_milestone_coverage.code_rows %}
+                    <tr>
+                        <td>{{ row.type_label }}</td>
+                        <td><code>{{ row.milestone_code }}</code></td>
+                        <td>{{ row.title }}</td>
+                        <td>{{ row.expected }}</td>
+                        <td>{{ row.actual }}</td>
+                        <td>{% if row.missing %}<span class="badge text-bg-danger">{{ row.missing }}</span>{% else %}0{% endif %}</td>
+                        <td>{% if row.extra %}<span class="badge text-bg-warning">{{ row.extra }}</span>{% else %}0{% endif %}</td>
+                        <td>{% if row.snapshot_diff %}<span class="badge text-bg-secondary">{{ row.snapshot_diff }}</span>{% else %}0{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">「快照差异」表示事件保存的门槛或名称与当前规则不同。它可能是规则演进的正常痕迹，不能被自动改写；真正要优先核对的是缺失、多余和事实不一致。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>三、事实一致性信号</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>信号</th><th>行数</th><th>读法</th></tr></thead>
+                <tbody>
+                    <tr><td>触发贡献用户不一致</td><td>{{ contribution_milestone_coverage.audit.owner_mismatch_count }}</td><td class="ops-hint">事件用户与触发贡献用户不是同一人</td></tr>
+                    <tr><td>触发贡献指向不一致</td><td>{{ contribution_milestone_coverage.audit.trigger_mismatch_count }}</td><td class="ops-hint">与稳定重放得到的触发贡献不是同一条记录</td></tr>
+                    <tr><td>达成时间不一致</td><td>{{ contribution_milestone_coverage.audit.time_mismatch_count }}</td><td class="ops-hint">事件 reached_at 与贡献 occurred_at 必须相等</td></tr>
+                    <tr><td>跨越前后指标不一致</td><td>{{ contribution_milestone_coverage.audit.value_mismatch_count }}</td><td class="ops-hint">与稳定重放得到的 previous_value / reached_value 对不上</td></tr>
+                    <tr><td>跨越不等式失效</td><td>{{ contribution_milestone_coverage.audit.boundary_mismatch_count }}</td><td class="ops-hint">必须满足 previous &lt; threshold &lt;= reached</td></tr>
+                    <tr class="{% if contribution_milestone_coverage.audit.fact_mismatch_count %}ops-row-emphasis{% endif %}"><td>事实不一致合计</td><td>{{ contribution_milestone_coverage.audit.fact_mismatch_count }}</td><td class="ops-hint">按事件行去重，同一行多个信号只计一次</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本面板只读，不自动修复。</strong>不补事件、不删事件、不重跑迁移、不改贡献流水，也不触发通知、庆祝或额外积分。缺失、多余与不一致只聚合到类型或代码，不输出用户、贡献标题、描述或幂等键。统计周期选择器对本面板无效：台账覆盖是全量事实，跨周期达成节奏要等对账可信后再做。</div>
+    {% endif %}
 </section>
 
 <section class="content-card ops-panel mb-4 borrow-days-shape-panel">
