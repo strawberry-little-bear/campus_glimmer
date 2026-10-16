@@ -165,10 +165,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（135 个）
+## 业务链路的测试模块（136 个）
 
 <details>
-<summary>业务链路测试清单（135 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（136 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
@@ -201,6 +201,7 @@ campus_glimmer/
 - **`test_bulk_listing_create.py`**：毕业季批量发布的空行忽略、共同设置、交易方式默认值、20 行边界、事务一致性与匹配通知测试
 
 - **`test_bulk_listing_csv_import.py`**：批量发布 CSV 的 UTF-8 与表头校验、行级错误、预览不写入、token 失效与确认发布闭环
+- **`test_bulk_listing_image_queue.py`**：批量发布后的短期补图队列、本人与展示状态过滤、完成进度、session 覆盖与失效边界
 
 - **`test_campaign_analytics.py`**：专题周期内的新增、在售与转化漏斗
 

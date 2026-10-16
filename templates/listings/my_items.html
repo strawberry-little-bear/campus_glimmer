@@ -9,6 +9,9 @@
     <div class="d-flex flex-wrap gap-2">
         <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
         <a href="{% url 'bulk_create_items' %}" class="btn btn-outline-primary">批量发布</a>
+        {% if has_bulk_listing_image_queue %}
+        <a href="{% url 'bulk_listing_image_queue' %}" class="btn btn-outline-secondary">本批次补图</a>
+        {% endif %}
     </div>
 </div>
 

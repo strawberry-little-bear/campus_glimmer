@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} · 拾光校园{% endblock %}
+{% block content %}
+<div class="form-page-heading">
+    <a href="{% url 'my_items' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回我的商品</a>
+    <span class="eyebrow eyebrow-soft">批量发布收尾</span>
+    <h1>本批次补图</h1>
+    <p>先补齐最需要的照片；每一件都沿用原来的单件编辑与图片治理规则。</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-4">
+        <div class="content-card text-center">
+            <span class="text-muted small d-block">本批次发布</span>
+            <strong class="display-6">{{ published_count }}</strong>
+            <span class="text-muted small d-block">{{ published_at|date:"Y-m-d H:i" }}</span>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="content-card text-center">
+            <span class="text-muted small d-block">已有图片</span>
+            <strong class="display-6 text-success">{{ completed_count }}</strong>
+            <span class="text-muted small d-block">不需要继续处理 {{ not_actionable_count }} 件</span>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="content-card text-center">
+            <span class="text-muted small d-block">仍待补图</span>
+            <strong class="display-6 text-primary">{{ pending_count }}</strong>
+            <span class="text-muted small d-block">逐件进入原编辑页</span>
+        </div>
+    </div>
+</div>
+
+<div class="form-card content-card">
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h6 mb-0">补图进度</h2>
+            <span class="small text-muted">{{ completed_count }} / {{ actionable_count }}</span>
+        </div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress_percent }}">
+            <div class="progress-bar bg-success" style="width: {{ progress_percent }}%"></div>
+        </div>
+    </div>
+
+    {% if pending_items %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>商品</th>
+                    <th>交易口径</th>
+                    <th>状态</th>
+                    <th>发布时间</th>
+                    <th class="text-end">下一步</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in pending_items %}
+                <tr>
+                    <td><a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></td>
+                    <td>
+                        {% if item.trade_mode == 'free' %}免费赠送
+                        {% elif item.trade_mode == 'borrow' %}押金 ¥{{ item.deposit_amount }} · {{ item.borrow_days }} 天
+                        {% else %}¥{{ item.price }}{% endif %}
+                    </td>
+                    <td>{{ item.get_status_display }}</td>
+                    <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+                    <td class="text-end">
+                        <a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-primary">去补图</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state text-center py-5">
+        <i class="bi bi-check-circle-fill text-success display-6 d-block mb-3"></i>
+        <h2 class="h5">这一批不用再补了</h2>
+        <p class="text-muted mb-0">仍有展示价值且需要图片的商品已经处理完。</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

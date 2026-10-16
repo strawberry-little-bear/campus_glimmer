@@ -128,7 +128,7 @@ class BulkListingCsvImportTests(TestCase):
                 ['折叠桌', '搬离宿舍时自提', 'borrow', '', '20.00', '14', '轻微使用痕迹'],
             ], token=token))
 
-        self.assertRedirects(response, reverse('my_items'))
+        self.assertRedirects(response, reverse('bulk_listing_image_queue'))
         self.assertEqual(Item.objects.count(), 2)
         self.assertEqual(saved_mock.call_count, 2)
         self.assertEqual(demand_mock.call_count, 2)

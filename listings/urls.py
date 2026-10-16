@@ -65,6 +65,7 @@ urlpatterns = [
 path('item/<int:item_id>/refresh/', views.refresh_item, name='refresh_item'),
     path('my_items/bulk-campaign/', views.bulk_assign_campaign, name='bulk_assign_campaign'),
     path('my_items/bulk-create/', views.bulk_create_items, name='bulk_create_items'),
+    path('my_items/bulk-create/images/', views.bulk_listing_image_queue, name='bulk_listing_image_queue'),
     path('my_items/bulk-create/import/', views.bulk_create_items_import, name='bulk_create_items_import'),
     path('my_items/bulk-create/import/<str:token>/', views.bulk_create_items_import_preview, name='bulk_create_items_import_preview'),
     path('search/', views.search_items, name='search_items'),

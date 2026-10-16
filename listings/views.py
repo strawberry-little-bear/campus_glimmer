@@ -21,6 +21,7 @@ from django.db.models.functions import Cast
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
@@ -2454,6 +2455,7 @@ def refresh_item(request, item_id):
 
 BULK_LISTING_IMPORT_SESSION_KEY = 'listings:bulk_listing_csv_import'
 BULK_LISTING_IMPORT_MAX_ROWS = 20
+BULK_LISTING_IMAGE_QUEUE_SESSION_KEY = 'listings:bulk_listing_image_queue'
 
 
 def _load_bulk_listing_import(request, token=None):
@@ -2487,6 +2489,42 @@ def _clear_bulk_listing_import(request, token=None):
     state = _load_bulk_listing_import(request, token=token)
     if state is not None:
         del request.session[BULK_LISTING_IMPORT_SESSION_KEY]
+
+
+def _load_bulk_listing_image_queue(request):
+    """Return the current seller's short-lived image follow-up queue, if valid."""
+    state = request.session.get(BULK_LISTING_IMAGE_QUEUE_SESSION_KEY)
+    if not isinstance(state, dict):
+        return None
+
+    seller_id = state.get('seller_id')
+    item_ids = state.get('item_ids')
+    published_at = parse_datetime(state.get('published_at', ''))
+    if type(seller_id) is not int or seller_id != request.user.id:
+        return None
+    if not isinstance(item_ids, list) or not 1 <= len(item_ids) <= BULK_LISTING_IMPORT_MAX_ROWS:
+        return None
+    if not all(type(item_id) is int for item_id in item_ids):
+        return None
+    if published_at is None:
+        return None
+    if timezone.is_naive(published_at):
+        published_at = timezone.make_aware(published_at)
+
+    return {
+        'seller_id': seller_id,
+        'item_ids': item_ids,
+        'published_at': published_at,
+    }
+
+
+def _store_bulk_listing_image_queue(request, items):
+    """Keep only the latest batch in the session; this is not a persistent task."""
+    request.session[BULK_LISTING_IMAGE_QUEUE_SESSION_KEY] = {
+        'seller_id': request.user.id,
+        'item_ids': [item.id for item in items],
+        'published_at': timezone.now().isoformat(),
+    }
 
 
 def _render_bulk_create_page(
@@ -2551,8 +2589,9 @@ def bulk_create_items(request):
                 notify_demand_matches(item)
 
             _clear_bulk_listing_import(request, token=import_token)
+            _store_bulk_listing_image_queue(request, items)
             messages.success(request, f'已批量发布 {len(items)} 件商品。')
-            return redirect('my_items')
+            return redirect('bulk_listing_image_queue')
 
         import_state = _load_bulk_listing_import(request, token=import_token)
         preview_count = len(import_state['rows']) if import_state else 0
@@ -2600,6 +2639,57 @@ def bulk_create_items_import_preview(request, token):
     )
 
 @login_required
+def bulk_listing_image_queue(request):
+    """Show only the latest batch's still-actionable image follow-up work."""
+    queue = _load_bulk_listing_image_queue(request)
+    if queue is None:
+        messages.info(request, '本批次补图队列已失效，可以在“我的商品”里继续管理商品。')
+        return redirect('my_items')
+
+    now = timezone.now()
+    items = Item.objects.filter(
+        seller=request.user,
+        id__in=queue['item_ids'],
+    ).annotate(
+        image_count=Count('images'),
+    ).order_by('pk')
+    items_by_id = {item.id: item for item in items}
+
+    pending_items = []
+    completed_count = 0
+    not_actionable_count = 0
+    for item_id in queue['item_ids']:
+        item = items_by_id.get(item_id)
+        if item is None:
+            not_actionable_count += 1
+            continue
+        if item.image_count:
+            completed_count += 1
+            continue
+        still_displayable = item.status in ('available', 'reserved') and not (
+            item.expires_at and item.expires_at <= now
+        )
+        if still_displayable:
+            pending_items.append(item)
+        else:
+            not_actionable_count += 1
+
+    actionable_count = completed_count + len(pending_items)
+    progress_percent = int(completed_count * 100 / actionable_count) if actionable_count else 100
+    return render(request, 'listings/bulk_listing_images.html', {
+        'title': '本批次补图',
+        'published_at': timezone.localtime(queue['published_at']),
+        'published_count': len(queue['item_ids']),
+        'pending_items': pending_items,
+        'completed_count': completed_count,
+        'pending_count': len(pending_items),
+        'not_actionable_count': not_actionable_count,
+        'actionable_count': actionable_count,
+        'progress_percent': progress_percent,
+    })
+
+
+@login_required
 def my_items(request):
     items = Item.objects.filter(seller=request.user).select_related(
         'category', 'location', 'campaign',
@@ -2618,6 +2708,7 @@ def my_items(request):
         'items': items,
         'campaigns': campaigns,
         'lifecycle': lifecycle,
+        'has_bulk_listing_image_queue': _load_bulk_listing_image_queue(request) is not None,
         'title': '我的商品',
     })
 

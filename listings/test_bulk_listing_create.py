@@ -92,7 +92,7 @@ class BulkListingCreateTests(TestCase):
                           deposit='20.00', borrow_days='14'),
             ], expires_at=expires_at_text))
 
-        self.assertRedirects(response, reverse('my_items'))
+        self.assertRedirects(response, reverse('bulk_listing_image_queue'))
         items = Item.objects.order_by('title')
         self.assertEqual(items.count(), 3)
         self.assertEqual(
@@ -179,7 +179,7 @@ class BulkListingCreateTests(TestCase):
                 self._row(0, title='计算器', description='考试周可借', trade_mode='borrow'),
             ]))
 
-        self.assertRedirects(response, reverse('my_items'))
+        self.assertRedirects(response, reverse('bulk_listing_image_queue'))
         item = Item.objects.get(title='计算器')
         self.assertEqual(item.price, Decimal('0.00'))
         self.assertEqual(item.deposit_amount, Decimal('0.00'))
