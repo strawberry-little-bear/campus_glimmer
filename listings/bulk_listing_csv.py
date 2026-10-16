@@ -2,7 +2,8 @@
 
 The parser deliberately has no Django form or database dependency.  It turns an
 uploaded file into plain row-initial values and user-facing errors, so the view
-can decide whether to render a preview or report file/row problems.
+can decide whether to render a preview or report file/row problems.  Row
+validation is shared with the XLSX importer.
 """
 
 from __future__ import annotations
@@ -12,10 +13,15 @@ import io
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
-BULK_LISTING_CSV_HEADERS = ('标题', '描述', '交易方式', '价格', '押金', '借用天数', '成色')
+BULK_LISTING_IMPORT_HEADERS = ('标题', '描述', '交易方式', '价格', '押金', '借用天数', '成色')
+BULK_LISTING_IMPORT_MAX_ROWS = 20
+BULK_LISTING_IMPORT_MAX_ERRORS = 50
+
+# Historical public names kept for the first CSV-focused iteration.
+BULK_LISTING_CSV_HEADERS = BULK_LISTING_IMPORT_HEADERS
 BULK_LISTING_CSV_MAX_BYTES = 128 * 1024
-BULK_LISTING_CSV_MAX_ROWS = 20
-BULK_LISTING_CSV_MAX_ERRORS = 50
+BULK_LISTING_CSV_MAX_ROWS = BULK_LISTING_IMPORT_MAX_ROWS
+BULK_LISTING_CSV_MAX_ERRORS = BULK_LISTING_IMPORT_MAX_ERRORS
 
 TRADE_MODE_LABELS = {
     '出售': 'sale',
@@ -26,7 +32,7 @@ TRADE_MODE_LABELS = {
 
 @dataclass(frozen=True)
 class BulkListingCsvRowError:
-    """A row/column located CSV error that can be shown next to the upload form."""
+    """A row/column located import error that can be shown next to the upload form."""
 
     message: str
     row_number: int = 0
@@ -83,11 +89,14 @@ def _valid_decimal(value: str, *, allow_blank: bool) -> tuple[Decimal | None, st
     return number, None
 
 
-def _parse_row(row_number: int, values: dict[str, str]) -> tuple[dict[str, str] | None, list[BulkListingCsvRowError]]:
+def parse_bulk_listing_row(
+    row_number: int, values: dict[str, str]
+) -> tuple[dict[str, str] | None, list[BulkListingCsvRowError]]:
+    """Validate one format-neutral row; the final Django formset still revalidates."""
     errors: list[BulkListingCsvRowError] = []
 
     def add(column: str, message: str) -> None:
-        if len(errors) < BULK_LISTING_CSV_MAX_ERRORS:
+        if len(errors) < BULK_LISTING_IMPORT_MAX_ERRORS:
             errors.append(BulkListingCsvRowError(message, row_number, column))
 
     title = values['标题'].strip()
@@ -143,6 +152,26 @@ def _parse_row(row_number: int, values: dict[str, str]) -> tuple[dict[str, str] 
     return row, errors
 
 
+def finish_bulk_listing_result(
+    *,
+    rows: list[dict[str, str]],
+    row_errors: list[BulkListingCsvRowError],
+    file_error: str,
+    format_name: str,
+) -> BulkListingCsvParseResult:
+    """Apply the shared empty-row and bounded-error rules used by both importers."""
+    if not rows and not row_errors and not file_error:
+        row_errors.append(BulkListingCsvRowError(f'{format_name} 中至少需要一行非空商品。'))
+    if len(row_errors) > BULK_LISTING_IMPORT_MAX_ERRORS:
+        row_errors = row_errors[:BULK_LISTING_IMPORT_MAX_ERRORS - 1]
+        row_errors.append(BulkListingCsvRowError('错误过多，请先修正以上问题后再重新上传。'))
+    return BulkListingCsvParseResult(
+        rows=rows,
+        row_errors=row_errors,
+        file_error=file_error,
+    )
+
+
 def parse_bulk_listing_csv(file) -> BulkListingCsvParseResult:
     """Parse one uploaded CSV without touching the database."""
     if file is None:
@@ -166,8 +195,8 @@ def parse_bulk_listing_csv(file) -> BulkListingCsvParseResult:
 
     if header is None:
         return BulkListingCsvParseResult(file_error='CSV 文件为空。')
-    if tuple(cell.strip() for cell in header) != BULK_LISTING_CSV_HEADERS:
-        expected = ','.join(BULK_LISTING_CSV_HEADERS)
+    if tuple(cell.strip() for cell in header) != BULK_LISTING_IMPORT_HEADERS:
+        expected = ','.join(BULK_LISTING_IMPORT_HEADERS)
         return BulkListingCsvParseResult(
             file_error=f'CSV 表头必须固定为：{expected}',
         )
@@ -177,21 +206,21 @@ def parse_bulk_listing_csv(file) -> BulkListingCsvParseResult:
     file_error = ''
     try:
         for row_number, raw_row in enumerate(reader, start=2):
-            if len(raw_row) != len(BULK_LISTING_CSV_HEADERS):
+            if len(raw_row) != len(BULK_LISTING_IMPORT_HEADERS):
                 row_errors.append(BulkListingCsvRowError(
                     '这一行必须正好 7 列，请补齐或删除多余列。', row_number,
                 ))
                 continue
-            values = dict(zip(BULK_LISTING_CSV_HEADERS, raw_row))
+            values = dict(zip(BULK_LISTING_IMPORT_HEADERS, raw_row))
             if not any(value.strip() for value in values.values()):
                 continue
-            row, errors = _parse_row(row_number, values)
+            row, errors = parse_bulk_listing_row(row_number, values)
             if errors:
                 row_errors.extend(errors)
-            if len(rows) < BULK_LISTING_CSV_MAX_ROWS:
+            if len(rows) < BULK_LISTING_IMPORT_MAX_ROWS:
                 rows.append(row)
             elif not file_error:
-                file_error = f'CSV 商品行超过 {BULK_LISTING_CSV_MAX_ROWS} 行，请分批导入。'
+                file_error = f'CSV 商品行超过 {BULK_LISTING_IMPORT_MAX_ROWS} 行，请分批导入。'
     except csv.Error:
         return BulkListingCsvParseResult(
             rows=rows,
@@ -199,14 +228,9 @@ def parse_bulk_listing_csv(file) -> BulkListingCsvParseResult:
             file_error='CSV 格式无法解析，请检查引号是否成对。',
         )
 
-    if not rows and not row_errors and not file_error:
-        row_errors.append(BulkListingCsvRowError('CSV 中至少需要一行非空商品。'))
-    if len(row_errors) > BULK_LISTING_CSV_MAX_ERRORS:
-        row_errors = row_errors[:BULK_LISTING_CSV_MAX_ERRORS]
-        row_errors.append(BulkListingCsvRowError('错误过多，请先修正以上问题后再重新上传。'))
-
-    return BulkListingCsvParseResult(
+    return finish_bulk_listing_result(
         rows=rows,
         row_errors=row_errors,
         file_error=file_error,
+        format_name='CSV',
     )

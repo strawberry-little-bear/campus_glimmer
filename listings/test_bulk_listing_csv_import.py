@@ -49,7 +49,7 @@ class BulkListingCsvImportTests(TestCase):
         upload = SimpleUploadedFile(
             filename, content, content_type='text/csv',
         )
-        return self.client.post(self.import_url, {'csv_file': upload})
+        return self.client.post(self.import_url, {'import_file': upload})
 
     def _row_payload(self, rows, *, token=''):
         payload = {
@@ -103,7 +103,7 @@ class BulkListingCsvImportTests(TestCase):
         preview = self.client.get(preview_url)
 
         self.assertEqual(preview.status_code, 200)
-        self.assertContains(preview, 'CSV 已解析出 <strong>3</strong> 件商品')
+        self.assertContains(preview, '导入文件已解析出 <strong>3</strong> 件商品')
         self.assertContains(preview, '内容还没有发布')
         self.assertContains(preview, '数据结构教材')
         self.assertContains(preview, '免费赠送')
@@ -197,6 +197,6 @@ class BulkListingCsvImportTests(TestCase):
         followed = self.client.get(
             reverse('bulk_create_items_import_preview', args=['expired-token']), follow=True,
         )
-        self.assertContains(followed, '这份 CSV 预览已失效')
+        self.assertContains(followed, '这份导入预览已失效')
         self.assertEqual(valid.status_code, 200)
-        self.assertContains(valid, 'CSV 已解析出 <strong>1</strong> 件商品')
+        self.assertContains(valid, '导入文件已解析出 <strong>1</strong> 件商品')

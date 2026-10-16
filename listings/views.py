@@ -26,7 +26,8 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
-from .bulk_listing_csv import parse_bulk_listing_csv
+from .bulk_listing_csv import BulkListingCsvParseResult, parse_bulk_listing_csv
+from .bulk_listing_xlsx import parse_bulk_listing_xlsx
 from .dashboard_build_performance import build_dashboard_build_performance
 from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
 from .search_combo_shift import build_search_combo_shift
@@ -2459,7 +2460,7 @@ BULK_LISTING_IMAGE_QUEUE_SESSION_KEY = 'listings:bulk_listing_image_queue'
 
 
 def _load_bulk_listing_import(request, token=None):
-    """Return the current CSV draft after its shape and optional token check."""
+    """Return the current import draft after its shape and optional token check."""
     state = request.session.get(BULK_LISTING_IMPORT_SESSION_KEY)
     if not isinstance(state, dict):
         return None
@@ -2606,11 +2607,24 @@ def bulk_create_items(request):
     return _render_bulk_create_page(request)
 
 
+def _parse_bulk_listing_import(upload) -> BulkListingCsvParseResult:
+    """Dispatch one bounded upload to the CSV or XLSX parser by extension."""
+    if upload is None:
+        return BulkListingCsvParseResult(file_error='请选择要导入的 CSV / XLSX 文件。')
+
+    extension = Path(upload.name).suffix.lower()
+    if extension == '.csv':
+        return parse_bulk_listing_csv(upload)
+    if extension == '.xlsx':
+        return parse_bulk_listing_xlsx(upload)
+    return BulkListingCsvParseResult(file_error='仅支持 .csv 或 .xlsx 文件，请重新选择。')
+
+
 @login_required
 @require_POST
 def bulk_create_items_import(request):
-    """Parse a UTF-8 CSV draft; never create items or notifications here."""
-    result = parse_bulk_listing_csv(request.FILES.get('csv_file'))
+    """Parse a CSV or XLSX draft; never create items or notifications here."""
+    result = _parse_bulk_listing_import(request.FILES.get('import_file'))
     if not result.can_preview:
         formset = BulkListingRowFormSet(initial=result.rows) if result.rows else None
         return _render_bulk_create_page(
@@ -2629,7 +2643,7 @@ def bulk_create_items_import(request):
 def bulk_create_items_import_preview(request, token):
     state = _load_bulk_listing_import(request, token=token)
     if state is None:
-        messages.warning(request, '这份 CSV 预览已失效，请重新上传文件。')
+        messages.warning(request, '这份导入预览已失效，请重新上传文件。')
         return redirect('bulk_create_items')
     return _render_bulk_create_page(
         request,
