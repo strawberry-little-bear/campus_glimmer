@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.db import OperationalError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 
 
@@ -97,3 +97,48 @@ class ContainerHealthcheckTests(SimpleTestCase):
 
         self.assertIn('readiness check failed', stderr.getvalue())
         self.assertNotIn('secret connection failure', stderr.getvalue())
+
+
+class SecurityResponseBaselineTests(SimpleTestCase):
+    def assert_security_baseline(self, response):
+        self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')
+        self.assertEqual(response.headers['Referrer-Policy'], 'same-origin')
+        self.assertEqual(response.headers['Cross-Origin-Opener-Policy'], 'same-origin')
+        self.assertEqual(response.headers['X-Frame-Options'], 'DENY')
+
+    def test_security_baseline_applies_to_json_health_response(self):
+        response = self.client.get(reverse('health_check'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_security_baseline(response)
+        self.assertEqual(response.headers['Cache-Control'], 'no-store')
+        self.assertNotIn('Strict-Transport-Security', response.headers)
+
+    def test_hsts_is_explicit_and_complete_when_configured(self):
+        with override_settings(
+            SECURE_HSTS_SECONDS=31_536_000,
+            SECURE_HSTS_INCLUDE_SUBDOMAINS=True,
+            SECURE_HSTS_PRELOAD=True,
+        ):
+            response = self.client.get(reverse('health_check'), secure=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assert_security_baseline(response)
+        self.assertEqual(
+            response.headers['Strict-Transport-Security'],
+            'max-age=31536000; includeSubDomains; preload',
+        )
+
+    def test_cookies_are_not_readable_from_scripts(self):
+        from django.conf import settings
+
+        self.assertTrue(settings.SESSION_COOKIE_HTTPONLY)
+        self.assertTrue(settings.CSRF_COOKIE_HTTPONLY)
+
+    def test_invalid_hsts_values_fall_back_to_disabled(self):
+        from campus_glimmer.settings import _hsts_seconds
+
+        self.assertEqual(_hsts_seconds('not-a-number'), 0)
+        self.assertEqual(_hsts_seconds('-10'), 0)
+        with patch('campus_glimmer.settings.os.getenv', return_value='broken'):
+            self.assertEqual(_hsts_seconds(None), 0)

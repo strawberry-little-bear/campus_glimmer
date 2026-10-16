@@ -72,6 +72,7 @@
 | 图片处理 | Pillow | 商品图上传限制、EXIF 方向、WebP 重编码、响应式图片候选与展示宽高 |
 | Web 服务 | Django 开发服务器 / Gunicorn | Docker 镜像默认使用 Gunicorn |
 | 自动化 | GitHub Actions | 语法检查、Django 系统检查、迁移检查和测试 |
+| 浏览器安全 | Django Security Middleware | 默认启用 nosniff、Referrer/COOP、DENY 与 HttpOnly；HTTPS 部署可显式开启 HSTS |
 
 ## 功能速览
 
@@ -431,7 +432,8 @@ campus_glimmer/
 
 - 不要提交生产数据库、上传文件、密钥或包含用户隐私的日志。
 
-- 启用 HTTPS 后，应同步配置安全重定向、Session Cookie、CSRF Cookie 和可信来源。
+- 默认响应头已包含 `nosniff`、`Referrer-Policy: same-origin`、`Cross-Origin-Opener-Policy: same-origin`、`X-Frame-Options: DENY`，并保持会话与 CSRF Cookie `HttpOnly`。
+- 启用 HTTPS 后，应同步配置安全重定向、Session Cookie、CSRF Cookie 和可信来源；域名与回滚窗口确认后再设置 `DJANGO_SECURE_HSTS_SECONDS`。
 
 - 面向真实用户时，应进一步配置反向代理、限流、备份、日志和媒体文件访问策略。
 
@@ -531,6 +533,7 @@ Copy-Item .env.example .env
 | `DJANGO_SECURE_SSL_REDIRECT` | 是否强制跳转 HTTPS | `0` |
 | `DJANGO_SESSION_COOKIE_SECURE` | 是否只通过 HTTPS 发送会话 Cookie | `0` |
 | `DJANGO_CSRF_COOKIE_SECURE` | 是否只通过 HTTPS 发送 CSRF Cookie | `0` |
+| `DJANGO_SECURE_HSTS_SECONDS` | HTTPS 稳定后开启 HSTS 的 max-age 秒数；非法或负数会回落为 0 | `0` |
 | `DJANGO_EMAIL_BACKEND` | Django 邮件后端；本地可使用控制台后端，生产环境建议配置 SMTP | DEBUG 时为 console，生产环境为 SMTP |
 | `DJANGO_DEFAULT_FROM_EMAIL` | 校园认证邮件的发件地址 | `no-reply@campus-glimmer.local` |
 

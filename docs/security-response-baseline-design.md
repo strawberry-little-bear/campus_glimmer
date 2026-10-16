@@ -1,6 +1,7 @@
 # 安全响应头基线设计
 
-状态：设计稿（本轮先明确口径，不改代码）
+状态：已落地
+实现位置：`campus_glimmer/settings.py`、`campus_glimmer/tests.py`
 
 ## 1. 背景
 
@@ -41,3 +42,9 @@
 - 配置 HSTS 秒数后，响应包含 max-age、`includeSubDomains` 与 `preload`；
 - 健康检查原有的 `Cache-Control: no-store` 与错误脱敏行为不受影响；
 - 不新增表、字段、迁移或外部依赖。
+
+## 6. 落地记录
+
+- 通过 Django 原生 `SecurityMiddleware` 与 `XFrameOptionsMiddleware` 输出基础安全头，未引入新依赖。
+- 新增 `DJANGO_SECURE_HSTS_SECONDS`，非法值与负数均回落为 0；HSTS 开启后包含 `includeSubDomains` 与 `preload`。
+- 会话与 CSRF Cookie 保持 `HttpOnly`，健康检查响应由测试钉住安全头与 `no-store`。
