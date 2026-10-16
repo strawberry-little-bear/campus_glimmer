@@ -133,7 +133,13 @@ from .recommendation_impression_quality import build_recommendation_impression_q
 from .opportunity_impression_quality import build_opportunity_impression_quality
 from .recommendation_quality import build_recommendation_quality
 from .reputation import build_seller_reputation
-from .notifications import active_unread_notifications, actionable_unread_q, create_notification, quiet_hours_active
+from .notifications import (
+    NOTIFICATION_SNOOZE_DURATIONS, NOTIFICATION_SNOOZE_OPTIONS,
+    active_unread_notifications, actionable_unread_q,
+    bulk_snooze_notifications, create_notification,
+    normalize_notification_ids, quiet_hours_active,
+    restore_snoozed_notifications,
+)
 from .opportunity_dismissal_quality import build_opportunity_dismissal_quality
 from .favorite_collection_quality import build_favorite_collection_quality
 from .academic_phase_supply_preparation import build_academic_phase_supply_preparation
@@ -13213,11 +13219,7 @@ def notification_list(request):
         'notification_search_query': search_query,
         'notification_filter_query': filter_params.urlencode(),
         'notification_quiet_hours_active': quiet,
-        'notification_snooze_options': (
-            ('2h', '2 小时'),
-            ('24h', '24 小时'),
-            ('3d', '3 天'),
-        ),
+        'notification_snooze_options': NOTIFICATION_SNOOZE_OPTIONS,
     })
 
 
@@ -13386,12 +13388,9 @@ def snooze_notification(request, notification_id):
     )
     if request.method == 'POST' and not notification.is_read:
         duration_key = request.POST.get('duration', '24h').strip()
-        durations = {
-            '2h': (timedelta(hours=2), '2 小时'),
-            '24h': (timedelta(hours=24), '24 小时'),
-            '3d': (timedelta(days=3), '3 天'),
-        }
-        duration, label = durations.get(duration_key, durations['24h'])
+        duration, label = NOTIFICATION_SNOOZE_DURATIONS.get(
+            duration_key, NOTIFICATION_SNOOZE_DURATIONS['24h'],
+        )
         notification.snoozed_until = timezone.now() + duration
         notification.save(update_fields=['snoozed_until'])
         messages.success(request, f'这条通知已延后 {label}，到期后会重新计入未读提醒。')
@@ -13465,3 +13464,68 @@ def mark_selected_notifications_read(request):
     ):
         next_url = reverse('notification_list')
     return redirect(next_url)
+
+
+def _notification_action_redirect(request):
+    """Return to the current notification view without trusting external hosts."""
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = reverse('notification_list')
+    return redirect(next_url)
+
+
+@login_required
+@require_POST
+def snooze_selected_notifications(request):
+    raw_ids = request.POST.getlist('notification_ids')
+    notification_ids = normalize_notification_ids(raw_ids)
+    if not notification_ids:
+        messages.info(request, '请选择至少一条当前可处理的未读通知。')
+        return _notification_action_redirect(request)
+
+    duration_key = request.POST.get('duration', '').strip()
+    if duration_key not in NOTIFICATION_SNOOZE_DURATIONS:
+        messages.error(request, '延后时长无效，请重新选择。')
+        return _notification_action_redirect(request)
+
+    updated_count, skipped_count = bulk_snooze_notifications(
+        request.user,
+        notification_ids,
+        duration_key=duration_key,
+    )
+    label = NOTIFICATION_SNOOZE_DURATIONS[duration_key][1]
+    if updated_count:
+        message = f'已将 {updated_count} 条通知延后 {label}。'
+        if skipped_count:
+            message += f'另有 {skipped_count} 条因状态变化或不属于当前账号未处理。'
+        messages.success(request, message)
+    else:
+        messages.info(request, '所选通知已不再适合延后，请刷新后重试。')
+    return _notification_action_redirect(request)
+
+
+@login_required
+@require_POST
+def restore_selected_notifications(request):
+    raw_ids = request.POST.getlist('notification_ids')
+    notification_ids = normalize_notification_ids(raw_ids)
+    if not notification_ids:
+        messages.info(request, '请选择至少一条仍在延后中的未读通知。')
+        return _notification_action_redirect(request)
+
+    updated_count, skipped_count = restore_snoozed_notifications(
+        request.user,
+        notification_ids,
+    )
+    if updated_count:
+        message = f'已恢复 {updated_count} 条通知，它们重新计入未读提醒。'
+        if skipped_count:
+            message += f'另有 {skipped_count} 条因状态变化或不属于当前账号未处理。'
+        messages.success(request, message)
+    else:
+        messages.info(request, '所选通知已经恢复、被读或不再属于当前账号。')
+    return _notification_action_redirect(request)

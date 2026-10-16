@@ -354,7 +354,7 @@ campus_glimmer/
 
 - **`test_notification_response.py`**：通知处理时效与触达质量，阅读时刻可登记
 
-- **`test_notification_snooze.py`**：通知延后、未读统计和权限测试
+- **`test_notification_snooze.py`**：单条与批量延后/恢复、状态边界、未读统计和权限测试
 
 - **`test_notification_snooze_return.py`**：延后的通知到期后是否回来：把主动等待从处理时长里拆出来
 

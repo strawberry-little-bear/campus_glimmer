@@ -7,6 +7,18 @@ from django.utils import timezone
 from .models import Notification, NotificationPreference
 
 
+MAX_BULK_NOTIFICATION_IDS = 200
+NOTIFICATION_SNOOZE_DURATIONS = {
+    '2h': (timedelta(hours=2), '2 小时'),
+    '24h': (timedelta(hours=24), '24 小时'),
+    '3d': (timedelta(days=3), '3 天'),
+}
+NOTIFICATION_SNOOZE_OPTIONS = tuple(
+    (key, label)
+    for key, (_, label) in NOTIFICATION_SNOOZE_DURATIONS.items()
+)
+
+
 def actionable_unread_q(now=None):
     """Return the query condition for unread notifications that are due now."""
     now = now or timezone.now()
@@ -53,6 +65,58 @@ def snoozed_notifications(recipient, *, now=None):
         is_read=False,
         snoozed_until__gt=now,
     )
+
+
+def normalize_notification_ids(raw_ids, *, limit=MAX_BULK_NOTIFICATION_IDS):
+    """Return unique positive IDs in request order, capped for bounded updates."""
+    if limit <= 0:
+        return []
+    normalized = []
+    seen = set()
+    for raw_id in raw_ids:
+        try:
+            notification_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if notification_id <= 0 or notification_id in seen:
+            continue
+        seen.add(notification_id)
+        normalized.append(notification_id)
+        if len(normalized) >= limit:
+            break
+    return normalized
+
+
+def bulk_snooze_notifications(recipient, notification_ids, *, duration_key, now=None):
+    """Snooze only owned notifications that are currently actionable and unread.
+
+    The returned skipped count keeps the view honest about records the user saw
+    on the page but which changed state or no longer belong in that action.
+    """
+    duration = NOTIFICATION_SNOOZE_DURATIONS.get(duration_key)
+    if duration is None:
+        return 0, len(notification_ids)
+
+    now = now or timezone.now()
+    updated_count = Notification.objects.filter(
+        recipient=recipient,
+        id__in=notification_ids,
+    ).filter(actionable_unread_q(now)).update(
+        snoozed_until=now + duration[0],
+    )
+    return updated_count, max(len(notification_ids) - updated_count, 0)
+
+
+def restore_snoozed_notifications(recipient, notification_ids, *, now=None):
+    """Restore only owned unread notifications that are still snoozed."""
+    now = now or timezone.now()
+    updated_count = Notification.objects.filter(
+        recipient=recipient,
+        id__in=notification_ids,
+        is_read=False,
+        snoozed_until__gt=now,
+    ).update(snoozed_until=None)
+    return updated_count, max(len(notification_ids) - updated_count, 0)
 
 
 def create_notification(

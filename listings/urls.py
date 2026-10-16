@@ -104,4 +104,6 @@ path('item/<int:item_id>/refresh/', views.refresh_item, name='refresh_item'),
     path('notifications/<int:notification_id>/read/', views.mark_notification_read, name='mark_notification_read'),
     path('notifications/read-all/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
     path('notifications/read-selected/', views.mark_selected_notifications_read, name='mark_selected_notifications_read'),
+    path('notifications/snooze-selected/', views.snooze_selected_notifications, name='snooze_selected_notifications'),
+    path('notifications/restore-selected/', views.restore_selected_notifications, name='restore_selected_notifications'),
 ]

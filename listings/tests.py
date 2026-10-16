@@ -396,7 +396,7 @@ class ListingFlowTests(TestCase):
         response = self.client.get(reverse('notification_list'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '商品收到新的留言')
-        self.assertContains(response, '标记所选为已读')
+        self.assertContains(response, '标记已读')
         self.assertContains(response, '2 条未读')
         self.assertEqual(response.context['notification_unread_total'], 2)
         kind_options = {

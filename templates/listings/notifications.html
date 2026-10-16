@@ -79,15 +79,27 @@
 
     <div class="notification-filter-summary"><i class="bi bi-sliders me-1"></i>当前结果中有 {{ notification_filtered_unread_count }} 条未读{% if notification_total != notification_total_all %} · 已应用筛选条件{% endif %}</div>
 
+    {% if notification_status_filter != 'read' %}
     <div class="notification-bulk-toolbar">
         <label class="notification-select-all"><input type="checkbox" id="notification-select-all"><span>全选本页未读</span></label>
         <span class="notification-selection-count" id="notification-selection-count">已选择 0 条</span>
-        <button type="submit" form="notification-bulk-form" class="btn btn-outline-primary btn-sm" id="notification-bulk-submit" disabled><i class="bi bi-check2-square me-1"></i>标记所选为已读</button>
+        <div class="notification-bulk-actions">
+            {% if notification_status_filter == 'snoozed' %}
+            <button type="submit" form="notification-bulk-form" formaction="{% url 'restore_selected_notifications' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-arrow-counterclockwise me-1"></i>恢复所选</button>
+            {% else %}
+            <select class="form-select form-select-sm notification-bulk-duration" name="duration" form="notification-bulk-form" aria-label="批量延后时长">
+                {% for duration, label in notification_snooze_options %}<option value="{{ duration }}">{{ label }}</option>{% endfor %}
+            </select>
+            <button type="submit" form="notification-bulk-form" formaction="{% url 'snooze_selected_notifications' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-clock-history me-1"></i>延后所选</button>
+            {% endif %}
+            <button type="submit" form="notification-bulk-form" formaction="{% url 'mark_selected_notifications_read' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-check2-square me-1"></i>标记已读</button>
+        </div>
     </div>
     <form id="notification-bulk-form" method="post" action="{% url 'mark_selected_notifications_read' %}">
         {% csrf_token %}
         <input type="hidden" name="next" value="{% if notification_filter_query %}{% url 'notification_list' %}?{{ notification_filter_query }}{% else %}{% url 'notification_list' %}{% endif %}">
     </form>
+    {% endif %}
 
     <div class="notification-list">
         {% for notification in notifications %}
@@ -177,12 +189,12 @@ document.addEventListener('DOMContentLoaded', function () {
     const selectAll = document.getElementById('notification-select-all');
     const checkboxes = Array.from(document.querySelectorAll('.notification-checkbox'));
     const count = document.getElementById('notification-selection-count');
-    const submit = document.getElementById('notification-bulk-submit');
-    if (!selectAll || !count || !submit) return;
+    const submits = Array.from(document.querySelectorAll('.notification-bulk-submit'));
+    if (!selectAll || !count || submits.length === 0) return;
     const refreshSelection = function () {
         const selected = checkboxes.filter(function (checkbox) { return checkbox.checked; });
         count.textContent = '已选择 ' + selected.length + ' 条';
-        submit.disabled = selected.length === 0;
+        submits.forEach(function (button) { button.disabled = selected.length === 0; });
         selectAll.checked = checkboxes.length > 0 && selected.length === checkboxes.length;
         selectAll.indeterminate = selected.length > 0 && selected.length < checkboxes.length;
     };
