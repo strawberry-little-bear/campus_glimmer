@@ -27,6 +27,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
+from .campaign_phase_review import build_campaign_phase_review
 from .bulk_listing_csv import BulkListingCsvParseResult, parse_bulk_listing_csv
 from .bulk_listing_template import build_bulk_listing_import_template
 from .bulk_listing_xlsx import parse_bulk_listing_xlsx
@@ -3172,6 +3173,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
         'contribution_milestone_phase_rhythm', '贡献里程碑阶段节奏',
         build_contribution_milestone_phase_rhythm,
     ),
+    ('campaign_phase_review', '校园专题分阶段复盘', build_campaign_phase_review),
     ('borrow_days_shape', '默认借用天数形状', build_borrow_days_shape),
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
@@ -8869,6 +8871,69 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([
         '此处只报告，不调整专题的投放位置、不自动结束或续期任何专题。',
+    ])
+
+    phase_review = dashboard['campaign_phase_review']
+    phase_summary = phase_review['summary']
+    writer.writerow([])
+    writer.writerow(['校园专题分阶段复盘'])
+    writer.writerow(['导出口径'])
+    writer.writerow([
+        '已结束专题', phase_summary['closed_campaign_count'],
+        '本轮复盘', phase_summary['reviewed_campaign_count'],
+        '仍未结束', phase_summary['open_campaign_count'],
+        '阶段行', phase_summary['phase_count'],
+        '可判节奏专题', phase_summary['order_sample_campaign_count'],
+        '新增商品', phase_summary['new_items'],
+        '浏览', phase_summary['views'],
+        '收藏', phase_summary['favorites'],
+        '预约', phase_summary['orders'],
+        '完成交易', phase_summary['completed_orders'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '专题', '阶段', '开始时间', '结束时间', '阶段天数', '新增商品',
+        '浏览', '收藏', '预约', '完成交易', '浏览转预约（%）',
+        '预约完成率（%）', '预约/百天', '浏览/百天', '新增/百天',
+    ])
+    if not phase_review['rows']:
+        writer.writerow(['当前还没有已经结束、且时间范围有效的校园专题。'])
+    else:
+        for row in phase_review['rows']:
+            for phase in row['phases']:
+                writer.writerow([
+                    row['title'],
+                    phase['label'],
+                    timezone.localtime(phase['starts_at']).strftime('%Y-%m-%d %H:%M'),
+                    timezone.localtime(phase['ends_at']).strftime('%Y-%m-%d %H:%M'),
+                    phase['days'],
+                    phase['new_items'],
+                    phase['views'],
+                    phase['favorites'],
+                    phase['orders'],
+                    phase['completed_orders'],
+                    '' if phase['view_to_order_rate'] is None else phase['view_to_order_rate'],
+                    '' if phase['completion_rate'] is None else phase['completion_rate'],
+                    '' if phase['orders_per_100_days'] is None else phase['orders_per_100_days'],
+                    '' if phase['views_per_100_days'] is None else phase['views_per_100_days'],
+                    '' if phase['new_items_per_100_days'] is None else phase['new_items_per_100_days'],
+                ])
+    writer.writerow([])
+    writer.writerow(['跨专题总结'])
+    writer.writerow([phase_review['cross_campaign']['conclusion']])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([
+        '只读复盘：只统计 ends_at 已到期的专题，并取最近 8 个；每个专题按自己的 '
+        'starts_at 到 ends_at 均分前、中、后三段，边界采用半开区间。',
+    ])
+    writer.writerow([
+        '浏览按 BrowsingHistory.last_viewed_at，商品按 Item.created_at，收藏按 '
+        'Favorite.created_at，预约按 Order.created_at；完成交易只数当前状态为 completed 的订单。',
+    ])
+    writer.writerow([
+        '只有三段都至少有 3 次预约才判断预约高峰；样本不足或并列时只报数字。'
+        '这里不输出用户名、商品标题或订单号，也不调整专题、商品、曝光或通知。',
     ])
 
     calendar = dashboard['academic_calendar']

@@ -1833,6 +1833,51 @@
     {% else %}<div class="empty-inline mt-3">当前统计周期还没有专题行为数据。</div>{% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>曝光、收藏和预约按业务记录统计；转化率用于比较专题表现，不代表单个用户的完整行为路径。运营人员仍需结合商品质量和活动内容人工判断。</div>
 </section>
+<section class="content-card ops-panel mb-4 campaign-phase-review-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Campaign phase review</span><h2>校园专题分阶段复盘</h2></div>
+        <span class="ops-panel-hint">按每个已结束专题自己的起止时间均分前、中、后三段</span>
+    </div>
+    <div class="campaign-analytics-summary campaign-phase-summary">
+        <div><span>已结束专题</span><strong>{{ campaign_phase_review.summary.closed_campaign_count }}</strong><small>本轮复盘 {{ campaign_phase_review.summary.reviewed_campaign_count }} 个</small></div>
+        <div><span>阶段行</span><strong>{{ campaign_phase_review.summary.phase_count }}</strong><small>每个有效专题固定 3 段</small></div>
+        <div><span>预约 / 完成</span><strong>{{ campaign_phase_review.summary.orders }} / {{ campaign_phase_review.summary.completed_orders }}</strong><small>按阶段创建时间归段</small></div>
+        <div class="campaign-summary-warning"><span>可判节奏</span><strong>{{ campaign_phase_review.summary.order_sample_campaign_count }}</strong><small>三段均至少 3 次预约</small></div>
+    </div>
+    {% if campaign_phase_review.rows %}
+    <div class="ops-table-wrap mt-3">
+        <table class="table ops-table align-middle mb-0 campaign-phase-review-table">
+            <thead><tr><th>专题</th><th>阶段</th><th>区间</th><th>新增</th><th>浏览</th><th>收藏</th><th>预约</th><th>完成</th><th>浏览→预约</th><th>预约完成</th><th>预约/百天</th><th>判断</th></tr></thead>
+            <tbody>
+                {% for row in campaign_phase_review.rows %}
+                {% for phase in row.phases %}
+                <tr class="{% if phase.is_order_peak %}campaign-phase-peak{% endif %}">
+                    <td><strong>{{ row.title }}</strong><small class="d-block text-muted">{{ row.duration_days }} 天 · {{ row.rhythm_label }}</small></td>
+                    <td><span class="campaign-phase-label campaign-phase-label-{{ phase.key }}">{{ phase.label }}</span></td>
+                    <td><small class="text-muted">{{ phase.starts_at|date:'m-d H:i' }}—{{ phase.ends_at|date:'m-d H:i' }}<br>{{ phase.days }} 天</small></td>
+                    <td>{{ phase.new_items }}<small class="d-block text-muted">{{ phase.new_items_per_100_days }}/百天</small></td>
+                    <td>{{ phase.views }}<small class="d-block text-muted">{{ phase.views_per_100_days }}/百天</small></td>
+                    <td>{{ phase.favorites }}</td>
+                    <td><strong>{{ phase.orders }}</strong><small class="d-block text-muted">{{ phase.orders_per_100_days }}/百天</small></td>
+                    <td>{{ phase.completed_orders }}</td>
+                    <td>{% if phase.view_to_order_rate is not None %}{{ phase.view_to_order_rate }}%{% else %}—{% endif %}</td>
+                    <td>{% if phase.completion_rate is not None %}{{ phase.completion_rate }}%{% else %}—{% endif %}</td>
+                    <td>{{ phase.orders_per_100_days }}</td>
+                    <td>{% if phase.is_order_peak %}<span class="campaign-performance campaign-performance-{{ row.rhythm_tone }}">{{ row.rhythm_label }}</span>{% elif forloop.first %}<span class="campaign-performance campaign-performance-{{ row.rhythm_tone }}">{{ row.rhythm_label }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="campaign-phase-cross-summary mt-3"><i class="bi bi-bar-chart-line me-1"></i>{{ campaign_phase_review.cross_campaign.conclusion }}</div>
+    {% if campaign_phase_review.is_truncated %}<div class="empty-inline mt-2">只回看最近 {{ campaign_phase_review.limit }} 个已结束专题；更早的专题保留在历史数据里，不进入这次请求。</div>{% endif %}
+    {% if campaign_phase_review.summary.invalid_campaign_count %}<div class="empty-inline mt-2">有 {{ campaign_phase_review.summary.invalid_campaign_count }} 个专题的起止时间无效，未进入阶段统计。</div>{% endif %}
+    {% else %}
+    <div class="empty-inline mt-3">当前还没有已经结束、且起止时间有效的校园专题。进行中和未设置结束时间的专题会明确忽略。</div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>只读复盘：边界采用半开区间，结束时刻不计入；完成交易只数当前状态为 <code>completed</code> 的订单。三段中任一段预约不足 3 次时只报数字；这里不输出用户名、商品标题或订单号，也不调整专题、商品、曝光或通知。</div>
+</section>
 <section class="content-card ops-panel mb-4 academic-calendar-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Academic rhythm</span><h2>学期节律与交易高峰</h2></div>

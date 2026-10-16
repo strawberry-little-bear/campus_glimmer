@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（134 个）
+## listings/ 的业务模块（135 个）
 
 
 <details>
-<summary>业务模块清单（134 个，按业务链路归组）</summary>
+<summary>业务模块清单（135 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ campus_glimmer/
 | `location_maintenance_queue.py` | 校园地点维护信号的主优先级、重叠信号、行动提示与 20 条人工核对清单（只读分诊） | 只报告 |
 | `location_maintenance_decision_review.py` | 校园地点维护决策的首次留痕时间分布、复核比例与暂缓停留清单（不计算历史处理率） | 只报告 |
 | `campaign_analytics.py` | 校园专题周期、转化漏斗与运营提示 | 读写 |
-| `campaign_phase_review.py`（规划） | 已结束专题按自身窗口均分三段，复盘供给、曝光、收藏、预约与完成交易的节奏；薄样本不判方向 | 只报告 |
+| `campaign_phase_review.py` | 已结束专题按自身窗口均分三段，复盘供给、曝光、收藏、预约与完成交易的节奏；薄样本不判方向 | 只报告 |
 | `demand_matching.py` | 新发布的商品与活跃求购的匹配撮合 | 读写 |
 | `demand_radar.py` | 无结果搜索、求购与供给缺口的需求雷达 | 读写 |
 | `demand_radar_hit_trend.py` | 需求雷达命中率的跨周期变化：按份额判方向、上一周期没有的类别标成新出现 | 读写 |
@@ -176,10 +176,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（153 个）
+## 业务链路的测试模块（154 个）
 
 <details>
-<summary>业务链路测试清单（153 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（154 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -220,6 +220,8 @@ campus_glimmer/
 - **`test_bulk_listing_image_queue.py`**：批量发布后的短期补图队列、本人与展示状态过滤、完成进度、行内补图上传、整批校验失败不写入、session 覆盖与失效边界
 
 - **`test_campaign_analytics.py`**：专题周期内的新增、在售与转化漏斗
+
+- **`test_campaign_phase_review.py`**：已结束专题的阶段边界、业务时间归段、薄样本门槛、跨专题总结、隐私与只读页面 / CSV 契约
 
 - **`test_campaigns.py`**：校园专题、时间窗口和专题商品测试
 
