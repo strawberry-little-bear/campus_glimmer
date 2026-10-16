@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，131 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，132 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（131 个）
+## listings/ 的业务模块（132 个）
 
 
 <details>
-<summary>业务模块清单（131 个，按业务链路归组）</summary>
+<summary>业务模块清单（132 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -84,6 +84,7 @@ campus_glimmer/
 | `search_rejection_stats.py` | 否决记录的频率加权与门槛负向样本（只报告不改写） | 只报告 |
 | `search_rejection_recurrence.py` | 否决的回头与被推翻：只报回头次数与覆盖，撤销读不到就不编数 | 只报告 |
 | `search_impression_pairing_quality.py` | 搜索曝光与点击的配对质量：字段结构、可配对率、位置一致性、点击延迟与自然日覆盖（只报告，不改搜索写入与排序） | 只报告 |
+| `search_exposure_cold_start.py` | 新商品从发布到首次搜索曝光的冷启动队列：48 小时观察缓冲、首曝延迟、异常时间形状与分类对照（只报告） | 只报告 |
 | `search_position_quality.py` | 搜索结果位置分档点击率与排序效果（只报告不改权重） | 只报告 |
 | `search_combo_shift.py` | 筛选组合的跳周期交叉对比（分类×价格带，只报告） | 只报告 |
 | `notification_response.py` | 通知处理时效与触达质量统计 | 读写 |
@@ -172,10 +173,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（149 个）
+## 业务链路的测试模块（150 个）
 
 <details>
-<summary>业务链路测试清单（149 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（150 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -406,6 +407,8 @@ campus_glimmer/
 - **`test_search_combo_shift.py`**：组合占比口径、稀疏门槛、单周期组合与面板导出测试
 
 - **`test_search_impression_pairing_quality.py`**：周期边界、历史曝光可配对、字段缺失、零位置、延迟分档、自然日覆盖与看板导出隐私边界
+
+- **`test_search_exposure_cold_start.py`**：观察缓冲、首曝延迟边界、早于发布曝光、早于首曝点击、有点击无曝光、分类聚合、页面 20 条与 CSV 完整清单
 
 - **`test_search_position_quality.py`**：位置分档点击率、排序效果与深度诊断，含页面与导出呈现
 

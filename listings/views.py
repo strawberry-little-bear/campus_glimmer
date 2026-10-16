@@ -43,6 +43,7 @@ from .search_rejection_recurrence import build_search_rejection_recurrence
 from .search_rejection_stats import build_search_rejection_stats
 from .search_position_quality import build_search_position_quality
 from .search_impression_pairing_quality import build_search_impression_pairing_quality
+from .search_exposure_cold_start import build_search_exposure_cold_start
 from .demand_match_quality import build_demand_match_quality
 from .mutual_aid_feedback_notes import build_mutual_aid_feedback_notes
 from .demand_opportunity_followups import build_demand_opportunity_followups
@@ -3129,6 +3130,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
         'search_impression_pairing_quality', '搜索曝光与点击配对质量',
         build_search_impression_pairing_quality,
     ),
+    ('search_exposure_cold_start', '新商品搜索曝光冷启动', build_search_exposure_cold_start),
     ('handoff_code_usage', '交付码使用', build_handoff_code_usage),
     ('return_handshake', '归还双方握手', build_return_handshake),
     ('delivery_handshake', '当面交付握手', build_delivery_handshake),
@@ -8279,6 +8281,89 @@ def operations_dashboard_export(request):
     writer.writerow([])
     writer.writerow(['说明'])
     writer.writerow([search_pairing['note']])
+
+    cold_start = dashboard['search_exposure_cold_start']
+    writer.writerow([])
+    writer.writerow(['新商品搜索曝光冷启动'])
+    writer.writerow([])
+    writer.writerow(['口径说明'])
+    writer.writerow(['指标', '数值', '说明'])
+    for label, value, note in (
+        ('回看天数', cold_start['period_days'], '本地自然日边界；队列只收周期内发布的商品'),
+        (
+            '观察缓冲', f"{cold_start['observation_hours']} 小时",
+            '发布未满该时长的商品只登记为未成熟，不进入冷启动分母',
+        ),
+        (
+            '队列截止', timezone.localtime(cold_start['observation_cutoff']).strftime('%Y-%m-%d %H:%M'),
+            '避免刚发布商品因为还没有时间被搜索看见而误判为未曝光',
+        ),
+        ('商品状态', '全部状态', '商品即使很快售出，发布后是否被搜索看见仍是有效事实'),
+        ('首次曝光', '发布后最早一条 SearchImpression', '曝光早于发布只报形状，不生成负延迟'),
+        ('首次点击', '首次曝光后的最早 SearchClick', '点击早于首曝、有点击但无曝光都只报形状'),
+        ('搜索归因', '不要求', '本面板问是否出现在结果页，SearchImpression.search_query 为空仍算曝光'),
+    ):
+        writer.writerow([label, value, note])
+
+    writer.writerow([])
+    writer.writerow(['首曝延迟分桶'])
+    writer.writerow(['首曝延迟分桶', '商品数', '占比（%）'])
+    for row in cold_start['latency_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            row['share'] if row['share'] is not None else '—',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['分类冷启动'])
+    writer.writerow([
+        '分类冷启动', '队列商品', '已首曝', '未首曝', '首曝后点击',
+        '中位等待（小时）', 'P90 等待（小时）', '未首曝占比（%）',
+    ])
+    for row in cold_start['category_rows']:
+        writer.writerow([
+            row['category_name'], row['cohort_count'], row['exposed_count'],
+            row['unexposed_count'], row['clicked_after_exposure_count'],
+            row['median_first_exposure_hours'] if row['median_first_exposure_hours'] is not None else '—',
+            row['p90_first_exposure_hours'] if row['p90_first_exposure_hours'] is not None else '—',
+            row['unexposed_share'] if row['unexposed_share'] is not None else '—',
+        ])
+
+    writer.writerow([])
+    writer.writerow(['新商品清单'])
+    writer.writerow([
+        '新商品清单', '分类', '交易方式', '状态', '发布时间', '首曝时间',
+        '首曝延迟（小时）', '点击', '信号',
+    ])
+    for row in cold_start['item_rows']:
+        if row['has_click_after_exposure']:
+            click_state = '首曝后有点击'
+        elif not row['has_exposure'] and row['has_click']:
+            click_state = '有点击但无曝光'
+        elif row['early_click_count']:
+            click_state = '有早于首曝的点击'
+        else:
+            click_state = '无'
+        writer.writerow([
+            row['item_id'], row['category_name'], row['trade_mode_label'],
+            row['status_label'],
+            timezone.localtime(row['created_at']).strftime('%Y-%m-%d %H:%M'),
+            (
+                timezone.localtime(row['first_exposure_at']).strftime('%Y-%m-%d %H:%M')
+                if row['first_exposure_at'] else '—'
+            ),
+            f"{row['first_exposure_hours']:g}" if row['first_exposure_hours'] is not None else '—',
+            click_state, row['shape'],
+        ])
+    if not cold_start['item_rows']:
+        writer.writerow(['—', '暂无可观察商品', '', '', '', '', '', '', ''])
+
+    writer.writerow([])
+    writer.writerow(['边界说明'])
+    writer.writerow(['项目', '约束'])
+    writer.writerow(['只读', '不调搜索排序、不自动置顶、不给商品打分，也不触发卖家提醒'])
+    writer.writerow(['隐私', '不输出商品标题、描述、价格、卖家、搜索词或用户'])
+    writer.writerow(['解释', '未曝光可能来自低搜索量、分类冷门或学期节奏；先看形状，不做因果判断'])
 
     refresh_response = dashboard['refresh_response']
     writer.writerow([])

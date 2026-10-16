@@ -262,7 +262,7 @@ campus_glimmer/
 └── README.md
 ```
 
-`listings/` 内 131 个业务模块、149 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
+`listings/` 内 132 个业务模块、150 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
 
 ## 核心数据模型
 
@@ -270,7 +270,7 @@ campus_glimmer/
 
 
 <details>
-<summary>模型分组（50 行，按业务领域归组）</summary>
+<summary>模型分组（51 行，按业务领域归组）</summary>
 
 | 领域 | 主要模型 | 作用 |
 | --- | --- | --- |
@@ -296,11 +296,12 @@ campus_glimmer/
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
-| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 60 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
+| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 61 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
 | 需求跟进闭环 | `DemandOpportunityTask.created_at`、`DemandOpportunityTask.radar_key`、`DemandOpportunityTask.available_supply`、`SearchQuery.result_count` | 任务创建时间是唯一稳定的分界线（雷达行是滚动聚合，内容每次刷新都变），创建时的供给数用于判断「动作是否真的发生」，搜索结果数用于判断「需求是否被满足」 |
 | 同义词候选 | `SearchQuery.user_id`、`SearchQuery.query`、`SearchQuery.result_count`、`SearchQuery.created_at`、`SearchSynonym.keyword` / `synonym` / `is_active` | 同一次会话内相邻两次搜索的改口证据；已启用同义词的两个方向都参与去重，停用同义词不屏蔽候选 |
 | 同义词效果回流 | 不新增表，读 `SearchSynonym.created_at` + `SearchQuery` | 确认时间是唯一稳定的分界线；搜索词记录的是学生原本输入的那一串（扩展只发生在查询内部），按扩展词统计会成为自己和自己比、永远报成功 |
 | 搜索曝光与点击配对质量 | 不新增表，只读 `SearchQuery` + `SearchImpression` + `SearchClick` | 周期内点击可在曝光表上线以来寻找同一搜索、同一商品且不晚于点击的曝光；缺搜索记录、零位置、无法配对、点击早于曝光、未来时间各自单列，延迟从最早可配对曝光算起；不比较用户、不判成因、不输出搜索词、用户名或商品标题 |
+| 新商品搜索曝光冷启动 | 不新增表，读 `Item` + `SearchImpression` + `SearchClick` | 以周期内发布且已满 48 小时观察期的商品为队列，看首曝延迟、仍未曝光、首曝后点击和分类差异；只读，不调排序、不置顶、不打商品分 |
 | 筛选组合对比 | 不新增表，读 `SearchQuery.category_id` + `min_price` / `max_price` | 组合占比的分母是同一个分类内部的搜索次数，因此分类总量上涨不会把每个组合都推成上升；价格带判据与单维表同一套，闭带需要两个界都设、开区间顶带只需下限 |
 | 候选门槛建议 | 不新增表，读 `SearchSynonym` + `SearchQuery` | 命中率衡量的是「候选池 + 人工确认」整条链而非候选池本身，因此只作为调整门槛的参考；词对大面积配错时判定为配对问题而非阈值问题，收紧门槛只会把错误藏起来 |
 | 候选否决分析 | 新增表 `SearchSynonymRejection` + 读 `SearchQuery` | 否决记录本身落库（否决候选不落库），归一化词对与排查器同一套，因此「充电宝」和「充电宝 」落到同一行；出现次数由同一份改口日志反汇，否决按次数加权而不按否决条数 |

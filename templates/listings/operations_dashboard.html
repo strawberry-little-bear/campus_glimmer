@@ -7143,6 +7143,89 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读 <code>SearchImpression</code> 与 <code>SearchClick</code>：不加请求 ID、不回填历史点击、不改搜索页写入、不修改位置质量面板的过滤规则，也不输出搜索词、用户名或商品标题。</div>
 </section>
 
+<section class="content-card ops-panel mb-4 search-exposure-cold-start-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Search cold start</span><h2>新商品搜索曝光冷启动</h2></div>
+        <span class="ops-panel-hint">先问新商品有没有进入结果页</span>
+    </div>
+    {% if not search_exposure_cold_start.has_data %}
+    <div class="empty-inline">统计周期内还没有新发布商品；这里不会为空历史发明 0% 的冷启动率。</div>
+    {% else %}
+    <p class="text-muted small mb-3"><i class="bi bi-hourglass-split me-1"></i>{{ search_exposure_cold_start.summary }}</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>可观察队列</span><strong>{{ search_exposure_cold_start.metrics.cohort_item_count }}</strong><small>发布已满 {{ search_exposure_cold_start.observation_hours }} 小时</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已首曝</span><strong>{{ search_exposure_cold_start.metrics.exposed_item_count }}</strong><small>发布后进入过搜索结果页</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>观察 {{ search_exposure_cold_start.observation_hours }} 小时后未曝光</span><strong>{{ search_exposure_cold_start.metrics.unexposed_item_count }}</strong><small>只报规模，不自动归因</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>首曝中位等待</span><strong>{% if search_exposure_cold_start.metrics.median_first_exposure_hours is None %}&mdash;{% else %}{{ search_exposure_cold_start.metrics.median_first_exposure_hours }} 小时{% endif %}</strong><small>未成熟商品不进入分母</small></div></div>
+    </div>
+
+    <h3 class="h6 mb-3">首曝延迟分桶</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>首曝延迟分桶</th><th>商品数</th><th>占比</th></tr></thead>
+            <tbody>
+                {% for row in search_exposure_cold_start.latency_rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.count }}</td>
+                    <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <h3 class="h6 mb-3 mt-4">分类冷启动</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>分类冷启动</th><th>队列商品</th><th>已首曝</th><th>未首曝</th><th>首曝后点击</th><th>中位等待</th><th>P90 等待</th><th>未首曝占比</th></tr></thead>
+            <tbody>
+                {% for row in search_exposure_cold_start.category_rows %}
+                <tr>
+                    <td><strong>{{ row.category_name }}</strong></td>
+                    <td>{{ row.cohort_count }}</td>
+                    <td>{{ row.exposed_count }}</td>
+                    <td>{{ row.unexposed_count }}</td>
+                    <td>{{ row.clicked_after_exposure_count }}</td>
+                    <td>{% if row.median_first_exposure_hours is None %}&mdash;{% else %}{{ row.median_first_exposure_hours }} 小时{% endif %}</td>
+                    <td>{% if row.p90_first_exposure_hours is None %}&mdash;{% else %}{{ row.p90_first_exposure_hours }} 小时{% endif %}</td>
+                    <td>{% if row.unexposed_share is None %}&mdash;{% else %}{{ row.unexposed_share }}%{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="text-muted">暂无可观察商品。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <h3 class="h6 mb-3 mt-4">新商品清单</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>新商品清单</th><th>分类</th><th>交易方式</th><th>状态</th><th>发布时间</th><th>首曝时间</th><th>首曝延迟</th><th>点击</th><th>信号</th></tr></thead>
+            <tbody>
+                {% for row in search_exposure_cold_start.item_page_rows %}
+                <tr>
+                    <td>#{{ row.item_id }}</td>
+                    <td>{{ row.category_name }}</td>
+                    <td>{{ row.trade_mode_label }}</td>
+                    <td>{{ row.status_label }}</td>
+                    <td>{{ row.created_at|date:'Y-m-d H:i' }}</td>
+                    <td>{% if row.first_exposure_at %}{{ row.first_exposure_at|date:'Y-m-d H:i' }}{% else %}&mdash;{% endif %}</td>
+                    <td>{% if row.first_exposure_hours is None %}&mdash;{% else %}{{ row.first_exposure_hours }} 小时{% endif %}</td>
+                    <td>{% if row.has_click_after_exposure %}首曝后有点击{% elif not row.has_exposure and row.has_click %}有点击但无曝光{% elif row.early_click_count %}有早于首曝的点击{% else %}无{% endif %}</td>
+                    <td>{{ row.shape }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="9" class="text-muted">周期内有新商品，但都未满 {{ search_exposure_cold_start.observation_hours }} 小时；这里只登记，不判断冷启动。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="text-muted small mb-0 mt-2"><i class="bi bi-list-ul me-1"></i>页面最多显示 {{ search_exposure_cold_start.item_row_limit }} 条，完整清单见 CSV 导出（{{ search_exposure_cold_start.item_total_count }} 条）。</p>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>{{ search_exposure_cold_start.boundary_note }}</div>
+</section>
+
 <section class="content-card ops-panel mb-4 refresh-response-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Refresh response</span><h2>商品刷新后的搜索回响</h2></div>
