@@ -136,6 +136,7 @@ campus_glimmer/
 | `contributions.py` | 校园互助贡献积分、等级与徽章的幂等记录、首次达成里程碑和历史回填（只累计自己的行为，不排名不公开） | 读写 |
 | `contribution_tier_shape.py` | 积分等级与徽章的门槛形状：五级等级、七枚徽章、六种类型、幂等键业务域与重复分布（只报告，复用产品侧判定规则不本地复制） | 只报告 |
 | `contribution_milestone_coverage.py` | 里程碑事实与贡献流水的全量覆盖审计：缺失、多余、规则快照差异与事实一致性分开报（只报告不修复） | 只报告 |
+| `contribution_milestone_phase_rhythm.py`（规划） | 贡献里程碑在同类学期同一已结束阶段的达成节奏对照：先被覆盖审计阻塞，再用每百天强度比较，薄样本不判方向 | 只报告 |
 | `recommendations.py` | 推荐结果和推荐反馈 | 读写 |
 | `recommendation_impression_quality.py` | 首页推荐曝光日志的字段形状、重复曝光、匿名流量、位置与时间异常，以及自然日覆盖（只报告，不推断写入失败或每屏缺失） | 只报告 |
 | `recommendation_quality.py` | 首页推荐卡的反馈率、正负比例、改口数与理由拆分，以及按推荐当时的理由和分数档拆开的反馈率（只报告不改权重） | 只报告 |
