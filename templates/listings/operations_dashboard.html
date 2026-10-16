@@ -7907,8 +7907,71 @@
         </div>
     </div>
 
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本面板只读，不自动修复。</strong>不补事件、不删事件、不重跑迁移、不改贡献流水，也不触发通知、庆祝或额外积分。缺失、多余与不一致只聚合到类型或代码，不输出用户、贡献标题、描述或幂等键。统计周期选择器对本面板无效：台账覆盖是全量事实，跨周期达成节奏要等对账可信后再做。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本面板只读，不自动修复。</strong>不补事件、不删事件、不重跑迁移、不改贡献流水，也不触发通知、庆祝或额外积分。缺失、多余与不一致只聚合到类型或代码，不输出用户、贡献标题、描述或幂等键。统计周期选择器对本面板无效：台账覆盖是全量事实；相邻的阶段节奏面板会先读取这里的审计门槛。</div>
     {% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4 contribution-milestone-phase-rhythm-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Contribution milestone phase rhythm</span><h2>贡献里程碑阶段节奏</h2></div>
+        <span class="ops-panel-hint">同类学期的同一已结束阶段才互相对照</span>
+    </div>
+    <div class="empty-inline">{{ contribution_milestone_phase_rhythm.summary }}</div>
+
+    <div class="row g-3 mt-0 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>覆盖审计门槛</span><strong>{% if contribution_milestone_phase_rhythm.coverage_gate.is_clean %}通过{% else %}阻塞{% endif %}</strong><small>规则快照差异不阻塞</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>可比 / 薄样本 / 等待</span><strong>{{ contribution_milestone_phase_rhythm.compared_count }} / {{ contribution_milestone_phase_rhythm.thin_sample_count }} / {{ contribution_milestone_phase_rhythm.waiting_count }}</strong><small>薄样本不判方向</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>固定回看</span><strong>{{ contribution_milestone_phase_rhythm.lookback_days }} 天</strong><small>容纳同类学期最近两次</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未进入对照</span><strong>{{ contribution_milestone_phase_rhythm.no_term_event_count }} / {{ contribution_milestone_phase_rhythm.unassigned_phase_event_count }} / {{ contribution_milestone_phase_rhythm.ongoing_phase_event_count }}</strong><small>无学期 / 未划分 / 进行中</small></div></div>
+    </div>
+
+    {% if not contribution_milestone_phase_rhythm.coverage_gate.is_clean %}
+    <div class="ops-panel-block">
+        <h3>一、先处理审计阻塞</h3>
+        <ul class="small text-muted mb-0">
+            {% for blocker in contribution_milestone_phase_rhythm.coverage_gate.blockers %}
+            <li>{{ blocker }}</li>
+            {% endfor %}
+        </ul>
+        <p class="small text-muted mt-2 mb-0">这里不把台账缺口读成用户行为变化；先回到上一张面板核对事实。</p>
+    </div>
+    {% endif %}
+
+    {% if contribution_milestone_phase_rhythm.groups %}
+    <div class="ops-panel-block">
+        <h3>一、最新两个同类学期</h3>
+        {% for group in contribution_milestone_phase_rhythm.groups %}
+        <div class="mb-3">
+            <h4 class="small fw-semibold">{{ group.kind_label }} · {{ group.phase_label }}</h4>
+            <p class="small text-muted">{{ group.latest_term.name }}（{{ group.latest_term.starts_on|date:"Y-m-d" }} 开学）{% if group.previous_term %} 对照 {{ group.previous_term.name }}（{{ group.previous_term.starts_on|date:"Y-m-d" }} 开学）{% else %}还找不到同类上一学期{% endif %}</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>里程碑</th><th>最新事件</th><th>最新天数</th><th>最新每百天</th><th>上一事件</th><th>上一天数</th><th>上一每百天</th><th>事件差</th><th>强度差</th><th>方向</th><th>状态</th></tr></thead>
+                    <tbody>
+                        {% for row in group.rows %}
+                        <tr class="{% if row.status == 'compared' %}ops-row-emphasis{% endif %}">
+                            <td>{{ row.latest.type_label }} · {{ row.latest.milestone_title }}</td>
+                            <td>{{ row.latest.event_count }}</td>
+                            <td>{{ row.latest.day_count }}</td>
+                            <td>{{ row.latest.events_per_100_days }}</td>
+                            <td>{% if row.previous %}{{ row.previous.event_count }}{% else %}—{% endif %}</td>
+                            <td>{% if row.previous %}{{ row.previous.day_count }}{% else %}—{% endif %}</td>
+                            <td>{% if row.previous %}{{ row.previous.events_per_100_days }}{% else %}—{% endif %}</td>
+                            <td>{% if row.event_count_delta is None %}—{% else %}{{ row.event_count_delta }}{% endif %}</td>
+                            <td>{% if row.intensity_delta is None %}—{% else %}{{ row.intensity_delta }}{% endif %}</td>
+                            <td>{% if row.direction == 'faster' %}<span class="badge text-bg-success">{{ row.direction_label }}</span>{% elif row.direction == 'slower' %}<span class="badge text-bg-warning">{{ row.direction_label }}</span>{% elif row.direction == 'flat' %}<span class="badge text-bg-secondary">{{ row.direction_label }}</span>{% else %}<span class="badge text-bg-light text-muted">—</span>{% endif %}</td>
+                            <td class="ops-hint">{{ row.status_label }}；{{ row.note }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本面板只报告节奏，不改变任何规则。</strong>方向只按每百天事件强度判断，不用裸事件数；两侧都达到 {{ contribution_milestone_phase_rhythm.min_events_per_cell }} 条才输出方向。无学期、未划分阶段、进行中和对照外事件单独计数，不摊派。不输出用户、贡献标题、描述、幂等键或触发贡献明细，不发通知、不改等级、不改徽章、不调整积分规则。</div>
 </section>
 
 <section class="content-card ops-panel mb-4 borrow-days-shape-panel">

@@ -117,6 +117,7 @@ from .contributions import (
 # 后面，改表的人一眼能看出这里也跟着动。
 from .contribution_tier_shape import build_contribution_tier_shape
 from .contribution_milestone_coverage import build_contribution_milestone_coverage
+from .contribution_milestone_phase_rhythm import build_contribution_milestone_phase_rhythm
 from .availability import notify_item_available
 from .borrow_days_shape import build_borrow_days_shape
 from .dispute_evidence_shape import build_dispute_evidence_shape
@@ -3167,6 +3168,10 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ),
     ('contribution_tier_shape', '积分等级与徽章形状', build_contribution_tier_shape),
     ('contribution_milestone_coverage', '贡献里程碑覆盖审计', build_contribution_milestone_coverage),
+    (
+        'contribution_milestone_phase_rhythm', '贡献里程碑阶段节奏',
+        build_contribution_milestone_phase_rhythm,
+    ),
     ('borrow_days_shape', '默认借用天数形状', build_borrow_days_shape),
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
@@ -11357,6 +11362,76 @@ def operations_dashboard_export(request):
     writer.writerow([
         '隐私边界', '',
         '不输出用户、贡献标题、描述或幂等键；缺失与多余只聚合到类型或代码',
+    ])
+
+    milestone_rhythm = dashboard['contribution_milestone_phase_rhythm']
+    writer.writerow([])
+    writer.writerow(['贡献里程碑阶段节奏', '数值', '说明'])
+    writer.writerow([
+        '固定回看天数', milestone_rhythm['lookback_days'],
+        '看板 days 参数仅作注册表兼容，本面板不按周期选择器切片',
+    ])
+    writer.writerow([
+        '覆盖审计门槛', '通过' if milestone_rhythm['coverage_gate']['is_clean'] else '阻塞',
+        '缺失、多余或事实不一致时全部方向留空；规则快照差异不阻塞',
+    ])
+    writer.writerow([
+        '最小样本', milestone_rhythm['min_events_per_cell'],
+        '对照两侧都达到该事件数才输出方向',
+    ])
+    writer.writerow([
+        '可比 / 薄样本 / 等待', (
+            f"{milestone_rhythm['compared_count']} / "
+            f"{milestone_rhythm['thin_sample_count']} / "
+            f"{milestone_rhythm['waiting_count']}"
+        ),
+        '薄样本与等待同类上一学期只报数字',
+    ])
+    writer.writerow([
+        '未进入对照的事件', (
+            f"无学期 {milestone_rhythm['no_term_event_count']}，"
+            f"未划分阶段 {milestone_rhythm['unassigned_phase_event_count']}，"
+            f"进行中 {milestone_rhythm['ongoing_phase_event_count']}，"
+            f"对照外 {milestone_rhythm['outside_comparison_event_count']}"
+        ),
+        '单独计数，不摊派进任何可比格子',
+    ])
+    writer.writerow(['摘要', milestone_rhythm['summary'], '只说明聚合走向，不输出用户明细'])
+
+    writer.writerow([])
+    writer.writerow(['一、同类学期同阶段对照'])
+    writer.writerow([
+        '阶段 / 学期类型', '里程碑', '最新学期', '最新事件', '最新天数',
+        '最新每百天', '上一学期', '上一事件', '上一天数', '上一每百天',
+        '事件差', '强度差', '方向', '状态',
+    ])
+    for group in milestone_rhythm['groups']:
+        previous_name = (
+            group['previous_term']['name'] if group['previous_term'] else '—'
+        )
+        for row in group['rows']:
+            latest = row['latest']
+            previous = row['previous']
+            writer.writerow([
+                f"{group['phase_label']} / {group['kind_label']}",
+                f"{latest['type_label']} · {latest['milestone_title']}",
+                latest['term_name'], latest['event_count'], latest['day_count'],
+                latest['events_per_100_days'],
+                previous_name if previous else '—',
+                previous['event_count'] if previous else '—',
+                previous['day_count'] if previous else '—',
+                previous['events_per_100_days'] if previous else '—',
+                '—' if row['event_count_delta'] is None else row['event_count_delta'],
+                '—' if row['intensity_delta'] is None else row['intensity_delta'],
+                row['direction_label'], row['status_label'],
+            ])
+    writer.writerow([
+        '边界', '', '', '', '', '', '', '', '', '', '', '', '',
+        '方向只按每百天事件强度判断，不比较裸事件数',
+    ])
+    writer.writerow([
+        '隐私', '', '', '', '', '', '', '', '', '', '', '', '',
+        '不输出用户、贡献标题、描述、幂等键或触发贡献明细',
     ])
 
     location_quality = dashboard['location_registry_quality']

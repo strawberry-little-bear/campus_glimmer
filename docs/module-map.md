@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，132 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，134 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（133 个）
+## listings/ 的业务模块（134 个）
 
 
 <details>
-<summary>业务模块清单（133 个，按业务链路归组）</summary>
+<summary>业务模块清单（134 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -136,7 +136,7 @@ campus_glimmer/
 | `contributions.py` | 校园互助贡献积分、等级与徽章的幂等记录、首次达成里程碑和历史回填（只累计自己的行为，不排名不公开） | 读写 |
 | `contribution_tier_shape.py` | 积分等级与徽章的门槛形状：五级等级、七枚徽章、六种类型、幂等键业务域与重复分布（只报告，复用产品侧判定规则不本地复制） | 只报告 |
 | `contribution_milestone_coverage.py` | 里程碑事实与贡献流水的全量覆盖审计：缺失、多余、规则快照差异与事实一致性分开报（只报告不修复） | 只报告 |
-| `contribution_milestone_phase_rhythm.py`（规划） | 贡献里程碑在同类学期同一已结束阶段的达成节奏对照：先被覆盖审计阻塞，再用每百天强度比较，薄样本不判方向 | 只报告 |
+| `contribution_milestone_phase_rhythm.py` | 贡献里程碑在同类学期同一已结束阶段的达成节奏对照：先被覆盖审计阻塞，再用每百天强度比较，薄样本不判方向 | 只报告 |
 | `recommendations.py` | 推荐结果和推荐反馈 | 读写 |
 | `recommendation_impression_quality.py` | 首页推荐曝光日志的字段形状、重复曝光、匿名流量、位置与时间异常，以及自然日覆盖（只报告，不推断写入失败或每屏缺失） | 只报告 |
 | `recommendation_quality.py` | 首页推荐卡的反馈率、正负比例、改口数与理由拆分，以及按推荐当时的理由和分数档拆开的反馈率（只报告不改权重） | 只报告 |
@@ -175,10 +175,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（152 个）
+## 业务链路的测试模块（153 个）
 
 <details>
-<summary>业务链路测试清单（152 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（153 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -239,6 +239,7 @@ campus_glimmer/
 - **`test_contribution_tier_shape.py`**：五级全列、四级跨度全列、空样本报 None 不报 0、复用产品侧判定规则、组合数不数用户数、只读性与周期回退
 
 - **`test_contribution_milestone_coverage.py`**：稳定重放、缺失与多余分开、快照差异不进入事实不一致、触发贡献指向、空分母与页面 / CSV 只读契约
+- **`test_contribution_milestone_phase_rhythm.py`**：同类学期同阶段对照、每百天强度、覆盖审计阻塞、快照差异放行、薄样本、进行中与无学期事件、页面 / CSV 只读契约
 
 - **`test_dashboard_build_performance.py`**：请求内构建耗时的空态、单样本、最近秩分位、重复 key、共享组装契约与页面 / CSV 导出一致性
 - **`test_dashboard_export_columns.py`**：面板与导出的层级与表头：子标题归节、表头可判别、摘要不冒充表头

@@ -146,6 +146,7 @@
    - 分类调价参考会把同类出售价格聚合成中位数和四分位区间，并只统计当前在售商品的区间外规模；样本不足或区间过宽时降级为观察，不自动改价；
 
    - 专题分析会把“活动内容 → 商品曝光 → 收藏 → 预约 → 完成交易”串成专题级漏斗，并输出低转化提示，让运营数据能够反向影响下一轮活动策划；
+   - 贡献里程碑阶段节奏先过覆盖审计，再只比较同类学期同一已结束阶段，方向按每百天强度判断，不按裸事件数；
 3. **识别问题**：识别无结果搜索、待处理举报堆积、完成交易下降等运营告警；
 4. **发送提醒**：管理员可以运行 `send_operations_digest`，将告警摘要写入站内通知中心；
 5. **进入处理**：通知携带运营看板地址，管理员可以直接回到对应统计周期继续分析。
@@ -263,7 +264,7 @@ campus_glimmer/
 └── README.md
 ```
 
-`listings/` 内 133 个业务模块、152 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
+`listings/` 内 134 个业务模块、153 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
 
 ## 核心数据模型
 
@@ -294,11 +295,11 @@ campus_glimmer/
 | 需求撮合 | `DemandPost`、`DemandResponse` | 求购发布、商品响应、确认匹配和需求转化 |
 | 机会流曝光 | `OpportunityImpression`、`OpportunityDismissal` | 一次机会流渲染落一行的「被看见」，和一次「不再显示」落的「不看了」；两者口径对偶，忽略率的分母来自前者 |
 | 通知 | `Notification`、`NotificationPreference` | 站内提醒、未读状态、阅读时间、通知偏好、求购关联、到期提醒和幂等键；通知类型包含商品生命周期提醒，可单独关闭。偏好开关先报形状；关闭后仍出现的历史通知再按发生时间与偏好行最后写入拆开，只给可疑下界，不把整行 `updated_at` 当成逐开关关闭时间 |
-| 互助贡献 | `CommunityContribution`、`ContributionMilestoneEvent` | 可审计的贡献积分流水，以及等级与徽章首次达成的事件台账；台账有全量覆盖审计，里程碑只作运营事实，不触发额外通知或排名 |
+| 互助贡献 | `CommunityContribution`、`ContributionMilestoneEvent` | 可审计的贡献积分流水，以及等级与徽章首次达成的事件台账；台账有全量覆盖审计和同类学期同阶段节奏对照，里程碑只作运营事实，不触发额外通知、排名或规则修改 |
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
-| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 62 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
+| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 63 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
 | 需求跟进闭环 | `DemandOpportunityTask.created_at`、`DemandOpportunityTask.radar_key`、`DemandOpportunityTask.available_supply`、`SearchQuery.result_count` | 任务创建时间是唯一稳定的分界线（雷达行是滚动聚合，内容每次刷新都变），创建时的供给数用于判断「动作是否真的发生」，搜索结果数用于判断「需求是否被满足」 |
 | 同义词候选 | `SearchQuery.user_id`、`SearchQuery.query`、`SearchQuery.result_count`、`SearchQuery.created_at`、`SearchSynonym.keyword` / `synonym` / `is_active` | 同一次会话内相邻两次搜索的改口证据；已启用同义词的两个方向都参与去重，停用同义词不屏蔽候选 |
 | 同义词效果回流 | 不新增表，读 `SearchSynonym.created_at` + `SearchQuery` | 确认时间是唯一稳定的分界线；搜索词记录的是学生原本输入的那一串（扩展只发生在查询内部），按扩展词统计会成为自己和自己比、永远报成功 |

@@ -1,7 +1,7 @@
 # 贡献里程碑阶段节奏设计
 
-状态：设计中
-规划模块：`listings/contribution_milestone_phase_rhythm.py`
+状态：已落地
+实现模块：`listings/contribution_milestone_phase_rhythm.py`、`listings/views.py`、`templates/listings/operations_dashboard.html`
 前置能力：贡献里程碑事件台账、贡献里程碑覆盖审计
 
 ## 1. 要回答的问题
@@ -55,3 +55,9 @@
 - 任一侧低于最小样本时只显示数字；
 - 无同类上一学期、事件未落入阶段等情况有明确状态；
 - 页面与 CSV 共用同一构建器，且均保持只读和聚合输出。
+
+## 6. 落地记录
+
+- 构建器落在 `listings/contribution_milestone_phase_rhythm.py`，页面与 CSV 共用同一份结果；
+- 面板注册进运营看板共享构建器，不新增表、迁移或写入路径；
+- 验证覆盖同类学期同阶段对照、每百天强度、覆盖审计阻塞、快照差异放行、薄样本、进行中与无学期事件，以及页面 / CSV 只读契约。
