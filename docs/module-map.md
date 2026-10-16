@@ -68,6 +68,7 @@ campus_glimmer/
 | `location_maintenance_queue.py` | 校园地点维护信号的主优先级、重叠信号、行动提示与 20 条人工核对清单（只读分诊） | 只报告 |
 | `location_maintenance_decision_review.py` | 校园地点维护决策的首次留痕时间分布、复核比例与暂缓停留清单（不计算历史处理率） | 只报告 |
 | `campaign_analytics.py` | 校园专题周期、转化漏斗与运营提示 | 读写 |
+| `campaign_phase_review.py`（规划） | 已结束专题按自身窗口均分三段，复盘供给、曝光、收藏、预约与完成交易的节奏；薄样本不判方向 | 只报告 |
 | `demand_matching.py` | 新发布的商品与活跃求购的匹配撮合 | 读写 |
 | `demand_radar.py` | 无结果搜索、求购与供给缺口的需求雷达 | 读写 |
 | `demand_radar_hit_trend.py` | 需求雷达命中率的跨周期变化：按份额判方向、上一周期没有的类别标成新出现 | 读写 |
@@ -477,7 +478,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（104 篇，持续更新）</summary>
+<summary>设计文档清单（107 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -644,4 +645,7 @@ campus_glimmer/
 - **`notification-preference-usage-design.md`**：25 个通知类型开关第一次被逐个读到，被挡掉的通知一行都不建所以只报形状不报效果、四格不是两格、按交易后果分四组、没有偏好行单列，
   以及三处被代码纠正的地方（时间窗留 60 秒余量、`filter` 的 key 合并、空平台的「-1 个」）
 
+- **`security-response-baseline-design.md`**：默认安全响应头的基线、HSTS 配置边界，以及为什么先不直接上 CSP
+- **`contribution-milestone-phase-rhythm-design.md`**：同类学期同一已结束阶段的达成节奏、每百天强度与覆盖审计阻塞
+- **`campaign-phase-review-design.md`**：校园专题按自身窗口复盘前中后段节奏，每百天强度、样本门槛与只读边界
 </details>
