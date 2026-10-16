@@ -84,7 +84,7 @@
 | 借用双方 | 借用下单、催收阶梯、归还两次握手登记、地点每周时段与单日例外提醒 |
 | 普通用户 | 站内通知中心、延后通知、通知偏好、关注搜索汇总、延后提醒、我的举报与结果回访、我的内容申诉 |
 | 校园认证 | 校园邮箱域名配置、一次性验证链接、认证标识、公开交易档案 |
-| 管理员 | 治理工作台、需求雷达与跟进闭环、运营看板（含出售价格轨迹洞察）、告警日报、脱敏 CSV 导出 |
+| 管理员 | 治理工作台、需求雷达与跟进闭环、运营看板（含出售价格轨迹洞察与交付开放时段风险审计）、告警日报、脱敏 CSV 导出 |
 
 所有运营面板遵循同一条纪律：只报告、不自动改任何业务状态，具体见[功能手册第 7 章](docs/feature-handbook.md#7-运营看板与运营告警)。
 
@@ -262,7 +262,7 @@ campus_glimmer/
 └── README.md
 ```
 
-`listings/` 内 129 个业务模块、147 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
+`listings/` 内 130 个业务模块、148 个业务链路测试模块、`chat_messages/` 关键测试以及设计文档索引，已整理在[模块与测试地图](docs/module-map.md)。该地图同时标注“读写”和“只报告”模块，用于维护运营面板只读不写的纪律。
 
 ## 核心数据模型
 
@@ -270,7 +270,7 @@ campus_glimmer/
 
 
 <details>
-<summary>模型分组（46 行，按业务领域归组）</summary>
+<summary>模型分组（49 行，按业务领域归组）</summary>
 
 | 领域 | 主要模型 | 作用 |
 | --- | --- | --- |
@@ -285,6 +285,7 @@ campus_glimmer/
 | 学期日历 | `AcademicTerm`、`AcademicPhase`、`AcademicTermSnapshot` | 学期起止日期、按偏移天数划分的阶段规则、阶段级统计快照（已结束阶段由 `build_academic_calendar` 读取，进行中阶段实时算） |
 | 互动 | `Favorite`、`ItemAvailabilityWatch`、`Comment`、`PrivateMessage` | 收藏、有货提醒、公开留言和私信 |
 | 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`DeliveryConfirmation`、`Rating` | 交易预约、交付时间协商、状态事件、双方确认和完成后的评价 |
+| 交付开放时段风险 | 不新增表，读 `MeetingAppointment`、`CampusLocationServiceWindow`、`CampusLocationServiceException` | 把未来待确认或已确认的交付安排对照地点每周规则与单日例外，只提示人工核对，不改预约或地点配置 |
 | 交易安全确认 | `OrderSafetyAcknowledgement` | 买卖双方对当前安全卡的版本化确认记录，按订单、角色和安全卡指纹唯一；历史记录保留用于审计 |
 | 订单阶段链路 | `OrderEvent`（状态流转事件） | 每次状态变化都会留下带时间戳的事件记录，运营看板据此还原“下单 → 确认 → 交付 → 成交 / 借出 → 归还”的阶段耗时 |
 | 搜索 | `SearchQuery`、`SearchClick`、`SearchImpression`、`SavedSearch`、`SearchSynonym` | 搜索需求、点击、曝光、保存搜索和联想词；无结果搜索会进入需求雷达 |
@@ -294,7 +295,7 @@ campus_glimmer/
 | 身份与信任 | `CampusDomain`、`CampusVerification`、`Rating` | 校园邮箱域名配置、身份认证和交易信誉摘要 |
 | 治理 | `Report`、`ModerationEvent`、`OrderDispute`、`OrderDisputeEvidence` | 商品举报、交易争议和证据处理；内容审核保存命中规则、风险、复核结论，`receiver` 支持私信恢复，`released_at` 记录内容真正回到原渠道的时间 |
 | 运营 | 订单、浏览、搜索、收藏、求购等行为记录的聚合 | 看板、漏斗、用户分层、回访率、需求雷达、跟进任务和运营告警 |
-| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 57 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
+| 看板自身构建耗时 | 不新增表，请求内读共享构建注册表与 `perf_counter` 计时 | 核心统计 + 59 个共享面板；P50/P90 取最近秩，重复 key 单列；页面 Top 12、CSV 全量；不含渲染、序列化、筛选和下载，也不落库或跨请求平均 |
 | 需求跟进闭环 | `DemandOpportunityTask.created_at`、`DemandOpportunityTask.radar_key`、`DemandOpportunityTask.available_supply`、`SearchQuery.result_count` | 任务创建时间是唯一稳定的分界线（雷达行是滚动聚合，内容每次刷新都变），创建时的供给数用于判断「动作是否真的发生」，搜索结果数用于判断「需求是否被满足」 |
 | 同义词候选 | `SearchQuery.user_id`、`SearchQuery.query`、`SearchQuery.result_count`、`SearchQuery.created_at`、`SearchSynonym.keyword` / `synonym` / `is_active` | 同一次会话内相邻两次搜索的改口证据；已启用同义词的两个方向都参与去重，停用同义词不屏蔽候选 |
 | 同义词效果回流 | 不新增表，读 `SearchSynonym.created_at` + `SearchQuery` | 确认时间是唯一稳定的分界线；搜索词记录的是学生原本输入的那一串（扩展只发生在查询内部），按扩展词统计会成为自己和自己比、永远报成功 |

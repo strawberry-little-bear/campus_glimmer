@@ -4195,6 +4195,58 @@
     {% endif %}
 </section>
 
+<section class="content-card ops-panel mb-4 meeting-service-window-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Service window audit</span><h2>交付开放时段风险</h2></div>
+        <span class="ops-panel-hint">只看未来安排，按登记规则重新解释</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-clock-history me-1"></i>{{ meeting_service_window_quality.period_note }}这里的“风险”不是违规判定：交易双方仍可协商到登记时段之外；它只表示地点档案、单日例外和这笔未来安排需要人工核对。</p>
+    {% if not meeting_service_window_quality.has_data %}
+    <div class="empty-inline">{{ meeting_service_window_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未来安排</span><strong>{{ meeting_service_window_quality.metrics.total_count }}</strong><small>待确认或已确认且尚未开始</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>登记规则外</span><strong>{{ meeting_service_window_quality.metrics.registered_outside_count }}</strong><small>每周时段外 {{ meeting_service_window_quality.metrics.weekly_outside_count }} · 例外相关 {{ meeting_service_window_quality.metrics.closed_exception_count|add:meeting_service_window_quality.metrics.replacement_outside_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未登记每周时段</span><strong>{{ meeting_service_window_quality.metrics.unregistered_count }}</strong><small>只提醒补档案，不当成错误</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>例外无同日安排</span><strong>{{ meeting_service_window_quality.metrics.unused_count }}</strong><small>未来例外 {{ meeting_service_window_quality.metrics.future_count }} 条 · 覆盖 {{ meeting_service_window_quality.metrics.unused_location_count }} 个地点</small></div></div>
+    </div>
+    {% if meeting_service_window_quality.location_rows %}
+    <h3 class="h6 mb-3">按地点核对</h3>
+    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>未来安排</th><th>登记规则外</th><th>例外相关</th><th>未登记时段</th><th>需人工核对</th></tr></thead><tbody>
+        {% for row in meeting_service_window_quality.location_rows %}<tr{% if row.attention_count %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ row.location_name }}</strong></td>
+            <td>{{ row.total_count }}</td>
+            <td>{{ row.registered_outside_count }}</td>
+            <td>{{ row.exception_count }}</td>
+            <td>{{ row.unregistered_count }}</td>
+            <td><strong>{{ row.attention_count }}</strong></td>
+        </tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+    {% if meeting_service_window_quality.risk_page_rows %}
+    <h3 class="h6 mb-3">即将发生的核对清单</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>订单</th><th>地点</th><th>安排时间</th><th>状态</th><th>分类</th><th>原因</th></tr></thead><tbody>
+        {% for row in meeting_service_window_quality.risk_page_rows %}
+        <tr>
+            <td><strong>#{{ row.order_id }}</strong></td>
+            <td>{{ row.location_name }}</td>
+            <td>{{ row.start_at|date:'m-d H:i' }} — {{ row.end_at|date:'H:i' }}</td>
+            <td>{{ row.status_label }}</td>
+            <td>{{ row.kind_label }}</td>
+            <td class="meeting-service-window-reason">{{ row.reason }}</td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% if meeting_service_window_quality.risk_total_count > meeting_service_window_quality.risk_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>页面最多列 {{ meeting_service_window_quality.risk_row_limit }} 条，完整清单在 CSV 导出中，本次共 {{ meeting_service_window_quality.risk_total_count }} 条。</p>
+    {% endif %}
+    {% else %}
+    <div class="empty-inline">当前没有需要核对开放时段的未来安排。</div>
+    {% endif %}
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>{{ meeting_service_window_quality.boundary_note }}清单只带订单号、地点和时间，不带用户名、商品标题或联系方式；页面与 CSV 共用同一个构建器。</div>
+</section>
+
 <section class="content-card ops-panel mb-4 handoff-code-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Handover proof</span><h2>在现场念出来的那六位数字</h2></div>

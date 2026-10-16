@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（129 个）
+## listings/ 的业务模块（130 个）
 
 
 <details>
-<summary>业务模块清单（129 个，按业务链路归组）</summary>
+<summary>业务模块清单（130 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -55,6 +55,7 @@ campus_glimmer/
 | `order_workflow.py` | 订单状态流转和交付相关逻辑 | 读写 |
 | `meeting_scheduling.py` | 交付时间安排、冲突检测与开放时段推荐信号 | 读写 |
 | `campus_location_service_hours.py` | 校园地点每周服务时段、单日开放例外、跨午夜截断与相邻窗口覆盖判断 | 只读 |
+| `meeting_service_window_quality.py` | 未来交付安排对照每周开放时段与单日例外的只读风险审计、地点聚合与脱敏清单 | 只报告 |
 | `price_insights.py` | 同类价格参考与需求热度分析 | 读写 |
 | `price_changes.py` | 出售价格轨迹与收藏商品降价提醒 | 读写 |
 | `price_history.py` | 商品详情价格轨迹的连续性校验、最近窗口、走势、隐私粒度与卖家维护提示（只报告） | 只报告 |
@@ -170,10 +171,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（147 个）
+## 业务链路的测试模块（148 个）
 
 <details>
-<summary>业务链路测试清单（147 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（148 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -309,6 +310,7 @@ campus_glimmer/
 
 - **`test_campus_location_service_hours.py`**：每周时段模型约束、跨午夜与相邻窗口判断、交付推荐解释和时段外提交提醒
 - **`test_campus_location_service_exceptions.py`**：单日关闭与替换例外、跨午夜截断、推荐解释、原因提醒与约束测试
+- **`test_meeting_service_window_quality.py`**：未来安排开放状态分类、例外识别、未登记与无地点边界、分页、页面与 CSV 同构和只读测试
 
 - **`test_meeting_reschedule.py`**：下界只认「更新了」备注、首次提议不算改期、没约上的不进分母、响应分档与 attendance 一致、地点只和当前版比、清单只列改过两次以上、只报告不改写与空态导出测试
 

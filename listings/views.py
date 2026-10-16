@@ -58,6 +58,7 @@ from .report_resolution_quality import build_report_resolution_quality
 from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
+from .meeting_service_window_quality import build_meeting_service_window_quality
 from .refresh_quota_drift import build_refresh_quota_drift
 from .item_refresh_event_ledger import build_item_refresh_event_ledger_dashboard
 from .refresh_response import build_refresh_response
@@ -3111,6 +3112,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('moderation_notice_preference', '治理通知偏好', build_moderation_notice_preference),
     ('meeting_attendance', '面约到场', build_meeting_attendance),
     ('meeting_reschedule', '面约改期', build_meeting_reschedule),
+    ('meeting_service_window_quality', '交付开放时段风险', build_meeting_service_window_quality),
     ('refresh_quota_drift', '刷新额度漂移', build_refresh_quota_drift),
     ('item_refresh_event_ledger', '商品刷新事件台账', build_item_refresh_event_ledger_dashboard),
     ('relist_freshness', '重新上架新鲜度', build_relist_freshness),
@@ -3470,6 +3472,83 @@ def operations_dashboard_export(request):
             ' · '.join(reading) if reading else '—',
         ])
     writer.writerow(['口径', performance['note']])
+
+    service_window_quality = dashboard['meeting_service_window_quality']
+    service_metrics = service_window_quality['metrics']
+    writer.writerow([])
+    writer.writerow(['交付开放时段风险', '数值', '说明'])
+    writer.writerow([
+        '口径', service_window_quality['summary'],
+        service_window_quality['period_note'],
+    ])
+    writer.writerow([
+        '未来安排总数', service_metrics['total_count'],
+        '只看构建后仍待确认或已确认、且尚未开始的安排',
+    ])
+    writer.writerow([
+        '可评估安排', service_metrics['measurable_count'],
+        '已填写交付地点的安排；未登记时段也算可评估，单独分类',
+    ])
+    writer.writerow([
+        '开放时段内', service_metrics['open_count'],
+        '预约区间完整落在每周规则或单日替换时段并集内',
+    ])
+    writer.writerow([
+        '登记规则外', service_metrics['registered_outside_count'],
+        '每周时段外、临时关闭与替换时段外三者互斥相加',
+    ])
+    writer.writerow([
+        '每周时段外', service_metrics['weekly_outside_count'],
+        '当天没有启用例外时，不在每周登记时段内',
+    ])
+    writer.writerow([
+        '命中临时关闭', service_metrics['closed_exception_count'],
+        '安排日期命中启用关闭例外',
+    ])
+    writer.writerow([
+        '替换时段外', service_metrics['replacement_outside_count'],
+        '安排日期命中替换例外但预约区间不在替换时段内',
+    ])
+    writer.writerow([
+        '地点未登记每周时段', service_metrics['unregistered_count'],
+        '单独统计，不视为错误，也不并入登记规则外',
+    ])
+    writer.writerow([
+        '无交付地点', service_metrics['no_location_count'],
+        '不借用订单历史地点伪装可评估',
+    ])
+    writer.writerow([
+        '未来启用例外', service_metrics['future_count'],
+        '生效日期不早于构建当天；同日没有未来安排的例外也保留在这里',
+    ])
+    writer.writerow([
+        '例外无同日安排', service_metrics['unused_count'],
+        f"覆盖 {service_metrics['unused_location_count']} 个地点；提前维护和自然无人使用都算",
+    ])
+
+    writer.writerow([])
+    writer.writerow([
+        '交付开放时段风险 · 地点聚合', '未来安排', '登记规则外', '例外相关',
+        '未登记时段', '需人工核对',
+    ])
+    for row in service_window_quality['location_rows']:
+        writer.writerow([
+            row['location_name'], row['total_count'], row['registered_outside_count'],
+            row['exception_count'], row['unregistered_count'], row['attention_count'],
+        ])
+
+    writer.writerow([])
+    writer.writerow([
+        '交付开放时段风险 · 完整清单', '开始时间', '结束时间', '状态', '分类', '原因', '登记规则',
+    ])
+    for row in service_window_quality['risk_rows']:
+        writer.writerow([
+            f"订单 {row['order_id']}",
+            timezone.localtime(row['start_at']).strftime('%Y-%m-%d %H:%M'),
+            timezone.localtime(row['end_at']).strftime('%Y-%m-%d %H:%M'),
+            row['status_label'], row['kind_label'], row['reason'], row['rule_summary'],
+        ])
+    writer.writerow(['边界', service_window_quality['boundary_note']])
 
     writer.writerow([])
     writer.writerow(['求购匹配转化', '数量', '相对上一步转化率（%）', '口径说明'])
