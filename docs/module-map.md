@@ -472,7 +472,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（103 篇，持续更新）</summary>
+<summary>设计文档清单（104 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -512,6 +512,7 @@ campus_glimmer/
 
 - **`contribution-tier-shape-design.md`**：积分等级与徽章的三张规则表第一次被数字读到，按全量不按周期切
 - **`contribution-milestone-ledger-design.md`**：等级与徽章首次达成的事实台账，在线幂等写入、历史稳定回填且不触发庆祝
+- **`contribution-milestone-coverage-design.md`**：里程碑事实与贡献流水的全量对账，缺失、多余、快照差异和事实不一致分开报
 
 - **`meeting-reschedule-design.md`**：改期计数的四条损失与「一次谈成是主档」的口径
 - **`campus-location-service-hours-design.md`**：校园地点每周开放时段、跨午夜合并与推荐提醒边界
