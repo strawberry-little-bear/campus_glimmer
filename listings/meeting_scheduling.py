@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from .campus_location_service_hours import (
+    evaluate_service_windows, get_active_service_windows,
+)
 from .models import CampusLocation, MeetingAppointment
 
 
@@ -17,6 +20,8 @@ class MeetingLocationRecommendation:
     safety_note: str
     pair_history_count: int = 0
     recent_usage_count: int = 0
+    service_state: str = 'unregistered'
+    service_hours_text: str = '未登记每周开放时段'
 
 
 @dataclass(frozen=True)
@@ -58,7 +63,9 @@ def _location_safety_note(location):
     return location.safety_note or '该地点未标记为公共交付区域，建议改约到人流较多且光线充足的校园地点。'
 
 
-def recommend_meeting_locations(*, order, limit=3):
+def recommend_meeting_locations(
+    *, order, limit=3, target_start_at=None, target_end_at=None,
+):
     """Recommend locations using item context, pair history, and campus usage.
 
     The score is intentionally explainable rather than opaque: every returned
@@ -68,7 +75,9 @@ def recommend_meeting_locations(*, order, limit=3):
     participant_ids = {order.buyer_id, order.seller_id}
 
     locations = list(
-        CampusLocation.objects.filter(is_active=True).order_by('sort_order', 'name')
+        CampusLocation.objects.filter(is_active=True)
+        .prefetch_related('service_windows')
+        .order_by('sort_order', 'name')
     )
     if not locations:
         return []
@@ -103,6 +112,10 @@ def recommend_meeting_locations(*, order, limit=3):
         pair_count = pair_counts.get(location.id, 0)
         participant_count = participant_counts.get(location.id, 0)
         usage_count = usage_counts.get(location.id, 0)
+        service_windows = get_active_service_windows(location)
+        service_evaluation = evaluate_service_windows(
+            service_windows, start_at=target_start_at, end_at=target_end_at,
+        )
         reasons = []
         score = 0
 
@@ -123,6 +136,20 @@ def recommend_meeting_locations(*, order, limit=3):
             reasons.append('公共区域，更适合当面核验')
         else:
             reasons.append('请优先确认现场安全和开放时间')
+        if target_start_at is not None and target_end_at is not None:
+            if service_evaluation.state == 'open':
+                score += 12
+                reasons.append('当前安排落在登记开放时段内')
+            elif service_evaluation.state == 'closed':
+                score = max(0, score - 10)
+                reasons.append('当前安排不在登记开放时段，请确认临时开放或调整时间')
+            else:
+                reasons.append('未登记开放时段，请自行确认现场安排')
+        elif service_evaluation.is_registered:
+            score += 5
+            reasons.append('已登记每周开放时段')
+        else:
+            reasons.append('未登记开放时段，请自行确认现场安排')
         if not reasons:
             reasons.append('校园内可用的交付地点')
 
@@ -134,6 +161,8 @@ def recommend_meeting_locations(*, order, limit=3):
                 safety_note=_location_safety_note(location),
                 pair_history_count=pair_count,
                 recent_usage_count=usage_count,
+                service_state=service_evaluation.state,
+                service_hours_text=service_evaluation.summary,
             )
         )
 
@@ -149,12 +178,13 @@ def recommend_meeting_locations(*, order, limit=3):
     return recommendations[:limit]
 
 
-def recommend_meeting_times(*, order, limit=3, days=7, now=None):
+def recommend_meeting_times(*, order, location=None, limit=3, days=7, now=None):
     """Return upcoming one-hour slots that are free for both participants."""
     now = now or timezone.now()
     local_now = timezone.localtime(now)
     horizon_end = now + timedelta(days=max(days, 1) + 1)
     participant_ids = {order.buyer_id, order.seller_id}
+    service_windows = get_active_service_windows(location)
     blocked_intervals = list(
         MeetingAppointment.objects.filter(
             status__in={'pending', 'confirmed'},
@@ -192,6 +222,17 @@ def recommend_meeting_times(*, order, limit=3, days=7, now=None):
 
             reasons = ['双方当前没有其他交付预约冲突']
             score = max(1, 6 - day_offset)
+            service_evaluation = evaluate_service_windows(
+                service_windows, start_at=start_at, end_at=end_at,
+            )
+            if service_evaluation.state == 'open':
+                score += 6
+                reasons.append('落在交付地点登记开放时段内')
+            elif service_evaluation.state == 'closed':
+                score = max(1, score - 6)
+                reasons.append('不在交付地点登记开放时段内')
+            else:
+                reasons.append('交付地点未登记开放时段，请自行确认')
             if start_at.weekday() >= 5:
                 score += 2
                 reasons.append('周末时段，时间安排更宽松')

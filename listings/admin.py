@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, CampusLocationMaintenanceDecision, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -16,12 +16,20 @@ class CategoryAdmin(admin.ModelAdmin):
     search_fields = ('name',)
 
 
+class CampusLocationServiceWindowInline(admin.TabularInline):
+    model = CampusLocationServiceWindow
+    extra = 1
+    fields = ('weekday', 'start_time', 'end_time', 'is_active')
+    ordering = ('weekday', 'start_time')
+
+
 @admin.register(CampusLocation)
 class CampusLocationAdmin(admin.ModelAdmin):
     list_display = ('name', 'building', 'address', 'is_public', 'is_active', 'sort_order')
     list_filter = ('is_active', 'is_public', 'building')
     search_fields = ('name', 'building', 'address')
     list_editable = ('is_public', 'is_active', 'sort_order')
+    inlines = (CampusLocationServiceWindowInline,)
 
 
 @admin.register(CampusLocationMaintenanceDecision)

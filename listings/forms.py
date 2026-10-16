@@ -5,6 +5,7 @@ from django import forms
 from django.db.models import Q
 from django.utils import timezone
 
+from .campus_location_service_hours import evaluate_location_service_window
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
@@ -457,6 +458,7 @@ class MeetingAppointmentForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.service_hours_notice = ''
         self._style_fields()
         self.fields['start_at'].input_formats = ['%Y-%m-%dT%H:%M']
         self.fields['end_at'].input_formats = ['%Y-%m-%dT%H:%M']
@@ -492,6 +494,20 @@ class MeetingAppointmentForm(StyledModelFormMixin, forms.ModelForm):
             self.add_error('start_at', '最多只能安排未来 60 天内的时间。')
         if end_at - start_at > timedelta(hours=12):
             self.add_error('end_at', '单次交付安排不能超过 12 小时。')
+        location = cleaned_data.get('location')
+        if location:
+            service_evaluation = evaluate_location_service_window(
+                location, start_at=start_at, end_at=end_at,
+            )
+            if service_evaluation.state == 'closed':
+                self.service_hours_notice = (
+                    f'所选时间不在「{location.name}」登记开放时段（{service_evaluation.summary}）内，'
+                    '请自行确认临时开放、假期调整或现场门禁。'
+                )
+            elif not service_evaluation.is_registered:
+                self.service_hours_notice = (
+                    f'「{location.name}」未登记每周开放时段，请自行确认现场开放情况。'
+                )
         return cleaned_data
 
 

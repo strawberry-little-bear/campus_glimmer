@@ -57,6 +57,73 @@ class CampusLocation(models.Model):
         ordering = ['sort_order', 'name']
 
 
+class CampusLocationServiceWindow(models.Model):
+    """A recurring weekly opening window for one campus location.
+
+    The window belongs to the weekday of its start time. An end time before
+    the start time is interpreted as crossing midnight into the next day, which
+    keeps late-night service desks representable without extra fields.
+    """
+
+    WEEKDAY_CHOICES = (
+        (1, '周一'), (2, '周二'), (3, '周三'), (4, '周四'),
+        (5, '周五'), (6, '周六'), (7, '周日'),
+    )
+    WEEKDAY_LABELS = dict(WEEKDAY_CHOICES)
+
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.CASCADE,
+        related_name='service_windows', verbose_name='校园地点',
+    )
+    weekday = models.PositiveSmallIntegerField('星期', choices=WEEKDAY_CHOICES)
+    start_time = models.TimeField('开始时间')
+    end_time = models.TimeField('结束时间', help_text='早于开始时间时表示跨午夜到次日。')
+    is_active = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    def clean(self):
+        super().clean()
+        if self.start_time == self.end_time:
+            raise ValidationError({'end_time': '结束时间不能等于开始时间；本轮不提供“全天开放”开关。'})
+
+    @property
+    def display_text(self):
+        end_prefix = '次日 ' if self.end_time <= self.start_time else ''
+        return (
+            f'{self.WEEKDAY_LABELS.get(self.weekday, "未知")} '
+            f'{self.start_time:%H:%M}–{end_prefix}{self.end_time:%H:%M}'
+        )
+
+    def __str__(self):
+        return f'{self.location.name} · {self.display_text}'
+
+    class Meta:
+        verbose_name = '校园地点服务时段'
+        verbose_name_plural = '校园地点服务时段'
+        ordering = ['location_id', 'weekday', 'start_time', 'end_time']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['location', 'weekday', 'start_time'],
+                name='unique_location_weekday_start_time',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(weekday__gte=1, weekday__lte=7),
+                name='service_window_valid_weekday',
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(start_time=models.F('end_time')),
+                name='service_window_end_not_start',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['location', 'is_active', 'weekday'],
+                name='location_service_lookup_idx',
+            ),
+        ]
+
+
 class CampusLocationMaintenanceDecision(models.Model):
     """一次校园地点维护队列的人工判断留痕。
 

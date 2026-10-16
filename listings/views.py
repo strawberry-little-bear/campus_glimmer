@@ -138,6 +138,7 @@ from .price_changes import notify_item_price_drop, record_item_price_change
 from .price_history import (
     build_item_price_history, build_item_price_history_maintenance,
 )
+from .campus_location_service_hours import evaluate_location_service_window
 from .price_change_quality import build_price_change_quality_panel
 from .lifecycle_diagnostics import _refresh_state, build_seller_lifecycle
 from .meeting_scheduling import (
@@ -991,6 +992,11 @@ def order_detail(request, order_id):
         messages.error(request, '你没有权限查看这笔订单。')
         return redirect('home')
     appointment = getattr(order, 'appointment', None)
+    appointment_service_evaluation = (
+        evaluate_location_service_window(
+            appointment.location, appointment.start_at, appointment.end_at,
+        ) if appointment and appointment.location else None
+    )
     transaction_safety = build_transaction_safety(order)
     safety_fingerprint = transaction_safety_fingerprint(transaction_safety)
     current_safety_acknowledgements = {
@@ -1014,8 +1020,15 @@ def order_detail(request, order_id):
     if order.status in {'confirmed', 'meeting'} and not (appointment and appointment.status == 'pending' and appointment.proposed_by_id != request.user.id):
         form_initial = {'location': order.meeting_location_id} if not appointment else None
         meeting_form = MeetingAppointmentForm(instance=appointment, initial=form_initial)
-        meeting_location_recommendations = recommend_meeting_locations(order=order)
-        meeting_time_recommendations = recommend_meeting_times(order=order)
+        meeting_location_recommendations = recommend_meeting_locations(
+            order=order,
+            target_start_at=appointment.start_at if appointment else None,
+            target_end_at=appointment.end_at if appointment else None,
+        )
+        meeting_time_recommendations = recommend_meeting_times(
+            order=order,
+            location=appointment.location if appointment else order.meeting_location,
+        )
     if confirmation and request.user == order.seller and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at and not confirmation.seller_confirmed_at:
         delivery_code_form = DeliveryCodeForm()
     if confirmation and request.user == order.buyer and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at:
@@ -1046,6 +1059,7 @@ def order_detail(request, order_id):
         'delivery_code_form': delivery_code_form,
         'handoff_code_display': handoff_code_display,
         'appointment': appointment,
+        'appointment_service_evaluation': appointment_service_evaluation,
         'transaction_safety': transaction_safety,
         'safety_fingerprint': safety_fingerprint,
         'buyer_safety_acknowledgement': current_safety_acknowledgements.get('buyer'),
@@ -1208,6 +1222,8 @@ def propose_meeting(request, order_id):
             target_url=reverse('order_detail', args=[locked_order.id]),
         )
     messages.success(request, '交付时间已提交，等待对方确认。')
+    if form.service_hours_notice:
+        messages.warning(request, form.service_hours_notice)
     return redirect('order_detail', order_id=order.id)
 
 

@@ -144,6 +144,13 @@
                     <span>{% if appointment.location %}{{ appointment.location.name }}{% else %}沿用订单交付地点{% endif %}</span>
                     <small>由 {{ appointment.proposed_by.username }} 提出 · {{ appointment.get_status_display }}</small>
                 </div>
+                {% if appointment_service_evaluation %}
+                <div class="service-window-note {% if appointment_service_evaluation.state == 'open' %}is-open{% elif appointment_service_evaluation.state == 'closed' %}is-closed{% endif %}">
+                    {% if appointment_service_evaluation.state == 'open' %}<i class="bi bi-clock-check me-1"></i>当前安排落在登记开放时段内：{{ appointment_service_evaluation.summary }}
+                    {% elif appointment_service_evaluation.state == 'closed' %}<i class="bi bi-clock-history me-1"></i>当前安排不在登记开放时段内：{{ appointment_service_evaluation.summary }}，请自行确认临时开放或假期调整。
+                    {% else %}<i class="bi bi-clock me-1"></i>该地点未登记每周开放时段，请自行确认现场安排。{% endif %}
+                </div>
+                {% endif %}
                 {% if appointment.status == 'confirmed' and order.status == 'meeting' %}
                 <div class="meeting-attendance mt-3">
                     <div class="meeting-attendance-row"><span><i class="bi bi-person-check me-1"></i>买家到场</span><strong>{% if appointment.buyer_arrived_at %}已登记 · {{ appointment.buyer_arrived_at|date:'H:i' }}{% else %}待登记{% endif %}</strong></div>
@@ -184,6 +191,7 @@
                                 <span class="recommendation-score">{{ recommendation.score }} 分</span>
                             </div>
                             <p class="small mb-1 mt-2">{{ recommendation.reasons|join:' · ' }}</p>
+                            <small class="text-muted d-block"><i class="bi bi-clock me-1"></i>登记时段：{{ recommendation.service_hours_text }}</small>
                             <small class="text-muted d-block"><i class="bi bi-shield-check me-1"></i>{{ recommendation.safety_note }}</small>
                             <button type="button" class="btn btn-sm btn-link px-0 mt-2 meeting-recommendation-action" data-recommendation-location="{{ recommendation.location.id }}">采用这个地点</button>
                         </article>
