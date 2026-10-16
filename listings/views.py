@@ -117,7 +117,8 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import BulkListingRowFormSet, BulkListingSettingsForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
 from .opportunity_impression_quality import build_opportunity_impression_quality
@@ -2652,17 +2653,11 @@ def bulk_create_items_import_preview(request, token):
         import_token=state['token'],
     )
 
-@login_required
-def bulk_listing_image_queue(request):
-    """Show only the latest batch's still-actionable image follow-up work."""
-    queue = _load_bulk_listing_image_queue(request)
-    if queue is None:
-        messages.info(request, '本批次补图队列已失效，可以在“我的商品”里继续管理商品。')
-        return redirect('my_items')
-
+def _build_bulk_listing_image_queue_context(queue):
+    """Build the queue's latest facts for both GET and failed POST renders."""
     now = timezone.now()
     items = Item.objects.filter(
-        seller=request.user,
+        seller=queue['seller_id'],
         id__in=queue['item_ids'],
     ).annotate(
         image_count=Count('images'),
@@ -2689,8 +2684,10 @@ def bulk_listing_image_queue(request):
             not_actionable_count += 1
 
     actionable_count = completed_count + len(pending_items)
-    progress_percent = int(completed_count * 100 / actionable_count) if actionable_count else 100
-    return render(request, 'listings/bulk_listing_images.html', {
+    progress_percent = (
+        int(completed_count * 100 / actionable_count) if actionable_count else 100
+    )
+    return {
         'title': '本批次补图',
         'published_at': timezone.localtime(queue['published_at']),
         'published_count': len(queue['item_ids']),
@@ -2700,7 +2697,102 @@ def bulk_listing_image_queue(request):
         'not_actionable_count': not_actionable_count,
         'actionable_count': actionable_count,
         'progress_percent': progress_percent,
-    })
+    }
+
+
+def _render_bulk_listing_image_queue(request, queue, *, image_errors=None):
+    context = _build_bulk_listing_image_queue_context(queue)
+    image_errors = image_errors or {}
+    for item in context['pending_items']:
+        item.bulk_image_error = image_errors.get(item.id, '')
+    return render(request, 'listings/bulk_listing_images.html', context)
+
+
+@login_required
+def bulk_listing_image_queue(request):
+    """Upload one explicitly chosen photo per item in the latest batch queue."""
+    queue = _load_bulk_listing_image_queue(request)
+    if queue is None:
+        messages.info(request, '本批次补图队列已失效，可以在“我的商品”里继续管理商品。')
+        return redirect('my_items')
+
+    if request.method == 'POST':
+        context = _build_bulk_listing_image_queue_context(queue)
+        pending_items_by_id = {
+            item.id: item for item in context['pending_items']
+        }
+        uploads = {}
+        image_errors = {}
+        for item_id, item in pending_items_by_id.items():
+            uploaded = request.FILES.get(f'item_image_{item_id}')
+            if uploaded is None:
+                continue
+            try:
+                uploads[item_id] = normalize_item_image(uploaded)
+            except ItemImageLimitError:
+                image_errors[item_id] = (
+                    '图片过大：单张不能超过 10 MB 或 2000 万像素。'
+                )
+            except Exception:
+                # Pillow errors can expose paths or decoder details. Keep the
+                # row actionable without leaking implementation information.
+                image_errors[item_id] = '图片处理失败，请换一张清晰的图片再试。'
+
+        if image_errors:
+            messages.error(
+                request,
+                '本次选择的图片全部未保存：请先修正标出的商品行，再重新选择文件提交。',
+            )
+            return _render_bulk_listing_image_queue(
+                request, queue, image_errors=image_errors,
+            )
+        if not uploads:
+            messages.warning(request, '请先至少为一行待补图商品选择图片。')
+            return _render_bulk_listing_image_queue(request, queue)
+
+        saved_count = 0
+        with transaction.atomic():
+            locked_items = {
+                item.id: item
+                for item in Item.objects.select_for_update().filter(
+                    seller=request.user,
+                    id__in=uploads,
+                )
+            }
+            items_with_images = set(ItemImage.objects.filter(
+                item_id__in=uploads,
+            ).values_list('item_id', flat=True))
+            now = timezone.now()
+            for item_id, image in uploads.items():
+                item = locked_items.get(item_id)
+                if item is None or item_id in items_with_images:
+                    continue
+                still_displayable = (
+                    item.status in ('available', 'reserved')
+                    and not (item.expires_at and item.expires_at <= now)
+                )
+                if not still_displayable:
+                    continue
+                ItemImage.objects.create(item=item, image=image)
+                saved_count += 1
+
+        if saved_count:
+            messages.success(
+                request, f'已为 {saved_count} 件商品补上图片，队列进度已更新。'
+            )
+        else:
+            messages.info(
+                request, '这些商品刚被其他页面处理过，队列已按最新状态刷新。'
+            )
+        skipped_count = len(uploads) - saved_count
+        if skipped_count:
+            messages.info(
+                request,
+                f'有 {skipped_count} 行因商品状态或图片状态变化未写入，请以当前队列为准。',
+            )
+        return redirect('bulk_listing_image_queue')
+
+    return _render_bulk_listing_image_queue(request, queue)
 
 
 @login_required

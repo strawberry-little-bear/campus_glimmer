@@ -203,7 +203,7 @@ campus_glimmer/
 
 - **`test_bulk_listing_csv_import.py`**：批量发布 CSV 的 UTF-8 与表头校验、行级错误、预览不写入、token 失效与确认发布闭环
 - **`test_bulk_listing_xlsx_import.py`**：批量发布 XLSX 的数字转换、公式 / 日期 / 布尔拒绝、第一工作表边界、文件上限与确认发布闭环
-- **`test_bulk_listing_image_queue.py`**：批量发布后的短期补图队列、本人与展示状态过滤、完成进度、session 覆盖与失效边界
+- **`test_bulk_listing_image_queue.py`**：批量发布后的短期补图队列、本人与展示状态过滤、完成进度、行内补图上传、整批校验失败不写入、session 覆盖与失效边界
 
 - **`test_campaign_analytics.py`**：专题周期内的新增、在售与转化漏斗
 

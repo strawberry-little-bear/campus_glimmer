@@ -64,6 +64,13 @@ class BulkListingImageQueueTests(TestCase):
         }
         session.save()
 
+    def image_upload(self, name='batch-cover.png', *, content=None, content_type='image/png'):
+        if content is None:
+            buffer = BytesIO()
+            Image.new('RGB', (1600, 1000), '#48c').save(buffer, format='PNG')
+            content = buffer.getvalue()
+        return SimpleUploadedFile(name, content, content_type=content_type)
+
     def bulk_payload(self, titles):
         payload = {
             'category': self.category.id,
@@ -211,6 +218,77 @@ class BulkListingImageQueueTests(TestCase):
         page = self.client.get(self.url)
         self.assertEqual(list(page.context['pending_items']), [second])
         self.assertNotContains(page, first.title)
+
+    def test_queue_page_upload_saves_only_selected_rows(self):
+        first = self.make_item('选择补图的教材')
+        second = self.make_item('暂时不补的台灯')
+        self.set_queue([first, second])
+        self.client.force_login(self.seller)
+
+        response = self.client.post(self.url, {
+            f'item_image_{first.id}': self.image_upload('first-cover.png'),
+        })
+
+        self.assertRedirects(response, self.url)
+        saved_image = ItemImage.objects.get(item=first)
+        self.assertEqual(ItemImage.objects.filter(item=second).count(), 0)
+        self.assertTrue(saved_image.thumbnail)
+        self.assertTrue(saved_image.preview)
+        self.assertEqual(
+            (saved_image.image_width, saved_image.image_height), (1600, 1000),
+        )
+        self.assertEqual(
+            (saved_image.preview_width, saved_image.preview_height), (960, 600),
+        )
+
+        queue = self.client.get(self.url)
+        self.assertEqual(list(queue.context['pending_items']), [second])
+        self.assertEqual(queue.context['completed_count'], 1)
+        self.assertEqual(queue.context['pending_count'], 1)
+        self.assertEqual(queue.context['progress_percent'], 50)
+
+    def test_one_invalid_upload_rejects_the_whole_submission(self):
+        valid = self.make_item('合法图片商品')
+        invalid = self.make_item('无效图片商品')
+        self.set_queue([valid, invalid])
+        self.client.force_login(self.seller)
+
+        response = self.client.post(self.url, {
+            f'item_image_{valid.id}': self.image_upload('valid-cover.png'),
+            f'item_image_{invalid.id}': self.image_upload(
+                'broken-cover.png', content=b'not an image',
+            ),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ItemImage.objects.count(), 0)
+        self.assertContains(response, '图片处理失败，请换一张清晰的图片再试。')
+        self.assertContains(response, '本次选择的图片全部未保存')
+
+    def test_empty_submission_does_not_write_images(self):
+        item = self.make_item('未选择图片的教材')
+        self.set_queue([item])
+        self.client.force_login(self.seller)
+
+        response = self.client.post(self.url, {})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ItemImage.objects.count(), 0)
+        self.assertContains(response, '请先至少为一行待补图商品选择图片。')
+
+    def test_upload_for_no_longer_pending_item_is_ignored(self):
+        pending = self.make_item('仍在待办中的教材')
+        sold = self.make_item('已售出的台灯', status='sold')
+        self.set_queue([pending, sold])
+        self.client.force_login(self.seller)
+
+        response = self.client.post(self.url, {
+            f'item_image_{sold.id}': self.image_upload('sold-cover.png'),
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ItemImage.objects.count(), 0)
+        self.assertContains(response, '请先至少为一行待补图商品选择图片。')
 
     def test_completed_queue_shows_closed_state_and_keeps_single_edit_entry(self):
         item = self.make_item('已经补图的教材')

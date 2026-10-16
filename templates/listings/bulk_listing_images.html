@@ -6,7 +6,7 @@
     <a href="{% url 'my_items' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回我的商品</a>
     <span class="eyebrow eyebrow-soft">批量发布收尾</span>
     <h1>本批次补图</h1>
-    <p>先补齐最需要的照片；每一件都沿用原来的单件编辑与图片治理规则。</p>
+    <p>每一行选择一张图；只想先补几件，就只给那几行选文件。</p>
 </div>
 
 <div class="row g-3 mb-4">
@@ -28,7 +28,7 @@
         <div class="content-card text-center">
             <span class="text-muted small d-block">仍待补图</span>
             <strong class="display-6 text-primary">{{ pending_count }}</strong>
-            <span class="text-muted small d-block">逐件进入原编辑页</span>
+            <span class="text-muted small d-block">行内直接上传</span>
         </div>
     </div>
 </div>
@@ -45,36 +45,67 @@
     </div>
 
     {% if pending_items %}
-    <div class="table-responsive">
-        <table class="table table-hover align-middle">
-            <thead>
-                <tr>
-                    <th>商品</th>
-                    <th>交易口径</th>
-                    <th>状态</th>
-                    <th>发布时间</th>
-                    <th class="text-end">下一步</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in pending_items %}
-                <tr>
-                    <td><a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></td>
-                    <td>
-                        {% if item.trade_mode == 'free' %}免费赠送
-                        {% elif item.trade_mode == 'borrow' %}押金 ¥{{ item.deposit_amount }} · {{ item.borrow_days }} 天
-                        {% else %}¥{{ item.price }}{% endif %}
-                    </td>
-                    <td>{{ item.get_status_display }}</td>
-                    <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
-                    <td class="text-end">
-                        <a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-primary">去补图</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="alert alert-light border d-flex align-items-start" role="note">
+            <i class="bi bi-info-circle-fill text-primary me-2 mt-1"></i>
+            <div>
+                文件与商品的对应关系以这一页的表格为准。本次提交通过前，任何一张无效图片都会让整次选择不写入；需要继续加图或删图时，再进入单件编辑页。
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>商品</th>
+                        <th>交易口径</th>
+                        <th>状态</th>
+                        <th>发布时间</th>
+                        <th>本行补图</th>
+                        <th class="text-end">更多操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in pending_items %}
+                    <tr>
+                        <td><a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></td>
+                        <td>
+                            {% if item.trade_mode == 'free' %}免费赠送
+                            {% elif item.trade_mode == 'borrow' %}押金 ¥{{ item.deposit_amount }} · {{ item.borrow_days }} 天
+                            {% else %}¥{{ item.price }}{% endif %}
+                        </td>
+                        <td>{{ item.get_status_display }}</td>
+                        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+                        <td>
+                            <label class="visually-hidden" for="item-image-{{ item.id }}">{{ item.title }} 的补图文件</label>
+                            <input
+                                type="file"
+                                name="item_image_{{ item.id }}"
+                                id="item-image-{{ item.id }}"
+                                accept="image/*"
+                                aria-describedby="item-image-error-{{ item.id }}"
+                                class="form-control{% if item.bulk_image_error %} is-invalid{% endif %}"
+                            >
+                            {% if item.bulk_image_error %}
+                            <div class="invalid-feedback d-block" id="item-image-error-{{ item.id }}">
+                                {{ item.bulk_image_error }}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">单件编辑</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="d-flex flex-wrap justify-content-end gap-2 pt-3">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-cloud-arrow-up me-2"></i>保存选中的补图
+            </button>
+        </div>
+    </form>
     {% else %}
     <div class="empty-state text-center py-5">
         <i class="bi bi-check-circle-fill text-success display-6 d-block mb-3"></i>
