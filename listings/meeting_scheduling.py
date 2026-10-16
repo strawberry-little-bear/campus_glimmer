@@ -5,7 +5,8 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from .campus_location_service_hours import (
-    evaluate_service_windows, get_active_service_windows,
+    evaluate_service_windows, get_active_service_exceptions,
+    get_active_service_windows,
 )
 from .models import CampusLocation, MeetingAppointment
 
@@ -76,7 +77,7 @@ def recommend_meeting_locations(
 
     locations = list(
         CampusLocation.objects.filter(is_active=True)
-        .prefetch_related('service_windows')
+        .prefetch_related('service_windows', 'service_exceptions__exception_windows')
         .order_by('sort_order', 'name')
     )
     if not locations:
@@ -113,8 +114,12 @@ def recommend_meeting_locations(
         participant_count = participant_counts.get(location.id, 0)
         usage_count = usage_counts.get(location.id, 0)
         service_windows = get_active_service_windows(location)
+        service_exceptions = get_active_service_exceptions(location)
         service_evaluation = evaluate_service_windows(
-            service_windows, start_at=target_start_at, end_at=target_end_at,
+            service_windows,
+            start_at=target_start_at,
+            end_at=target_end_at,
+            exceptions=service_exceptions,
         )
         reasons = []
         score = 0
@@ -136,13 +141,21 @@ def recommend_meeting_locations(
             reasons.append('公共区域，更适合当面核验')
         else:
             reasons.append('请优先确认现场安全和开放时间')
-        if target_start_at is not None and target_end_at is not None:
+        if target_start_at is not None or target_end_at is not None:
             if service_evaluation.state == 'open':
                 score += 12
-                reasons.append('当前安排落在登记开放时段内')
+                if service_evaluation.has_exception:
+                    reasons.append('当前安排落在当天例外开放时段内')
+                else:
+                    reasons.append('当前安排落在登记开放时段内')
             elif service_evaluation.state == 'closed':
                 score = max(0, score - 10)
-                reasons.append('当前安排不在登记开放时段，请确认临时开放或调整时间')
+                if service_evaluation.closed_exceptions:
+                    reasons.append('交付日期地点临时关闭，请调整日期、时间或地点')
+                elif service_evaluation.has_exception:
+                    reasons.append('当前安排不在当天替换时段内，请核对单日开放例外')
+                else:
+                    reasons.append('当前安排不在登记开放时段，请确认临时开放或调整时间')
             else:
                 reasons.append('未登记开放时段，请自行确认现场安排')
         elif service_evaluation.is_registered:
@@ -185,6 +198,7 @@ def recommend_meeting_times(*, order, location=None, limit=3, days=7, now=None):
     horizon_end = now + timedelta(days=max(days, 1) + 1)
     participant_ids = {order.buyer_id, order.seller_id}
     service_windows = get_active_service_windows(location)
+    service_exceptions = get_active_service_exceptions(location)
     blocked_intervals = list(
         MeetingAppointment.objects.filter(
             status__in={'pending', 'confirmed'},
@@ -223,14 +237,25 @@ def recommend_meeting_times(*, order, location=None, limit=3, days=7, now=None):
             reasons = ['双方当前没有其他交付预约冲突']
             score = max(1, 6 - day_offset)
             service_evaluation = evaluate_service_windows(
-                service_windows, start_at=start_at, end_at=end_at,
+                service_windows,
+                start_at=start_at,
+                end_at=end_at,
+                exceptions=service_exceptions,
             )
             if service_evaluation.state == 'open':
                 score += 6
-                reasons.append('落在交付地点登记开放时段内')
+                if service_evaluation.has_exception:
+                    reasons.append('落在交付地点当天例外开放时段内')
+                else:
+                    reasons.append('落在交付地点登记开放时段内')
             elif service_evaluation.state == 'closed':
                 score = max(1, score - 6)
-                reasons.append('不在交付地点登记开放时段内')
+                if service_evaluation.closed_exceptions:
+                    reasons.append('交付日期地点临时关闭，请调整日期、时间或地点')
+                elif service_evaluation.has_exception:
+                    reasons.append('不在交付地点当天替换时段内')
+                else:
+                    reasons.append('不在交付地点登记开放时段内')
             else:
                 reasons.append('交付地点未登记开放时段，请自行确认')
             if start_at.weekday() >= 5:

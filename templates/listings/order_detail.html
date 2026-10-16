@@ -146,8 +146,8 @@
                 </div>
                 {% if appointment_service_evaluation %}
                 <div class="service-window-note {% if appointment_service_evaluation.state == 'open' %}is-open{% elif appointment_service_evaluation.state == 'closed' %}is-closed{% endif %}">
-                    {% if appointment_service_evaluation.state == 'open' %}<i class="bi bi-clock-check me-1"></i>当前安排落在登记开放时段内：{{ appointment_service_evaluation.summary }}
-                    {% elif appointment_service_evaluation.state == 'closed' %}<i class="bi bi-clock-history me-1"></i>当前安排不在登记开放时段内：{{ appointment_service_evaluation.summary }}，请自行确认临时开放或假期调整。
+                    {% if appointment_service_evaluation.state == 'open' %}<i class="bi bi-clock-check me-1"></i>{% if appointment_service_evaluation.has_exception %}当前安排落在当天例外开放时段内：{% else %}当前安排落在登记开放时段内：{% endif %}{{ appointment_service_evaluation.summary }}
+                    {% elif appointment_service_evaluation.state == 'closed' %}<i class="bi bi-clock-history me-1"></i>{% if appointment_service_evaluation.has_exception %}当前安排不在当天开放例外内：{% else %}当前安排不在登记开放时段内：{% endif %}{{ appointment_service_evaluation.summary }}，请自行确认临时开放或假期调整。{% if appointment_service_evaluation.exception_reasons %}原因：{{ appointment_service_evaluation.exception_reasons|join:'；' }}。{% endif %}
                     {% else %}<i class="bi bi-clock me-1"></i>该地点未登记每周开放时段，请自行确认现场安排。{% endif %}
                 </div>
                 {% endif %}

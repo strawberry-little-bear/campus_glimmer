@@ -124,6 +124,109 @@ class CampusLocationServiceWindow(models.Model):
         ]
 
 
+
+class CampusLocationServiceException(models.Model):
+    """A date-specific override for one campus location's weekly windows."""
+
+    CLOSED = 'closed'
+    REPLACEMENT = 'replacement'
+    EXCEPTION_TYPE_CHOICES = (
+        (CLOSED, '临时关闭'),
+        (REPLACEMENT, '替换时段'),
+    )
+
+    location = models.ForeignKey(
+        CampusLocation,
+        on_delete=models.CASCADE,
+        related_name='service_exceptions',
+        verbose_name='校园地点',
+    )
+    effective_date = models.DateField('生效日期')
+    exception_type = models.CharField(
+        '例外类型', max_length=20, choices=EXCEPTION_TYPE_CHOICES, default=CLOSED,
+    )
+    reason = models.CharField('配置原因', max_length=200)
+    is_active = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    def clean(self):
+        super().clean()
+        if self.exception_type not in self.EXCEPTION_TYPE_CHOICES:
+            raise ValidationError({'exception_type': '请选择有效的单日例外类型。'})
+
+    @property
+    def type_label(self):
+        return self.get_exception_type_display()
+
+    def __str__(self):
+        return f'{self.location.name} · {self.effective_date:%Y-%m-%d} {self.type_label}'
+
+    class Meta:
+        verbose_name = '校园地点单日开放例外'
+        verbose_name_plural = '校园地点单日开放例外'
+        ordering = ['effective_date', 'location__name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['location', 'effective_date'],
+                condition=models.Q(is_active=True),
+                name='unique_active_location_service_exception_date',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(exception_type__in=['closed', 'replacement']),
+                name='service_exception_valid_type',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['location', 'is_active', 'effective_date'],
+                name='location_exception_lookup_idx',
+            ),
+        ]
+
+
+class CampusLocationServiceExceptionWindow(models.Model):
+    """One same-day opening interval attached to a replacement exception."""
+
+    service_exception = models.ForeignKey(
+        CampusLocationServiceException,
+        on_delete=models.CASCADE,
+        related_name='exception_windows',
+        verbose_name='单日开放例外',
+    )
+    start_time = models.TimeField('开始时间')
+    end_time = models.TimeField('结束时间', help_text='必须晚于开始时间；跨午夜请调整每周时段。')
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    def clean(self):
+        super().clean()
+        if self.start_time >= self.end_time:
+            raise ValidationError({'end_time': '替换时段必须晚于开始时间，且不支持跨午夜。'})
+
+    @property
+    def display_text(self):
+        return f'{self.start_time:%H:%M}–{self.end_time:%H:%M}'
+
+    def __str__(self):
+        return f'{self.service_exception} · {self.display_text}'
+
+    class Meta:
+        verbose_name = '校园地点单日替换时段'
+        verbose_name_plural = '校园地点单日替换时段'
+        ordering = ['service_exception', 'start_time', 'end_time']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['service_exception', 'start_time'],
+                name='unique_exception_start_time',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(start_time__lt=models.F('end_time')),
+                name='exception_window_end_after_start',
+            ),
+        ]
+
+
 class CampusLocationMaintenanceDecision(models.Model):
     """一次校园地点维护队列的人工判断留痕。
 

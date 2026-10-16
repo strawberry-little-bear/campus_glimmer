@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，128 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，129 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -54,7 +54,7 @@ campus_glimmer/
 | `order_maintenance.py` | 订单超时兜底与借用到期通知的批处理 | 读写 |
 | `order_workflow.py` | 订单状态流转和交付相关逻辑 | 读写 |
 | `meeting_scheduling.py` | 交付时间安排、冲突检测与开放时段推荐信号 | 读写 |
-| `campus_location_service_hours.py` | 校园地点每周服务时段、跨午夜与相邻窗口覆盖判断 | 只读 |
+| `campus_location_service_hours.py` | 校园地点每周服务时段、单日开放例外、跨午夜截断与相邻窗口覆盖判断 | 只读 |
 | `price_insights.py` | 同类价格参考与需求热度分析 | 读写 |
 | `price_changes.py` | 出售价格轨迹与收藏商品降价提醒 | 读写 |
 | `price_history.py` | 商品详情价格轨迹的连续性校验、最近窗口、走势、隐私粒度与卖家维护提示（只报告） | 只报告 |
@@ -170,12 +170,12 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（144 个）
+## 业务链路的测试模块（147 个）
 
 <details>
-<summary>业务链路测试清单（144 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（147 个，按主题就近排列）</summary>
 
-清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
+清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
 - **`test_academic_calendar.py`**：学期阶段划分、阶段统计与快照写路径
 
@@ -308,6 +308,7 @@ campus_glimmer/
 - **`test_meeting_recommendations.py`**：交付时间建议的生成与冲突规避
 
 - **`test_campus_location_service_hours.py`**：每周时段模型约束、跨午夜与相邻窗口判断、交付推荐解释和时段外提交提醒
+- **`test_campus_location_service_exceptions.py`**：单日关闭与替换例外、跨午夜截断、推荐解释、原因提醒与约束测试
 
 - **`test_meeting_reschedule.py`**：下界只认「更新了」备注、首次提议不算改期、没约上的不进分母、响应分档与 attendance 一致、地点只和当前版比、清单只列改过两次以上、只报告不改写与空态导出测试
 
@@ -462,7 +463,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（96 篇，持续更新）</summary>
+<summary>设计文档清单（99 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -500,6 +501,10 @@ campus_glimmer/
 - **`contribution-tier-shape-design.md`**：积分等级与徽章的三张规则表第一次被数字读到，按全量不按周期切
 
 - **`meeting-reschedule-design.md`**：改期计数的四条损失与「一次谈成是主档」的口径
+- **`campus-location-service-hours-design.md`**：校园地点每周开放时段、跨午夜合并与推荐提醒边界
+
+- **`campus-location-service-exceptions-design.md`**：单日临时关闭、替换时段与跨午夜截断口径
+
 
 - **`report-outcome-feedback-design.md`**：举报人侧的结果回访：三档结构化反馈、一次性提交与运营回访质量口径
 - **`report-priority-design.md`**：商品举报的可解释优先级：风险原因、在售曝光与多人交叉信号只影响人工查看顺序

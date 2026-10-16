@@ -500,10 +500,17 @@ class MeetingAppointmentForm(StyledModelFormMixin, forms.ModelForm):
                 location, start_at=start_at, end_at=end_at,
             )
             if service_evaluation.state == 'closed':
-                self.service_hours_notice = (
-                    f'所选时间不在「{location.name}」登记开放时段（{service_evaluation.summary}）内，'
-                    '请自行确认临时开放、假期调整或现场门禁。'
-                )
+                if service_evaluation.has_exception:
+                    exception_reason = '；'.join(service_evaluation.exception_reasons)
+                    self.service_hours_notice = (
+                        f'「{location.name}」当天开放安排有单日例外（{exception_reason}），'
+                        '所选时间不在例外时段内，请自行确认或调整安排。'
+                    )
+                else:
+                    self.service_hours_notice = (
+                        f'所选时间不在「{location.name}」登记开放时段（{service_evaluation.summary}）内，'
+                        '请自行确认临时开放、假期调整或现场门禁。'
+                    )
             elif not service_evaluation.is_registered:
                 self.service_hours_notice = (
                     f'「{location.name}」未登记每周开放时段，请自行确认现场开放情况。'

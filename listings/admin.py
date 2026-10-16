@@ -1,6 +1,6 @@
 from django.contrib import admin, messages
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -30,6 +30,26 @@ class CampusLocationAdmin(admin.ModelAdmin):
     search_fields = ('name', 'building', 'address')
     list_editable = ('is_public', 'is_active', 'sort_order')
     inlines = (CampusLocationServiceWindowInline,)
+
+
+
+class CampusLocationServiceExceptionWindowInline(admin.TabularInline):
+    model = CampusLocationServiceExceptionWindow
+    extra = 1
+    fields = ('start_time', 'end_time')
+    ordering = ('start_time',)
+
+
+@admin.register(CampusLocationServiceException)
+class CampusLocationServiceExceptionAdmin(admin.ModelAdmin):
+    list_display = ('location', 'effective_date', 'exception_type', 'reason', 'is_active', 'updated_at')
+    list_filter = ('exception_type', 'is_active', 'location')
+    search_fields = ('location__name', 'location__building', 'reason')
+    autocomplete_fields = ('location',)
+    ordering = ('-effective_date', 'location__name')
+    inlines = (CampusLocationServiceExceptionWindowInline,)
+    readonly_fields = ('created_at', 'updated_at')
+    date_hierarchy = 'effective_date'
 
 
 @admin.register(CampusLocationMaintenanceDecision)
