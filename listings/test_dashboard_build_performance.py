@@ -124,8 +124,8 @@ class SharedOperationsDashboardAssemblyTests(SimpleTestCase):
     def test_the_production_registry_has_unique_shared_keys(self):
         keys = [row[0] for row in OPERATIONS_DASHBOARD_SHARED_BUILDERS]
 
-        self.assertEqual(len(keys), 57)
-        self.assertEqual(len(set(keys)), 57)
+        self.assertEqual(len(keys), 58)
+        self.assertEqual(len(set(keys)), 58)
         self.assertIn('price_response', keys)
         self.assertIn('category_price_reference', keys)
         self.assertIn('search_impression_pairing_quality', keys)
@@ -135,6 +135,7 @@ class SharedOperationsDashboardAssemblyTests(SimpleTestCase):
         self.assertIn('location_maintenance_queue', keys)
         self.assertIn('location_maintenance_decision_review', keys)
         self.assertIn('task_run_ledger_integrity', keys)
+        self.assertIn('lifecycle_reminder_term_trend', keys)
 
 
 class DashboardBuildPerformanceExportTests(TestCase):
