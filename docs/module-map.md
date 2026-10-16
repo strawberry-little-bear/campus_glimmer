@@ -467,7 +467,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（101 篇，持续更新）</summary>
+<summary>设计文档清单（102 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -493,6 +493,7 @@ campus_glimmer/
 - **`dispute-evidence-shape-design.md`**：证据文件的形状，attachment.name 与 size 第一次被数字读到
 - **`meeting-service-window-quality-design.md`**：未来交付安排对照开放时段与单日例外的只读风险审计
 - **`campus-location-service-rule-quality-design.md`**：校园地点每周时段与单日例外的配置形状、生命周期与只读核对清单
+- **`search-exposure-cold-start-design.md`**：新商品从发布到首次搜索曝光的冷启动队列、延迟分桶与分类对照
 
 - **`campus-verification-friction-design.md`**：校园认证最后一公里的等待时延，只收认证成功，慢的清单按耗时倒序
 
