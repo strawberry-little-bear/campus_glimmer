@@ -74,5 +74,5 @@ class BulkCampaignAssignmentTests(TestCase):
         response = self.client.get(reverse('my_items'))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '批量加入校园专题')
+        self.assertContains(response, '批量管理勾选商品')
         self.assertContains(response, '教材交换周')

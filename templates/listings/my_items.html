@@ -69,9 +69,9 @@
 {% if items %}
 <div class="content-card bulk-campaign-toolbar mb-4">
     <div>
-        <span class="eyebrow eyebrow-soft">Campaign tools</span>
-        <strong>批量加入校园专题</strong>
-        <p>勾选商品后统一加入或移出专题，适合毕业季清仓、教材交换周等集中运营场景。</p>
+        <span class="eyebrow eyebrow-soft">Seller batch tools</span>
+        <strong>批量管理勾选商品</strong>
+        <p>统一加入或移出校园专题，也可以为毕业季一批即将到期的商品设置新的展示截止时间。</p>
     </div>
     <form method="post" action="{% url 'bulk_assign_campaign' %}" id="bulk-campaign-form" class="d-flex flex-wrap gap-2 align-items-center">
         {% csrf_token %}
@@ -79,7 +79,9 @@
             <option value="none">移出当前专题</option>
             {% for campaign in campaigns %}<option value="{{ campaign.id }}">加入：{{ campaign.title }}</option>{% endfor %}
         </select>
-        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-stars me-1"></i>应用到勾选商品</button>
+        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-stars me-1"></i>应用专题</button>
+        <input type="datetime-local" name="expires_at" class="form-control form-control-sm" aria-label="批量续期的新展示截止时间">
+        <button type="submit" formaction="{% url 'bulk_renew_items' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-calendar-check me-1"></i>批量续期</button>
     </form>
 </div>
 {% endif %}

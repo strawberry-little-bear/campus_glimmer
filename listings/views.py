@@ -118,7 +118,7 @@ from .dispute_evidence_shape import build_dispute_evidence_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import BulkListingRowFormSet, BulkListingSettingsForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
@@ -2868,6 +2868,76 @@ def bulk_assign_campaign(request):
 
     action = f'加入“{campaign.title}”' if campaign else '移出当前专题'
     messages.success(request, f'已将 {updated} 件商品{action}。')
+    return redirect('my_items')
+
+
+@login_required
+def bulk_renew_items(request):
+    """Renew a whole seller-selected batch with one explicit expiry.
+
+    This is deliberately not a refresh: it only moves the public expiry (and
+    revives rows already marked expired). Refresh quota, event history, and
+    match notifications stay untouched.
+    """
+    if request.method != 'POST':
+        return redirect('my_items')
+
+    raw_item_ids = [value.strip() for value in request.POST.getlist('item_ids')]
+    try:
+        item_ids = [int(value) for value in raw_item_ids]
+    except ValueError:
+        item_ids = []
+    if not item_ids or len(item_ids) != len(raw_item_ids) or len(set(item_ids)) != len(item_ids):
+        messages.warning(request, '请先选择至少一件商品，且不要重复提交同一件商品。')
+        return redirect('my_items')
+
+    form = BulkListingRenewalForm(request.POST)
+    if not form.is_valid():
+        errors = []
+        for field in form:
+            errors.extend(error for error in field.errors)
+        errors.extend(form.non_field_errors())
+        messages.warning(request, f'批量续期未执行：{"；".join(errors)}')
+        return redirect('my_items')
+
+    new_expires_at = form.cleaned_data['expires_at']
+    with transaction.atomic():
+        locked_items = list(
+            Item.objects.select_for_update().filter(
+                seller=request.user, id__in=item_ids,
+            ).order_by('id')
+        )
+        if len(locked_items) != len(item_ids):
+            messages.warning(request, '批量续期未执行：请只选择您自己当前仍存在的商品。')
+            return redirect('my_items')
+
+        blocked_items = [
+            item for item in locked_items
+            if not (
+                item.status == 'expired'
+                or (item.status == 'available' and item.expires_at is not None)
+            )
+        ]
+        if blocked_items:
+            messages.warning(
+                request,
+                f'批量续期未执行：{len(blocked_items)} 件商品不可续期。请只勾选已过期，或已有截止时间的在售商品。',
+            )
+            return redirect('my_items')
+
+        for item in locked_items:
+            was_expired = item.status == 'expired'
+            item.expires_at = new_expires_at
+            update_fields = ['expires_at', 'updated_at']
+            if was_expired:
+                item.status = 'available'
+                update_fields.append('status')
+            item.save(update_fields=update_fields)
+
+    messages.success(
+        request,
+        f'已为 {len(locked_items)} 件商品续期到 {timezone.localtime(new_expires_at):%Y-%m-%d %H:%M}。',
+    )
     return redirect('my_items')
 
 

@@ -64,6 +64,7 @@ urlpatterns = [
     path('my_items/', views.my_items, name='my_items'),
 path('item/<int:item_id>/refresh/', views.refresh_item, name='refresh_item'),
     path('my_items/bulk-campaign/', views.bulk_assign_campaign, name='bulk_assign_campaign'),
+    path('my_items/bulk-renew/', views.bulk_renew_items, name='bulk_renew_items'),
     path('my_items/bulk-create/', views.bulk_create_items, name='bulk_create_items'),
     path('my_items/bulk-create/images/', views.bulk_listing_image_queue, name='bulk_listing_image_queue'),
     path('my_items/bulk-create/import/template/<str:template_format>/', views.bulk_listing_import_template, name='bulk_listing_import_template'),

@@ -209,6 +209,32 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
         return value
 
 
+class BulkListingRenewalForm(forms.Form):
+    """批量设置本批次商品新的展示截止时间。"""
+
+    expires_at = forms.DateTimeField(
+        label='新的展示截止时间',
+        required=True,
+        input_formats=['%Y-%m-%dT%H:%M'],
+        widget=forms.DateTimeInput(
+            format='%Y-%m-%dT%H:%M',
+            attrs={'type': 'datetime-local', 'class': 'form-control'},
+        ),
+        help_text='必须晚于当前时间，且不能超过 90 天。',
+    )
+
+    def clean_expires_at(self):
+        value = self.cleaned_data['expires_at']
+        if timezone.is_naive(value):
+            value = timezone.make_aware(value, timezone.get_current_timezone())
+        now = timezone.now()
+        if value <= now:
+            raise forms.ValidationError('新的展示截止时间必须晚于当前时间。')
+        if value > now + timezone.timedelta(days=90):
+            raise forms.ValidationError('新的展示截止时间不能超过 90 天。')
+        return value
+
+
 class BulkListingSettingsForm(ItemForm):
     """毕业季批量发布本批次共用的设置。"""
 
