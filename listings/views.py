@@ -29,6 +29,7 @@ from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_
 from .bulk_listing_csv import BulkListingCsvParseResult, parse_bulk_listing_csv
 from .bulk_listing_template import build_bulk_listing_import_template
 from .bulk_listing_xlsx import parse_bulk_listing_xlsx
+from .bulk_listing_import_summary import build_bulk_listing_import_error_summary
 from .dashboard_build_performance import build_dashboard_build_performance
 from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
 from .search_combo_shift import build_search_combo_shift
@@ -2539,6 +2540,7 @@ def _render_bulk_create_page(
     import_row_errors=(),
     import_preview_count=0,
     import_token='',
+    import_error_summary=None,
 ):
     return render(request, 'listings/bulk_item_create.html', {
         'settings_form': settings_form if settings_form is not None else BulkListingSettingsForm(),
@@ -2549,6 +2551,7 @@ def _render_bulk_create_page(
         'import_row_errors': import_row_errors,
         'import_preview_count': import_preview_count,
         'import_token': import_token,
+        'import_error_summary': import_error_summary,
     })
 
 
@@ -2634,6 +2637,9 @@ def bulk_create_items_import(request):
             formset=formset,
             import_file_error=result.file_error,
             import_row_errors=[error.display for error in result.row_errors],
+            import_error_summary=build_bulk_listing_import_error_summary(
+                result.row_errors,
+            ),
         )
 
     token = _store_bulk_listing_import(request, result.rows)

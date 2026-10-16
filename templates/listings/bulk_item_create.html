@@ -21,15 +21,34 @@
             {% if import_file_error %}
             <div class="alert alert-danger">{{ import_file_error }}</div>
             {% endif %}
-            {% if import_row_errors %}
-            <div class="alert alert-warning mb-3">
-                <strong>导入文件里还有需要修正的内容：</strong>
+            {% if import_error_summary %}
+            <div class="alert alert-warning mb-2">
+                <strong>导入错误摘要：</strong>
+                共 {{ import_error_summary.total_error_count }} 个行级错误，
+                涉及 {{ import_error_summary.affected_row_count }} 行，
+                归纳为 {{ import_error_summary.group_count }} 类问题。
+                <ul class="mb-0 mt-2 small">
+                    {% for group in import_error_summary.groups %}
+                    <li>
+                        <strong>{{ group.count }} 次</strong> · {{ group.column_label }}：{{ group.message }}
+                        <span class="text-muted">（{{ group.row_numbers_display }}）</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% if import_error_summary.hidden_group_count %}
+                <div class="small mt-2 mb-0">
+                    还有 {{ import_error_summary.hidden_group_count }} 类问题未在摘要中展开，请查看下方完整清单。
+                </div>
+                {% endif %}
+            </div>
+            <details class="alert alert-warning mb-3">
+                <summary class="small">查看全部逐条导入错误</summary>
                 <ul class="mb-0 mt-2 small">
                     {% for error in import_row_errors %}
                     <li>{{ error }}</li>
                     {% endfor %}
                 </ul>
-            </div>
+            </details>
             {% endif %}
             <label for="id_import_file" class="form-label">CSV / XLSX 文件</label>
             <input

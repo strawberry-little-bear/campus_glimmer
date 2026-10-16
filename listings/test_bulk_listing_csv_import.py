@@ -105,6 +105,7 @@ class BulkListingCsvImportTests(TestCase):
         self.assertEqual(preview.status_code, 200)
         self.assertContains(preview, '导入文件已解析出 <strong>3</strong> 件商品')
         self.assertContains(preview, '内容还没有发布')
+        self.assertNotContains(preview, '导入错误摘要')
         self.assertContains(preview, '数据结构教材')
         self.assertContains(preview, '免费赠送')
         self.assertFalse(Item.objects.exists())
@@ -139,11 +140,17 @@ class BulkListingCsvImportTests(TestCase):
 
         response = self._upload(make_csv([
             ['台灯', '宿舍使用一学期', '出出售', '25.00', '', '', '良好'],
-            ['折叠桌', '搬离宿舍时自提', '出售', 'abc', '-1', '999', '轻微使用痕迹'],
+            ['折叠桌', '搬离宿舍时自提', '出出售', 'abc', '-1', '999', '轻微使用痕迹'],
         ]))
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Item.objects.exists())
+        self.assertContains(response, '共 5 个行级错误')
+        self.assertContains(response, '涉及 2 行')
+        self.assertContains(response, '归纳为 4 类问题')
+        self.assertContains(response, '<strong>2 次</strong> · 交易方式')
+        self.assertContains(response, '第 2 行、第 3 行')
+        self.assertContains(response, '查看全部逐条导入错误')
         self.assertContains(response, '第 2 行「交易方式」')
         self.assertContains(response, '第 3 行「价格」')
         self.assertContains(response, '第 3 行「押金」')

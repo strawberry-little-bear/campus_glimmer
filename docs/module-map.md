@@ -28,11 +28,11 @@ campus_glimmer/
 └── README.md
 ```
 
-## listings/ 的业务模块（127 个）
+## listings/ 的业务模块（128 个）
 
 
 <details>
-<summary>业务模块清单（127 个，按业务链路归组）</summary>
+<summary>业务模块清单（128 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -43,7 +43,8 @@ campus_glimmer/
 | `first_viewed.py` | 商品第一次被看见之后的收藏与下单时延、来源与后续一步（只报告不改写） | 读写 |
 | `bulk_listing_csv.py` | 毕业季批量发布 CSV 的 UTF-8 解码、固定表头、行级校验与预览草稿 | 只读 |
 | `bulk_listing_xlsx.py` | 毕业季批量发布 XLSX 的第一工作表读取、安全单元格转换与共享行校验 | 只读 |
-| `bulk_listing_template.py` | 毕业季批量发布 CSV / XLSX 固定表头模板的内存生成，含 XLSX 交易方式下拉 | 只读 |
+| `bulk_listing_template.py` | 毕业季批量发布 CSV / XLSX 固定表头模板的内存生成，含 XLSX 交易方式下拉与行内范围提示 | 只读 |
+| `bulk_listing_import_summary.py` | 毕业季批量发布 CSV / XLSX 行级错误的重复问题分组与页面摘要 | 只读 |
 | `forms.py` | 商品、搜索、通知偏好等表单 | 读写 |
 | `image_processing.py` | 商品图片上传硬限制、降采样、EXIF 方向、WebP 重编码、列表缩略图与大图预览生成、内在宽高读取 | 读写 |
 | `models.py` | 商品、地点、领取申请、订单、通知和机会忽略记录等核心模型 | 读写 |
@@ -168,10 +169,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（140 个）
+## 业务链路的测试模块（141 个）
 
 <details>
-<summary>业务链路测试清单（140 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（141 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的四条链路测试。
 
@@ -205,7 +206,8 @@ campus_glimmer/
 
 - **`test_bulk_listing_csv_import.py`**：批量发布 CSV 的 UTF-8 与表头校验、行级错误、预览不写入、token 失效与确认发布闭环
 - **`test_bulk_listing_xlsx_import.py`**：批量发布 XLSX 的数字转换、公式 / 日期 / 布尔拒绝、第一工作表边界、文件上限与确认发布闭环
-- **`test_bulk_listing_import_template.py`**：批量发布 CSV / XLSX 模板的固定表头、XLSX 下拉与冻结行、空模板回读、格式白名单与登录边界
+- **`test_bulk_listing_import_summary.py`**：批量发布导入错误摘要的空态、重复问题聚合、行号展示、排序稳定与前六组截断
+- **`test_bulk_listing_import_template.py`**：批量发布 CSV / XLSX 模板的固定表头、XLSX 输入约束与冻结行、空模板回读、格式白名单与登录边界
 - **`test_bulk_listing_image_queue.py`**：批量发布后的短期补图队列、本人与展示状态过滤、完成进度、行内补图上传、整批校验失败不写入、session 覆盖与失效边界
 
 - **`test_campaign_analytics.py`**：专题周期内的新增、在售与转化漏斗

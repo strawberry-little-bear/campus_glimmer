@@ -140,6 +140,9 @@ class BulkListingXlsxImportTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Item.objects.exists())
+        self.assertContains(response, '共 4 个行级错误')
+        self.assertContains(response, '涉及 4 行')
+        self.assertContains(response, '归纳为 2 类问题')
         self.assertContains(response, '第 2 行「价格」：这一格必须是文本或数字')
         self.assertContains(response, '第 3 行「价格」：这一格必须是文本或数字')
         self.assertContains(response, '第 4 行「标题」：这一格必须是文本或数字')
