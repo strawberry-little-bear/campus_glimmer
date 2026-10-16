@@ -74,13 +74,52 @@ class BulkListingImportTemplateTests(TestCase):
             BULK_LISTING_IMPORT_HEADERS,
         )
         self.assertEqual(worksheet.freeze_panes, 'A2')
-        self.assertEqual(len(worksheet.data_validations.dataValidation), 1)
-        validation = worksheet.data_validations.dataValidation[0]
-        self.assertEqual(str(validation.sqref), 'C2:C21')
-        self.assertEqual(
-            validation.formula1, f'"{",".join(TRADE_MODE_LABELS)}"',
-        )
+        self.assertEqual(worksheet.max_row, 1)
         self.assertTrue(all(cell.data_type == 's' for cell in worksheet[1]))
+
+        validations = {
+            str(validation.sqref): validation
+            for validation in worksheet.data_validations.dataValidation
+        }
+        expected = {
+            'A2:A21': (
+                'textLength', 'between', '1', '200', '标题',
+                '填写商品后标题需为 1–200 个字符。',
+            ),
+            'C2:C21': (
+                'list', None, f'"{",".join(TRADE_MODE_LABELS)}"', None,
+                '交易方式', f'只能填写：{",".join(TRADE_MODE_LABELS)}',
+            ),
+            'D2:D21': (
+                'decimal', 'between', '0', '99999999.99', '价格',
+                '填写价格时需为 0–99,999,999.99 的数字。',
+            ),
+            'E2:E21': (
+                'decimal', 'between', '0', '99999999.99', '押金',
+                '填写押金时需为 0–99,999,999.99 的数字。',
+            ),
+            'F2:F21': (
+                'whole', 'between', '1', '90', '借用天数',
+                '填写借用天数时需为 1–90 的整数。',
+            ),
+            'G2:G21': (
+                'textLength', 'between', '1', '100', '成色',
+                '填写商品后成色需为 1–100 个字符。',
+            ),
+        }
+        self.assertEqual(set(validations), set(expected))
+        for cell_range, attributes in expected.items():
+            with self.subTest(cell_range=cell_range):
+                validation = validations[cell_range]
+                validation_type, operator, formula1, formula2, title, error = attributes
+                self.assertEqual(validation.type, validation_type)
+                self.assertEqual(validation.operator, operator)
+                self.assertEqual(validation.formula1, formula1)
+                self.assertEqual(validation.formula2, formula2)
+                self.assertTrue(validation.allow_blank)
+                self.assertTrue(validation.showErrorMessage)
+                self.assertEqual(validation.errorTitle, title)
+                self.assertEqual(validation.error, error)
 
     def test_generated_templates_still_reach_the_empty_row_guard(self):
         csv_template = build_bulk_listing_import_template('csv')

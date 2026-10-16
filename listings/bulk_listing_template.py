@@ -45,6 +45,74 @@ def _build_csv_template() -> BulkListingImportTemplate:
     )
 
 
+def _add_xlsx_input_validations(worksheet) -> None:
+    """Attach per-column hints for the twenty optional listing rows."""
+    trade_choices = ','.join(TRADE_MODE_LABELS)
+    last_row = BULK_LISTING_IMPORT_MAX_ROWS + 1
+    validations = (
+        DataValidation(
+            type='textLength',
+            operator='between',
+            formula1='1',
+            formula2='200',
+            allow_blank=True,
+            showErrorMessage=True,
+            errorTitle='标题',
+            error='填写商品后标题需为 1–200 个字符。',
+        ),
+        DataValidation(
+            type='list',
+            formula1=f'"{trade_choices}"',
+            allow_blank=True,
+            showErrorMessage=True,
+            errorTitle='交易方式',
+            error=f'只能填写：{trade_choices}',
+        ),
+        DataValidation(
+            type='decimal',
+            operator='between',
+            formula1='0',
+            formula2='99999999.99',
+            allow_blank=True,
+            showErrorMessage=True,
+            errorTitle='价格',
+            error='填写价格时需为 0–99,999,999.99 的数字。',
+        ),
+        DataValidation(
+            type='decimal',
+            operator='between',
+            formula1='0',
+            formula2='99999999.99',
+            allow_blank=True,
+            showErrorMessage=True,
+            errorTitle='押金',
+            error='填写押金时需为 0–99,999,999.99 的数字。',
+        ),
+        DataValidation(
+            type='whole',
+            operator='between',
+            formula1='1',
+            formula2='90',
+            allow_blank=True,
+            showErrorMessage=True,
+            errorTitle='借用天数',
+            error='填写借用天数时需为 1–90 的整数。',
+        ),
+        DataValidation(
+            type='textLength',
+            operator='between',
+            formula1='1',
+            formula2='100',
+            allow_blank=True,
+            showErrorMessage=True,
+            errorTitle='成色',
+            error='填写商品后成色需为 1–100 个字符。',
+        ),
+    )
+    for column, validation in zip('ACDEFG', validations):
+        validation.add(f'{column}2:{column}{last_row}')
+        worksheet.add_data_validation(validation)
+
 def _build_xlsx_template() -> BulkListingImportTemplate:
     workbook = Workbook()
     worksheet = workbook.active
@@ -59,18 +127,7 @@ def _build_xlsx_template() -> BulkListingImportTemplate:
         cell.fill = PatternFill('solid', fgColor='2C5F82')
         cell.alignment = Alignment(horizontal='center')
 
-    trade_choices = ','.join(TRADE_MODE_LABELS)
-    validation = DataValidation(
-        type='list',
-        formula1=f'"{trade_choices}"',
-        allow_blank=True,
-        showErrorMessage=True,
-        errorTitle='交易方式',
-        error=f'只能填写：{trade_choices}',
-    )
-    last_row = BULK_LISTING_IMPORT_MAX_ROWS + 1
-    validation.add(f'C2:C{last_row}')
-    worksheet.add_data_validation(validation)
+    _add_xlsx_input_validations(worksheet)
 
     buffer = io.BytesIO()
     workbook.save(buffer)
