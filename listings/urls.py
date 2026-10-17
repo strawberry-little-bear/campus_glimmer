@@ -27,6 +27,7 @@ urlpatterns = [
     path('campaigns/<slug:slug>/', views.campaign_detail, name='campaign_detail'),
     path('campaigns/<slug:slug>/join/', views.join_campaign_view, name='join_campaign'),
     path('campaigns/<slug:slug>/leave/', views.leave_campaign_view, name='leave_campaign'),
+    path('campaigns/<slug:slug>/updates/', views.update_campaign_subscription, name='update_campaign_subscription'),
     path('item/<int:item_id>/', views.item_detail, name='item_detail'),
     path('item/<int:item_id>/report/', views.report_item, name='report_item'),
     path('item/<int:item_id>/order/', views.create_order, name='create_order'),

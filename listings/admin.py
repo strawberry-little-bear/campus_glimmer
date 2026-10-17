@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -110,7 +110,7 @@ class CampusLocationMaintenanceDecisionAdmin(admin.ModelAdmin):
 class CampusCampaignAdmin(admin.ModelAdmin):
     list_display = (
         'title', 'slug', 'starts_at', 'ends_at', 'is_active',
-        'item_count', 'active_registration_count',
+        'item_count', 'active_registration_count', 'subscription_count',
     )
     list_filter = ('is_active', 'starts_at', 'ends_at')
     search_fields = ('title', 'slug', 'description')
@@ -122,6 +122,13 @@ class CampusCampaignAdmin(admin.ModelAdmin):
                 'registrations',
                 filter=Q(registrations__is_active=True),
             ),
+            subscription_total=Count(
+                'registrations',
+                filter=Q(
+                    registrations__is_active=True,
+                    registrations__notify_updates=True,
+                ),
+            ),
         )
 
     @admin.display(description='商品数')
@@ -132,17 +139,56 @@ class CampusCampaignAdmin(admin.ModelAdmin):
     def active_registration_count(self, obj):
         return obj.active_registration_total
 
+    @admin.display(description='摘要订阅', ordering='subscription_total')
+    def subscription_count(self, obj):
+        return obj.subscription_total
+
 
 @admin.register(CampaignRegistration)
 class CampaignRegistrationAdmin(admin.ModelAdmin):
     list_display = (
-        'campaign', 'user', 'joined_at', 'left_at', 'is_active', 'created_at',
+        'campaign', 'user', 'joined_at', 'left_at', 'is_active',
+        'notify_updates', 'update_frequency', 'created_at',
     )
-    list_filter = ('is_active', 'campaign', 'joined_at', 'left_at')
+    list_filter = (
+        'is_active', 'notify_updates', 'update_frequency',
+        'campaign', 'joined_at', 'left_at',
+    )
     search_fields = ('campaign__title', 'campaign__slug', 'user__username')
     date_hierarchy = 'joined_at'
     list_select_related = ('campaign', 'user')
     readonly_fields = ('created_at',)
+
+
+@admin.register(CampaignUpdateMatch)
+class CampaignUpdateMatchAdmin(admin.ModelAdmin):
+    """Read-only operational audit for buffered campaign update matches."""
+
+    list_display = (
+        'registration', 'item', 'matched_at', 'notified_at',
+        'cancelled_at', 'notification',
+    )
+    list_filter = ('notified_at', 'cancelled_at', 'matched_at')
+    search_fields = (
+        'registration__campaign__title', 'registration__user__username',
+        'item__title', 'notification__title',
+    )
+    list_select_related = ('registration__campaign', 'registration__user', 'item')
+    autocomplete_fields = ('registration', 'item', 'notification')
+    readonly_fields = (
+        'registration', 'item', 'matched_at', 'notified_at',
+        'cancelled_at', 'notification',
+    )
+    date_hierarchy = 'matched_at'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Item)

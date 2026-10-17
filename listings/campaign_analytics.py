@@ -1,9 +1,11 @@
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import (
-    BrowsingHistory, CampusCampaign, CampaignRegistration, Favorite, Item, Order,
+    BrowsingHistory, CampusCampaign, CampaignRegistration, CampaignUpdateMatch,
+    Favorite, Item, Notification, Order,
 )
 
 
@@ -91,6 +93,36 @@ def build_campaign_analytics(days=30, *, now=None):
         seller_count = items.values('seller_id').distinct().count()
         active_registration_count = registrations.filter(is_active=True).count()
         new_registration_count = new_registrations.count()
+        current_subscription_count = registrations.filter(
+            is_active=True,
+            notify_updates=True,
+        ).count()
+        pending_update_match_count = CampaignUpdateMatch.objects.filter(
+            registration__campaign=campaign,
+            registration__is_active=True,
+            registration__notify_updates=True,
+            registration__campaign__is_active=True,
+            registration__campaign__starts_at__lte=now,
+            notified_at__isnull=True,
+            cancelled_at__isnull=True,
+            item__campaign=campaign,
+            item__status='available',
+        ).filter(
+            Q(item__expires_at__isnull=True) | Q(item__expires_at__gt=now),
+            Q(registration__campaign__ends_at__isnull=True)
+            | Q(registration__campaign__ends_at__gt=now),
+        ).count()
+        digest_notifications = Notification.objects.filter(
+            kind='campaign_update',
+            campaign_update_matches__registration__campaign=campaign,
+            created_at__gte=window_start,
+            created_at__lte=window_end,
+        ).distinct()
+        sent_digest_count = digest_notifications.count()
+        read_digest_count = digest_notifications.filter(
+            is_read=True,
+            read_at__isnull=False,
+        ).count()
         performance_label, performance_tone, performance_note = _performance_label(
             new_items=new_item_count,
             current_items=current_item_count,
@@ -112,6 +144,11 @@ def build_campaign_analytics(days=30, *, now=None):
             'favorites': favorite_count,
             'active_registration_count': active_registration_count,
             'new_registration_count': new_registration_count,
+            'current_subscription_count': current_subscription_count,
+            'pending_update_match_count': pending_update_match_count,
+            'period_sent_digest_count': sent_digest_count,
+            'period_read_digest_count': read_digest_count,
+            'digest_read_rate': _rate(read_digest_count, sent_digest_count),
             'orders': order_count,
             'completed_orders': completed_order_count,
             'view_to_favorite_rate': _rate(favorite_count, view_count),
@@ -133,6 +170,18 @@ def build_campaign_analytics(days=30, *, now=None):
         ),
     )
     attention_rows = [row for row in rows if row['performance_tone'] in {'warning', 'muted'}]
+    campaign_ids = [row['id'] for row in rows]
+    period_digests = Notification.objects.filter(
+        kind='campaign_update',
+        campaign_update_matches__registration__campaign_id__in=campaign_ids,
+        created_at__gte=start,
+        created_at__lte=now,
+    ).distinct()
+    period_sent_digest_count = period_digests.count()
+    period_read_digest_count = period_digests.filter(
+        is_read=True,
+        read_at__isnull=False,
+    ).count()
     return {
         'rows': rows[:8],
         'attention_rows': attention_rows[:3],
@@ -148,6 +197,18 @@ def build_campaign_analytics(days=30, *, now=None):
             ),
             'new_registration_count': sum(
                 row['new_registration_count'] for row in rows
+            ),
+            'current_subscription_count': sum(
+                row['current_subscription_count'] for row in rows
+            ),
+            'pending_update_match_count': sum(
+                row['pending_update_match_count'] for row in rows
+            ),
+            'period_sent_digest_count': period_sent_digest_count,
+            'period_read_digest_count': period_read_digest_count,
+            'digest_read_rate': _rate(
+                period_read_digest_count,
+                period_sent_digest_count,
             ),
             'orders': sum(row['orders'] for row in rows),
             'completed_orders': sum(row['completed_orders'] for row in rows),

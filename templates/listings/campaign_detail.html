@@ -19,7 +19,7 @@
     </div>
     <div class="campaign-hero-actions">
         {% if user.is_authenticated %}
-            {% if is_registered %}
+            {% if active_registration %}
                 <span class="campaign-registration-status"><i class="bi bi-check2-circle me-1"></i>已加入专题</span>
                 <form method="post" action="{% url 'leave_campaign' campaign.slug %}">
                     {% csrf_token %}
@@ -40,6 +40,34 @@
         {% endif %}
     </div>
 </div>
+
+{% if active_registration %}
+<section class="content-card campaign-update-panel mb-4">
+    <div class="campaign-update-copy">
+        <span class="campaign-update-icon"><i class="bi bi-bell"></i></span>
+        <div>
+            <span class="eyebrow eyebrow-soft">Optional digest</span>
+            <h2>专题上新摘要</h2>
+            <p>只汇总此后新上架的商品。订阅是独立选择，不会预约商品、占用库存或创建订单；退出专题后立即停止。</p>
+        </div>
+    </div>
+    <form method="post" action="{% url 'update_campaign_subscription' campaign.slug %}" class="campaign-update-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <label class="campaign-update-toggle" for="campaign-notify-updates">
+            <span><strong>接收合并摘要</strong><small>同一周期最多一条站内通知</small></span>
+            <input type="checkbox" name="notify_updates" id="campaign-notify-updates" {% if active_registration.notify_updates %}checked{% endif %}>
+        </label>
+        <label class="campaign-update-frequency" for="campaign-update-frequency">
+            <span>摘要频率</span>
+            <select name="update_frequency" id="campaign-update-frequency">
+                {% for value, label in update_frequency_choices %}<option value="{{ value }}" {% if active_registration.update_frequency == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </label>
+        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2 me-1"></i>保存摘要设置</button>
+    </form>
+</section>
+{% endif %}
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div><span class="eyebrow eyebrow-soft">Featured listings</span><h2 class="section-title mt-1">专题商品</h2></div>

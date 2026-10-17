@@ -81,7 +81,7 @@
   <line x1="580" y1="691" x2="634" y2="691" class="dash"/>
   <g filter="url(#shadow)"><rect x="60" y="770" width="1100" height="76" rx="20" fill="#eef4f9" stroke="#b6d1e5"/></g>
   <text x="90" y="800" class="label">站内通知中心</text>
-  <text x="90" y="824" class="small">26 个偏好开关 · 稍后处理 · 免打扰 · 已读时间 · 顶部未读定时刷新</text>
+  <text x="90" y="824" class="small">27 个偏好开关 · 稍后处理 · 免打扰 · 已读时间 · 顶部未读定时刷新</text>
   <text x="640" y="800" class="label">治理工作台</text>
   <text x="640" y="824" class="small">举报 · 预约异常 · 借用催收升级 · 内容审核 · 用户临时静默</text>
 </svg>

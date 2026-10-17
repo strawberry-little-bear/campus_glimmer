@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from .models import CampaignRegistration
+from .models import CampaignRegistration, CampaignUpdateMatch
 
 
 class CampaignRegistrationClosed(ValueError):
@@ -77,4 +77,9 @@ def leave_campaign(user, campaign, *, now=None):
         registration.is_active = False
         registration.left_at = now
         registration.save(update_fields=['is_active', 'left_at'])
+        CampaignUpdateMatch.objects.filter(
+            registration=registration,
+            notified_at__isnull=True,
+            cancelled_at__isnull=True,
+        ).update(cancelled_at=now)
         return CampaignRegistrationResult(registration, True, 'left')

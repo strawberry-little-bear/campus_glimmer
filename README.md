@@ -337,7 +337,9 @@ GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查�
 | `process_order_timeouts` | 预约超时、归还提醒与逾期催收 | 周期性运行 |
 | `expire_items` | 下架到期商品并通知发布者 | 每日运行 |
 | `send_operations_digest` | 生成管理员运营告警日报 | 按统计周期运行 |
+| `send_opportunity_digest` | 发送互助机会摘要 | 每日运行 |
 | `send_saved_search_digest` | 发送关注搜索汇总 | 按日 / 周运行 |
+| `send_campaign_update_digest` | 发送校园专题上新摘要 | 按日 / 周运行 |
 | `send_lifecycle_reminders` | 发送商品生命周期提醒 | 每日运行 |
 | `sync_academic_calendar` | 补齐学期阶段并刷新快照 | 开学前与每周运行 |
 | `backfill_item_thumbnails` | 回填历史图片变体和宽高 | 上线辅助、分批运行 |

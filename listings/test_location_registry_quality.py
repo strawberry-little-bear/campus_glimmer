@@ -17,7 +17,9 @@ from .models import (
 
 class LocationRegistryQualityTests(TestCase):
     def setUp(self):
-        self.now = timezone.now() + timedelta(seconds=1)
+        # Keep the snapshot boundary ahead of database setup; a one-second
+        # margin makes the delivery-window assertion flaky on slower machines.
+        self.now = timezone.now() + timedelta(hours=1)
         self.user = User.objects.create_user(
             username='location-quality-user', password='safe-password-123',
         )

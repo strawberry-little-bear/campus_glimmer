@@ -328,7 +328,9 @@ docker compose down -v
 | `process_order_timeouts` | 预约超时、归还提醒和逾期催收 | 周期性运行 |
 | `expire_items` | 下架到期商品并通知发布者 | 每日运行 |
 | `send_operations_digest` | 生成管理员运营告警日报 | 按统计周期运行 |
+| `send_opportunity_digest` | 发送互助机会摘要 | 每日运行 |
 | `send_saved_search_digest` | 发送关注搜索汇总 | 按日/周频率运行 |
+| `send_campaign_update_digest` | 发送校园专题上新摘要 | 按日/周频率运行 |
 | `send_lifecycle_reminders` | 发送商品生命周期提醒 | 每日运行 |
 | `sync_academic_calendar` | 补齐学期阶段并刷新快照 | 开学前及每周运行 |
 | `backfill_item_thumbnails` | 回填历史图片变体和宽高 | 上线辅助、分批运行 |
@@ -404,6 +406,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | --- | --- |
 | [功能手册](feature-handbook.md) | 想了解九条业务链路的完整规则、指标和边缘情况 |
 | [校园专题报名设计](campaign-registration-design.md) | 想了解专题参与区间、幂等约束、隐私边界和运营口径 |
+| [校园专题上新摘要设计](campaign-update-digest-design.md) | 想了解主动订阅、合并摘要、发送边界和运营口径 |
 | [核心数据模型](data-model.md) | 想理解模型分组、关键字段和约束 |
 | [模块与测试地图](module-map.md) | 想找代码模块、测试以及设计文档索引 |
 | [后台与定时任务](scheduled-tasks.md) | 想接入周期任务、回填数据或排查运行台账 |

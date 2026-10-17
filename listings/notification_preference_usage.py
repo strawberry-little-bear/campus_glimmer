@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""通知偏好开关：26 个开关各自的形状，第一次被运营读到。
+"""通知偏好开关：每种通知类型各自的形状，第一次被运营读到。
 
-`NotificationPreference` 上有 27 个布尔字段，其中 26 个是通知类型的开关、
-1 个是免打扰总闸（`quiet_hours_enabled`）。每个开关都有真实的读取路径：
+`NotificationPreference` 上为每种通知类型各保留一个布尔开关，另有 1 个免打扰总闸
+（`quiet_hours_enabled`）。每个开关都有真实的读取路径：
 `notifications.py:66` 的 `create_notification` 第一件事就是
 `if not getattr(preference, kind, True): return None`——**开关关掉的通知，在写入那一刻
 就被静默丢弃，库里连一行都没有。**
@@ -11,7 +11,7 @@
 `operations_digest.py:52`、`opportunity_digest.py:46`、`saved_search_digest.py:124`、
 `lifecycle_reminder_effect.py:392`）和一处展示侧（`forms.py:40` 的表单字段），
 **运营侧只有 `moderation_notice_preference` 读过一行值，而它只读 `moderation_update` 一个
-开关。** 其余 25 个开关关没关、谁关的、关了之后通知还来不来，一处都答不上来。
+开关。** 其余开关关没关、谁关的、关了之后通知还来不来，一处都答不上来。
 
 本模块把它们一次读完，只报告：不加迁移、不加字段、不改 `create_notification`、
 不改表单、不给任何人自动打开开关。`create_notification` 那句静默的 `return None`
@@ -47,7 +47,7 @@
 
 ## 三、关掉的是哪一类，按「有没有交易后果」分
 
-25 个开关不是一类东西。关掉 `order_created`（有人预约你的商品）有真实的交易后果：
+这些开关不是一类东西。关掉 `order_created`（有人预约你的商品）有真实的交易后果：
 用户收不到通知，可能错过一笔成交。关掉 `moderation_update`（你违规了）没有任何交易
 后果。本模块按这个性质分四组报，不合成一个「关闭率」：
 
@@ -116,7 +116,8 @@ PREFERENCE_GROUPS = (
         'message_received', 'comment_received', 'rating_received',
     )),
     ('digest', '汇总类', (
-        'operations_digest', 'opportunity_digest', 'saved_search_digest',
+          'operations_digest', 'opportunity_digest', 'saved_search_digest',
+          'campaign_update',
     )),
     ('other', '其余', (
         'saved_search_match', 'item_available', 'item_expired',
@@ -126,7 +127,7 @@ PREFERENCE_GROUPS = (
     )),
 )
 
-# 免打扰总闸单独一组——它不是通知类型，但和 26 个开关摆在同一个模型上、
+# 免打扰总闸单独一组——它不是通知类型，但和通知类型开关摆在同一个模型上、
 # 同一张表单里，用户关掉它的频率是最能说明「这一页好不好用」的信号。
 QUIET_HOURS_FIELD = 'quiet_hours_enabled'
 
@@ -180,7 +181,7 @@ def _recently_notified_users(kind, start, end):
 
 
 def build_notification_preference_usage(days=30, now=None):
-    """把 26 个通知类型开关各自的四格形状读出来。"""
+    """把每种通知类型开关各自的四格形状读出来。"""
     now = now or timezone.now()
     start = now - timedelta(days=days)
     fields = _preference_fields()
@@ -198,7 +199,7 @@ def build_notification_preference_usage(days=30, now=None):
             'days': days,
             'field_total': len(fields),
             'summary': (
-                '25 个开关逐个报，按「关掉它有没有交易后果」分四组，不合成一个全站关闭率。'
+                f'{len(fields)} 个开关逐个报，按「关掉它有没有交易后果」分四组，不合成一个全站关闭率。'
                 '当前平台还没有任何偏好行。'
             ),
             'rows': [],
@@ -267,7 +268,7 @@ def build_notification_preference_usage(days=30, now=None):
         })
 
     summary = (
-        '25 个开关逐个报，按「关掉它有没有交易后果」分四组，不合成一个全站关闭率。'
+        f'{len(fields)} 个开关逐个报，按「关掉它有没有交易后果」分四组，不合成一个全站关闭率。'
         '被开关挡掉的通知连一行都不建，所以「关掉之后通知少了多少」不在本模块口径里——'
         '分子在库里，分母不在。没有偏好行的用户单列一格，不并入「开着」。'
     )

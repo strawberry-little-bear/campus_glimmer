@@ -1008,8 +1008,24 @@ a { color: inherit; text-decoration: none; }
 .campaign-footprint-body h3 { margin: 10px 0 7px; color: #315946; font-size: 1.02rem; }
 .campaign-footprint-body p { margin: 0 0 13px; color: #75877d; font-size: .78rem; line-height: 1.65; }
 .campaign-footprint-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
-@media (max-width: 767px) { .campaign-hero { flex-wrap: wrap; }.campaign-hero-actions { width: 100%; flex-basis: 100%; padding: 15px 0 0; border-top: 1px solid #dcebe1; border-left: 0; }.campaign-hero-actions small, .campaign-registration-status { text-align: left; }.campaign-footprint-item { padding: 17px; } }
-@media (max-width: 575px) { .campaign-hero { flex-direction: column; padding: 21px; }.campaign-hero-icon { width: 54px; height: 54px; flex-basis: 54px; font-size: 1.4rem; }.campaign-hero h1 { font-size: 1.65rem; }.campaign-hero-meta { align-items: flex-start; flex-direction: column; gap: 8px; }.campaign-card-body { padding: 15px 18px 18px; }.campaign-footprint-item { gap: 12px; padding: 15px; }.campaign-footprint-icon { width: 38px; height: 38px; flex-basis: 38px; } }
+.campaign-update-panel { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 18px 20px; border-color: #dcebe1; background: linear-gradient(120deg, #f5fbf6, #fff 68%); }
+.campaign-update-copy { display: flex; align-items: flex-start; gap: 13px; min-width: 0; }
+.campaign-update-icon { display: grid; width: 42px; height: 42px; flex: 0 0 42px; place-items: center; color: #3d9667; background: #e3f3e7; border-radius: 13px; font-size: 1rem; }
+.campaign-update-copy h2 { margin: 1px 0 5px; color: #315946; font-size: .98rem; }
+.campaign-update-copy p { margin: 0; color: #75877d; font-size: .75rem; line-height: 1.65; }
+.campaign-update-form { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 9px 12px; }
+.campaign-update-toggle, .campaign-update-frequency { display: inline-flex; align-items: center; gap: 7px; margin: 0; color: #5f7769; font-size: .74rem; }
+.campaign-update-toggle input { width: 1rem; height: 1rem; accent-color: #4b946a; }
+.campaign-update-frequency select { min-width: 104px; padding: 5px 28px 5px 9px; border: 1px solid #d5e5da; border-radius: 9px; color: #4d6758; background-color: #fff; font-size: .73rem; }
+.campaign-update-form .btn { white-space: nowrap; }
+.campaign-footprint-subscription { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 9px; margin: 0 0 11px; }
+.campaign-footprint-subscription small { color: #8a9b91; font-size: .67rem; line-height: 1.5; }
+.campaign-footprint-subscription-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 9px 11px; border: 1px solid #e1ede4; border-radius: 11px; background: #f8fcf9; }
+.campaign-footprint-subscription-form label { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: #5d7768; font-size: .72rem; }
+.campaign-footprint-subscription-form input[type='checkbox'] { width: .95rem; height: .95rem; accent-color: #4b946a; }
+.campaign-footprint-subscription-form select { min-width: 88px; padding: 4px 24px 4px 8px; border: 1px solid #d7e6dc; border-radius: 8px; color: #536d5e; background: #fff; font-size: .71rem; }
+@media (max-width: 767px) { .campaign-hero { flex-wrap: wrap; }.campaign-hero-actions { width: 100%; flex-basis: 100%; padding: 15px 0 0; border-top: 1px solid #dcebe1; border-left: 0; }.campaign-hero-actions small, .campaign-registration-status { text-align: left; }.campaign-footprint-item { padding: 17px; }.campaign-update-panel { align-items: flex-start; flex-direction: column; gap: 14px; }.campaign-update-form { width: 100%; justify-content: flex-start; } }
+@media (max-width: 575px) { .campaign-hero { flex-direction: column; padding: 21px; }.campaign-hero-icon { width: 54px; height: 54px; flex-basis: 54px; font-size: 1.4rem; }.campaign-hero h1 { font-size: 1.65rem; }.campaign-hero-meta { align-items: flex-start; flex-direction: column; gap: 8px; }.campaign-card-body { padding: 15px 18px 18px; }.campaign-footprint-item { gap: 12px; padding: 15px; }.campaign-footprint-icon { width: 38px; height: 38px; flex-basis: 38px; }.campaign-update-panel { padding: 15px; }.campaign-update-form { align-items: stretch; flex-direction: column; }.campaign-update-toggle, .campaign-update-frequency { justify-content: space-between; }.campaign-update-frequency select { flex: 1; }.campaign-update-form .btn { width: 100%; }.campaign-footprint-subscription-form { align-items: stretch; flex-direction: column; }.campaign-footprint-subscription-form label, .campaign-footprint-subscription-form select, .campaign-footprint-subscription-form .btn { width: 100%; } }
 
 .bulk-campaign-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 17px 20px; border-color: #dcece1; background: linear-gradient(120deg, #f5fbf6, #ffffff); }
 .bulk-campaign-toolbar strong { display: block; margin-top: 4px; color: #315946; }

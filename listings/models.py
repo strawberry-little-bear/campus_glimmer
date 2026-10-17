@@ -340,6 +340,15 @@ class CampaignRegistration(models.Model):
     joined_at = models.DateTimeField('加入时间', default=timezone.now)
     left_at = models.DateTimeField('退出时间', null=True, blank=True)
     is_active = models.BooleanField('参与中', default=True)
+    notify_updates = models.BooleanField(
+        '订阅专题上新摘要', default=False,
+        help_text='只有主动开启后才会收到专题新上架商品的合并摘要。',
+    )
+    update_frequency = models.CharField(
+        '摘要频率', max_length=10, default='daily',
+        choices=(('daily', '每日摘要'), ('weekly', '每周摘要')),
+        help_text='仅在开启专题上新摘要时生效。',
+    )
     created_at = models.DateTimeField('创建时间', auto_now_add=True)
 
     class Meta:
@@ -381,6 +390,58 @@ class CampaignRegistration(models.Model):
             raise ValidationError({'left_at': '参与中的报名不能设置退出时间。'})
         if not self.is_active and self.left_at is None:
             raise ValidationError({'left_at': '已退出的报名必须记录退出时间。'})
+
+
+class CampaignUpdateMatch(models.Model):
+    """A buffered item that became newly available inside a subscribed campaign.
+
+    The row is an idempotency and audit boundary, not a reservation. Sending is
+    decided later from the current registration, campaign, item and notification
+    preference state, so leaving a campaign naturally cancels pending matches.
+    """
+
+    registration = models.ForeignKey(
+        CampaignRegistration, on_delete=models.CASCADE,
+        related_name='update_matches', verbose_name='专题报名',
+    )
+    item = models.ForeignKey(
+        'Item', on_delete=models.CASCADE,
+        related_name='campaign_update_matches', verbose_name='商品',
+    )
+    matched_at = models.DateTimeField('命中时间', default=timezone.now)
+    notified_at = models.DateTimeField('摘要发送时间', null=True, blank=True)
+    cancelled_at = models.DateTimeField(
+        '取消时间', null=True, blank=True,
+        help_text='退出订阅、专题结束或商品已不可投递时写入，保留审计但不再发送。',
+    )
+    notification = models.ForeignKey(
+        'Notification', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='campaign_update_matches', verbose_name='摘要通知',
+    )
+
+    class Meta:
+        verbose_name = '专题上新命中'
+        verbose_name_plural = '专题上新命中'
+        ordering = ['matched_at', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['registration', 'item'],
+                name='unique_campaign_update_match',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['registration', 'notified_at', 'cancelled_at'],
+                name='campaign_match_pending_idx',
+            ),
+            models.Index(
+                fields=['notification', 'matched_at'],
+                name='campaign_match_notice_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.registration.user.username} · {self.item.title}'
 
 
 class ItemQuerySet(models.QuerySet):
@@ -1851,6 +1912,7 @@ class Notification(models.Model):
         ('lost_found_lead', '失物招领线索更新'),
         ('opportunity_digest', '互助机会摘要'),
         ('saved_search_digest', '关注搜索汇总提醒'),
+        ('campaign_update', '校园专题上新摘要'),
         ('lifecycle_reminder', '商品生命周期提醒'),
         ('mutual_aid_feedback', '互助完成反馈'),
     )
@@ -2029,6 +2091,10 @@ class NotificationPreference(models.Model):
     saved_search_digest = models.BooleanField(
         '关注搜索汇总提醒', default=True,
         help_text='选择每日或每周汇总的关注搜索，会在对应周期发送一条合并提醒。',
+    )
+    campaign_update = models.BooleanField(
+        '校园专题上新摘要', default=True,
+        help_text='你主动订阅的校园专题有新商品时，按每日或每周节奏发送一条合并提醒。',
     )
     lifecycle_reminder = models.BooleanField(
         '商品生命周期提醒', default=True,

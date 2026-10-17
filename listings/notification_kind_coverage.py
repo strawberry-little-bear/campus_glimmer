@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 """通知类型、偏好开关与用户手上的那一栏——版图第一次被运营读到。
 
-``Notification.KIND_CHOICES`` 有 24 个值，``NotificationPreference`` 上有 26 个布尔开关，
-``NotificationPreferenceForm.Meta.fields`` 里摆出来 27 个字段。这三个数本应相等，或者只差
-免打扰那一组。它们不相等——而每个表各自都是自洽的，所以差额一直被「看起来像」吃掉了。
+``Notification.KIND_CHOICES``、``NotificationPreference`` 上的通知类型开关和
+``NotificationPreferenceForm.Meta.fields`` 是三个独立来源。它们本应对齐，或者只差
+免打扰那一组；而每个表各自都是自洽的，所以差额很容易被「看起来像」吃掉。
 
 两个方向各有一个窟窿：
 
 **``mutual_aid_feedback`` 是一个正在被发送、却没有名字的类型。** 它在 ``views.py:7436``
 （求购侧）和 ``views.py:7838``（失物招领侧）被真正发送，偏好表上有它的开关，而
-``KIND_CHOICES`` 的 24 个值里没有它。后果不止是看板上显示英文：
+``KIND_CHOICES`` 里没有它。后果不止是看板上显示英文：
 ``notification_list`` 的类型筛选器拿 ``KIND_CHOICES`` 当白名单——**这一类通知，用户在自己
 的通知中心里筛不出来。** 它照样进来、照样进角标、照样能被点开，但类型下拉里没有它。
 
 **``meeting_incident`` 是一个用户关不掉的开关。** 模型上有、默认开着、``views.py:1213``
-和 ``views.py:1224`` 真的在发，而表单的 27 个字段里没有它。模板是
-``{% for field in form.visible_fields %}``，表单里没有的字段页面上就没有那一行。其余 23 个
+和 ``views.py:1224`` 真的在发，而表单字段里没有它。模板是
+``{% for field in form.visible_fields %}``，表单里没有的字段页面上就没有那一行。其余
 类型的开关全在偏好页面上，用户形成的心智是「这一页能管我的通知」——一个 Silent 的例外
 破坏的是这个心智本身。
 

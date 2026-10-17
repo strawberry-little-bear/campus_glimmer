@@ -31,6 +31,10 @@ from .campaign_phase_review import build_campaign_phase_review
 from .campaign_registration import (
     CampaignRegistrationClosed, join_campaign, leave_campaign,
 )
+from .campaign_updates import (
+    CampaignUpdateSubscriptionUnavailable, queue_campaign_update_matches,
+    set_campaign_update_preference,
+)
 from .bulk_listing_csv import BulkListingCsvParseResult, parse_bulk_listing_csv
 from .bulk_listing_template import build_bulk_listing_import_template
 from .bulk_listing_xlsx import parse_bulk_listing_xlsx
@@ -128,7 +132,7 @@ from .dispute_evidence_shape import build_dispute_evidence_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
 from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
@@ -537,19 +541,21 @@ def campaign_detail(request, slug):
     items = Item.objects.available().filter(campaign=campaign).select_related(
         'category', 'seller', 'location',
     ).prefetch_related('images')
-    is_registered = (
-        request.user.is_authenticated
-        and CampaignRegistration.objects.filter(
+    active_registration = None
+    if request.user.is_authenticated:
+        active_registration = CampaignRegistration.objects.filter(
             campaign=campaign,
             user=request.user,
             is_active=True,
-        ).exists()
-    )
+        ).first()
     return render(request, 'listings/campaign_detail.html', {
         'campaign': campaign,
         'items': items,
         'favorite_ids': _favorite_ids(request),
-        'is_registered': is_registered,
+        'active_registration': active_registration,
+        'update_frequency_choices': (
+            ('daily', '每日摘要'), ('weekly', '每周摘要'),
+        ),
         'title': campaign.title,
     })
 
@@ -596,6 +602,41 @@ def leave_campaign_view(request, slug):
             messages.success(request, '已退出专题，之前的参与记录会保留在足迹中。')
         elif result.state == 'not_joined':
             messages.info(request, '你当前没有加入这个专题。')
+    return _campaign_action_redirect(request, campaign)
+
+
+@login_required
+@require_POST
+def update_campaign_subscription(request, slug):
+    """Let an active participant opt in or out of the campaign update digest."""
+    campaign = get_object_or_404(_live_campaigns(), slug=slug)
+    form = CampaignUpdateSubscriptionForm(request.POST)
+    if not form.is_valid():
+        messages.warning(request, '专题摘要设置无效，请选择每日或每周频率后重试。')
+        return _campaign_action_redirect(request, campaign)
+
+    try:
+        _, changed = set_campaign_update_preference(
+            request.user,
+            campaign,
+            notify_updates=form.cleaned_data['notify_updates'],
+            update_frequency=form.cleaned_data['update_frequency'],
+        )
+    except CampaignUpdateSubscriptionUnavailable as exc:
+        messages.warning(request, str(exc))
+    else:
+        if form.cleaned_data['notify_updates']:
+            frequency = dict(form.fields['update_frequency'].choices)[
+                form.cleaned_data['update_frequency']
+            ]
+            if changed:
+                messages.success(request, f'已订阅专题上新摘要，将按{frequency}合并发送。摘要不会预约商品或占用库存。')
+            else:
+                messages.info(request, '专题摘要设置没有变化。')
+        elif changed:
+            messages.success(request, '已关闭专题上新摘要，之后的新上架不会再提醒你。')
+        else:
+            messages.info(request, '专题上新摘要当前已经是关闭状态。')
     return _campaign_action_redirect(request, campaign)
 
 
@@ -2435,6 +2476,7 @@ def new_item(request):
                     image.save()
             notify_saved_search_matches(item)
             notify_demand_matches(item)
+            queue_campaign_update_matches(item)
             messages.success(request, '商品已成功发布，快去分享给同学吧！')
             return redirect('item_detail', item_id=item.id)
     else:
@@ -2463,6 +2505,7 @@ def edit_item(request, item_id):
                 locked_item = Item.objects.select_for_update().get(pk=item.pk)
                 previous_price = locked_item.price
                 previous_trade_mode = locked_item.trade_mode
+                previous_campaign_id = locked_item.campaign_id
                 locked_form = ItemForm(request.POST, instance=locked_item)
                 if not locked_form.is_valid():
                     messages.error(request, '商品信息刚被其他修改更新，请确认内容后重试。')
@@ -2487,6 +2530,8 @@ def edit_item(request, item_id):
 
             # The edit and its trajectory are committed first. A notification
             # problem is logged by the helper and must not roll back either one.
+            if saved_item.campaign_id and saved_item.campaign_id != previous_campaign_id:
+                queue_campaign_update_matches(saved_item)
             if price_change is not None:
                 notify_item_price_drop(saved_item, price_change, actor=request.user)
             formset.instance = saved_item
@@ -2747,6 +2792,7 @@ def bulk_create_items(request):
             for item in items:
                 notify_saved_search_matches(item)
                 notify_demand_matches(item)
+                queue_campaign_update_matches(item)
 
             _clear_bulk_listing_import(request, token=import_token)
             _store_bulk_listing_image_queue(request, items)
@@ -3117,9 +3163,21 @@ def bulk_assign_campaign(request):
         )
 
     with transaction.atomic():
-        updated = Item.objects.select_for_update().filter(
-            seller=request.user, id__in=item_ids,
+        locked_items = list(
+            Item.objects.select_for_update().filter(
+                seller=request.user, id__in=item_ids,
+            ).select_related('campaign')
+        )
+        previous_campaigns = {item.pk: item.campaign_id for item in locked_items}
+        updated = Item.objects.filter(
+            pk__in=previous_campaigns,
         ).update(campaign=campaign, updated_at=timezone.now())
+        if campaign is not None:
+            for item in locked_items:
+                if previous_campaigns[item.pk] == campaign.pk:
+                    continue
+                item.campaign = campaign
+                queue_campaign_update_matches(item)
 
     action = f'加入“{campaign.title}”' if campaign else '移出当前专题'
     messages.success(request, f'已将 {updated} 件商品{action}。')
@@ -4569,7 +4627,7 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([
         '开着免打扰总闸', usage['quiet_hours']['on'],
-        'quiet_hours_enabled 不是通知类型，但和 25 个开关摆在同一张表单里',
+        f"quiet_hours_enabled 不是通知类型，但和 {usage['field_total']} 个开关摆在同一张表单里",
     ])
     writer.writerow([
         '关掉免打扰总闸', usage['quiet_hours']['off'],
@@ -8921,6 +8979,11 @@ def operations_dashboard_export(request):
         '专题收藏', campaigns['summary']['favorites'],
         '专题当前活跃报名', campaigns['summary']['active_registration_count'],
         '专题周期新增报名', campaigns['summary']['new_registration_count'],
+        '专题当前摘要订阅', campaigns['summary']['current_subscription_count'],
+        '专题待发送摘要命中', campaigns['summary']['pending_update_match_count'],
+        '周期专题摘要', campaigns['summary']['period_sent_digest_count'],
+        '周期专题摘要已读', campaigns['summary']['period_read_digest_count'],
+        '专题摘要阅读率（%）', campaigns['summary']['digest_read_rate'],
         '专题预约', campaigns['summary']['orders'],
         '专题完成交易', campaigns['summary']['completed_orders'],
         '浏览转预约（%）', campaigns['summary']['view_to_order_rate'],
@@ -8930,6 +8993,7 @@ def operations_dashboard_export(request):
     writer.writerow([])
     writer.writerow(['专题', '周期新增商品', '当前在售', '参与卖家',
                      '当前活跃报名', '周期新增报名',
+                     '当前摘要订阅', '待发送摘要命中', '周期摘要', '周期摘要已读',
                      '浏览', '浏览用户', '收藏', '浏览转收藏（%）',
                      '预约', '完成交易', '完成率（%）',
                      '收藏转预约（%）', '浏览转预约（%）', '判断'])
@@ -8944,6 +9008,10 @@ def operations_dashboard_export(request):
                 row['seller_count'],
                 row['active_registration_count'],
                 row['new_registration_count'],
+                row['current_subscription_count'],
+                row['pending_update_match_count'],
+                row['period_sent_digest_count'],
+                row['period_read_digest_count'],
                 row['views'],
                 row['viewers'],
                 row['favorites'],
@@ -8979,6 +9047,14 @@ def operations_dashboard_export(request):
     writer.writerow([
         '报名表示用户关注专题，不会预约商品、占用库存或创建订单；'
         '当前活跃报名按尚未退出的参与区间计数，周期新增报名按加入时间归期。',
+    ])
+    writer.writerow([
+        '摘要订阅只表示用户额外同意接收上新提醒，与报名分开计算，不进入预约率或成交率；'
+        '待发送命中只统计报名仍有效、订阅仍开启、专题仍在进行且商品仍可投递的记录。',
+    ])
+    writer.writerow([
+        '周期摘要按通知去重统计；同一条合并摘要覆盖多个专题时，各专题行会各计一次，'
+        '顶部汇总只计通知一次。摘要已读只代表触达被看到，不代表购买意向。',
     ])
     writer.writerow([
         '此处只报告，不调整专题的投放位置、不自动结束或续期任何专题。',

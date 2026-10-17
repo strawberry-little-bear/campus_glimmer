@@ -42,7 +42,7 @@ class NotificationPreferenceForm(forms.ModelForm):
             'order_expiring', 'order_expired', 'report_update', 'moderation_update',
             'operations_digest', 'demand_match', 'demand_response',
             'lost_found_match', 'lost_found_lead', 'opportunity_digest', 'mutual_aid_feedback',
-            'saved_search_digest', 'lifecycle_reminder',
+            'saved_search_digest', 'campaign_update', 'lifecycle_reminder',
             'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
         ]
 
@@ -73,6 +73,18 @@ class NotificationPreferenceForm(forms.ModelForm):
         ):
             raise forms.ValidationError('免打扰开始时间和结束时间不能相同，请至少保留一个小时的可用时段。')
         return cleaned_data
+
+
+class CampaignUpdateSubscriptionForm(forms.Form):
+    notify_updates = forms.BooleanField(
+        label='订阅专题上新摘要', required=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+    )
+    update_frequency = forms.ChoiceField(
+        label='摘要频率',
+        choices=(('daily', '每日摘要'), ('weekly', '每周摘要')),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
 
 
 class DemandResponseForm(StyledModelFormMixin, forms.ModelForm):

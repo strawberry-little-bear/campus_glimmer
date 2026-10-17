@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
-"""为「通知偏好开关：26 个开关各自的形状」钉住口径。
+"""为「通知偏好开关：每种通知类型各自的形状」钉住口径。
 
-`NotificationPreference` 上有 27 个布尔字段：26 个通知类型开关和一个免打扰总闸。每个开关都有真实的
+`NotificationPreference` 上为每种通知类型各有一个开关，另有一个免打扰总闸。每个开关都有真实的
 读取路径——`notifications.py:66` 的 `create_notification` 第一件事就是
 `if not getattr(preference, kind, True): return None`：**开关关掉的通知，在写入那一刻
 就被静默丢弃，库里连一行都没有。**
 
 此前只有 `moderation_notice_preference` 读过一行偏好值，而它只读 `moderation_update`
-一个开关。其余 24 个关没关、谁关的，一处都答不上来。
+一个开关。其余开关关没关、谁关的，一处都答不上来。
 
 这些测试要钉住的是：
 
-1. 26 个开关全部报出来，一个不少——名单从模型元数据现读，加了新开关自动进面板；
+1. 每个通知类型开关都报出来，一个不少——名单从模型元数据现读，加了新开关自动进面板；
 2. 被开关挡掉的通知一行都不建，所以「关掉之后通知少了多少」不在口径里——
    那个数的分子在库里、分母不在；
 3. 按「关掉它有没有交易后果」分四组，不合成一个全站关闭率——合成之后，
    「关掉运营告警日报」和「关掉新订单通知」会读成同一件事；
 4. 「关着却仍收到过」这一格只可能是窗口前收到的或汇总类通知，两种都记、不拆；
 5. 没有偏好行的用户单列一格，不并入「开着」——否则「多少人碰过设置页」问不出来；
-6. 免打扰总闸单独报，不并进 26 个开关里；
+6. 免打扰总闸单独报，不并进通知类型开关里；
 7. 门槛按行算，不足 12 行的类型只报数字不给占比；
 8. 不按用户排名、不输出用户名；
 9. 不改 `create_notification`、不给任何人自动打开开关。
@@ -57,8 +57,8 @@ class PreferenceFieldDiscoveryTests(TestCase):
 
     def test_every_notification_type_switch_is_reported(self):
         fields = _preference_fields()
-        # 27 个布尔字段减去免打扰总闸，正好 26 个通知类型开关。
-        self.assertEqual(len(fields), 26)
+        # 开关名单必须与通知类型表对齐；两个来源都从代码现读。
+        self.assertEqual(len(fields), len(Notification.KIND_CHOICES))
         self.assertNotIn(QUIET_HOURS_FIELD, fields)
 
     def test_every_switch_is_assigned_to_exactly_one_group(self):
@@ -84,7 +84,7 @@ class PreferenceFieldDiscoveryTests(TestCase):
 
 
 class PreferenceShapeTests(TestCase):
-    """第二组：26 个开关各自的四格形状。"""
+    """第二组：每个通知类型开关各自的四格形状。"""
 
     def setUp(self):
         self.category = make_category()
@@ -180,7 +180,10 @@ class PreferenceShapeTests(TestCase):
         for field in ('order_created', 'order_status', 'order_dispute',
                       'meeting_incident', 'gift_application', 'demand_response'):
             self.assertIn(field, keys['transaction'])
-        for field in ('operations_digest', 'opportunity_digest', 'saved_search_digest'):
+        for field in (
+            'operations_digest', 'opportunity_digest', 'saved_search_digest',
+            'campaign_update',
+        ):
             self.assertIn(field, keys['digest'])
         for field in ('message_received', 'comment_received', 'rating_received'):
             self.assertIn(field, keys['interaction'])
@@ -207,7 +210,7 @@ class PreferenceShapeTests(TestCase):
         user = make_user('single')
         NotificationPreference.objects.create(user=user)
         result = build_notification_preference_usage(now=self.now)
-        self.assertEqual(len(result['rows']), 26)
+        self.assertEqual(len(result['rows']), len(_preference_fields()))
         self.assertTrue(all(r['has_enough_rows'] is False for r in result['rows']))
 
     def test_a_switch_that_is_never_used_still_gets_a_row(self):

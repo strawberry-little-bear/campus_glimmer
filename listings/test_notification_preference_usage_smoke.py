@@ -8,7 +8,7 @@
    页面照样渲染，只是文案变成一句错话；
 2. `by_group` 空列表走 `{% empty %}` 分支，`share` 为 None 走 `&mdash;` 分支；
 3. 导出的那一行标题必须和面板的 `<h3>` 是同一个数。空平台时面板渲染「0 个开关逐个看」
-   而导出写死「25 个」，屏幕和下载件就是两句话——`test_dashboard_export_columns`
+   而导出写死旧数量，屏幕和下载件就是两句话——`test_dashboard_export_columns`
    的三个失败全是这一处造成的。
 """
 import re
@@ -60,7 +60,7 @@ class NotificationPreferenceUsageSmokeTests(TestCase):
         self.assertEqual(response.status_code, 200)
         usage = response.context['notification_preference_usage']
         self.assertTrue(usage['has_data'])
-        self.assertEqual(len(usage['rows']), 26)
+        self.assertEqual(len(usage['rows']), len(Notification.KIND_CHOICES))
         self.assertEqual(len(usage['by_group']), 4)
         order_row = next(r for r in usage['rows'] if r['field'] == 'order_created')
         self.assertEqual(order_row['off'], 5)
@@ -69,9 +69,11 @@ class NotificationPreferenceUsageSmokeTests(TestCase):
         export = self.client.get(reverse('operations_dashboard_export'))
         self.assertEqual(export.status_code, 200)
         text = export.content.decode('utf-8-sig')
-        self.assertIn('通知偏好开关：26 个开关各自的形状', text)
+        self.assertIn(
+            f"通知偏好开关：{len(Notification.KIND_CHOICES)} 个开关各自的形状", text,
+        )
         self.assertIn('按「关掉它有没有交易后果」分组', text)
-        self.assertIn('26 个开关逐个看', text)
+        self.assertIn(f"{len(Notification.KIND_CHOICES)} 个开关逐个看", text)
         self.assertIn('关着却仍收到过', text)
 
     def test_dashboard_and_export_render_on_an_empty_campus(self):

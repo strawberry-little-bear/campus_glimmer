@@ -29,6 +29,25 @@
                 </div>
                 <h3>{{ registration.campaign.title }}</h3>
                 <p>{{ registration.campaign.description|default:'这个专题暂时没有补充说明。'|truncatechars:120 }}</p>
+                <div class="campaign-footprint-subscription">
+                    <span class="badge {% if registration.notify_updates %}text-bg-primary{% else %}text-bg-light{% endif %}">
+                        <i class="bi bi-bell{% if registration.notify_updates %}-fill{% endif %} me-1"></i>
+                        {% if registration.notify_updates %}已订阅{{ registration.get_update_frequency_display }}{% else %}未订阅上新摘要{% endif %}
+                    </span>
+                    <small>订阅只发送新上架摘要，不预约商品、不占库存。</small>
+                </div>
+                {% if registration.campaign_is_live %}
+                <form method="post" action="{% url 'update_campaign_subscription' registration.campaign.slug %}" class="campaign-footprint-subscription-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'my_campaigns' %}">
+                    <label><input type="checkbox" name="notify_updates" {% if registration.notify_updates %}checked{% endif %}> 接收摘要</label>
+                    <select name="update_frequency" aria-label="摘要频率">
+                        <option value="daily" {% if registration.update_frequency == 'daily' %}selected{% endif %}>每日</option>
+                        <option value="weekly" {% if registration.update_frequency == 'weekly' %}selected{% endif %}>每周</option>
+                    </select>
+                    <button type="submit" class="btn btn-outline-primary btn-sm">保存</button>
+                </form>
+                {% endif %}
                 <div class="campaign-footprint-actions">
                     {% if registration.campaign_is_live %}
                     <a href="{% url 'campaign_detail' registration.campaign.slug %}" class="text-link">进入专题 <i class="bi bi-arrow-up-right"></i></a>

@@ -19,7 +19,7 @@
 | 商品生命周期 | `Item.last_refreshed_at`、`Item.refresh_count`、`ItemRefreshEvent`、`Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at`、`LifecycleReminderEvent` | 商品最新刷新时间、累计次数与逐次真实刷新事件，两类提醒的冷却时间，以及逐商品、逐类型的真实发送事件台账；刷新和提醒台账都保留历史事实，历史缺口不回填 |
 | 生命周期提醒效果 | `LifecycleReminderEvent`、`Item.attention_reminder_sent_at`、`Item.price_drop_reminder_sent_at`、`Item.category`、`Notification.read_at`、`OrderEvent.created_at`、`AcademicTerm`、`AcademicPhase` | 单期效果真实发送事件优先，旧数据回退商品冷却时间戳；通知是否被打开与订单终态时间共同决定「提醒之后有没有动作」。跨学期终态转化只读事件台账与订单终态，不用可覆盖的刷新时间判方向 |
 | 分类调价参考 | 不新增表，只读 `Item.category` / `price` / `status` / `expires_at` / `created_at` | 分类级当前供给价格形状：优先近 180 天样本、每分类最多 500 件，当前在售单列低于 / 区间内 / 高于；样本不足、四分位退化与区间过宽都显式标记，只报告不自动改价 |
-| 校园活动与报名 | `CampusCampaign`、`CampaignRegistration` | 有起止时间的专题活动、专题与在售商品的可选关联，以及用户逐次加入和退出的参与区间；报名不创建订单或占用库存 |
+| 校园活动与报名 | `CampusCampaign`、`CampaignRegistration`、`CampaignUpdateMatch` | 有起止时间的专题活动、专题与在售商品的可选关联、用户逐次加入和退出的参与区间，以及主动订阅后的上新摘要命中缓冲；报名不创建订单或占用库存，命中也不预约商品 |
 | 学期日历 | `AcademicTerm`、`AcademicPhase`、`AcademicTermSnapshot` | 学期起止日期、按偏移天数划分的阶段规则、阶段级统计快照（已结束阶段由 `build_academic_calendar` 读取，进行中阶段实时算） |
 | 互动 | `Favorite`、`ItemAvailabilityWatch`、`Comment`、`PrivateMessage` | 收藏、有货提醒、公开留言和私信 |
 | 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`DeliveryConfirmation`、`Rating` | 交易预约、交付时间协商、状态事件、双方确认和完成后的评价 |

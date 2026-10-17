@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """为「内容审核结果通知：开关、触达与沉默」钉住口径。
 
-`moderation_update`（内容审核结果）是站内 24 种通知里唯一一条**平台自己说话**的通知。
+`moderation_update`（内容审核结果）是站内 27 种通知里唯一一条**平台自己说话**的通知。
 它的读取路径此前只有两处：`forms.py:40` 的表单字段和 `notifications.py:66` 的
 `getattr(preference, kind, True)`。一个开关被表单收集、被写入路径读取，从来没被统计过。
 

@@ -3,8 +3,9 @@
 
 这一轮量的不是解析函数，是三件更根本的事。
 
-第一件是**三个数不相等**。``KIND_CHOICES`` 有 24 个值、``NotificationPreference`` 上有
-26 个布尔开关、``NotificationPreferenceForm`` 里摆出来 27 个字段。三个表各自自洽，所以差额
+第一件是**三个数不相等**。修复这一轮时，``KIND_CHOICES`` 有 24 个值、
+``NotificationPreference`` 上有 26 个布尔开关、``NotificationPreferenceForm`` 里摆出来
+27 个字段。三个表各自自洽，所以差额
 一直被「看起来像」吃掉了。测试必须钉住这条边界：版图从三个来源**现读**，不硬编码名单——
 硬编码的名单会和代码走散，而那正是本模块要报的问题。
 

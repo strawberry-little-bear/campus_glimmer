@@ -84,6 +84,7 @@ campus_glimmer/
 | `campaign_analytics.py` | 校园专题周期、转化漏斗与运营提示 | 读写 |
 | `campaign_phase_review.py` | 已结束专题按自身窗口均分三段，复盘供给、曝光、收藏、预约与完成交易的节奏；薄样本不判方向 | 只报告 |
 | `campaign_registration.py` | 校园专题加入、退出、幂等状态与参与区间历史 | 读写 |
+| `campaign_updates.py` | 主动订阅的专题上新摘要：幂等命中缓冲、发送前边界复核、每日 / 每周合并通知与批量取消审计 | 读写 |
 | `demand_matching.py` | 新发布的商品与活跃求购的匹配撮合 | 读写 |
 | `demand_radar.py` | 无结果搜索、求购与供给缺口的需求雷达 | 读写 |
 | `demand_radar_hit_trend.py` | 需求雷达命中率的跨周期变化：按份额判方向、上一周期没有的类别标成新出现 | 读写 |
@@ -107,7 +108,7 @@ campus_glimmer/
 | `notification_snooze_return.py` | 延后的通知到期后是否回来：把用户主动要求的等待从处理时长里拆出来 | 读写 |
 | `notification_kind_coverage.py` | 通知类型的三张表对齐情况：KIND_CHOICES、偏好开关、表单字段现读对齐，上一轮的两个窟窿已补上，现在差集为空、由测试守住（只报告） | 只报告 |
 | `notification_preference_bypass_diagnosis.py` | 通知偏好关闭后的异常链路诊断：与后关一致、偏好写入后仍出现、可疑行数下界与已知写入路径 | 只报告 |
-| `notification_preference_usage.py` | 26 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
+| `notification_preference_usage.py` | 27 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
 | `notification_quiet_hours_shape.py` | 免打扰时段的形状：默认窗口采用率、同日 / 跨午夜、时长档、开始与结束小时、逐分钟叠加成小时曲线 | 只读 |
 | `notification_aggregation_quality.py` | 通知聚合的质量：被聚合过的行 vs 从没被聚合过的行，阅读率与处理时长对照（只报告） | 只报告 |
 | `report_priority.py` | 商品举报队列的优先处理、较高关注、常规处理分层与具名解释信号，只排序不写回事实 | 只报告 |
@@ -239,6 +240,8 @@ campus_glimmer/
 - **`test_campaign_phase_review.py`**：已结束专题的阶段边界、业务时间归段、薄样本门槛、跨专题总结、隐私与只读页面 / CSV 契约
 
 - **`test_campaign_registration.py`**：专题报名的幂等加入与退出、参与区间、数据库约束、页面权限、返回地址、个人足迹和后台入口
+
+- **`test_campaign_updates.py`**：加入不自动订阅、命中幂等入队、关闭订阅与退出取消、发送前状态复核、日 / 周独立去重、多专题合并、免打扰、任务台账、权限和运营导出
 
 - **`test_campaigns.py`**：校园专题、时间窗口和专题商品测试
 
@@ -668,4 +671,5 @@ campus_glimmer/
 - **`contribution-milestone-phase-rhythm-design.md`**：同类学期同一已结束阶段的达成节奏、每百天强度与覆盖审计阻塞
 - **`campaign-phase-review-design.md`**：校园专题按自身窗口复盘前中后段节奏，每百天强度、样本门槛与只读边界
 - **`campaign-registration-design.md`**：专题报名、幂等参与区间、个人足迹、聚合人数和运营 CSV 同口径
+- **`campaign-update-digest-design.md`**：专题上新摘要的主动订阅、命中缓冲、发送前复核、每日 / 每周去重、页面和运营口径
 </details>

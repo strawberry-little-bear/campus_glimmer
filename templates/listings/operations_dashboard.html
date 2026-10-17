@@ -1807,6 +1807,10 @@
         <div><span>专题新增商品</span><strong>{{ campaign_analytics.summary.new_items }}</strong></div>
         <div><span>当前活跃报名</span><strong>{{ campaign_analytics.summary.active_registration_count }}</strong><small>仅专题关注</small></div>
         <div><span>周期新增报名</span><strong>{{ campaign_analytics.summary.new_registration_count }}</strong><small>按加入时间</small></div>
+        <div><span>当前摘要订阅</span><strong>{{ campaign_analytics.summary.current_subscription_count }}</strong><small>主动开启提醒</small></div>
+        <div><span>待发送命中</span><strong>{{ campaign_analytics.summary.pending_update_match_count }}</strong><small>当前仍可投递</small></div>
+        <div><span>周期摘要</span><strong>{{ campaign_analytics.summary.period_sent_digest_count }}</strong><small>按通知去重</small></div>
+        <div><span>摘要阅读率</span><strong>{{ campaign_analytics.summary.digest_read_rate }}%</strong><small>{{ campaign_analytics.summary.period_read_digest_count }} 条已读</small></div>
         <div><span>专题预约</span><strong>{{ campaign_analytics.summary.orders }}</strong></div>
         <div class="campaign-summary-warning"><span>需要关注</span><strong>{{ campaign_analytics.summary.attention_count }}</strong></div>
     </div>
@@ -1818,12 +1822,15 @@
     </div>
     {% endif %}
     {% if campaign_analytics.rows %}
-    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 campaign-analytics-table"><thead><tr><th>专题</th><th>供给</th><th>报名</th><th>曝光</th><th>收藏</th><th>预约</th><th>完成</th><th>转化</th><th>判断</th></tr></thead><tbody>
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 campaign-analytics-table"><thead><tr><th>专题</th><th>供给</th><th>报名</th><th>摘要订阅</th><th>待发送</th><th>周期摘要</th><th>曝光</th><th>收藏</th><th>预约</th><th>完成</th><th>转化</th><th>判断</th></tr></thead><tbody>
         {% for campaign in campaign_analytics.rows %}
         <tr>
             <td><strong>{{ campaign.title }}</strong><small class="d-block text-muted">卖家 {{ campaign.seller_count }} · 当前在售 {{ campaign.current_items }}</small></td>
             <td>{{ campaign.new_items }}<small class="d-block text-muted">周期新增</small></td>
             <td><strong>{{ campaign.active_registration_count }}</strong><small class="d-block text-muted">周期新增 {{ campaign.new_registration_count }}</small></td>
+            <td><strong>{{ campaign.current_subscription_count }}</strong><small class="d-block text-muted">主动订阅</small></td>
+            <td>{{ campaign.pending_update_match_count }}<small class="d-block text-muted">仍可投递</small></td>
+            <td><strong>{{ campaign.period_sent_digest_count }}</strong><small class="d-block text-muted">{{ campaign.period_read_digest_count }} 已读 · {{ campaign.digest_read_rate }}%</small></td>
             <td>{{ campaign.views }}<small class="d-block text-muted">{{ campaign.viewers }} 位用户</small></td>
             <td>{{ campaign.favorites }}<small class="d-block text-muted">{{ campaign.view_to_favorite_rate }}%</small></td>
             <td><strong>{{ campaign.orders }}</strong><small class="d-block text-muted">浏览转预约 {{ campaign.view_to_order_rate }}%</small></td>
@@ -1834,7 +1841,7 @@
         {% endfor %}
     </tbody></table></div>
     {% else %}<div class="empty-inline mt-3">当前统计周期还没有专题行为数据。</div>{% endif %}
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>报名只表示用户关注专题，不锁定商品、不创建订单，也不参与转化率计算。曝光、收藏和预约按业务记录统计；转化率用于比较专题表现，不代表单个用户的完整行为路径。运营人员仍需结合商品质量和活动内容人工判断。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>报名只表示用户关注专题，摘要订阅则表示用户额外同意接收上新提醒；两者都不锁定商品、不创建订单，也不进入预约率或成交率的分子、分母。待发送命中会在发送前重新校验报名、订阅、专题和商品状态。合并摘要跨专题时，各专题行会各计一次同一条通知，顶部汇总按通知去重；摘要已读只代表触达被看到，不代表购买意向。</div>
 </section>
 <section class="content-card ops-panel mb-4 campaign-phase-review-panel">
     <div class="ops-panel-heading">
