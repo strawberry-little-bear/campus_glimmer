@@ -16,7 +16,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=flat-square&logo=docker&logoColor=white)](docker-compose.yml)
 [![License](https://img.shields.io/badge/License-MIT-f6aa61?style=flat-square)](LICENSE)
 
-[产品预览](#preview) · [功能地图](#features) · [快速开始](#quick-start) · [工程与测试](#engineering) · [文档地图](#docs)
+[产品预览](#preview) · [功能地图](#features) · [快速开始](#quick-start) · [工程与测试](#engineering) · [文档地图](#docs) · [完整手册](docs/README.md)
 
 </div>
 
@@ -350,6 +350,7 @@ GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查�
 
 | 想了解什么 | 从这里开始 |
 | :--- | :--- |
+| 完整项目说明、系统概览与本地运行 | [完整项目手册](docs/README.md) |
 | 八条业务链路的完整规则、指标与边缘情况 | [功能手册](docs/feature-handbook.md) |
 | 核心 ORM 模型、关键字段与约束 | [核心数据模型](docs/data-model.md) |
 | 代码模块、测试与设计文档索引 | [模块与测试地图](docs/module-map.md) |
