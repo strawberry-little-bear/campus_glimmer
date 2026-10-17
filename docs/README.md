@@ -176,8 +176,10 @@ campus_glimmer/
 | [`templates/`](../templates/README.md) | 服务端模板、公共布局和页面组合方式 |
 | [`static/`](../static/README.md) | 主题变量、搜索建议、未读轮询和静态资源约定 |
 | [`docker/`](../docker/README.md) | 镜像启动、迁移、静态收集与健康检查 |
-| [`.github/`](../.github/README.md) | GitHub Actions 质量检查与本地等价命令 |
+| [`.github/`](../.github/CI.md) | GitHub Actions 质量检查与本地等价命令 |
 | [`docs/screenshots/`](screenshots/README.md) | 真实界面截图、尺寸、隐私和更新流程 |
+
+> GitHub 首页会优先读取 `.github/README.md`。因此 CI 说明固定命名为 [`.github/CI.md`](../.github/CI.md)，避免覆盖根目录的项目主 README。
 
 模块、测试和设计文档索引见[模块与测试地图](module-map.md)。核心模型与关键约束见[核心数据模型](data-model.md)。
 

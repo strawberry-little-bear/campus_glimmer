@@ -39,7 +39,7 @@ campus_glimmer/
 | `templates/` | [服务端渲染页面](../templates/README.md) | 模板结构、公共布局和约定 |
 | `static/` | [样式、脚本与基础图片](../static/README.md) | CSS、JavaScript 和静态资源 |
 | `docker/` | [容器运行与健康检查](../docker/README.md) | 镜像启动、数据卷和探针 |
-| `.github/` | [持续集成](../.github/README.md) | GitHub Actions 与本地等价检查 |
+| `.github/` | [持续集成](../.github/CI.md) | GitHub Actions 与本地等价检查 |
 | `docs/screenshots/` | [系统界面预览](screenshots/README.md) | 首页截图的来源与维护方式 |
 
 ## listings/ 的业务模块（135 个）
