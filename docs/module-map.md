@@ -28,6 +28,20 @@ campus_glimmer/
 └── README.md
 ```
 
+## 目录 README
+
+| 目录 | README | 适合查看 |
+| --- | --- | --- |
+| `accounts/` | [账户与校园身份](../accounts/README.md) | 注册、资料和校园认证 |
+| `chat_messages/` | [留言、私信与内容治理](../chat_messages/README.md) | 收件箱、审核和申诉 |
+| `campus_glimmer/` | [Django 项目配置](../campus_glimmer/README.md) | 设置、根路由和健康检查 |
+| `listings/` | [校园交易与运营核心](../listings/README.md) | 业务模块、定时任务和测试入口 |
+| `templates/` | [服务端渲染页面](../templates/README.md) | 模板结构、公共布局和约定 |
+| `static/` | [样式、脚本与基础图片](../static/README.md) | CSS、JavaScript 和静态资源 |
+| `docker/` | [容器运行与健康检查](../docker/README.md) | 镜像启动、数据卷和探针 |
+| `.github/` | [持续集成](../.github/README.md) | GitHub Actions 与本地等价检查 |
+| `docs/screenshots/` | [系统界面预览](screenshots/README.md) | 首页截图的来源与维护方式 |
+
 ## listings/ 的业务模块（135 个）
 
 
