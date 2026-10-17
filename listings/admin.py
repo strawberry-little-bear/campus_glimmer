@@ -1,6 +1,7 @@
 from django.contrib import admin, messages
+from django.db.models import Count, Q
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -107,14 +108,41 @@ class CampusLocationMaintenanceDecisionAdmin(admin.ModelAdmin):
 
 @admin.register(CampusCampaign)
 class CampusCampaignAdmin(admin.ModelAdmin):
-    list_display = ('title', 'slug', 'starts_at', 'ends_at', 'is_active', 'item_count')
+    list_display = (
+        'title', 'slug', 'starts_at', 'ends_at', 'is_active',
+        'item_count', 'active_registration_count',
+    )
     list_filter = ('is_active', 'starts_at', 'ends_at')
     search_fields = ('title', 'slug', 'description')
     prepopulated_fields = {'slug': ('title',)}
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            active_registration_total=Count(
+                'registrations',
+                filter=Q(registrations__is_active=True),
+            ),
+        )
+
     @admin.display(description='商品数')
     def item_count(self, obj):
         return obj.items.filter(status='available').count()
+
+    @admin.display(description='活跃报名', ordering='active_registration_total')
+    def active_registration_count(self, obj):
+        return obj.active_registration_total
+
+
+@admin.register(CampaignRegistration)
+class CampaignRegistrationAdmin(admin.ModelAdmin):
+    list_display = (
+        'campaign', 'user', 'joined_at', 'left_at', 'is_active', 'created_at',
+    )
+    list_filter = ('is_active', 'campaign', 'joined_at', 'left_at')
+    search_fields = ('campaign__title', 'campaign__slug', 'user__username')
+    date_hierarchy = 'joined_at'
+    list_select_related = ('campaign', 'user')
+    readonly_fields = ('created_at',)
 
 
 @admin.register(Item)

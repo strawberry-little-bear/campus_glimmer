@@ -2,7 +2,9 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import BrowsingHistory, CampusCampaign, Favorite, Item, Order
+from .models import (
+    BrowsingHistory, CampusCampaign, CampaignRegistration, Favorite, Item, Order,
+)
 
 
 def _rate(numerator, denominator):
@@ -75,6 +77,11 @@ def build_campaign_analytics(days=30, *, now=None):
             created_at__gte=window_start,
             created_at__lte=window_end,
         )
+        registrations = CampaignRegistration.objects.filter(campaign=campaign)
+        new_registrations = registrations.filter(
+            joined_at__gte=window_start,
+            joined_at__lte=window_end,
+        )
         new_item_count = new_items.count()
         current_item_count = items.available(now).count()
         view_count = views.count()
@@ -82,6 +89,8 @@ def build_campaign_analytics(days=30, *, now=None):
         order_count = orders.count()
         completed_order_count = orders.filter(status='completed').count()
         seller_count = items.values('seller_id').distinct().count()
+        active_registration_count = registrations.filter(is_active=True).count()
+        new_registration_count = new_registrations.count()
         performance_label, performance_tone, performance_note = _performance_label(
             new_items=new_item_count,
             current_items=current_item_count,
@@ -101,6 +110,8 @@ def build_campaign_analytics(days=30, *, now=None):
             'views': view_count,
             'viewers': views.values('user_id').distinct().count(),
             'favorites': favorite_count,
+            'active_registration_count': active_registration_count,
+            'new_registration_count': new_registration_count,
             'orders': order_count,
             'completed_orders': completed_order_count,
             'view_to_favorite_rate': _rate(favorite_count, view_count),
@@ -132,6 +143,12 @@ def build_campaign_analytics(days=30, *, now=None):
             'current_items': sum(row['current_items'] for row in rows),
             'views': sum(row['views'] for row in rows),
             'favorites': sum(row['favorites'] for row in rows),
+            'active_registration_count': sum(
+                row['active_registration_count'] for row in rows
+            ),
+            'new_registration_count': sum(
+                row['new_registration_count'] for row in rows
+            ),
             'orders': sum(row['orders'] for row in rows),
             'completed_orders': sum(row['completed_orders'] for row in rows),
             'view_to_order_rate': _rate(

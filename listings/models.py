@@ -321,6 +321,68 @@ class CampusCampaign(models.Model):
             raise ValidationError({'ends_at': '结束时间必须晚于开始时间。'})
 
 
+class CampaignRegistration(models.Model):
+    """One user's participation interval in a campus campaign.
+
+    Each join creates a row and each leave closes it. Keeping intervals instead
+    of reusing a single row makes the participation history explainable, while
+    the partial unique constraint prevents two active rows for the same pair.
+    """
+
+    campaign = models.ForeignKey(
+        CampusCampaign, on_delete=models.CASCADE,
+        related_name='registrations', verbose_name='校园专题',
+    )
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='campaign_registrations', verbose_name='报名用户',
+    )
+    joined_at = models.DateTimeField('加入时间', default=timezone.now)
+    left_at = models.DateTimeField('退出时间', null=True, blank=True)
+    is_active = models.BooleanField('参与中', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '校园专题报名'
+        verbose_name_plural = '校园专题报名'
+        ordering = ['-joined_at', '-id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['campaign', 'user'],
+                condition=Q(is_active=True),
+                name='unique_active_campaign_registration',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(is_active=True, left_at__isnull=True)
+                    | Q(is_active=False, left_at__isnull=False)
+                ),
+                name='campaign_registration_state_consistency',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['campaign', 'is_active', 'joined_at'],
+                name='campaign_reg_active_idx',
+            ),
+            models.Index(
+                fields=['user', 'is_active', 'joined_at'],
+                name='campaign_user_active_idx',
+            ),
+        ]
+
+    def __str__(self):
+        state = '参与中' if self.is_active else '已退出'
+        return f'{self.user.username} · {self.campaign.title} · {state}'
+
+    def clean(self):
+        super().clean()
+        if self.is_active and self.left_at is not None:
+            raise ValidationError({'left_at': '参与中的报名不能设置退出时间。'})
+        if not self.is_active and self.left_at is None:
+            raise ValidationError({'left_at': '已退出的报名必须记录退出时间。'})
+
+
 class ItemQuerySet(models.QuerySet):
     def available(self, now=None):
         """Return listings that are still visible and can accept a reservation."""

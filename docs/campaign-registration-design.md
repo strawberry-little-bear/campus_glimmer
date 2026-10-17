@@ -1,10 +1,23 @@
 # 校园专题报名设计
 
-状态：设计完成，待实现  
-实现模块：`listings/campaign_registration.py`  
-测试模块：`listings/test_campaign_registration.py`  
-页面入口：专题详情、我的专题足迹、运营看板  
+状态：已实现（2026-10-17）
+实现模块：`listings/campaign_registration.py`、报名视图、后台与专题分析
+测试模块：`listings/test_campaign_registration.py`、`listings/test_campaign_analytics.py`
+页面入口：专题列表、专题详情、我的专题足迹、运营看板
 前置能力：校园专题、校园专题表现、校园专题分阶段复盘
+
+## 0. 实现记录
+
+| 交付面 | 实际入口 | 已验证行为 |
+| --- | --- | --- |
+| 数据模型 | `CampaignRegistration`、迁移 `0076_campaign_registration` | 条件唯一约束只允许一条活跃报名，状态与退出时间保持一致 |
+| 领域服务 | `listings/campaign_registration.py` | 加入和退出幂等；退出后重新加入保留新的参与区间 |
+| 公开页面 | `/listings/campaigns/`、`/listings/campaigns/<slug>/` | 只显示聚合报名人数，不公开报名用户身份 |
+| 个人足迹 | `/listings/campaigns/mine/` | 只显示当前用户自己的参与记录和历史区间 |
+| 后台维护 | Django 后台的校园专题报名列表 | 支持按专题、用户、状态和时间排查 |
+| 运营统计 | 运营看板专题表现与 CSV 导出 | 同时输出当前活跃报名和周期新增报名，且明确不预约商品、不占库存 |
+
+已结束专题不再接受加入或退出；如果用户尚未退出，记录继续保留为开放区间，用于说明真实参与历史，不会被事后改写。
 
 ## 1. 背景与问题
 
@@ -127,7 +140,7 @@
 
 ### 我的专题足迹
 
-- 分开展示“正在参与”和“历史参与”；
+- 分开展示“参与记录”和“历史参与”；
 - 每条记录展示专题名称、加入时间、退出时间、当前活动状态；
 - 进行中的专题提供详情与退出入口；
 - 已结束专题展示归档状态，不提供事后修改。
@@ -156,6 +169,14 @@
   - 锁定并关闭当前活跃记录；
   - 已退出或从未报名时返回幂等结果，不更新时间戳。
 - 服务返回结构化结果，至少包含 `changed`、`state` 和 `registration`，页面根据结果给出普通提示，不把并发冲突误报成系统错误。
+
+实现入口：
+
+- 路由：`join_campaign`、`leave_campaign`、`my_campaigns`；
+- 视图：专题列表和详情使用聚合 `Count` 展示人数，报名状态由当前登录用户自己的活跃记录决定；
+- 后台：`CampusCampaignAdmin` 展示活跃报名数，`CampaignRegistrationAdmin` 提供维护入口；
+- 统计：`build_campaign_analytics()` 输出报名指标，页面与 CSV 共用结果；
+- 回归测试：服务、模型约束、页面权限、外部返回地址、后台、看板和 CSV 均有覆盖。
 
 ## 9. 统计口径
 

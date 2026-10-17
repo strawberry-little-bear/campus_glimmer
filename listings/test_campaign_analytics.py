@@ -6,7 +6,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .campaign_analytics import build_campaign_analytics
-from .models import BrowsingHistory, CampusCampaign, Category, Favorite, Item, Order
+from .models import (
+    BrowsingHistory, CampusCampaign, CampaignRegistration, Category, Favorite, Item, Order,
+)
 
 
 class CampaignAnalyticsTests(TestCase):
@@ -78,16 +80,40 @@ class CampaignAnalyticsTests(TestCase):
         Order.objects.filter(pk=order.pk).update(
             created_at=self.now - timedelta(days=2),
         )
+        registrants = [
+            User.objects.create_user(
+                username=f'campaign-registrant-{index}',
+                password='safe-password-123',
+            )
+            for index in range(3)
+        ]
+        for registrant in registrants[:2]:
+            CampaignRegistration.objects.create(
+                campaign=self.success_campaign,
+                user=registrant,
+                joined_at=self.now - timedelta(days=1),
+            )
+        CampaignRegistration.objects.create(
+            campaign=self.success_campaign,
+            user=registrants[2],
+            joined_at=self.now - timedelta(days=1),
+            left_at=self.now - timedelta(hours=1),
+            is_active=False,
+        )
 
         analytics = build_campaign_analytics(days=30, now=self.now)
 
         self.assertEqual(analytics['summary']['campaign_count'], 2)
+        self.assertEqual(analytics['summary']['active_registration_count'], 2)
+        self.assertEqual(analytics['summary']['new_registration_count'], 3)
         row = analytics['rows'][0]
         self.assertEqual(row['title'], '毕业季专题')
         self.assertEqual(row['new_items'], 1)
         self.assertEqual(row['views'], 4)
         self.assertEqual(row['viewers'], 4)
         self.assertEqual(row['favorites'], 1)
+        self.assertEqual(row['active_registration_count'], 2)
+        self.assertEqual(row['new_registration_count'], 3)
         self.assertEqual(row['orders'], 1)
         self.assertEqual(row['completed_orders'], 1)
         self.assertEqual(row['view_to_order_rate'], 25.0)
@@ -134,3 +160,37 @@ class CampaignAnalyticsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '校园专题表现')
         self.assertContains(response, '毕业季专题')
+        self.assertContains(response, '当前活跃报名')
+        self.assertContains(response, '周期新增报名')
+
+    def test_operations_csv_exports_registration_metrics_with_same_definition(self):
+        registrants = [
+            User.objects.create_user(
+                username=f'campaign-csv-registrant-{index}',
+                password='safe-password-123',
+            )
+            for index in range(2)
+        ]
+        for registrant in registrants:
+            CampaignRegistration.objects.create(
+                campaign=self.success_campaign,
+                user=registrant,
+                joined_at=self.now - timedelta(days=1),
+            )
+        admin = User.objects.create_user(
+            username='campaign-csv-admin',
+            password='safe-password-123',
+            is_staff=True,
+        )
+        self.client.force_login(admin)
+
+        response = self.client.get(reverse('operations_dashboard_export'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'text/csv; charset=utf-8')
+        content = response.content.decode('utf-8-sig')
+        self.assertIn('专题当前活跃报名', content)
+        self.assertIn('专题周期新增报名', content)
+        self.assertIn('当前活跃报名', content)
+        self.assertIn('周期新增报名', content)
+        self.assertIn('报名表示用户关注专题，不会预约商品、占用库存或创建订单', content)

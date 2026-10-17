@@ -28,6 +28,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
 from .campaign_phase_review import build_campaign_phase_review
+from .campaign_registration import (
+    CampaignRegistrationClosed, join_campaign, leave_campaign,
+)
 from .bulk_listing_csv import BulkListingCsvParseResult, parse_bulk_listing_csv
 from .bulk_listing_template import build_bulk_listing_import_template
 from .bulk_listing_xlsx import parse_bulk_listing_xlsx
@@ -126,7 +129,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -508,6 +511,11 @@ def campaign_list(request):
             ),
             distinct=True,
         ),
+        active_registration_count=Count(
+            'registrations',
+            filter=Q(registrations__is_active=True),
+            distinct=True,
+        ),
     ).order_by('-starts_at', 'title')
     return render(request, 'listings/campaign_list.html', {
         'campaigns': campaigns,
@@ -516,15 +524,103 @@ def campaign_list(request):
 
 
 def campaign_detail(request, slug):
-    campaign = get_object_or_404(_live_campaigns(), slug=slug)
+    campaign = get_object_or_404(
+        _live_campaigns().annotate(
+            active_registration_count=Count(
+                'registrations',
+                filter=Q(registrations__is_active=True),
+                distinct=True,
+            ),
+        ),
+        slug=slug,
+    )
     items = Item.objects.available().filter(campaign=campaign).select_related(
         'category', 'seller', 'location',
     ).prefetch_related('images')
+    is_registered = (
+        request.user.is_authenticated
+        and CampaignRegistration.objects.filter(
+            campaign=campaign,
+            user=request.user,
+            is_active=True,
+        ).exists()
+    )
     return render(request, 'listings/campaign_detail.html', {
         'campaign': campaign,
         'items': items,
         'favorite_ids': _favorite_ids(request),
+        'is_registered': is_registered,
         'title': campaign.title,
+    })
+
+
+def _campaign_action_redirect(request, campaign):
+    next_url = request.POST.get('next', '').strip()
+    if not next_url or not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        if campaign.is_live():
+            return redirect('campaign_detail', slug=campaign.slug)
+        return redirect('campaign_list')
+    return redirect(next_url)
+
+
+@login_required
+@require_POST
+def join_campaign_view(request, slug):
+    campaign = get_object_or_404(_live_campaigns(), slug=slug)
+    try:
+        result = join_campaign(request.user, campaign)
+    except CampaignRegistrationClosed:
+        messages.warning(request, '这个专题当前不在可参与时间内。')
+    else:
+        if result.state == 'joined':
+            messages.success(request, f'已加入“{campaign.title}”。加入只表示关注专题，不会预约商品或占用库存。')
+        elif result.state == 'already_joined':
+            messages.info(request, '你已经加入这个专题，无需重复提交。')
+    return _campaign_action_redirect(request, campaign)
+
+
+@login_required
+@require_POST
+def leave_campaign_view(request, slug):
+    campaign = get_object_or_404(_live_campaigns(), slug=slug)
+    try:
+        result = leave_campaign(request.user, campaign)
+    except CampaignRegistrationClosed:
+        messages.warning(request, '这个专题当前不在可修改参与状态的时间内。')
+    else:
+        if result.state == 'left':
+            messages.success(request, '已退出专题，之前的参与记录会保留在足迹中。')
+        elif result.state == 'not_joined':
+            messages.info(request, '你当前没有加入这个专题。')
+    return _campaign_action_redirect(request, campaign)
+
+
+@login_required
+def my_campaigns(request):
+    now = timezone.now()
+    registrations = CampaignRegistration.objects.filter(
+        user=request.user,
+    ).select_related('campaign')
+    active_registrations = list(
+        registrations.filter(is_active=True).order_by('-joined_at', '-id')
+    )
+    history_queryset = registrations.filter(is_active=False).order_by(
+        '-left_at', '-joined_at', '-id',
+    )
+    history_total = history_queryset.count()
+    history_registrations = list(history_queryset[:30])
+    for registration in active_registrations + history_registrations:
+        registration.campaign_is_live = registration.campaign.is_live(now)
+    return render(request, 'listings/my_campaigns.html', {
+        'active_registrations': active_registrations,
+        'history_registrations': history_registrations,
+        'history_total': history_total,
+        'history_is_truncated': history_total > len(history_registrations),
+        'title': '我的专题足迹',
     })
 
 
@@ -8823,6 +8919,8 @@ def operations_dashboard_export(request):
         '专题当前在售', campaigns['summary']['current_items'],
         '专题浏览', campaigns['summary']['views'],
         '专题收藏', campaigns['summary']['favorites'],
+        '专题当前活跃报名', campaigns['summary']['active_registration_count'],
+        '专题周期新增报名', campaigns['summary']['new_registration_count'],
         '专题预约', campaigns['summary']['orders'],
         '专题完成交易', campaigns['summary']['completed_orders'],
         '浏览转预约（%）', campaigns['summary']['view_to_order_rate'],
@@ -8831,6 +8929,7 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([])
     writer.writerow(['专题', '周期新增商品', '当前在售', '参与卖家',
+                     '当前活跃报名', '周期新增报名',
                      '浏览', '浏览用户', '收藏', '浏览转收藏（%）',
                      '预约', '完成交易', '完成率（%）',
                      '收藏转预约（%）', '浏览转预约（%）', '判断'])
@@ -8843,6 +8942,8 @@ def operations_dashboard_export(request):
                 row['new_items'],
                 row['current_items'],
                 row['seller_count'],
+                row['active_registration_count'],
+                row['new_registration_count'],
                 row['views'],
                 row['viewers'],
                 row['favorites'],
@@ -8874,6 +8975,10 @@ def operations_dashboard_export(request):
     writer.writerow([
         '转化率用于横向比较专题，不代表任何单个用户的完整行为路径，'
         '也不代表专题本身的质量：运营人员仍需结合商品质量和活动内容判断。',
+    ])
+    writer.writerow([
+        '报名表示用户关注专题，不会预约商品、占用库存或创建订单；'
+        '当前活跃报名按尚未退出的参与区间计数，周期新增报名按加入时间归期。',
     ])
     writer.writerow([
         '此处只报告，不调整专题的投放位置、不自动结束或续期任何专题。',

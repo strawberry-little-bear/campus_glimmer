@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+
+{% block title %}我的专题足迹 · 拾光校园{% endblock %}
+
+{% block content %}
+<div class="page-intro mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">My campaign trail</span>
+        <h1>我的专题足迹</h1>
+        <p>这里记录你主动加入过的校园专题。加入表示关注活动；退出后历史区间仍会保留，但不会出现在公开报名人数中。</p>
+    </div>
+    <a href="{% url 'campaign_list' %}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-2"></i>返回校园专题</a>
+</div>
+
+<section class="mb-5">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div><span class="eyebrow eyebrow-soft">Current</span><h2 class="section-title mt-1">参与记录</h2></div>
+        <span class="text-muted small">{{ active_registrations|length }} 个专题</span>
+    </div>
+    <div class="campaign-footprint-list">
+        {% for registration in active_registrations %}
+        <article class="content-card campaign-footprint-item">
+            <div class="campaign-footprint-icon"><i class="bi bi-stars"></i></div>
+            <div class="campaign-footprint-body">
+                <div class="campaign-footprint-meta">
+                    {% if registration.campaign_is_live %}<span class="badge text-bg-success">进行中</span>{% else %}<span class="badge text-bg-secondary">活动已归档</span>{% endif %}
+                    <span><i class="bi bi-calendar-plus me-1"></i>{{ registration.joined_at|date:'Y年m月d日 H:i' }} 加入</span>
+                    {% if registration.campaign.ends_at %}<span><i class="bi bi-hourglass-split me-1"></i>{{ registration.campaign.ends_at|date:'Y年m月d日' }} 结束</span>{% endif %}
+                </div>
+                <h3>{{ registration.campaign.title }}</h3>
+                <p>{{ registration.campaign.description|default:'这个专题暂时没有补充说明。'|truncatechars:120 }}</p>
+                <div class="campaign-footprint-actions">
+                    {% if registration.campaign_is_live %}
+                    <a href="{% url 'campaign_detail' registration.campaign.slug %}" class="text-link">进入专题 <i class="bi bi-arrow-up-right"></i></a>
+                    <form method="post" action="{% url 'leave_campaign' registration.campaign.slug %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{% url 'my_campaigns' %}">
+                        <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-dash me-1"></i>退出专题</button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted small">专题结束后，参与记录会保留在这里。</span>
+                    {% endif %}
+                </div>
+            </div>
+        </article>
+        {% empty %}
+        <div class="content-card empty-state"><i class="bi bi-person-plus"></i><h2>还没有加入专题</h2><p>去看看正在进行中的校园专题，找到感兴趣的节点活动。</p><a href="{% url 'campaign_list' %}" class="btn btn-primary mt-2">浏览校园专题</a></div>
+        {% endfor %}
+    </div>
+</section>
+
+<section>
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div><span class="eyebrow eyebrow-soft">History</span><h2 class="section-title mt-1">历史参与</h2></div>
+        <span class="text-muted small">{{ history_total }} 段记录</span>
+    </div>
+    <div class="campaign-footprint-list">
+        {% for registration in history_registrations %}
+        <article class="content-card campaign-footprint-item campaign-footprint-history">
+            <div class="campaign-footprint-icon"><i class="bi bi-clock-history"></i></div>
+            <div class="campaign-footprint-body">
+                <div class="campaign-footprint-meta">
+                    <span class="badge text-bg-light">已退出</span>
+                    <span><i class="bi bi-calendar-plus me-1"></i>{{ registration.joined_at|date:'Y年m月d日 H:i' }} 加入</span>
+                    <span><i class="bi bi-calendar-minus me-1"></i>{{ registration.left_at|date:'Y年m月d日 H:i' }} 退出</span>
+                </div>
+                <h3>{{ registration.campaign.title }}</h3>
+                <div class="campaign-footprint-actions">
+                    {% if registration.campaign_is_live %}<a href="{% url 'campaign_detail' registration.campaign.slug %}" class="text-link">专题仍在进行，重新查看 <i class="bi bi-arrow-up-right"></i></a>{% else %}<span class="text-muted small">这次参与已经归档。</span>{% endif %}
+                </div>
+            </div>
+        </article>
+        {% empty %}
+        <div class="content-card empty-state"><i class="bi bi-clock-history"></i><h2>还没有历史参与</h2><p>退出专题后，这里会保留加入与退出的时间区间。</p></div>
+        {% endfor %}
+    </div>
+    {% if history_is_truncated %}<p class="text-muted small mt-3 mb-0">这里显示最近 30 段历史；更早的记录仍保留在数据库中。</p>{% endif %}
+</section>
+{% endblock %}

@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，134 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，136 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -42,11 +42,11 @@ campus_glimmer/
 | `.github/` | [持续集成](../.github/CI.md) | GitHub Actions 与本地等价检查 |
 | `docs/screenshots/` | [系统界面预览](screenshots/README.md) | 首页截图的来源与维护方式 |
 
-## listings/ 的业务模块（135 个）
+## listings/ 的业务模块（136 个）
 
 
 <details>
-<summary>业务模块清单（135 个，按业务链路归组）</summary>
+<summary>业务模块清单（136 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -83,6 +83,7 @@ campus_glimmer/
 | `location_maintenance_decision_review.py` | 校园地点维护决策的首次留痕时间分布、复核比例与暂缓停留清单（不计算历史处理率） | 只报告 |
 | `campaign_analytics.py` | 校园专题周期、转化漏斗与运营提示 | 读写 |
 | `campaign_phase_review.py` | 已结束专题按自身窗口均分三段，复盘供给、曝光、收藏、预约与完成交易的节奏；薄样本不判方向 | 只报告 |
+| `campaign_registration.py` | 校园专题加入、退出、幂等状态与参与区间历史 | 读写 |
 | `demand_matching.py` | 新发布的商品与活跃求购的匹配撮合 | 读写 |
 | `demand_radar.py` | 无结果搜索、求购与供给缺口的需求雷达 | 读写 |
 | `demand_radar_hit_trend.py` | 需求雷达命中率的跨周期变化：按份额判方向、上一周期没有的类别标成新出现 | 读写 |
@@ -190,10 +191,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（154 个）
+## 业务链路的测试模块（157 个）
 
 <details>
-<summary>业务链路测试清单（154 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（157 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -236,6 +237,8 @@ campus_glimmer/
 - **`test_campaign_analytics.py`**：专题周期内的新增、在售与转化漏斗
 
 - **`test_campaign_phase_review.py`**：已结束专题的阶段边界、业务时间归段、薄样本门槛、跨专题总结、隐私与只读页面 / CSV 契约
+
+- **`test_campaign_registration.py`**：专题报名的幂等加入与退出、参与区间、数据库约束、页面权限、返回地址、个人足迹和后台入口
 
 - **`test_campaigns.py`**：校园专题、时间窗口和专题商品测试
 
@@ -494,7 +497,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（107 篇，持续更新）</summary>
+<summary>设计文档清单（108 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -664,4 +667,5 @@ campus_glimmer/
 - **`security-response-baseline-design.md`**：默认安全响应头的基线、HSTS 配置边界，以及为什么先不直接上 CSP
 - **`contribution-milestone-phase-rhythm-design.md`**：同类学期同一已结束阶段的达成节奏、每百天强度与覆盖审计阻塞
 - **`campaign-phase-review-design.md`**：校园专题按自身窗口复盘前中后段节奏，每百天强度、样本门槛与只读边界
+- **`campaign-registration-design.md`**：专题报名、幂等参与区间、个人足迹、聚合人数和运营 CSV 同口径
 </details>

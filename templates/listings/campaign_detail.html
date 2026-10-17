@@ -6,11 +6,38 @@
 {% block content %}
 <div class="campaign-hero content-card mb-4">
     <div class="campaign-hero-icon"><i class="bi bi-stars"></i></div>
-    <div>
+    <div class="campaign-hero-copy">
         <span class="eyebrow eyebrow-soft">Campus campaign</span>
         <h1>{{ campaign.title }}</h1>
         <p>{{ campaign.description|default:'把校园里的短期需求集中起来，让闲置在合适的时间遇见合适的人。' }}</p>
-        <div class="campaign-hero-meta"><span><i class="bi bi-calendar3 me-1"></i>{{ campaign.starts_at|date:'Y年m月d日' }} 开始</span>{% if campaign.ends_at %}<span><i class="bi bi-hourglass-split me-1"></i>至 {{ campaign.ends_at|date:'Y年m月d日' }}</span>{% endif %}<span><i class="bi bi-box-seam me-1"></i>{{ items|length }} 件当前在售</span></div>
+        <div class="campaign-hero-meta">
+            <span><i class="bi bi-calendar3 me-1"></i>{{ campaign.starts_at|date:'Y年m月d日' }} 开始</span>
+            {% if campaign.ends_at %}<span><i class="bi bi-hourglass-split me-1"></i>至 {{ campaign.ends_at|date:'Y年m月d日' }}</span>{% endif %}
+            <span><i class="bi bi-box-seam me-1"></i>{{ items|length }} 件当前在售</span>
+            <span><i class="bi bi-people me-1"></i>{{ campaign.active_registration_count }} 人已加入</span>
+        </div>
+    </div>
+    <div class="campaign-hero-actions">
+        {% if user.is_authenticated %}
+            {% if is_registered %}
+                <span class="campaign-registration-status"><i class="bi bi-check2-circle me-1"></i>已加入专题</span>
+                <form method="post" action="{% url 'leave_campaign' campaign.slug %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-dash me-1"></i>退出专题</button>
+                </form>
+            {% else %}
+                <form method="post" action="{% url 'join_campaign' campaign.slug %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-person-plus me-1"></i>加入专题</button>
+                </form>
+            {% endif %}
+            <small>加入表示关注专题，不会预约商品或占用库存。</small>
+        {% else %}
+            <a href="{% url 'login' %}?next={{ request.path|urlencode }}" class="btn btn-primary btn-sm"><i class="bi bi-person-plus me-1"></i>登录后加入</a>
+            <small>加入只记录活动关注，不会预约商品或占用库存。</small>
+        {% endif %}
     </div>
 </div>
 

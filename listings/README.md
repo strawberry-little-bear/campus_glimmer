@@ -62,6 +62,7 @@ flowchart LR
 | --- | --- | --- |
 | 商品与供给 | [`item_lifecycle.py`](item_lifecycle.py)、[`availability.py`](availability.py)、[`image_processing.py`](image_processing.py) | 出售、赠送、借用、多图、有效期、刷新额度与批量发布 |
 | 搜索与发现 | [`recommendations.py`](recommendations.py)、[`saved_searches.py`](saved_searches.py)、[`price_insights.py`](price_insights.py) | 组合筛选、搜索建议、收藏搜索、价格轨迹和推荐反馈 |
+| 校园专题与参与 | [`campaign_registration.py`](campaign_registration.py)、[`campaign_analytics.py`](campaign_analytics.py) | 专题浏览、加入与退出、参与区间、聚合报名人数和运营导出 |
 | 求购与失物 | [`demand_matching.py`](demand_matching.py)、[`demand_radar.py`](demand_radar.py)、[`lost_found_matching.py`](lost_found_matching.py) | 求购响应、需求机会和失物招领线索匹配 |
 | 订单与交付 | [`order_workflow.py`](order_workflow.py)、[`meeting_scheduling.py`](meeting_scheduling.py)、[`delivery_handshake.py`](delivery_handshake.py)、[`return_handshake.py`](return_handshake.py) | 预约、改期、签到、交付确认、借用归还与争议 |
 | 通知与摘要 | [`notifications.py`](notifications.py)、[`notification_kind_coverage.py`](notification_kind_coverage.py)、[`*_digest.py`](.) | 通知中心、偏好、免打扰、延后和周期摘要 |
@@ -76,6 +77,8 @@ flowchart LR
 | --- | --- |
 | `/listings/` | 发现好物 |
 | `/listings/search/` | 搜索结果与组合筛选 |
+| `/listings/campaigns/` | 校园专题列表与聚合报名人数 |
+| `/listings/campaigns/mine/` | 当前用户的专题参与记录与历史 |
 | `/listings/demands/` | 求购广场 |
 | `/listings/lost-found/` | 失物招领 |
 | `/listings/item/<item_id>/` | 商品详情与交易入口 |
@@ -128,6 +131,7 @@ flowchart LR
 ```powershell
 python manage.py test listings
 python manage.py test listings.test_order_stage_flow
+python manage.py test listings.test_campaign_registration listings.test_campaign_analytics listings.test_campaigns
 python manage.py makemigrations --check --dry-run
 python manage.py check
 ```
