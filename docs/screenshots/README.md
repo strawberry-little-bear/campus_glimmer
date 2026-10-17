@@ -1,28 +1,106 @@
+<div align="center">
+
+<img src="../assets/brand-mark.svg" width="72" alt="拾光校园品牌图标">
+
 # screenshots · 系统界面预览
 
-[返回项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
+**八张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
 
-> 首页展示的系统截图，全部来自本地演示数据，用于说明真实页面结构，不使用真实用户信息。
+[项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
-## 当前截图
+</div>
 
-| 文件 | 页面 |
-| --- | --- |
-| `home.png` | 首页主视觉、导航和在售商品概览 |
-| `discover.png` | 商品发现、分类、校园地点与排序 |
-| `item-detail.png` | 商品详情、价格参考、地点和交易操作 |
-| `notifications.png` | 通知中心、未读统计、筛选和批量处理 |
+> [!IMPORTANT]
+> 所有截图均来自本地独立演示数据库。账号、商品、消息、通知和指标均为演示内容，不代表真实用户、真实成交或线上生产数据。当前截图统一使用 `demo_*` 演示身份，并已清理旧测试用户名和联系方式。
 
-## 维护约定
+## 📸 截图画廊
 
-- 截图应反映当前主导航、品牌色和核心页面结构；
-- 不出现真实姓名、邮箱、手机号、私信内容或其他个人数据；
-- 优先使用 `python init_data.py` 准备稳定的演示数据；
-- 截图尺寸保持一致，当前基准为 `1424 × 969`；
-- 替换截图后同步检查根 README 中的说明文字是否仍然准确；
-- 品牌图标位于 [`../assets/brand-mark.svg`](../assets/brand-mark.svg)。
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="home.png"><img src="home.png" alt="拾光校园首页，展示品牌主视觉、导航和商品概览" width="100%" /></a>
+<p align="center"><strong>首页</strong><br /><sub>品牌主视觉、全局导航与在售商品概览</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="discover.png"><img src="discover.png" alt="发现好物页面，展示分类、校园地点筛选和商品卡片" width="100%" /></a>
+<p align="center"><strong>发现好物</strong><br /><sub>分类、校园地点、成色、价格和排序</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="item-detail.png"><img src="item-detail.png" alt="商品详情页，展示图片、价格、校园地点和价格参考" width="100%" /></a>
+<p align="center"><strong>商品详情</strong><br /><sub>图片、交易信息、价格参考和操作入口</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="notifications.png"><img src="notifications.png" alt="通知中心，展示未读统计、类型分布、筛选和批量处理" width="100%" /></a>
+<p align="center"><strong>通知中心</strong><br /><sub>未读统计、类型分布、延后和批量已读</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="profile.png"><img src="profile.png" alt="个人资料页，展示账户信息、校园身份、互助贡献和我的活动" width="100%" /></a>
+<p align="center"><strong>个人资料</strong><br /><sub>账户信息、校园身份、贡献与活动入口</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="public-profile.png"><img src="public-profile.png" alt="公开交易档案，展示公开资料、交易表现和校园互助反馈" width="100%" /></a>
+<p align="center"><strong>公开交易档案</strong><br /><sub>公开信誉、贡献、在售商品和评价摘要</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="inbox.png"><img src="inbox.png" alt="消息中心，展示私信统计、会话列表、未读消息和批量已读" width="100%" /></a>
+<p align="center"><strong>消息中心</strong><br /><sub>会话列表、未读统计和批量已读</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="operations.png"><img src="operations.png" alt="运营数据概览，展示供给、搜索、预约、互助和看板构建耗时" width="100%" /></a>
+<p align="center"><strong>运营看板</strong><br /><sub>管理员视角下的指标、告警和构建观测</sub></p>
+</td>
+</tr>
+</table>
 
-## 使用位置
+点击图片可查看原始尺寸。
+
+## 📏 当前文件
+
+| 文件 | 尺寸 | 页面与观察重点 |
+| --- | --- | --- |
+| [`home.png`](home.png) | `1424 × 969` | 首页；品牌主视觉、导航和商品概览 |
+| [`discover.png`](discover.png) | `1424 × 969` | 发现页；分类、校园地点、商品卡片和排序 |
+| [`item-detail.png`](item-detail.png) | `1424 × 969` | 详情页；图片、状态、价格、地点和价格参考 |
+| [`notifications.png`](notifications.png) | `1424 × 969` | 通知中心；未读统计、类型分布和批量操作 |
+| [`profile.png`](profile.png) | `1424 × 969` | 个人资料；账户、校园身份、贡献和活动入口 |
+| [`public-profile.png`](public-profile.png) | `1424 × 969` | 公开档案；公开信誉、互助反馈和在售摘要 |
+| [`inbox.png`](inbox.png) | `1424 × 969` | 消息中心；会话、未读筛选和批量已读 |
+| [`operations.png`](operations.png) | `1424 × 969` | 运营看板；管理员指标、告警和构建耗时 |
+
+## 🔄 更新截图时
+
+仓库当前不提交自动截图脚本，截图需要人工准备和复核。建议流程：
+
+1. 使用独立演示数据库，或在确认不会污染真实数据的环境中启动项目；
+2. 运行 `python manage.py migrate`，按需执行 `python init_data.py` 准备演示数据；
+3. 为账户、商品、地点和通知准备同一套演示身份，避免截图之间出现互相矛盾的账号；
+4. 使用无痕窗口登录演示账号，隐藏密码、令牌、浏览器书签和开发者工具；
+5. 保持相同浏览器缩放与窗口宽度，当前基准视口为 `1424 × 969`；
+6. 保存后逐张检查用户名、商品、通知、价格和日期是否仍为演示数据；
+7. 更新本文件、根 README 以及引用截图的目录 README 描述。
+
+## 🔐 隐私检查
+
+- 不出现真实姓名、邮箱、手机号、学号、微信或私信内容；
+- 不出现真实订单号、交付码、争议证据或运营告警；
+- 不出现浏览器标签页中的个人信息、系统通知或本地路径；
+- 商品图片如果来自网络，应确认可用于仓库展示；
+- 截图中的功能必须与当前主分支一致，不能用设计稿或 AI 生成图冒充系统页面。
+
+## 🗺️ 使用位置
 
 - [根 README](../../README.md)
 - [完整项目手册](../README.md)
+- [accounts 说明](../../accounts/README.md)
+- [chat_messages 说明](../../chat_messages/README.md)
+- [listings 说明](../../listings/README.md)
+- [static 说明](../../static/README.md)
+- [templates 说明](../../templates/README.md)
+
+品牌图标位于 [`../assets/brand-mark.svg`](../assets/brand-mark.svg)。

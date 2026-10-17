@@ -103,7 +103,30 @@
 </tr>
 </table>
 
-<p align="center"><sub>界面预览 · 本地演示数据</sub></p>
+### 账户与消息
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="docs/screenshots/profile.png" alt="个人资料页，展示账户信息、校园身份、互助贡献和活动入口" width="100%" />
+<p align="center"><strong>个人资料</strong><br /><sub>账户信息、校园身份、贡献与活动入口</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src="docs/screenshots/inbox.png" alt="消息中心，展示私信统计、会话列表和批量已读操作" width="100%" />
+<p align="center"><strong>消息中心</strong><br /><sub>会话列表、未读统计与批量已读</sub></p>
+</td>
+</tr>
+</table>
+
+### 运营看板
+
+<p align="center">
+  <img src="docs/screenshots/operations.png" alt="运营数据概览，展示供给、搜索、预约、互助和看板构建耗时" width="100%" />
+</p>
+
+<p align="center"><sub>管理员视角下的供给、搜索、预约、互助和看板构建观测 · 本地演示数据</sub></p>
+
+<p align="center"><sub>全部截图均来自当前本地页面；更多说明见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
 
 ---
 
@@ -358,6 +381,8 @@ GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查�
 | 学期阶段、统计快照与交易高峰 | [学期日历与交易高峰](docs/academic-calendar.md) |
 | 当前取舍、隐私边界与实现纪律 | [当前取舍与边界](docs/product-boundaries.md) |
 | 后续方向与拆分原则 | [后续路线图](docs/roadmap.md) |
+| 系统界面与截图维护 | [系统界面预览](docs/screenshots/README.md) |
+| 按源码目录了解模块 | [目录级 README 索引](docs/README.md#directory-readmes) |
 | 具体功能的设计过程与历史取舍 | [`docs/` 设计说明](docs/) |
 
 README 只保留项目级入口，详细口径继续在深文档中维护。这样新增能力时不必反复拉长首页，

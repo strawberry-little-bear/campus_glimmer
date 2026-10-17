@@ -43,6 +43,33 @@
 
 ![一条链路看全貌](end-to-end.svg)
 
+### 真实界面
+
+下面四张图来自当前主分支的本地演示环境，分别覆盖发现、运营、消息和账户界面。业务规则仍以文字说明和专项文档为准，截图用于快速确认页面结构与信息层级。
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<img src="screenshots/discover.png" alt="发现校园好物页面，展示分类、地点、商品卡片和排序" width="100%" />
+<p align="center"><strong>发现与筛选</strong><br /><sub>分类、校园地点、价格与分页入口</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src="screenshots/operations.png" alt="运营数据概览，展示供给、预约、搜索、互助和构建耗时" width="100%" />
+<p align="center"><strong>运营看板</strong><br /><sub>指标卡片、告警状态与构建观测</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="screenshots/inbox.png" alt="消息中心，展示会话、未读统计和批量已读" width="100%" />
+<p align="center"><strong>消息中心</strong><br /><sub>会话、未读状态与批量操作</sub></p>
+</td>
+<td width="50%" valign="top">
+<img src="screenshots/profile.png" alt="个人资料页，展示账户、校园身份和互助贡献" width="100%" />
+<p align="center"><strong>账户资料</strong><br /><sub>校园身份、贡献与活动入口</sub></p>
+</td>
+</tr>
+</table>
+
 ### 技术栈
 
 | 层次 | 当前方案 | 说明 |
@@ -134,6 +161,23 @@ campus_glimmer/
 ├── docker/                    # 容器辅助文件
 └── docs/                      # 功能、设计、架构和运营文档
 ```
+
+<a id="directory-readmes"></a>
+### 目录级 README
+
+每个主要目录都有一份与源码同步的说明，适合在修改具体模块前快速进入：
+
+| 目录 | README 重点 |
+| --- | --- |
+| [`accounts/`](../accounts/README.md) | 账户、公开资料、校园邮箱域名与一次性认证链路 |
+| [`chat_messages/`](../chat_messages/README.md) | 留言、私信、未读状态、审核规则与内容申诉 |
+| [`listings/`](../listings/README.md) | 商品、搜索、订单、通知、治理、运营与定时任务 |
+| [`campus_glimmer/`](../campus_glimmer/README.md) | 根路由、配置、全局上下文、健康检查与服务入口 |
+| [`templates/`](../templates/README.md) | 服务端模板、公共布局和页面组合方式 |
+| [`static/`](../static/README.md) | 主题变量、搜索建议、未读轮询和静态资源约定 |
+| [`docker/`](../docker/README.md) | 镜像启动、迁移、静态收集与健康检查 |
+| [`.github/`](../.github/README.md) | GitHub Actions 质量检查与本地等价命令 |
+| [`docs/screenshots/`](screenshots/README.md) | 真实界面截图、尺寸、隐私和更新流程 |
 
 模块、测试和设计文档索引见[模块与测试地图](module-map.md)。核心模型与关键约束见[核心数据模型](data-model.md)。
 
