@@ -42,6 +42,9 @@
 数据库迁移、后台运营和自动化测试，再进入主分支。README 负责快速了解与进入，完整规则
 维护在 [`docs/`](docs/)。
 
+> **当前状态：** 持续维护中。核心交易、消息通知、社区治理和运营看板已形成闭环；近期迭代
+> 重点放在界面一致性、移动端体验、搜索入口和生产环境可靠性。
+
 <table>
 <tr>
 <td width="50%" valign="top">
@@ -85,10 +88,10 @@
 ### 发现校园好物
 
 <p align="center">
-  <img src="docs/screenshots/discover.png" alt="商品发现页，包含分类、校园地点筛选、商品卡片和排序" width="100%" />
+  <img src="docs/screenshots/discover.png" alt="商品发现页，包含关键词搜索、分类、校园地点筛选、商品卡片和排序" width="100%" />
 </p>
 
-<p align="center"><sub>分类、交易地点与商品状态在同一个筛选入口内完成 · 本地演示数据</sub></p>
+<p align="center"><sub>关键词、分类、交易地点与商品状态在同一个筛选入口内完成 · 本地演示数据</sub></p>
 
 <table>
 <tr>
@@ -108,8 +111,8 @@
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/profile.png" alt="个人资料页，展示账户信息、校园身份、互助贡献和活动入口" width="100%" />
-<p align="center"><strong>个人资料</strong><br /><sub>账户信息、校园身份、贡献与活动入口</sub></p>
+<a href="docs/screenshots/login.png"><img src="docs/screenshots/login.png" alt="登录页，展示品牌介绍、校园身份说明与登录表单" width="100%" /></a>
+<p align="center"><strong>登录与账户入口</strong><br /><sub>品牌信息、登录表单与继续交易的清晰入口</sub></p>
 </td>
 <td width="50%" valign="top">
 <img src="docs/screenshots/inbox.png" alt="消息中心，展示私信统计、会话列表和批量已读操作" width="100%" />
@@ -126,7 +129,7 @@
 
 <p align="center"><sub>管理员视角下的供给、搜索、预约、互助和看板构建观测 · 本地演示数据</sub></p>
 
-<p align="center"><sub>全部截图均来自当前本地页面；更多说明见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
+<p align="center"><sub>全部截图均来自当前本地页面与演示数据；个人资料、公开交易档案等更多页面见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
 
 ---
 

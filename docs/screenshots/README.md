@@ -4,16 +4,22 @@
 
 # screenshots · 系统界面预览
 
-**八张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
+**九张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
 </div>
 
 > [!IMPORTANT]
-> 所有截图均来自本地独立演示数据库。账号、商品、消息、通知和指标均为演示内容，不代表真实用户、真实成交或线上生产数据。当前截图统一使用 `demo_*` 演示身份，并已清理旧测试用户名和联系方式。
+> 所有截图均来自本地独立演示数据库。账号、商品、消息、通知和指标均为演示内容，不代表真实用户、真实成交或线上生产数据。登录页为未登录状态，登录后的页面统一使用 `demo_*` 演示身份，并已清理旧测试用户名和联系方式。
 
 ## 📸 截图画廊
+
+<p align="center">
+  <a href="login.png"><img src="login.png" alt="登录页，展示品牌介绍、校园身份说明、全局导航与登录表单" width="100%" /></a>
+</p>
+
+<p align="center"><strong>登录与账户入口</strong><br /><sub>品牌说明、账户动作与全局导航保持同一套视觉语言 · 本地演示数据</sub></p>
 
 <table>
 <tr>
@@ -22,8 +28,8 @@
 <p align="center"><strong>首页</strong><br /><sub>品牌主视觉、全局导航与在售商品概览</sub></p>
 </td>
 <td width="50%" valign="top">
-<a href="discover.png"><img src="discover.png" alt="发现好物页面，展示分类、校园地点筛选和商品卡片" width="100%" /></a>
-<p align="center"><strong>发现好物</strong><br /><sub>分类、校园地点、成色、价格和排序</sub></p>
+<a href="discover.png"><img src="discover.png" alt="发现好物页面，展示关键词搜索、分类、校园地点筛选和商品卡片" width="100%" /></a>
+<p align="center"><strong>发现好物</strong><br /><sub>关键词、分类、校园地点、成色、价格和排序</sub></p>
 </td>
 </tr>
 <tr>
@@ -65,7 +71,8 @@
 | 文件 | 尺寸 | 页面与观察重点 |
 | --- | --- | --- |
 | [`home.png`](home.png) | `1424 × 969` | 首页；品牌主视觉、导航和商品概览 |
-| [`discover.png`](discover.png) | `1424 × 969` | 发现页；分类、校园地点、商品卡片和排序 |
+| [`discover.png`](discover.png) | `1424 × 969` | 发现页；关键词搜索、分类、校园地点、商品卡片和排序 |
+| [`login.png`](login.png) | `1424 × 969` | 登录页；品牌信息、认证表单与全局导航 |
 | [`item-detail.png`](item-detail.png) | `1424 × 969` | 详情页；图片、状态、价格、地点和价格参考 |
 | [`notifications.png`](notifications.png) | `1424 × 969` | 通知中心；未读统计、类型分布和批量操作 |
 | [`profile.png`](profile.png) | `1424 × 969` | 个人资料；账户、校园身份、贡献和活动入口 |
