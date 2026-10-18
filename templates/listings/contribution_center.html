@@ -16,7 +16,7 @@
     <div class="contribution-overview mb-4">
         <div class="contribution-stat"><span>累计积分</span><strong>{{ summary.total_points }}</strong><small>分</small></div>
         <div class="contribution-stat"><span>完成事件</span><strong>{{ summary.total_events }}</strong><small>次</small></div>
-        <div class="contribution-stat contribution-progress-stat"><span>当前等级</span><strong>{{ summary.level }}</strong><div class="progress" role="progressbar" aria-label="等级进度" aria-valuenow="{{ summary.progress_percent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: {{ summary.progress_percent }}%"></div></div>{% if summary.next_level %}<small>距离“{{ summary.next_level }}”还差 {{ summary.remaining_points }} 分</small>{% else %}<small>已达到当前最高等级</small>{% endif %}</div>
+        <div class="contribution-stat contribution-progress-stat"><span>当前等级</span><strong>{{ summary.level }}</strong><div class="progress" role="progressbar" aria-label="等级进度" aria-valuenow="{{ summary.progress_percent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar" style="width: {{ summary.progress_percent }}%"></div></div>{% if summary.next_level %}<small>再获得 <strong>{{ summary.remaining_points }}</strong> 分升级为“{{ summary.next_level }}”</small>{% else %}<small>已达到当前最高等级</small>{% endif %}</div>
     </div>
 
     <div class="row g-4 align-items-start">

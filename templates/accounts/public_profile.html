@@ -71,7 +71,7 @@
                 <div class="contribution-summary">
                     <div class="contribution-score"><strong>{{ contribution.total_points }}</strong><span>贡献积分</span></div>
                     <div class="contribution-progress flex-grow-1">
-                        <div class="d-flex justify-content-between small text-muted mb-2"><span>{{ contribution.level }}</span>{% if contribution.next_level %}<span>距离“{{ contribution.next_level }}”还差 {{ contribution.remaining_points }} 分{% else %}<span>已达到最高等级{% endif %}</span></div>
+                        <div class="d-flex justify-content-between small text-muted mb-2"><span>{{ contribution.level }}</span>{% if contribution.next_level %}<span>再获得 {{ contribution.remaining_points }} 分升级为“{{ contribution.next_level }}”{% else %}<span>已达到最高等级{% endif %}</span></div>
                         <div class="progress" role="progressbar" aria-label="贡献等级进度" aria-valuenow="{{ contribution.progress_percent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-bar bg-success" style="width: {{ contribution.progress_percent }}%"></div></div>
                         <small class="text-muted">贡献记录只统计可验证的校园交易行为，不展示具体订单或敏感信息。</small>
                     </div>

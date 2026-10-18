@@ -3,112 +3,191 @@
 {% block title %}消息中心 - 拾光校园{% endblock %}
 
 {% block content %}
-<div class="message-center-toolbar mb-4">
-    <div>
-        <span class="eyebrow eyebrow-soft">Message center</span>
-        <h1 class="mb-1">消息中心</h1>
-        <p class="text-muted mb-0">把私信按会话和未读状态整理好，重要回复不会被新消息淹没。</p>
-    </div>
-    <div class="d-flex flex-wrap gap-2 align-items-center">
-        <form method="get" class="message-search-form">
+<div class="inbox-page">
+    <section class="inbox-hero">
+        <div>
+            <span class="eyebrow eyebrow-soft">Message center</span>
+            <h1>消息中心</h1>
+            <p>把私信按会话和未读状态整理好，重要回复不会被新消息淹没。</p>
+        </div>
+        <div class="inbox-hero-actions">
+            <a href="{% url 'activity_center' %}" class="btn btn-light"><i class="bi bi-activity me-2"></i>站内动态</a>
+            {% if unread_message_count %}
+            <form method="post" action="{% url 'mark_all_messages_read' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check2-all me-2"></i>全部已读 <span>{{ unread_message_count }}</span></button>
+            </form>
+            {% endif %}
+        </div>
+    </section>
+
+    <form method="get" class="inbox-filter-panel" role="search">
+        <div class="inbox-search-field">
             <i class="bi bi-search"></i>
-            <input type="search" name="q" value="{{ search_query }}" placeholder="搜索内容、用户或商品" aria-label="搜索私信">
-            <select name="status" class="form-select form-select-sm" aria-label="消息状态">
+            <input type="search" name="q" value="{{ search_query }}" placeholder="搜索私信内容、用户或商品" aria-label="搜索私信">
+        </div>
+        <label class="inbox-status-field">
+            <span>消息状态</span>
+            <select name="status" class="form-select" aria-label="消息状态">
                 {% for value, label in message_status_options %}<option value="{{ value }}" {% if message_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
-            <button type="submit" class="btn btn-sm btn-outline-success">筛选</button>
-            {% if search_query or message_status_filter != 'all' %}<a href="{% url 'inbox' %}" class="btn btn-sm btn-light">重置</a>{% endif %}
-        </form>
-        <a href="{% url 'activity_center' %}" class="btn btn-sm btn-light"><i class="bi bi-activity me-1"></i>站内动态</a>
-        {% if unread_message_count %}
-        <form method="post" action="{% url 'mark_all_messages_read' %}">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-all me-1"></i>全部已读（{{ unread_message_count }}）</button>
-        </form>
-        {% endif %}
-    </div>
-</div>
+        </label>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-sliders me-2"></i>应用筛选</button>
+        {% if search_query or message_status_filter != 'all' %}<a href="{% url 'inbox' %}" class="btn btn-light"><i class="bi bi-arrow-counterclockwise me-2"></i>重置</a>{% endif %}
+    </form>
 
-<div class="row g-3 mb-4">
-    <div class="col-md-4"><div class="content-card p-3 h-100"><div class="text-muted small">收到的私信</div><div class="h3 mb-0">{{ message_total_count }}</div></div></div>
-    <div class="col-md-4"><div class="content-card p-3 h-100"><div class="text-muted small">待处理未读</div><div class="h3 mb-0 text-primary">{{ unread_message_count }}</div></div></div>
-    <div class="col-md-4"><div class="content-card p-3 h-100"><div class="text-muted small">有未读的会话</div><div class="h3 mb-0 text-success">{{ conversation_unread_count }}</div></div></div>
-</div>
-
-<div class="message-filter-summary mb-3"><i class="bi bi-funnel me-1"></i>当前收到的消息 {{ message_filtered_total_count }} 条，其中 {{ message_filtered_unread_count }} 条未读{% if search_query or message_status_filter != 'all' %} · 已应用筛选条件{% endif %}</div>
-
-<div class="row">
-    <div class="col-md-4 mb-4">
-        <div class="card shadow">
-            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-                <h5 class="mb-0">我的对话</h5><small class="opacity-75">{{ conversation_data|length }} 个</small>
-            </div>
-            <div class="list-group list-group-flush">
-                {% for data in conversation_data %}
-                <div class="list-group-item d-flex align-items-center">
-                    <a href="{% url 'conversation' data.user.id %}" class="d-flex align-items-center text-decoration-none flex-grow-1 min-width-0">
-                        <img src="{{ data.user.profile.avatar.url }}" alt="{{ data.user.username }}" class="avatar-sm me-3">
-                        <span class="flex-grow-1 min-width-0">
-                            <span class="d-flex justify-content-between"><strong>{{ data.user.username }}</strong><small class="text-muted">{% if data.last_message %}{{ data.last_message.created_at|date:"m-d H:i" }}{% endif %}</small></span>
-                            <small class="text-muted d-block text-truncate">{% if data.last_message %}{{ data.last_message.content|truncatechars:24 }}{% endif %} · {{ data.message_count }} 条</small>
-                        </span>
-                    </a>
-                    {% if data.unread_count > 0 %}
-                    <form method="post" action="{% url 'mark_conversation_read' data.user.id %}" class="ms-2" title="将此会话标记为已读">
-                        {% csrf_token %}<button type="submit" class="btn btn-sm btn-link text-success p-0" aria-label="将 {{ data.user.username }} 的会话标记为已读"><span class="badge bg-danger rounded-pill">{{ data.unread_count }}</span></button>
-                    </form>
-                    {% endif %}
-                </div>
-                {% empty %}<div class="list-group-item text-center py-4"><p class="text-muted mb-0">暂无对话</p></div>{% endfor %}
-            </div>
+    <div class="inbox-stat-grid">
+        <div class="inbox-stat-card">
+            <span class="inbox-stat-icon"><i class="bi bi-inbox"></i></span>
+            <span><small>收到的私信</small><strong>{{ message_total_count }}</strong><em>全部历史消息</em></span>
+        </div>
+        <div class="inbox-stat-card is-unread">
+            <span class="inbox-stat-icon"><i class="bi bi-chat-dots"></i></span>
+            <span><small>待处理未读</small><strong>{{ unread_message_count }}</strong><em>{% if unread_message_count %}等待回复或标记已读{% else %}没有积压消息{% endif %}</em></span>
+        </div>
+        <div class="inbox-stat-card is-conversation">
+            <span class="inbox-stat-icon"><i class="bi bi-people"></i></span>
+            <span><small>有未读的会话</small><strong>{{ conversation_unread_count }}</strong><em>{{ conversation_data|length }} 个活跃会话</em></span>
         </div>
     </div>
 
-    <div class="col-md-8">
-        <div class="card shadow">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center gap-2">
-                <span class="small text-muted">{% if search_query %}“{{ search_query }}”的搜索结果{% else %}最近消息{% endif %}</span>
-                <ul class="nav nav-tabs card-header-tabs" id="messagesTabs" role="tablist">
-                    <li class="nav-item" role="presentation"><button class="nav-link active" id="received-tab" data-bs-toggle="tab" data-bs-target="#received" type="button" role="tab">收到的消息</button></li>
-                    <li class="nav-item" role="presentation"><button class="nav-link" id="sent-tab" data-bs-toggle="tab" data-bs-target="#sent" type="button" role="tab">发出的消息</button></li>
-                </ul>
-            </div>
-            <div class="card-body">
-                <div class="tab-content" id="messagesTabContent">
-                    <div class="tab-pane fade show active" id="received" role="tabpanel">
+    <div class="inbox-result-note">
+        <span><i class="bi bi-funnel me-2"></i>当前收到 {{ message_filtered_total_count }} 条消息，其中 {{ message_filtered_unread_count }} 条未读</span>
+        {% if search_query or message_status_filter != 'all' %}<span class="inbox-filter-chip"><i class="bi bi-check2"></i>已应用筛选条件</span>{% endif %}
+    </div>
+
+    <div class="row g-4 align-items-start">
+        <div class="col-lg-4">
+            <section class="inbox-panel conversation-panel">
+                <div class="inbox-panel-head">
+                    <div><span class="eyebrow eyebrow-soft">Conversations</span><h2><i class="bi bi-people me-2"></i>我的对话</h2></div>
+                    <span class="inbox-count-pill">{{ conversation_data|length }} 个</span>
+                </div>
+                <div class="conversation-list">
+                    {% for data in conversation_data %}
+                    <article class="conversation-row {% if data.unread_count %}is-unread{% endif %}">
+                        <a href="{% url 'conversation' data.user.id %}" class="conversation-link">
+                            <span class="conversation-avatar">
+                                <img src="{{ data.user.profile.avatar.url }}" alt="{{ data.user.username }}">
+                                {% if data.unread_count %}<span class="conversation-unread-dot"></span>{% endif %}
+                            </span>
+                            <span class="conversation-copy">
+                                <span class="conversation-topline">
+                                    <strong>{{ data.user.username }}</strong>
+                                    <time>{% if data.last_message %}{{ data.last_message.created_at|date:"m-d H:i" }}{% endif %}</time>
+                                </span>
+                                <span class="conversation-preview">{% if data.last_message %}{{ data.last_message.content|truncatechars:38 }}{% else %}还没有消息{% endif %}</span>
+                                <span class="conversation-meta"><i class="bi bi-chat-square me-1"></i>{{ data.message_count }} 条消息</span>
+                            </span>
+                        </a>
+                        {% if data.unread_count %}
+                        <form method="post" action="{% url 'mark_conversation_read' data.user.id %}" class="conversation-read-form" title="将此会话标记为已读">
+                            {% csrf_token %}
+                            <button type="submit" class="conversation-read-button" aria-label="将 {{ data.user.username }} 的会话标记为已读"><span>{{ data.unread_count }}</span><i class="bi bi-check2"></i></button>
+                        </form>
+                        {% endif %}
+                    </article>
+                    {% empty %}
+                    <div class="inbox-empty-state compact"><span><i class="bi bi-chat-square-dots"></i></span><strong>暂无对话</strong><p>从商品详情发起私信后，会话会出现在这里。</p><a href="{% url 'item_list' %}" class="btn btn-sm btn-outline-primary">去发现好物</a></div>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+
+        <div class="col-lg-8">
+            <section class="inbox-panel mailbox-panel">
+                <div class="mailbox-head">
+                    <div>
+                        <span class="eyebrow eyebrow-soft">Mailbox</span>
+                        <h2>{% if search_query %}“{{ search_query }}”的搜索结果{% else %}最近消息{% endif %}</h2>
+                        <p>点击“查看对话”继续沟通；未读消息可以逐条或批量处理。</p>
+                    </div>
+                    <ul class="nav inbox-tabs" id="messagesTabs" role="tablist">
+                        <li class="nav-item" role="presentation"><button class="nav-link active" id="received-tab" data-bs-toggle="tab" data-bs-target="#received" type="button" role="tab"><i class="bi bi-inbox me-2"></i>收到的消息</button></li>
+                        <li class="nav-item" role="presentation"><button class="nav-link" id="sent-tab" data-bs-toggle="tab" data-bs-target="#sent" type="button" role="tab"><i class="bi bi-send me-2"></i>发出的消息</button></li>
+                    </ul>
+                </div>
+
+                <div class="tab-content mailbox-tab-content" id="messagesTabContent">
+                    <div class="tab-pane fade show active" id="received" role="tabpanel" aria-labelledby="received-tab">
                         <form method="post" action="{% url 'mark_selected_messages_read' %}" id="selected-messages-form">
                             {% csrf_token %}
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <label class="small text-muted mb-0"><input type="checkbox" id="select-all-messages" class="form-check-input me-2">全选未读</label>
-                                <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-square me-1"></i>标记选中为已读</button>
+                            <div class="mailbox-toolbar">
+                                <label class="mailbox-select-all"><input type="checkbox" id="select-all-messages" class="form-check-input"> <span>全选未读</span></label>
+                                <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check2-square me-2"></i>标记选中为已读</button>
                             </div>
-                            <div class="list-group">
+
+                            <div class="mailbox-message-list">
                                 {% for message in received_page.object_list %}
-                                <div class="list-group-item list-group-item-action {% if not message.is_read %}bg-light{% endif %}">
-                                    <div class="d-flex align-items-start">
-                                        {% if not message.is_read %}<input type="checkbox" name="message_ids" value="{{ message.id }}" class="form-check-input message-select mt-1 me-3">{% else %}<span class="message-select-spacer me-3"></span>{% endif %}
-                                        <img src="{{ message.sender.profile.avatar.url }}" alt="{{ message.sender.username }}" class="avatar-sm me-3">
-                                        <div class="flex-grow-1"><div class="d-flex justify-content-between"><h6 class="mb-0">{{ message.sender.username }}{% if not message.is_read %}<span class="badge bg-primary-subtle text-primary ms-2">未读</span>{% endif %}</h6><small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small></div>
-                                            <p class="mb-1">{{ message.content }}</p>
-                                            {% if message.item %}<small class="text-muted">关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a></small>{% endif %}
-                                            <div class="mt-2"><a href="{% url 'conversation' message.sender.id %}" class="btn btn-sm btn-outline-success">查看对话</a></div>
+                                <article class="mailbox-message {% if not message.is_read %}is-unread{% endif %}">
+                                    <div class="mailbox-check">
+                                        {% if not message.is_read %}<input type="checkbox" name="message_ids" value="{{ message.id }}" class="form-check-input message-select" aria-label="选择 {{ message.sender.username }} 的消息">{% else %}<span class="mailbox-check-placeholder"></span>{% endif %}
+                                    </div>
+                                    <img src="{{ message.sender.profile.avatar.url }}" alt="{{ message.sender.username }}" class="mailbox-avatar">
+                                    <div class="mailbox-message-body">
+                                        <div class="mailbox-message-top">
+                                            <div><strong>{{ message.sender.username }}</strong>{% if not message.is_read %}<span class="mailbox-unread-label">未读</span>{% endif %}</div>
+                                            <time>{{ message.created_at|date:"Y-m-d H:i" }}</time>
+                                        </div>
+                                        <p>{{ message.content }}</p>
+                                        <div class="mailbox-message-foot">
+                                            {% if message.item %}<a href="{% url 'item_detail' message.item.id %}" class="mailbox-item-link"><i class="bi bi-box-seam me-1"></i>{{ message.item.title }}</a>{% else %}<span class="mailbox-item-link is-muted"><i class="bi bi-chat-square me-1"></i>直接私信</span>{% endif %}
+                                            <a href="{% url 'conversation' message.sender.id %}" class="btn btn-sm btn-outline-primary">查看对话 <i class="bi bi-arrow-right ms-1"></i></a>
                                         </div>
                                     </div>
-                                </div>
-                                {% empty %}<div class="text-center py-4"><p class="text-muted mb-0">暂无收到的消息</p></div>{% endfor %}
+                                </article>
+                                {% empty %}
+                                <div class="inbox-empty-state"><span><i class="bi bi-inbox"></i></span><strong>暂无收到的消息</strong><p>{% if search_query or message_status_filter != 'all' %}当前筛选条件下没有消息，试试重置筛选条件。{% else %}收到新私信后，这里会显示消息内容和对应商品。{% endif %}</p>{% if search_query or message_status_filter != 'all' %}<a href="{% url 'inbox' %}" class="btn btn-sm btn-outline-primary">重置筛选</a>{% endif %}</div>
+                                {% endfor %}
                             </div>
-                            {% if received_page.has_other_pages %}<nav class="mt-3" aria-label="收到的消息分页"><ul class="pagination pagination-sm justify-content-center mb-0">{% if received_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.previous_page_number }}">上一页</a></li>{% endif %}<li class="page-item active"><span class="page-link">{{ received_page.number }} / {{ received_page.paginator.num_pages }}</span></li>{% if received_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.next_page_number }}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
+
+                            {% if received_page.has_other_pages %}
+                            <nav class="mailbox-pagination" aria-label="收到的消息分页">
+                                <ul class="pagination pagination-sm justify-content-center mb-0">
+                                    {% if received_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.previous_page_number }}"><i class="bi bi-chevron-left"></i></a></li>{% endif %}
+                                    <li class="page-item active"><span class="page-link">{{ received_page.number }} / {{ received_page.paginator.num_pages }}</span></li>
+                                    {% if received_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.next_page_number }}"><i class="bi bi-chevron-right"></i></a></li>{% endif %}
+                                </ul>
+                            </nav>
+                            {% endif %}
                         </form>
                     </div>
-                    <div class="tab-pane fade" id="sent" role="tabpanel">
-                        <div class="list-group">
-                            {% for message in sent_page.object_list %}<div class="list-group-item list-group-item-action"><div class="d-flex"><img src="{{ message.receiver.profile.avatar.url }}" alt="{{ message.receiver.username }}" class="avatar-sm me-3"><div class="flex-grow-1"><div class="d-flex justify-content-between"><h6 class="mb-0">发送给: {{ message.receiver.username }}</h6><small class="text-muted">{{ message.created_at|date:"Y-m-d H:i" }}</small></div><p class="mb-1">{{ message.content }}</p>{% if message.item %}<small class="text-muted">关于商品: <a href="{% url 'item_detail' message.item.id %}">{{ message.item.title }}</a></small>{% endif %}<div class="mt-2"><a href="{% url 'conversation' message.receiver.id %}" class="btn btn-sm btn-outline-success">查看对话</a></div></div></div></div>
-                            {% empty %}<div class="text-center py-4"><p class="text-muted mb-0">暂无发出的消息</p></div>{% endfor %}
-                            {% if sent_page.has_other_pages %}<nav class="mt-3" aria-label="发出的消息分页"><ul class="pagination pagination-sm justify-content-center mb-0">{% if sent_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.previous_page_number }}">上一页</a></li>{% endif %}<li class="page-item active"><span class="page-link">{{ sent_page.number }} / {{ sent_page.paginator.num_pages }}</span></li>{% if sent_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.next_page_number }}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
+
+                    <div class="tab-pane fade" id="sent" role="tabpanel" aria-labelledby="sent-tab">
+                        <div class="mailbox-message-list">
+                            {% for message in sent_page.object_list %}
+                            <article class="mailbox-message is-sent">
+                                <div class="mailbox-check"><span class="mailbox-sent-icon"><i class="bi bi-send"></i></span></div>
+                                <img src="{{ message.receiver.profile.avatar.url }}" alt="{{ message.receiver.username }}" class="mailbox-avatar">
+                                <div class="mailbox-message-body">
+                                    <div class="mailbox-message-top">
+                                        <div><strong>发送给 {{ message.receiver.username }}</strong><span class="mailbox-sent-label">已发出</span></div>
+                                        <time>{{ message.created_at|date:"Y-m-d H:i" }}</time>
+                                    </div>
+                                    <p>{{ message.content }}</p>
+                                    <div class="mailbox-message-foot">
+                                        {% if message.item %}<a href="{% url 'item_detail' message.item.id %}" class="mailbox-item-link"><i class="bi bi-box-seam me-1"></i>{{ message.item.title }}</a>{% else %}<span class="mailbox-item-link is-muted"><i class="bi bi-chat-square me-1"></i>直接私信</span>{% endif %}
+                                        <a href="{% url 'conversation' message.receiver.id %}" class="btn btn-sm btn-outline-primary">查看对话 <i class="bi bi-arrow-right ms-1"></i></a>
+                                    </div>
+                                </div>
+                            </article>
+                            {% empty %}
+                            <div class="inbox-empty-state"><span><i class="bi bi-send"></i></span><strong>暂无发出的消息</strong><p>从商品详情或公开交易档案发起私信后，发送记录会保留在这里。</p></div>
+                            {% endfor %}
                         </div>
+
+                        {% if sent_page.has_other_pages %}
+                        <nav class="mailbox-pagination" aria-label="发出的消息分页">
+                            <ul class="pagination pagination-sm justify-content-center mb-0">
+                                {% if sent_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.previous_page_number }}"><i class="bi bi-chevron-left"></i></a></li>{% endif %}
+                                <li class="page-item active"><span class="page-link">{{ sent_page.number }} / {{ sent_page.paginator.num_pages }}</span></li>
+                                {% if sent_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.next_page_number }}"><i class="bi bi-chevron-right"></i></a></li>{% endif %}
+                            </ul>
+                        </nav>
+                        {% endif %}
                     </div>
                 </div>
-            </div>
+            </section>
         </div>
     </div>
 </div>

@@ -88,7 +88,8 @@ class CommunityContributionTests(TestCase):
         response = self.client.get(reverse('profile'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '校园互助贡献')
-        self.assertContains(response, '距离“可靠交易伙伴”还差 20 分')
+        self.assertContains(response, '再获得 <strong>20</strong> 分')
+        self.assertContains(response, '升级为“可靠交易伙伴”')
 
     def test_contribution_center_requires_login(self):
         response = self.client.get(reverse('contribution_center'))
@@ -112,5 +113,6 @@ class CommunityContributionTests(TestCase):
         self.assertContains(response, '迈出第一步')
         self.assertContains(response, '已解锁')
         self.assertContains(response, '响应校园求购')
-        self.assertContains(response, '距离“可靠交易伙伴”还差 20 分')
+        self.assertContains(response, '再获得 <strong>20</strong> 分')
+        self.assertContains(response, '升级为“可靠交易伙伴”')
 
