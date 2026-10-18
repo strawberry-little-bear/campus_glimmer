@@ -60,12 +60,12 @@
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="screenshots/inbox.png" alt="消息中心，展示会话、未读统计和批量已读" width="100%" />
-<p align="center"><strong>消息中心</strong><br /><sub>会话、未读状态与批量操作</sub></p>
+<img src="screenshots/inbox.png" alt="消息工作台，展示会话、未读统计和批量已读" width="100%" />
+<p align="center"><strong>消息工作台</strong><br /><sub>会话、未读状态与批量操作</sub></p>
 </td>
 <td width="50%" valign="top">
-<img src="screenshots/profile.png" alt="个人资料页，展示账户、校园身份和互助贡献" width="100%" />
-<p align="center"><strong>账户资料</strong><br /><sub>校园身份、贡献与活动入口</sub></p>
+<img src="screenshots/profile.png" alt="账户中心，展示校园认证、互助贡献、联系方式和个人活动入口" width="100%" />
+<p align="center"><strong>账户中心</strong><br /><sub>校园身份、贡献与活动入口</sub></p>
 </td>
 </tr>
 </table>
@@ -237,7 +237,7 @@ python manage.py runserver
 | 商品列表 | <http://127.0.0.1:8000/listings/> |
 | 搜索 | <http://127.0.0.1:8000/listings/search/> |
 | 我的订单 | <http://127.0.0.1:8000/listings/orders/> |
-| 消息中心 | <http://127.0.0.1:8000/messages/inbox/> |
+| 消息工作台 | <http://127.0.0.1:8000/messages/inbox/> |
 | 站内通知 | <http://127.0.0.1:8000/listings/notifications/> |
 | 校园专题 | <http://127.0.0.1:8000/listings/campaigns/> |
 | 我的专题足迹 | <http://127.0.0.1:8000/listings/campaigns/mine/> |

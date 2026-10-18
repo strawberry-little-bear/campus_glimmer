@@ -47,6 +47,12 @@ flowchart LR
 <p align="center"><strong>通知中心</strong><br /><sub>未读统计、类型分布、筛选与批量处理</sub></p>
 </td>
 </tr>
+<tr>
+<td colspan="2" valign="top">
+<a href="../docs/screenshots/contributions.png"><img src="../docs/screenshots/contributions.png" alt="贡献中心，展示互助等级、贡献进度、徽章墙和最近贡献事件" width="100%" /></a>
+<p align="center"><strong>贡献中心</strong><br /><sub>等级、贡献进度、徽章解锁与最近互助记录 · 本地演示数据</sub></p>
+</td>
+</tr>
 </table>
 
 <p align="center">

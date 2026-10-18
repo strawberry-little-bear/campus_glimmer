@@ -60,7 +60,7 @@
 
 <p align="center"><strong>运营看板 · 把校园交易现场变成可解释的运营信号</strong><br /><sub>供给、需求、搜索、交付、互助与告警共用同一套指标口径 · 本地演示数据</sub></p>
 
-<p align="center"><sub>全部截图来自当前本地页面与演示数据；登录、通知、公开档案等更多界面见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
+<p align="center"><sub>全部截图来自当前本地页面与演示数据；登录、通知、贡献中心、公开档案等更多界面见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
 
 ---
 
@@ -232,7 +232,7 @@ python init_data.py
 | 发现好物 | <http://127.0.0.1:8000/listings/> |
 | 搜索 | <http://127.0.0.1:8000/listings/search/> |
 | 我的交易 | <http://127.0.0.1:8000/listings/orders/> |
-| 消息中心 | <http://127.0.0.1:8000/messages/inbox/> |
+| 消息工作台 | <http://127.0.0.1:8000/messages/inbox/> |
 | 通知中心 | <http://127.0.0.1:8000/listings/notifications/> |
 | 校园专题 | <http://127.0.0.1:8000/listings/campaigns/> |
 | 我的专题足迹 | <http://127.0.0.1:8000/listings/campaigns/mine/> |
