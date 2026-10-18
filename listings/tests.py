@@ -1175,6 +1175,20 @@ class ListingFlowTests(TestCase):
         self.assertEqual(saved_search.location, self.location)
         self.assertEqual(str(saved_search.min_price), '50.00')
 
+    def test_save_search_without_frequency_field_falls_back_to_default(self):
+        # 商品页的保存关注卡片只渲染名称与筛选条件，不会提交 notify_frequency；
+        # 表单必填校验曾把这条路径卡死，回落到模型默认值才能保证真实流程可用。
+        self.client.login(username='alice', password='safe-password-123')
+        response = self.client.post(reverse('save_search'), {
+            'name': '图书馆附近的键盘', 'query': '键盘', 'condition': '9成新',
+            'location': self.location.id, 'min_price': '50', 'max_price': '120',
+            'next': reverse('item_list'),
+        })
+        self.assertRedirects(response, reverse('item_list'))
+        saved_search = SavedSearch.objects.get(user=self.user)
+        self.assertEqual(saved_search.notify_frequency, 'instant')
+        self.assertEqual(saved_search.max_matches_per_notice, 3)
+
     def test_new_matching_item_creates_one_aggregated_notification(self):
         SavedSearch.objects.create(user=self.other_user, name='键盘提醒', query='键盘')
         SavedSearch.objects.create(user=self.other_user, name='数码提醒', category=self.category)

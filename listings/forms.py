@@ -600,8 +600,10 @@ class RatingForm(StyledModelFormMixin, forms.ModelForm):
 
 class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):
     notify_frequency = forms.ChoiceField(
-        label='提醒频率', choices=SavedSearch.FREQUENCY_CHOICES, initial='instant',
+        label='提醒频率', choices=SavedSearch.FREQUENCY_CHOICES,
+        initial='instant', required=False,
     )
+
     max_matches_per_notice = forms.IntegerField(
         label='单次最多提醒条数', min_value=1, max_value=9, initial=3, required=False,
     )
@@ -611,6 +613,11 @@ class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):
         help_text='留空表示不静默；到时间后自动恢复提醒。',
     )
 
+    def clean_notify_frequency(self):
+        # 商品页的保存关注卡片只收集名称，频率稍后在「关注的搜索」里调整；
+        # 缺省时回落到模型默认值，避免必填校验把真实用户卡在商品页。
+        return self.cleaned_data.get('notify_frequency') or SavedSearch._meta.get_field('notify_frequency').default
+
     class Meta:
         model = SavedSearch
         fields = [
@@ -618,7 +625,7 @@ class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):
             'notify_frequency', 'max_matches_per_notice', 'quiet_until',
         ]
         widgets = {
-            'name': forms.TextInput(attrs={'placeholder': '例如：图书馆附近的考研资料'}),
+            'name': forms.TextInput(attrs={'placeholder': '例如：图书馆附近的考研资料', 'aria-label': '关注搜索名称'}),
             'query': forms.HiddenInput(),
             'condition': forms.HiddenInput(),
             'category': forms.HiddenInput(),
