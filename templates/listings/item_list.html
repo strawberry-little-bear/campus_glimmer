@@ -98,6 +98,19 @@
         </section>
         {% endif %}
 
+        <form class="catalog-search-bar mb-4" action="{% if category %}{% url 'item_list_by_category' category.id %}{% else %}{% url 'item_list' %}{% endif %}" method="get" role="search">
+            <div class="catalog-search-field">
+                <i class="bi bi-search"></i>
+                <input class="form-control" type="search" name="q" value="{{ query }}" placeholder="搜索书名、数码、生活好物或校园地点" aria-label="搜索校园好物" autocomplete="off">
+            </div>
+            {% if location %}<input type="hidden" name="location" value="{{ location.id }}">{% endif %}
+            {% if condition %}<input type="hidden" name="condition" value="{{ condition }}">{% endif %}
+            {% if min_price %}<input type="hidden" name="min_price" value="{{ min_price }}">{% endif %}
+            {% if max_price %}<input type="hidden" name="max_price" value="{{ max_price }}">{% endif %}
+            {% if sort != 'latest' %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
+            <button class="btn btn-primary" type="submit"><i class="bi bi-arrow-right me-1"></i>搜索</button>
+            {% if query or condition or location or min_price or max_price %}<a class="catalog-clear-filter" href="{% url 'item_list' %}"><i class="bi bi-x-circle me-1"></i>清除筛选</a>{% endif %}
+        </form>
         <div class="row g-4">
             {% for item in items %}
             <div class="col-sm-6 col-xl-4">{% include 'listings/_item_card.html' with item=item %}</div>

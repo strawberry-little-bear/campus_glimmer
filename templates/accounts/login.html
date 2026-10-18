@@ -1,39 +1,60 @@
-<!-- templates/accounts/login.html -->
 {% extends 'base.html' %}
 
-{% block title %}登录 - 拾光校园{% endblock %}
+{% block title %}登录 · 拾光校园{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow">
-            <div class="card-header bg-success text-white text-center">
-                <h4 class="my-0">登录账户</h4>
+<section class="auth-page">
+    <div class="auth-card">
+        <aside class="auth-story">
+            <div class="auth-story-glow auth-story-glow-one"></div>
+            <div class="auth-story-glow auth-story-glow-two"></div>
+            <div class="auth-story-content">
+                <span class="auth-story-eyebrow"><i class="bi bi-stars"></i> 校园里的轻盈交易站</span>
+                <h1>让好东西<br><span>继续被需要。</span></h1>
+                <p>回到熟悉的校园社区，继续发现、沟通和完成每一次安心的流转。</p>
+                <ul class="auth-benefit-list">
+                    <li><i class="bi bi-geo-alt"></i><span><strong>就近发现</strong>按校园地点筛选，少走一段路。</span></li>
+                    <li><i class="bi bi-chat-square-heart"></i><span><strong>沟通有回应</strong>私信、通知和未读提醒保持同步。</span></li>
+                    <li><i class="bi bi-shield-check"></i><span><strong>交易可回看</strong>预约、交付、评价和治理都有记录。</span></li>
+                </ul>
+                <div class="auth-story-note"><i class="bi bi-patch-check"></i> 校园身份认证 · 公开交易档案 · 内容治理</div>
             </div>
-            <div class="card-body">
-                <form method="POST">
-                    {% csrf_token %}
-                    
-                    {% for field in form %}
-                    <div class="mb-3">
-                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                        {{ field.errors }}
-                        {{ field }}
-                        {% if field.help_text %}
-                        <div class="form-text text-muted">{{ field.help_text }}</div>
-                        {% endif %}
-                    </div>
-                    {% endfor %}
-                    
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-success" type="submit">登录</button>
-                    </div>
-                </form>
+        </aside>
+
+        <div class="auth-panel">
+            <div class="auth-panel-head">
+                <span class="auth-icon"><i class="bi bi-box-arrow-in-right"></i></span>
+                <div>
+                    <span class="eyebrow eyebrow-soft">欢迎回来</span>
+                    <h2>登录拾光校园</h2>
+                    <p>继续查看你的心愿单、消息和正在进行的交易。</p>
+                </div>
             </div>
-            <div class="card-footer text-center">
-                <p class="mb-0">没有账户？ <a href="{% url 'register' %}">点击注册</a></p>
-            </div>
+
+            <form method="post" class="auth-form" novalidate>
+                {% csrf_token %}
+                {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+                {% if form.non_field_errors %}
+                <div class="auth-alert" role="alert"><i class="bi bi-exclamation-circle"></i><div>{{ form.non_field_errors }}</div></div>
+                {% endif %}
+
+                {% for field in form %}
+                <div class="auth-field{% if field.errors %} has-error{% endif %}">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<div class="auth-field-error">{{ field.errors }}</div>{% endif %}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                </div>
+                {% endfor %}
+
+                <button class="btn btn-primary auth-submit" type="submit">
+                    登录账户 <i class="bi bi-arrow-right"></i>
+                </button>
+            </form>
+
+            <p class="auth-switch">还没有账户？<a href="{% url 'register' %}">创建校园账户</a></p>
+            <p class="auth-footnote"><i class="bi bi-lock"></i> 请勿在公共设备上保存密码。</p>
         </div>
     </div>
-</div>
+</section>
 {% endblock %}
