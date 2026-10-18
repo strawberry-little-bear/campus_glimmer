@@ -55,7 +55,7 @@ def find_appointment_conflicts(*, user, start_at, end_at, exclude_order_id=None,
     if exclude_order_id is not None:
         appointments = appointments.exclude(order_id=exclude_order_id)
     appointments = appointments.order_by('start_at', 'id')
-    return appointments.select_for_update() if lock else appointments
+    return appointments.select_for_update(of=('self',)) if lock else appointments
 
 
 def _location_safety_note(location):

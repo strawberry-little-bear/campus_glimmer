@@ -195,7 +195,7 @@ def escalate_overdue_borrows(*, now=None, lookback_days=DEFAULT_LOOKBACK_DAYS):
     )
     for order in orders:
         with transaction.atomic():
-            escalation = BorrowReturnEscalation.objects.select_for_update().filter(
+            escalation = BorrowReturnEscalation.objects.select_for_update(of=('self',)).filter(
                 order=order,
             ).first()
             if escalation is not None and escalation.is_resolved:

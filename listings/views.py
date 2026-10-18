@@ -904,7 +904,7 @@ def create_order(request, item_id):
             if form.is_valid():
                 try:
                     with transaction.atomic():
-                        locked_item = Item.objects.select_for_update().select_related('seller', 'location').get(id=item.id)
+                        locked_item = Item.objects.select_for_update(of=('self',)).select_related('seller', 'location').get(id=item.id)
                         if not locked_item.is_available_now:
                             messages.info(request, '这个免费商品刚刚结束展示或已被选中。')
                             return redirect('item_detail', item_id=item.id)
@@ -946,7 +946,7 @@ def create_order(request, item_id):
         if form.is_valid():
             try:
                 with transaction.atomic():
-                    locked_item = Item.objects.select_for_update().select_related('seller').get(id=item.id)
+                    locked_item = Item.objects.select_for_update(of=('self',)).select_related('seller').get(id=item.id)
                     if (
                         not locked_item.is_available_now
                         or Order.objects.filter(
@@ -1046,10 +1046,10 @@ def accept_gift_application(request, application_id):
 
     try:
         with transaction.atomic():
-            locked_application = GiftApplication.objects.select_for_update().select_related(
+            locked_application = GiftApplication.objects.select_for_update(of=('self',)).select_related(
                 'item', 'applicant', 'item__seller', 'meeting_location',
             ).get(pk=application.id)
-            locked_item = Item.objects.select_for_update().get(pk=locked_application.item_id)
+            locked_item = Item.objects.select_for_update(of=('self',)).get(pk=locked_application.item_id)
             if locked_application.status != 'pending':
                 messages.info(request, '这个申请已经处理过了。')
                 return redirect('manage_gift_applications', item_id=locked_application.item_id)
@@ -1081,7 +1081,7 @@ def accept_gift_application(request, application_id):
             locked_application.save(update_fields=['status', 'order', 'decided_at', 'updated_at'])
 
             pending_applications = list(
-                GiftApplication.objects.select_for_update().select_related('applicant').filter(
+                GiftApplication.objects.select_for_update(of=('self',)).select_related('applicant').filter(
                     item=locked_item, status='pending',
                 ).exclude(pk=locked_application.pk)
             )
@@ -1245,7 +1245,7 @@ def acknowledge_order_safety(request, order_id):
         return redirect('order_detail', order_id=order.id)
 
     with transaction.atomic():
-        locked_order = Order.objects.select_for_update().select_related(
+        locked_order = Order.objects.select_for_update(of=('self',)).select_related(
             'item', 'buyer', 'seller', 'meeting_location', 'item__category', 'item__location',
         ).get(pk=order.id)
         if request.user not in {locked_order.buyer, locked_order.seller}:
@@ -1294,7 +1294,7 @@ def propose_meeting(request, order_id):
         return redirect('order_detail', order_id=order.id)
 
     with transaction.atomic():
-        locked_order = Order.objects.select_for_update().select_related(
+        locked_order = Order.objects.select_for_update(of=('self',)).select_related(
             'item', 'buyer', 'seller',
         ).get(pk=order.id)
         if locked_order.status not in {'confirmed', 'meeting'}:
@@ -1324,7 +1324,7 @@ def propose_meeting(request, order_id):
                 f'这段时间与“{conflict.order.item.title}”的另一笔交付安排冲突，请换一个时间。',
             )
             return redirect('order_detail', order_id=locked_order.id)
-        appointment, created = MeetingAppointment.objects.select_for_update().get_or_create(
+        appointment, created = MeetingAppointment.objects.select_for_update(of=('self',)).get_or_create(
             order=locked_order,
             defaults={
                 'proposed_by': request.user,
@@ -1391,10 +1391,10 @@ def respond_meeting(request, order_id, decision):
         return redirect('order_detail', order_id=order.id)
 
     with transaction.atomic():
-        locked_order = Order.objects.select_for_update().select_related(
+        locked_order = Order.objects.select_for_update(of=('self',)).select_related(
             'item', 'buyer', 'seller',
         ).get(pk=order.id)
-        appointment = MeetingAppointment.objects.select_for_update().select_related(
+        appointment = MeetingAppointment.objects.select_for_update(of=('self',)).select_related(
             'proposed_by',
         ).filter(order=locked_order).first()
         if locked_order.status not in {'confirmed', 'meeting'}:
@@ -1466,10 +1466,10 @@ def check_in_meeting(request, order_id):
         return redirect('order_detail', order_id=order.id)
 
     with transaction.atomic():
-        locked_order = Order.objects.select_for_update().select_related(
+        locked_order = Order.objects.select_for_update(of=('self',)).select_related(
             'item', 'buyer', 'seller',
         ).get(pk=order.id)
-        appointment = MeetingAppointment.objects.select_for_update().get(order=locked_order)
+        appointment = MeetingAppointment.objects.select_for_update(of=('self',)).get(order=locked_order)
         if locked_order.status != 'meeting' or not appointment.is_confirmed:
             messages.error(request, '只有进入待当面交付且双方已确认时间后，才能签到。')
             return redirect('order_detail', order_id=locked_order.id)
@@ -1535,7 +1535,7 @@ def report_meeting_incident(request, order_id):
         return redirect('order_detail', order_id=order.id)
 
     with transaction.atomic():
-        locked_appointment = MeetingAppointment.objects.select_for_update().select_related(
+        locked_appointment = MeetingAppointment.objects.select_for_update(of=('self',)).select_related(
             'order__item', 'order__buyer', 'order__seller',
         ).get(pk=appointment.id)
         locked_order = locked_appointment.order
@@ -1600,11 +1600,11 @@ def generate_delivery_code(request, order_id):
 
     raw_code = f'{secrets.randbelow(1_000_000):06d}'
     with transaction.atomic():
-        locked_order = Order.objects.select_for_update().select_related('item', 'buyer', 'seller').get(pk=order.id)
+        locked_order = Order.objects.select_for_update(of=('self',)).select_related('item', 'buyer', 'seller').get(pk=order.id)
         if locked_order.status != 'meeting':
             messages.error(request, '订单状态已经发生变化，请刷新后再试。')
             return redirect('order_detail', order_id=locked_order.id)
-        confirmation, _ = DeliveryConfirmation.objects.select_for_update().get_or_create(order=locked_order)
+        confirmation, _ = DeliveryConfirmation.objects.select_for_update(of=('self',)).get_or_create(order=locked_order)
         confirmation.handoff_code_hash = make_password(raw_code)
         confirmation.handoff_code_hint = f'末两位 {raw_code[-2:]}'
         confirmation.handoff_code_issued_at = timezone.now()
@@ -1642,8 +1642,8 @@ def confirm_delivery(request, order_id):
         return redirect('order_detail', order_id=order.id)
 
     with transaction.atomic():
-        locked_order = Order.objects.select_for_update().select_related('item', 'buyer', 'seller').get(pk=order.id)
-        confirmation, _ = DeliveryConfirmation.objects.select_for_update().get_or_create(order=locked_order)
+        locked_order = Order.objects.select_for_update(of=('self',)).select_related('item', 'buyer', 'seller').get(pk=order.id)
+        confirmation, _ = DeliveryConfirmation.objects.select_for_update(of=('self',)).get_or_create(order=locked_order)
         field_name = 'buyer_confirmed_at' if request.user == locked_order.buyer else 'seller_confirmed_at'
         if getattr(confirmation, field_name):
             messages.info(request, '你已经确认过这次交付了，请等待对方操作。')
@@ -1736,14 +1736,14 @@ def confirm_return(request, order_id):
         return redirect('order_detail', order_id=order.id)
 
     with transaction.atomic():
-        locked_order = Order.objects.select_for_update().select_related(
+        locked_order = Order.objects.select_for_update(of=('self',)).select_related(
             'item', 'buyer', 'seller',
         ).get(pk=order.id)
         if locked_order.item.trade_mode != 'borrow' or locked_order.status != 'borrowed':
             messages.info(request, '这笔借用订单已经发生变化，请刷新后再试。')
             return redirect('order_detail', order_id=locked_order.id)
 
-        confirmation, _ = DeliveryConfirmation.objects.select_for_update().get_or_create(
+        confirmation, _ = DeliveryConfirmation.objects.select_for_update(of=('self',)).get_or_create(
             order=locked_order,
         )
         field_name = 'buyer_returned_at' if request.user == locked_order.buyer else 'seller_returned_at'
@@ -2008,7 +2008,7 @@ def review_report(request, report_id):
         form = ReportReviewForm(request.POST, instance=report)
         if form.is_valid():
             with transaction.atomic():
-                report = Report.objects.select_for_update().select_related(
+                report = Report.objects.select_for_update(of=('self',)).select_related(
                     'item', 'reporter',
                 ).get(pk=report.id)
                 report.status = form.cleaned_data['status']
@@ -2127,7 +2127,7 @@ def review_meeting_incident(request, incident_id):
         form = MeetingIncidentReviewForm(request.POST, instance=incident)
         if form.is_valid():
             with transaction.atomic():
-                incident = MeetingIncident.objects.select_for_update().select_related(
+                incident = MeetingIncident.objects.select_for_update(of=('self',)).select_related(
                     'appointment__order__item',
                 ).get(pk=incident.id)
                 incident.status = form.cleaned_data['status']
@@ -2193,7 +2193,7 @@ def resolve_dispute(request, dispute_id):
         form = DisputeResolutionForm(request.POST, instance=dispute)
         if form.is_valid():
             with transaction.atomic():
-                dispute = OrderDispute.objects.select_for_update().select_related(
+                dispute = OrderDispute.objects.select_for_update(of=('self',)).select_related(
                     'order__item', 'order__buyer', 'order__seller',
                 ).get(pk=dispute.id)
                 dispute.status = form.cleaned_data['status']
@@ -2502,7 +2502,7 @@ def edit_item(request, item_id):
                 # same stale “before” value as their trajectory source. Rebinding
                 # the already validated POST data to the locked instance keeps
                 # concurrent safety without losing the seller's submitted price.
-                locked_item = Item.objects.select_for_update().get(pk=item.pk)
+                locked_item = Item.objects.select_for_update(of=('self',)).get(pk=item.pk)
                 previous_price = locked_item.price
                 previous_trade_mode = locked_item.trade_mode
                 previous_campaign_id = locked_item.campaign_id
@@ -2608,7 +2608,7 @@ def refresh_item(request, item_id):
 
     now = timezone.now()
     with transaction.atomic():
-        locked = Item.objects.select_for_update().get(pk=item.pk)
+        locked = Item.objects.select_for_update(of=('self',)).get(pk=item.pk)
         can_refresh, reason = _refresh_state(locked, now=now)
         if not can_refresh:
             messages.warning(request, reason)
@@ -2875,7 +2875,7 @@ def bulk_listing_semester_template_save(request):
 
     settings = settings_form.cleaned_data
     with transaction.atomic():
-        seller_templates = SemesterListingTemplate.objects.select_for_update().filter(
+        seller_templates = SemesterListingTemplate.objects.select_for_update(of=('self',)).filter(
             seller=request.user,
         )
         template = seller_templates.filter(name=template_name).first()
@@ -3077,7 +3077,7 @@ def bulk_listing_image_queue(request):
         with transaction.atomic():
             locked_items = {
                 item.id: item
-                for item in Item.objects.select_for_update().filter(
+                for item in Item.objects.select_for_update(of=('self',)).filter(
                     seller=request.user,
                     id__in=uploads,
                 )
@@ -3164,7 +3164,7 @@ def bulk_assign_campaign(request):
 
     with transaction.atomic():
         locked_items = list(
-            Item.objects.select_for_update().filter(
+            Item.objects.select_for_update(of=('self',)).filter(
                 seller=request.user, id__in=item_ids,
             ).select_related('campaign')
         )
@@ -3216,7 +3216,7 @@ def bulk_renew_items(request):
     new_expires_at = form.cleaned_data['expires_at']
     with transaction.atomic():
         locked_items = list(
-            Item.objects.select_for_update().filter(
+            Item.objects.select_for_update(of=('self',)).filter(
                 seller=request.user, id__in=item_ids,
             ).order_by('id')
         )
@@ -12740,10 +12740,10 @@ def respond_to_demand(request, demand_id, item_id):
 
     try:
         with transaction.atomic():
-            locked_demand = DemandPost.objects.select_for_update().select_related(
+            locked_demand = DemandPost.objects.select_for_update(of=('self',)).select_related(
                 'requester', 'category', 'location',
             ).get(pk=demand.id)
-            locked_item = Item.objects.select_for_update().select_related(
+            locked_item = Item.objects.select_for_update(of=('self',)).select_related(
                 'seller', 'category', 'location',
             ).get(pk=item.id)
             if locked_demand.status != 'active' or (
@@ -12759,7 +12759,7 @@ def respond_to_demand(request, demand_id, item_id):
                 messages.error(request, '这件商品当前不满足求购的分类、地点、预算或关键词条件。')
                 return redirect('demand_detail', demand_id=locked_demand.id)
 
-            response = DemandResponse.objects.select_for_update().filter(
+            response = DemandResponse.objects.select_for_update(of=('self',)).filter(
                 demand=locked_demand, item=locked_item,
             ).first()
             if response and response.status in {'pending', 'accepted'}:
@@ -12814,11 +12814,11 @@ def review_demand_response(request, response_id, action):
         return redirect('demand_detail', demand_id=response.demand_id)
 
     with transaction.atomic():
-        locked_response = DemandResponse.objects.select_for_update().select_related(
+        locked_response = DemandResponse.objects.select_for_update(of=('self',)).select_related(
             'demand', 'item', 'responder',
         ).get(pk=response.id)
-        locked_demand = DemandPost.objects.select_for_update().get(pk=locked_response.demand_id)
-        locked_item = Item.objects.select_for_update().get(pk=locked_response.item_id)
+        locked_demand = DemandPost.objects.select_for_update(of=('self',)).get(pk=locked_response.demand_id)
+        locked_item = Item.objects.select_for_update(of=('self',)).get(pk=locked_response.item_id)
         if locked_response.status != 'pending':
             messages.info(request, '这条求购响应已经处理过了。')
             return redirect('demand_detail', demand_id=locked_demand.id)
@@ -12836,7 +12836,7 @@ def review_demand_response(request, response_id, action):
             record_demand_response_contribution(locked_response)
             locked_demand.status = 'fulfilled'
             locked_demand.save(update_fields=['status', 'updated_at'])
-            other_responses = DemandResponse.objects.select_for_update().filter(
+            other_responses = DemandResponse.objects.select_for_update(of=('self',)).filter(
                 demand=locked_demand, status='pending',
             ).exclude(pk=locked_response.pk).select_related('responder', 'item')
             for other in other_responses:
@@ -12902,7 +12902,7 @@ def submit_demand_feedback(request, response_id):
         return redirect('demand_detail', demand_id=response.demand_id)
 
     with transaction.atomic():
-        locked_response = DemandResponse.objects.select_for_update().select_related(
+        locked_response = DemandResponse.objects.select_for_update(of=('self',)).select_related(
             'demand', 'demand__requester', 'item', 'responder',
         ).get(pk=response.pk)
         if locked_response.status != 'accepted':
@@ -13227,10 +13227,10 @@ def review_lost_found_lead(request, lead_id, action):
         return redirect('lost_found_detail', lead.post_id)
 
     with transaction.atomic():
-        locked_lead = LostFoundLead.objects.select_for_update().select_related(
+        locked_lead = LostFoundLead.objects.select_for_update(of=('self',)).select_related(
             'post', 'respondent', 'related_post',
         ).get(pk=lead.pk)
-        locked_post = LostFoundPost.objects.select_for_update().get(pk=locked_lead.post_id)
+        locked_post = LostFoundPost.objects.select_for_update(of=('self',)).get(pk=locked_lead.post_id)
         if locked_lead.status != 'pending':
             messages.info(request, '这条线索已经被处理过了。')
             return redirect('lost_found_detail', locked_post.id)
@@ -13243,7 +13243,7 @@ def review_lost_found_lead(request, lead_id, action):
             record_lost_found_lead_contribution(locked_lead)
             locked_post.status = 'matched'
             if locked_lead.related_post_id:
-                related = LostFoundPost.objects.select_for_update().get(pk=locked_lead.related_post_id)
+                related = LostFoundPost.objects.select_for_update(of=('self',)).get(pk=locked_lead.related_post_id)
                 if related.status == 'active':
                     related.status = 'matched'
                     related.matched_post_id = locked_post.id
@@ -13304,7 +13304,7 @@ def submit_lost_found_feedback(request, lead_id):
         return redirect('lost_found_detail', post_id=lead.post_id)
 
     with transaction.atomic():
-        locked_lead = LostFoundLead.objects.select_for_update().select_related(
+        locked_lead = LostFoundLead.objects.select_for_update(of=('self',)).select_related(
             'post', 'post__reporter', 'respondent',
         ).get(pk=lead.pk)
         if locked_lead.status != 'accepted':

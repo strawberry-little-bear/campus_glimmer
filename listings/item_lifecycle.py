@@ -16,7 +16,7 @@ def expire_items(*, now=None):
 
     for item_id in candidate_ids:
         with transaction.atomic():
-            item = Item.objects.select_for_update().select_related('seller').get(id=item_id)
+            item = Item.objects.select_for_update(of=('self',)).select_related('seller').get(id=item_id)
             if item.status != 'available' or not item.expires_at or item.expires_at > now:
                 continue
             item.status = 'expired'

@@ -37,7 +37,7 @@ def join_campaign(user, campaign, *, now=None):
 
     try:
         with transaction.atomic():
-            active = CampaignRegistration.objects.select_for_update().filter(
+            active = CampaignRegistration.objects.select_for_update(of=('self',)).filter(
                 campaign=campaign,
                 user=user,
                 is_active=True,
@@ -67,7 +67,7 @@ def leave_campaign(user, campaign, *, now=None):
     _ensure_campaign_is_live(campaign, now)
 
     with transaction.atomic():
-        registration = CampaignRegistration.objects.select_for_update().filter(
+        registration = CampaignRegistration.objects.select_for_update(of=('self',)).filter(
             campaign=campaign,
             user=user,
             is_active=True,

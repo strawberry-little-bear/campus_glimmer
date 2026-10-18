@@ -146,7 +146,7 @@ def set_campaign_update_preference(
         raise CampaignUpdateSubscriptionUnavailable('专题当前不在可订阅时间内。')
 
     with transaction.atomic():
-        registration = CampaignRegistration.objects.select_for_update().filter(
+        registration = CampaignRegistration.objects.select_for_update(of=('self',)).filter(
             campaign=campaign,
             user=user,
             is_active=True,

@@ -30,7 +30,7 @@ class OrderTransitionError(Exception):
 def transition_order(*, order_id, actor, target_status):
     """Apply one user-driven order transition under a row lock."""
     with transaction.atomic():
-        order = Order.objects.select_for_update().select_related(
+        order = Order.objects.select_for_update(of=('self',)).select_related(
             'item', 'buyer', 'seller',
         ).get(pk=order_id)
         if actor not in {order.buyer, order.seller}:

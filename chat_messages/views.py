@@ -561,7 +561,7 @@ def review_moderation_event(request, event_id):
         next_url = ''
     with transaction.atomic():
         event = get_object_or_404(
-            ModerationEvent.objects.select_for_update().select_related(
+            ModerationEvent.objects.select_for_update(of=('self',)).select_related(
             'author', 'item__seller', 'receiver',
         ),
             id=event_id,
@@ -636,7 +636,7 @@ def submit_moderation_appeal(request, event_id):
     """让确认违规事件的作者提交一次申诉，并保存原复核快照。"""
     with transaction.atomic():
         event = get_object_or_404(
-            ModerationEvent.objects.select_for_update().select_related('reviewed_by'),
+            ModerationEvent.objects.select_for_update(of=('self',)).select_related('reviewed_by'),
             id=event_id, author=request.user,
         )
         if event.status != 'confirmed':
@@ -680,7 +680,7 @@ def resolve_moderation_appeal(request, appeal_id):
     next_url = _safe_moderation_next_url(request)
     with transaction.atomic():
         appeal = get_object_or_404(
-            ModerationAppeal.objects.select_for_update().select_related(
+            ModerationAppeal.objects.select_for_update(of=('self',)).select_related(
                 'event__author', 'event__item__seller', 'event__receiver',
             ),
             id=appeal_id,

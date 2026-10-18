@@ -134,7 +134,7 @@ def create_notification(
     if dedupe_key:
         cutoff = now - timedelta(seconds=max(0, dedupe_window_seconds))
         with transaction.atomic():
-            existing_query = Notification.objects.select_for_update().filter(
+            existing_query = Notification.objects.select_for_update(of=('self',)).filter(
                 recipient=recipient,
                 kind=kind,
                 dedupe_key=dedupe_key,

@@ -165,7 +165,7 @@ def record_contribution(*, user, kind, points, title, description='', source_key
     with transaction.atomic():
         # Serialize writes for one user so two concurrent contributions cannot
         # both observe the same pre-contribution totals.
-        User.objects.select_for_update().get(pk=user.pk)
+        User.objects.select_for_update(of=('self',)).get(pk=user.pk)
         contribution, created = CommunityContribution.objects.get_or_create(
             source_key=source_key,
             defaults=defaults,

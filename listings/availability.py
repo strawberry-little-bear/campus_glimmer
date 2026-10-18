@@ -13,7 +13,7 @@ def notify_item_available(item, *, actor=None):
     notified_count = 0
     with transaction.atomic():
         watches = list(
-            ItemAvailabilityWatch.objects.select_for_update()
+            ItemAvailabilityWatch.objects.select_for_update(of=('self',))
             .select_related('user')
             .filter(item=item)
         )

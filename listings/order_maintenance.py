@@ -31,12 +31,12 @@ def process_order_timeouts(*, now=None, reminder_hours=DEFAULT_REMINDER_HOURS):
     ).values_list('id', flat=True)
     for order_id in expired_ids:
         with transaction.atomic():
-            order = Order.objects.select_for_update().select_related(
+            order = Order.objects.select_for_update(of=('self',)).select_related(
                 'item', 'buyer', 'seller',
             ).get(id=order_id)
             if order.status != 'pending' or not order.confirmation_deadline or order.confirmation_deadline > now:
                 continue
-            item = Item.objects.select_for_update().get(id=order.item_id)
+            item = Item.objects.select_for_update(of=('self',)).get(id=order.item_id)
             order.status = 'cancelled'
             order.save(update_fields=['status', 'updated_at'])
             OrderEvent.objects.create(
@@ -78,7 +78,7 @@ def process_order_timeouts(*, now=None, reminder_hours=DEFAULT_REMINDER_HOURS):
     ).values_list('id', flat=True)
     for order_id in reminder_ids:
         with transaction.atomic():
-            order = Order.objects.select_for_update().select_related(
+            order = Order.objects.select_for_update(of=('self',)).select_related(
                 'item', 'seller', 'buyer',
             ).get(id=order_id)
             if (
@@ -127,7 +127,7 @@ def process_borrow_due_notifications(*, now=None, reminder_hours=DEFAULT_REMINDE
     ).values_list('id', flat=True)
     for order_id in reminder_ids:
         with transaction.atomic():
-            order = Order.objects.select_for_update().select_related(
+            order = Order.objects.select_for_update(of=('self',)).select_related(
                 'item', 'seller', 'buyer',
             ).get(id=order_id)
             if (
@@ -160,7 +160,7 @@ def process_borrow_due_notifications(*, now=None, reminder_hours=DEFAULT_REMINDE
     ).values_list('id', flat=True)
     for order_id in overdue_ids:
         with transaction.atomic():
-            order = Order.objects.select_for_update().select_related(
+            order = Order.objects.select_for_update(of=('self',)).select_related(
                 'item', 'seller', 'buyer',
             ).get(id=order_id)
             if (
