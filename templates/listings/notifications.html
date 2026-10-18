@@ -3,96 +3,105 @@
 {% block title %}通知中心 - 拾光校园{% endblock %}
 
 {% block content %}
-<div class="page-heading notification-heading">
-    <div>
-        <span class="eyebrow">及时回应每一次互动</span>
-        <h1 class="mt-2">通知中心</h1>
-        <p class="text-muted mb-0">交易进展、留言、私信和评价都会在这里留下记录。</p>
-    </div>
-    <div class="d-flex flex-wrap gap-2 align-items-center">
-        <a href="{% url 'activity_center' %}" class="btn btn-light"><i class="bi bi-activity me-1"></i>查看站内动态</a>
-        {% if unread_notification_count %}
-        <form method="post" action="{% url 'mark_all_notifications_read' %}">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-outline-primary">
-            <i class="bi bi-check2-all me-1"></i>全部标记为已读
-        </button>
-        </form>
-        {% endif %}
-    </div>
-</div>
-
-<section class="content-card notification-panel">
-    {% if notification_quiet_hours_active %}<div class="notification-quiet-banner"><i class="bi bi-moon-stars me-1"></i>当前处于免打扰时段，顶部未读提醒暂时静默；通知仍会保留在这里，随时可以主动查看。</div>{% endif %}
-    <div class="notification-toolbar">
+<div class="inbox-page notifications-page">
+    <section class="inbox-hero">
         <div>
-            <strong>{{ notification_total }}</strong>{% if notification_total != notification_total_all %} / {{ notification_total_all }}{% endif %} 条通知
-            {% if notification_unread_total %}
-            <span class="notification-unread-summary">{{ notification_unread_total }} 条未读</span>
-            {% else %}
-            <span class="text-muted">全部已读</span>
+            <span class="eyebrow eyebrow-soft">Notification center</span>
+            <h1>通知中心</h1>
+            <p>交易进展、留言、私信和评价都会在这里留下记录。可以逐条处理，也可以按类型和状态批量整理；暂时不方便处理的事项，先延后一段时间。</p>
+        </div>
+        <div class="inbox-hero-actions">
+            <a href="{% url 'activity_center' %}" class="btn btn-light"><i class="bi bi-activity me-2"></i>站内动态</a>
+            <a href="{% url 'notification_preferences' %}" class="btn btn-light"><i class="bi bi-sliders2 me-2"></i>通知偏好</a>
+            {% if unread_notification_count %}
+            <form method="post" action="{% url 'mark_all_notifications_read' %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check2-all me-2"></i>全部已读 <span>{{ unread_notification_count }}</span></button>
+            </form>
             {% endif %}
         </div>
-        <span class="d-flex flex-wrap gap-3"><a class="text-decoration-none small" href="{% url 'notification_preferences' %}"><i class="bi bi-sliders2 me-1"></i>通知偏好</a><a class="text-decoration-none small" href="{% url 'inbox' %}"><i class="bi bi-chat-dots me-1"></i>查看私信</a></span>
+    </section>
+
+    {% if notification_quiet_hours_active %}
+    <div class="notifications-quiet-banner"><i class="bi bi-moon-stars me-2"></i><span>当前处于免打扰时段，顶部未读提醒暂时静默；通知仍会保留在这里，随时可以主动查看。</span></div>
+    {% endif %}
+
+    <form method="get" class="inbox-filter-panel" role="search">
+        <div class="inbox-search-field">
+            <i class="bi bi-search"></i>
+            <input type="search" name="q" value="{{ notification_search_query }}" placeholder="搜索通知标题、内容或商品" aria-label="搜索通知">
+        </div>
+        <label class="inbox-status-field">
+            <span>通知类型</span>
+            <select name="kind" class="form-select" aria-label="通知类型">
+                <option value="">全部类型</option>
+                {% for option in notification_kind_options %}<option value="{{ option.value }}" {% if notification_kind_filter == option.value %}selected{% endif %}>{{ option.label }}（{{ option.count }}）</option>{% endfor %}
+            </select>
+        </label>
+        <label class="inbox-status-field">
+            <span>处理状态</span>
+            <select name="status" class="form-select" aria-label="通知状态">
+                {% for value, label in notification_status_options %}<option value="{{ value }}" {% if notification_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </label>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-sliders me-2"></i>应用筛选</button>
+        {% if notification_search_query or notification_kind_filter or notification_status_filter != 'all' %}<a href="{% url 'notification_list' %}" class="btn btn-light"><i class="bi bi-arrow-counterclockwise me-2"></i>重置</a>{% endif %}
+    </form>
+
+    <div class="inbox-stat-grid">
+        <div class="inbox-stat-card">
+            <span class="inbox-stat-icon"><i class="bi bi-inbox"></i></span>
+            <span><small>全部通知</small><strong>{{ notification_total_all }}</strong><em>含已读与已延后</em></span>
+        </div>
+        <div class="inbox-stat-card is-unread">
+            <span class="inbox-stat-icon"><i class="bi bi-bell"></i></span>
+            <span><small>待处理未读</small><strong>{{ notification_unread_total }} 条未读</strong><em>{% if notification_unread_total %}等待回复、标记已读或延后{% else %}没有积压通知{% endif %}</em></span>
+        </div>
+        <div class="inbox-stat-card is-conversation">
+            <span class="inbox-stat-icon"><i class="bi bi-funnel"></i></span>
+            <span><small>当前筛选未读</small><strong>{{ notification_filtered_unread_count }} 条未读</strong><em>共 {{ notification_total }} 条符合当前条件</em></span>
+        </div>
     </div>
 
-    <div class="notification-insight-grid" aria-label="通知概览">
-        <div class="notification-insight-card">
-            <span class="notification-insight-icon"><i class="bi bi-inbox"></i></span>
-            <span><small>全部通知</small><strong>{{ notification_total_all }}</strong></span>
-        </div>
-        <div class="notification-insight-card is-highlighted">
-            <span class="notification-insight-icon"><i class="bi bi-bell"></i></span>
-            <span><small>待处理未读</small><strong>{{ notification_unread_total }}</strong></span>
-        </div>
-        <div class="notification-insight-card">
-            <span class="notification-insight-icon"><i class="bi bi-funnel"></i></span>
-            <span><small>当前筛选未读</small><strong>{{ notification_filtered_unread_count }}</strong></span>
-        </div>
+    <div class="inbox-result-note">
+        <span><i class="bi bi-funnel me-2"></i>当前结果中有 {{ notification_filtered_unread_count }} 条未读，共 {{ notification_total }} 条通知{% if notification_total != notification_total_all %}（已从 {{ notification_total_all }} 条中筛选）{% endif %}</span>
+        {% if notification_search_query or notification_kind_filter or notification_status_filter != 'all' %}<span class="inbox-filter-chip"><i class="bi bi-check2"></i>已应用筛选条件</span>{% endif %}
     </div>
 
-    <div class="notification-kind-summary" aria-label="通知类型未读分布">
-        <div class="notification-kind-summary-heading"><strong>类型未读分布</strong><span>了解哪类事项最需要及时回应</span></div>
-        <div class="notification-kind-summary-list">
+    <section class="inbox-panel notifications-kind-panel">
+        <div class="inbox-panel-head">
+            <div>
+                <span class="eyebrow eyebrow-soft">By type</span>
+                <h2><i class="bi bi-diagram-3 me-2"></i>类型未读分布</h2>
+            </div>
+            <span class="inbox-count-pill">{{ notification_kind_options|length }} 类</span>
+        </div>
+        <div class="notifications-kind-list">
             {% for option in notification_kind_options %}
-            <div class="notification-kind-chip {% if option.unread_count %}has-unread{% endif %}">
+            <div class="notifications-kind-chip {% if option.unread_count %}has-unread{% endif %}">
                 <span>{{ option.label }}</span>
                 <strong>{{ option.unread_count }}</strong>
                 <small>/ {{ option.count }}</small>
             </div>
             {% endfor %}
         </div>
-    </div>
-
-    <form method="get" class="notification-filter-bar">
-        <div class="notification-search"><i class="bi bi-search"></i><input name="q" type="search" value="{{ notification_search_query }}" placeholder="搜索通知标题、内容或商品" aria-label="搜索通知"></div>
-        <select class="form-select form-select-sm" name="kind" aria-label="通知类型">
-            <option value="">全部类型</option>
-            {% for option in notification_kind_options %}<option value="{{ option.value }}" {% if notification_kind_filter == option.value %}selected{% endif %}>{{ option.label }}（{{ option.count }}）</option>{% endfor %}
-        </select>
-        <select class="form-select form-select-sm" name="status" aria-label="通知状态">
-            {% for value, label in notification_status_options %}<option value="{{ value }}" {% if notification_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select>
-        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-funnel me-1"></i>筛选</button>
-        {% if notification_search_query or notification_kind_filter or notification_status_filter != 'all' %}<a class="btn btn-light btn-sm" href="{% url 'notification_list' %}">重置</a>{% endif %}
-    </form>
-
-    <div class="notification-filter-summary"><i class="bi bi-sliders me-1"></i>当前结果中有 {{ notification_filtered_unread_count }} 条未读{% if notification_total != notification_total_all %} · 已应用筛选条件{% endif %}</div>
+        <p class="notifications-kind-note">加粗数字是该类未读数量，斜杠后为总数；需要只看某一类时，用上面的类型筛选。</p>
+    </section>
 
     {% if notification_status_filter != 'read' %}
-    <div class="notification-bulk-toolbar">
+    <div class="notifications-bulk-panel">
         <label class="notification-select-all"><input type="checkbox" id="notification-select-all"><span>全选本页未读</span></label>
         <span class="notification-selection-count" id="notification-selection-count">已选择 0 条</span>
         <div class="notification-bulk-actions">
             {% if notification_status_filter == 'snoozed' %}
-            <button type="submit" form="notification-bulk-form" formaction="{% url 'restore_selected_notifications' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-arrow-counterclockwise me-1"></i>恢复所选</button>
+            <button type="submit" form="notification-bulk-form" formaction="{% url 'restore_selected_notifications' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-arrow-counterclockwise me-2"></i>恢复所选</button>
             {% else %}
             <select class="form-select form-select-sm notification-bulk-duration" name="duration" form="notification-bulk-form" aria-label="批量延后时长">
                 {% for duration, label in notification_snooze_options %}<option value="{{ duration }}">{{ label }}</option>{% endfor %}
             </select>
-            <button type="submit" form="notification-bulk-form" formaction="{% url 'snooze_selected_notifications' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-clock-history me-1"></i>延后所选</button>
+            <button type="submit" form="notification-bulk-form" formaction="{% url 'snooze_selected_notifications' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-clock-history me-2"></i>延后所选</button>
             {% endif %}
-            <button type="submit" form="notification-bulk-form" formaction="{% url 'mark_selected_notifications_read' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-check2-square me-1"></i>标记已读</button>
+            <button type="submit" form="notification-bulk-form" formaction="{% url 'mark_selected_notifications_read' %}" class="btn btn-outline-primary btn-sm notification-bulk-submit" disabled><i class="bi bi-check2-square me-2"></i>标记已读</button>
         </div>
     </div>
     <form id="notification-bulk-form" method="post" action="{% url 'mark_selected_notifications_read' %}">
@@ -173,7 +182,7 @@
     </div>
 
     {% if notifications.has_other_pages %}
-    <nav class="mt-4" aria-label="通知分页">
+    <nav class="mailbox-pagination" aria-label="通知分页">
         <ul class="pagination justify-content-center mb-0">
             {% if notifications.has_previous %}<li class="page-item"><a class="page-link" href="?{% if notification_filter_query %}{{ notification_filter_query }}&{% endif %}page={{ notifications.previous_page_number }}">上一页</a></li>{% endif %}
             <li class="page-item active"><span class="page-link">{{ notifications.number }} / {{ notifications.paginator.num_pages }}</span></li>
