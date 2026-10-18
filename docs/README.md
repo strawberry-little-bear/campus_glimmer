@@ -76,12 +76,14 @@
 | --- | --- | --- |
 | Web 框架 | Django 5.1+ | 路由、视图、模板、表单、认证与管理后台 |
 | 编程语言 | Python 3.11+ | 业务逻辑、统计计算、管理命令和测试 |
-| 数据库 | SQLite（默认） | 适合开发、演示和轻量部署，正式环境可替换 |
+| 数据库 | SQLite（本地）/ PostgreSQL 16（生产） | 本地保持零服务启动，生产使用事务数据库和连接健康检查 |
+| 缓存 | LocMem（本地）/ Redis 7（生产） | 缓存未读等短生命周期数据，生产会话使用 `cached_db` |
 | 页面层 | Django Templates + 轻量 JavaScript | 服务端渲染为主，未读刷新和筛选增强按需使用 JS |
-| 文件存储 | 本地 `media/` | 商品图和头像，容器运行时使用独立数据卷 |
+| 文件存储 | 本地 `media/` / S3、MinIO（生产） | 商品图和头像；浏览器签名端点与容器内部上传端点分离 |
 | 图片处理 | Pillow | EXIF 方向、WebP 重编码、缩略图和响应式候选 |
-| 容器 | Docker + Gunicorn | 提供开发演示和轻量部署配置 |
-| 持续集成 | GitHub Actions | 语法、Django check、迁移检查和完整测试 |
+| 容器 | Docker + Gunicorn + WhiteNoise | 本地 Compose 与单机生产 Compose 分层 |
+| 备份 | PostgreSQL dump + 对象镜像 | manifest、大小与 SHA-256 校验、按保留期清理 |
+| 持续集成 | GitHub Actions | SQLite 质量任务 + PostgreSQL/Redis 集成任务 |
 
 ## 功能地图
 
@@ -95,9 +97,9 @@
 | 4. 交易预约与订单状态 | 预约、改期、交付确认、借用归还、评价、争议与逾期催收 | [阅读](feature-handbook.md#4-交易预约与订单状态) |
 | 5. 私信、留言与通知中心 | 会话、未读提醒、偏好、汇总降噪、单条与批量延后和恢复 | [阅读](feature-handbook.md#5-私信留言与通知中心) |
 | 6. 社区治理与后台处理 | 举报、结果回访、风险分级、内容申诉、误判放行和治理队列 | [阅读](feature-handbook.md#6-社区治理与后台处理) |
-| 7. 运营看板与运营告警 | 供给、需求、搜索、交付、治理、通知、推荐、任务台账和学期节律 | [阅读](feature-handbook.md#7-运营看板与运营告警) |
+| 7. 运营看板与运营告警 | 供给、需求、搜索、交付、治理、通知、推荐、任务台账、专题目标和节奏偏差 | [阅读](feature-handbook.md#7-运营看板与运营告警) |
 | 8. 校园身份与可信交易 | 校园邮箱认证、公开档案、安全提示与确认记录 | [阅读](feature-handbook.md#8-校园身份与可信交易) |
-| 9. 校园专题与个人足迹 | 专题浏览、加入与退出、幂等参与区间、聚合报名人数与运营统计 | [阅读](feature-handbook.md#9-校园专题与个人足迹) |
+| 9. 校园专题与个人足迹 | 专题浏览、加入与退出、幂等参与区间、目标进度、严格用户漏斗与运营统计 | [阅读](feature-handbook.md#9-校园专题与个人足迹) |
 
 ### 围绕用户能做什么
 
@@ -273,7 +275,14 @@ Copy-Item .env.example .env
 | `DJANGO_DEBUG` | 是否开启调试模式 | `1` |
 | `DJANGO_ALLOWED_HOSTS` | 允许访问的域名，逗号分隔 | `127.0.0.1,localhost,testserver` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | HTTPS 或反向代理场景下的可信来源 | 空 |
-| `DJANGO_DB_PATH` | SQLite 数据库文件路径 | `db.sqlite3` |
+| `DJANGO_DB_PATH` | 本地 SQLite 数据库文件路径 | `db.sqlite3` |
+| `DJANGO_DATABASE_URL` | PostgreSQL 连接串，启用生产依赖时必填 | 空 |
+| `DJANGO_CACHE_URL` | Redis 连接串，启用生产依赖时必填 | 空 |
+| `DJANGO_STORAGE_BACKEND` | `filesystem`、`s3` 或 `minio` | `filesystem` |
+| `DJANGO_S3_BUCKET` | 商品图与头像所在 bucket | 空 |
+| `DJANGO_S3_ENDPOINT_URL` | 容器内部 S3/MinIO 地址 | 空 |
+| `DJANGO_S3_PUBLIC_ENDPOINT_URL` | 浏览器访问对象时使用的公网或本地端口 | 空 |
+| `DJANGO_REQUIRE_PRODUCTION_SERVICES` | 是否强制要求 PostgreSQL、Redis、对象存储 | `0` |
 | `DJANGO_SECURE_SSL_REDIRECT` | 是否强制跳转 HTTPS | `0` |
 | `DJANGO_SESSION_COOKIE_SECURE` | 是否只通过 HTTPS 发送会话 Cookie | `0` |
 | `DJANGO_CSRF_COOKIE_SECURE` | 是否只通过 HTTPS 发送 CSRF Cookie | `0` |
@@ -304,18 +313,24 @@ docker compose down -v
 镜像内置 `HEALTHCHECK`：
 
 - `/healthz/` 是存活检查，只确认 Django 进程可以处理请求；
-- `/readyz/` 是就绪检查，会对数据库执行轻量查询，失败时返回 `503`；
+- `/readyz/` 是就绪检查，会验证 PostgreSQL、Redis 和 S3/MinIO，任一失败返回 `503`；
 - 编排系统应优先用 `/readyz/` 判断实例是否接流量。
+
+生产拓扑使用 [`docker-compose.prod.yml`](../docker-compose.prod.yml)：PostgreSQL 16、Redis 7、MinIO、Gunicorn Web 和备份 sidecar。所有生产配置集中在 `.env.production`，并通过 `DJANGO_REQUIRE_PRODUCTION_SERVICES=1` 在启动时 fail closed。
 
 <details>
 <summary><strong>生产部署检查清单</strong></summary>
 
 - 替换 `DJANGO_SECRET_KEY`，关闭调试模式并配置允许域名；
+- 保证数据库/Redis 密码与连接串一致，替换所有 `CHANGE_ME` 占位值；
+- 配置浏览器可访问的 `DJANGO_S3_PUBLIC_ENDPOINT_URL`；
 - 启用 HTTPS 后配置安全重定向、Session/CSRF Cookie 和可信来源；
 - 域名与回滚窗口确认后再设置 `DJANGO_SECURE_HSTS_SECONDS`；
-- 根据规模配置反向代理、限流、备份、日志和媒体文件策略；
+- 将备份复制到独立主机或对象存储，并定期执行恢复演练；
 - 不提交生产数据库、上传文件、密钥或包含用户隐私的日志；
-- 当前默认配置面向开发和轻量部署，不代表大规模生产架构。
+- 当前生产编排是单机、小规模基线，不提供自动故障转移或异地容灾。
+
+完整步骤见[生产部署基线](production-deployment.md)和[备份与恢复](backup-restore.md)。
 
 </details>
 
@@ -382,7 +397,9 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | 提醒与供给 | 使用冷却、合并和效果观测，不靠无节制发送换短期动作率 |
 | 需求跟进 | 缺口被看见后要有任务、接手、复核和效果验证 |
 | 借用催收 | 分层提醒，归还仍由双方确认，不自动关闭订单 |
-| 部署形态 | 默认 SQLite 面向开发和轻量部署，不伪装成大规模架构 |
+| 部署形态 | 本地 SQLite 零服务；生产使用 PostgreSQL、Redis、S3/MinIO，但仍是单机小规模基线 |
+| 数据迁移 | SQLite、PostgreSQL 和对象存储之间不做隐式迁移，切生产必须单独迁移并核对 |
+| 备份一致性 | 数据库和对象分别备份，不是同一事务快照；默认备份不是异地容灾 |
 
 完整取舍见[当前取舍与边界](product-boundaries.md)。
 
@@ -396,7 +413,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 - **治理与通知**：继续做治理分组、申诉质量和通知降噪；
 - **校园场景与信任**：完善认证体验、可信档案和地点维护；
 - **运营与数据质量**：加强导出一致性、样本审计、指标血缘和告警；
-- **基础设施与体验**：优化移动端、无障碍、图片加载、备份和可观测性。
+- **基础设施与体验**：补齐多实例迁移、对象存储 CI、集中日志、监控告警、异机备份与恢复演练；继续优化移动端、无障碍和图片加载。
 
 每个方向都拆成可独立验证、独立回滚的小迭代。详细待办、已落地范围和不做的理由见[后续路线图](roadmap.md)。
 
@@ -407,6 +424,9 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [功能手册](feature-handbook.md) | 想了解九条业务链路的完整规则、指标和边缘情况 |
 | [校园专题报名设计](campaign-registration-design.md) | 想了解专题参与区间、幂等约束、隐私边界和运营口径 |
 | [校园专题上新摘要设计](campaign-update-digest-design.md) | 想了解主动订阅、合并摘要、发送边界和运营口径 |
+| [专题目标与转化漏斗](campaign-goals-funnel-design.md) | 想了解六类目标、节奏偏差、严格漏斗和跨专题去重限制 |
+| [生产部署基线](production-deployment.md) | 想配置 PostgreSQL、Redis、MinIO、Gunicorn 与生产探针 |
+| [备份与恢复](backup-restore.md) | 想创建、校验、保留或恢复数据库与对象存储 |
 | [核心数据模型](data-model.md) | 想理解模型分组、关键字段和约束 |
 | [模块与测试地图](module-map.md) | 想找代码模块、测试以及设计文档索引 |
 | [后台与定时任务](scheduled-tasks.md) | 想接入周期任务、回填数据或排查运行台账 |

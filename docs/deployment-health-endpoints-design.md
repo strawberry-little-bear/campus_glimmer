@@ -9,7 +9,7 @@
 - **存活检查**不该查数据库。数据库短暂抖动时，若存活探针失败，编排系统可能重启所有 worker，反而把一次存储故障放大成应用故障。
 - **就绪检查**应该查最小依赖。它失败时实例应被移出流量池，但进程可以继续运行，等待依赖恢复或人工处理。
 
-因此这一轮把两个问题拆成两个端点：`/healthz/` 保持轻量存活检查，新增 `/readyz/` 做数据库就绪检查。
+因此这一轮把两个问题拆成两个端点：`/healthz/` 保持轻量存活检查，新增 `/readyz/` 做数据库就绪检查。下面的“初始范围”保留了这一步的设计语境；生产持久化依赖接入后，端点又按同一原则扩展了 Redis 与对象存储检查。
 
 ## 目标
 
@@ -73,3 +73,50 @@
 - 模拟数据库连接失败时返回 503，状态和组件均为 unavailable。
 - 失败响应不包含异常消息，避免泄露部署细节。
 - URL 反向解析继续使用 `health_check` 与 `ready_check`，部署文档和容器配置可以稳定引用。
+
+
+## 后续演进：从数据库扩展到完整持久化依赖
+
+生产化接入 PostgreSQL、Redis 与 S3 兼容对象存储后，就绪检查在同一响应结构内增加了 `cache` 和 `object_storage`。这不是把 `/healthz/` 变重，而是让“能否接流量”覆盖真正决定页面与上传是否可用的依赖。
+
+| 检查项 | 何时出现 | 实际动作 | 失败后果 |
+| --- | --- | --- | --- |
+| `database` | 始终 | 对默认数据库执行 `SELECT 1` | 返回 `503` |
+| `cache` | 始终 | 经 Django cache 写入并读回短周期探针值 | 返回 `503` |
+| `object_storage` | `DJANGO_STORAGE_BACKEND` 为 `s3` / `minio` | 对配置的 bucket 执行 `head_bucket` | 返回 `503`；本地文件存储不执行该检查 |
+
+完整的就绪响应示例：
+
+```json
+{
+  "status": "ok",
+  "service": "campus-glimmer",
+  "checks": {
+    "database": "ok",
+    "cache": "ok",
+    "object_storage": "ok"
+  }
+}
+```
+
+部分依赖失败时仍返回稳定的组件状态，不返回异常文本：
+
+```json
+{
+  "status": "unavailable",
+  "service": "campus-glimmer",
+  "checks": {
+    "database": "ok",
+    "cache": "unavailable",
+    "object_storage": "ok"
+  }
+}
+```
+
+### 演进后的边界
+
+- 对象存储探针只读 bucket 元数据，不在每次健康检查时创建临时对象，也不修改 ACL。
+- 本地 `filesystem` 存储不会凭空要求一个对象存储服务，因此 `checks` 中不出现 `object_storage`。
+- 探针仍不检查磁盘剩余空间、邮件服务、异步任务队列、搜索索引或证书有效期；这些需要独立监控，不应全部塞进一次 HTTP 就绪请求。
+- Redis 探针验证连接与基本读写，不判断缓存命中率；探针失败只说明该实例暂不应接流量，不改变 PostgreSQL 中的业务事实。
+- 测试覆盖三个组件的成功、失败与隐私边界；新增关键依赖时应同步更新 `campus_glimmer/test_deployment.py`、部署文档和容器的 `HEALTHCHECK`。

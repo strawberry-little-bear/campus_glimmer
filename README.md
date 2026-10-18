@@ -144,9 +144,9 @@
 | 📦 **交易预约与订单状态** | 预约、改期、交付确认、借用归还、评价、争议与逾期催收 |
 | 💬 **私信、留言与通知中心** | 会话、未读提醒、偏好、汇总降噪、单条与批量延后和恢复 |
 | 🛡️ **社区治理与后台处理** | 举报、风险分级、内容申诉、误判放行与治理队列 |
-| 📈 **运营看板与运营告警** | 供给、需求、搜索、交付、治理、通知、推荐与任务台账 |
+| 📈 **运营看板与运营告警** | 供给、需求、搜索、交付、治理、通知、推荐、任务台账和专题目标节奏 |
 | 🎓 **校园身份与可信交易** | 校园邮箱认证、公开档案、安全提示与确认记录 |
-| 🎪 **校园专题与个人足迹** | 专题浏览、加入与退出、参与区间、聚合报名人数和运营导出 |
+| 🎪 **校园专题与个人足迹** | 专题浏览、加入与退出、参与区间、目标进度、严格用户漏斗和运营导出 |
 
 ### 一条交易链路
 
@@ -167,10 +167,13 @@
 | 层次 | 当前方案 |
 | :--- | :--- |
 | Web | Django 5.1+ · Django Templates · 轻量 JavaScript |
-| 数据 | SQLite 默认，模型与查询保持可替换数据库的边界 |
+| 数据 | SQLite（本地默认）· PostgreSQL 16（生产） |
+| 缓存 | LocMem（本地默认）· Redis 7（生产，含 `cached_db` 会话） |
+| 文件存储 | 本地 `media/`（开发）· S3 / MinIO（生产） |
 | 图片 | Pillow · EXIF 方向 · WebP 重编码 · 缩略图与响应式候选 |
-| 部署 | Docker Compose · Gunicorn · `/healthz/` 与 `/readyz/` |
-| 质量 | GitHub Actions · Django check · 迁移检查 · 自动化测试 |
+| 部署 | Docker Compose · Gunicorn · WhiteNoise · `/healthz/` 与 `/readyz/` |
+| 备份 | PostgreSQL custom dump · S3 对象镜像 · SHA-256 校验 · 增量恢复 |
+| 质量 | GitHub Actions · PostgreSQL/Redis 集成任务 · Django check · 迁移检查 · 自动化测试 |
 
 项目保持 Django 应用的自然边界：
 
@@ -263,7 +266,11 @@ Copy-Item .env.example .env
 | `DJANGO_DEBUG` | 是否开启调试模式 | `1` |
 | `DJANGO_ALLOWED_HOSTS` | 允许访问的域名，逗号分隔 | `127.0.0.1,localhost,testserver` |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | 反向代理场景下的可信来源 | 空 |
-| `DJANGO_DB_PATH` | SQLite 数据库文件路径 | `db.sqlite3` |
+| `DJANGO_DB_PATH` | 本地 SQLite 数据库文件路径 | `db.sqlite3` |
+| `DJANGO_DATABASE_URL` | 生产 PostgreSQL 连接串 | 空（使用 SQLite） |
+| `DJANGO_CACHE_URL` | 生产 Redis 连接串 | 空（使用 LocMem） |
+| `DJANGO_STORAGE_BACKEND` | `filesystem`、`s3` 或 `minio` | `filesystem` |
+| `DJANGO_S3_*` | bucket、endpoint、凭据与浏览器侧签名端点 | 空 |
 | `DJANGO_SECURE_SSL_REDIRECT` | 是否强制跳转 HTTPS | `0` |
 | `DJANGO_SESSION_COOKIE_SECURE` | 是否只通过 HTTPS 发送会话 Cookie | `0` |
 | `DJANGO_CSRF_COOKIE_SECURE` | 是否只通过 HTTPS 发送 CSRF Cookie | `0` |
@@ -296,17 +303,29 @@ docker compose down -v
 镜像内置健康检查：
 
 - `/healthz/`：存活检查，确认 Django 进程可以处理请求；
-- `/readyz/`：就绪检查，对数据库执行轻量查询，失败时返回 `503`。
+- `/readyz/`：就绪检查，验证 PostgreSQL、Redis 和 S3/MinIO，失败时返回 `503`。
+
+本地 Compose 继续使用 SQLite 与本地媒体文件。需要 PostgreSQL、Redis、MinIO 和定时备份时，使用 [生产编排](docker-compose.prod.yml)：
+
+```bash
+cp .env.production.example .env.production
+# 替换所有 CHANGE_ME，并保证数据库/Redis 密码与连接串一致
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+```
 
 <details>
 <summary><strong>生产部署检查清单</strong></summary>
 
 - 替换 `DJANGO_SECRET_KEY`，关闭调试模式并配置允许域名；
+- 配置 PostgreSQL、Redis、MinIO 或等价托管服务，生产启动会拒绝占位配置；
+- `DJANGO_S3_PUBLIC_ENDPOINT_URL` 必须是浏览器可访问的域名或端口；
 - 启用 HTTPS 后配置安全重定向、Session/CSRF Cookie 和可信来源；
 - 域名与回滚窗口确认后再设置 `DJANGO_SECURE_HSTS_SECONDS`；
-- 根据规模配置反向代理、限流、备份、日志和媒体文件策略；
+- 将备份复制到独立主机或对象存储，并定期做恢复演练；
 - 不提交生产数据库、上传文件、密钥或包含用户隐私的日志；
-- 当前默认配置面向开发和轻量部署，不代表大规模生产架构。
+- 当前生产编排是单机、小规模基线，不提供自动故障转移或异地容灾。
+
+详细步骤见[生产部署基线](docs/production-deployment.md)与[备份恢复](docs/backup-restore.md)。
 
 </details>
 
@@ -366,7 +385,7 @@ GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查�
 - **治理与通知**：继续做治理分组、申诉质量和通知降噪；
 - **校园场景与信任**：完善认证体验、可信档案和地点维护；
 - **运营与数据质量**：加强导出一致性、样本审计、指标血缘和告警；
-- **基础设施与体验**：优化移动端、无障碍、图片加载、备份和可观测性。
+- **基础设施与体验**：补齐多实例迁移、对象存储 CI、集中日志、监控告警、异机备份与恢复演练；继续优化移动端、无障碍和图片加载。
 
 每个方向都拆成可独立验证、独立回滚的小迭代。详细待办、已落地范围和不做某项功能的理由见
 [后续路线图](docs/roadmap.md)。
@@ -383,6 +402,9 @@ GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查�
 | 核心 ORM 模型、关键字段与约束 | [核心数据模型](docs/data-model.md) |
 | 代码模块、测试与设计文档索引 | [模块与测试地图](docs/module-map.md) |
 | 周期任务、幂等边界与运行台账 | [后台与定时任务](docs/scheduled-tasks.md) |
+| PostgreSQL、Redis、对象存储与生产启动 | [生产部署基线](docs/production-deployment.md) |
+| 备份内容、校验、保留与恢复演练 | [备份与恢复](docs/backup-restore.md) |
+| 专题目标、完成率与用户漏斗口径 | [专题目标与转化漏斗](docs/campaign-goals-funnel-design.md) |
 | 学期阶段、统计快照与交易高峰 | [学期日历与交易高峰](docs/academic-calendar.md) |
 | 当前取舍、隐私边界与实现纪律 | [当前取舍与边界](docs/product-boundaries.md) |
 | 后续方向与拆分原则 | [后续路线图](docs/roadmap.md) |

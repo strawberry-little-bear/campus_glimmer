@@ -81,7 +81,7 @@ campus_glimmer/
 | `location_registry_quality.py` | 校园地点档案形状、字段覆盖、当前引用、近似重名与停用引用（只读观测） | 只报告 |
 | `location_maintenance_queue.py` | 校园地点维护信号的主优先级、重叠信号、行动提示与 20 条人工核对清单（只读分诊） | 只报告 |
 | `location_maintenance_decision_review.py` | 校园地点维护决策的首次留痕时间分布、复核比例与暂缓停留清单（不计算历史处理率） | 只报告 |
-| `campaign_analytics.py` | 校园专题周期、转化漏斗与运营提示 | 读写 |
+| `campaign_analytics.py` | 校园专题周期、运营提示与严格用户转化漏斗；另含六类实时 CampaignGoal 目标的完成率、时间进度和节奏偏差 | 读写 |
 | `campaign_phase_review.py` | 已结束专题按自身窗口均分三段，复盘供给、曝光、收藏、预约与完成交易的节奏；薄样本不判方向 | 只报告 |
 | `campaign_registration.py` | 校园专题加入、退出、幂等状态与参与区间历史 | 读写 |
 | `campaign_updates.py` | 主动订阅的专题上新摘要：幂等命中缓冲、发送前边界复核、每日 / 每周合并通知与批量取消审计 | 读写 |
@@ -236,6 +236,7 @@ campus_glimmer/
 - **`test_bulk_listing_image_queue.py`**：批量发布后的短期补图队列、本人与展示状态过滤、完成进度、行内补图上传、整批校验失败不写入、session 覆盖与失效边界
 
 - **`test_campaign_analytics.py`**：专题周期内的新增、在售与转化漏斗
+- **`test_campaign_goals.py`**：六类专题目标的窗口继承、实时进度、节奏状态、严格漏斗分母、跨专题汇总限制与 CSV 口径
 
 - **`test_campaign_phase_review.py`**：已结束专题的阶段边界、业务时间归段、薄样本门槛、跨专题总结、隐私与只读页面 / CSV 契约
 
@@ -661,6 +662,9 @@ campus_glimmer/
 - **`dashboard-export-subhead-alignment-design.md`**：面板与下载件的标题必须是同一句话，以及第一版为什么选错了数——`field_total` 恒为 25、`rows|length` 空平台是 0，两者问的不是同一个问题
 - **`task-run-ledger-integrity-design.md`**：定时任务台账的时间、状态、失败备注与指标形状完整性审计口径
 - **`deployment-health-endpoints-design.md`**：存活检查与数据库就绪检查拆分，失败不泄露部署细节
+- **`campaign-goals-funnel-design.md`**：专题目标的周期口径、实时进度、节奏偏差、严格漏斗与跨专题汇总边界
+- **`production-deployment.md`**：PostgreSQL、Redis、MinIO / S3、WhiteNoise、单机 Compose 拓扑与上线边界
+- **`backup-restore.md`**：数据库 custom dump、对象镜像、SHA-256 校验、保留期、恢复顺序与演练边界
 
 - **`delivery-handshake-design.md`**：当面交付两次确认的顺序四档、双方同秒单列、挂起不按周期切
 
