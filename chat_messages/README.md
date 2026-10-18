@@ -16,10 +16,10 @@
 ## 📸 相关页面
 
 <p align="center">
-  <a href="../docs/screenshots/inbox.png"><img src="../docs/screenshots/inbox.png" alt="消息中心，展示私信统计、会话列表、未读消息和批量已读操作" width="100%" /></a>
+  <a href="../docs/screenshots/inbox.png"><img src="../docs/screenshots/inbox.png" alt="消息工作台，展示未读统计、搜索筛选、会话列表、收到与发出视图和批量已读操作" width="100%" /></a>
 </p>
 
-<p align="center"><strong>消息中心</strong><br /><sub>按会话整理私信，区分收到与发出的消息，并支持筛选和批量已读 · 本地演示数据</sub></p>
+<p align="center"><strong>消息工作台</strong><br /><sub>按会话整理私信，区分收到与发出视图，并支持状态筛选、未读聚焦和批量已读 · 本地演示数据</sub></p>
 
 <table>
 <tr>
@@ -83,7 +83,7 @@ flowchart LR
 | 路径 | 用途 |
 | --- | --- |
 | `/messages/comment/<item_id>/` | 在商品下新增留言 |
-| `/messages/inbox/` | 收件箱、会话列表和未读筛选 |
+| `/messages/inbox/` | 消息工作台、会话列表和未读筛选 |
 | `/messages/conversation/<user_id>/` | 与指定用户查看会话并继续发送 |
 | `/messages/send/<receiver_id>/<item_id>/` | 围绕商品发起私信 |
 | `/messages/inbox/read-selected/` | 批量标记当前用户的接收记录 |

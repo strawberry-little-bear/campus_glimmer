@@ -13,13 +13,13 @@
 > [!NOTE]
 > 这个应用只管账户、公开资料和校园邮箱认证。商品、订单、通知和审核分别由 `listings/` 与 `chat_messages/` 负责，不在这里重复实现。
 
-## 📸 账户页面
+## 📸 账户中心与公开档案
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<a href="../docs/screenshots/profile.png"><img src="../docs/screenshots/profile.png" alt="个人资料页，展示头像、简介、校园身份、互助贡献和我的活动" width="100%" /></a>
-<p align="center"><strong>个人资料</strong><br /><sub>账户信息、校园身份、贡献进度与活动入口</sub></p>
+<a href="../docs/screenshots/profile.png"><img src="../docs/screenshots/profile.png" alt="账户中心，展示头像、简介、校园认证、互助贡献、联系方式和最近活动" width="100%" /></a>
+<p align="center"><strong>账户中心</strong><br /><sub>校园认证、可信资料、贡献进度与活动入口</sub></p>
 </td>
 <td width="50%" valign="top">
 <a href="../docs/screenshots/public-profile.png"><img src="../docs/screenshots/public-profile.png" alt="公开交易档案，展示公开资料、交易表现和校园互助反馈" width="100%" /></a>
@@ -88,7 +88,7 @@ sequenceDiagram
 | --- | --- | --- |
 | `/accounts/register/` | 创建账户 | 否 |
 | `/accounts/login/` | 登录 | 否 |
-| `/accounts/profile/` | 自己的资料与贡献摘要 | 是 |
+| `/accounts/profile/` | 账户中心、校园身份与贡献摘要 | 是 |
 | `/accounts/profile/edit/` | 修改用户名、邮箱、头像和资料 | 是 |
 | `/accounts/user/<user_id>/` | 其他用户的公开交易档案 | 否 |
 | `/accounts/profile/campus-verification/` | 发起或重新发送校园认证 | 是 |

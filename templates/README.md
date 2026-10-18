@@ -36,8 +36,8 @@ flowchart TD
 | 目录或文件 | 内容 |
 | --- | --- |
 | [`base.html`](base.html) | 全站导航、品牌、消息提示、未读角标、页脚和公共脚本 |
-| [`accounts/`](accounts/) | 注册、登录、资料、公开主页和校园认证 |
-| [`chat_messages/`](chat_messages/) | 收件箱、会话、审核队列和申诉页面 |
+| [`accounts/`](accounts/) | 账户中心、登录、资料编辑、公开主页和校园认证 |
+| [`chat_messages/`](chat_messages/) | 消息工作台、会话、审核队列和申诉页面 |
 | [`listings/`](listings/) | 首页、商品、搜索、订单、通知、运营看板和治理页面 |
 | [`listings/_item_card.html`](listings/_item_card.html) | 商品卡片复用片段 |
 

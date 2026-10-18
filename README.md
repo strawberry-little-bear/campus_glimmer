@@ -1,14 +1,14 @@
 <a id="top"></a>
 <div align="center">
 
-<img src="docs/assets/brand-mark.svg" width="92" alt="拾光校园品牌图标" />
+<img src="docs/assets/brand-mark.svg" width="94" alt="拾光校园品牌图标" />
 
 # 拾光校园 · Campus Glimmer
 
 **让闲置在校园里继续流转，也让每一次相遇都更有回应。**
 
-面向校园的二手交易与社区协作平台。从发现一件好物，到预约、交付、反馈与治理，
-把校园里经常被忽略的细节，接成一条可以回看的交易链路。
+面向校园的二手交易与互助协作平台。围绕发布、发现、沟通、预约、交付、
+评价和治理，把一次校园交易中容易被忽略的细节连接成可回看的完整链路。
 
 [![Django](https://img.shields.io/badge/Django-5.1%2B-1d8a68?style=flat-square&logo=django&logoColor=white)](https://www.djangoproject.com/)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -16,120 +16,102 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ed?style=flat-square&logo=docker&logoColor=white)](docker-compose.yml)
 [![License](https://img.shields.io/badge/License-MIT-f6aa61?style=flat-square)](LICENSE)
 
-[产品预览](#preview) · [功能地图](#features) · [快速开始](#quick-start) · [工程与测试](#engineering) · [文档地图](#docs) · [完整手册](docs/README.md)
+[产品预览](#preview) · [能力地图](#features) · [快速开始](#quick-start) · [工程与测试](#engineering) · [文档地图](#docs) · [完整手册](docs/README.md)
 
 </div>
-
----
-
-<p align="center">
-  <img src="docs/screenshots/home.png" alt="拾光校园首页，展示校园闲置交易主视觉、导航与在售商品概览" width="100%" />
-</p>
-
-<p align="center"><sub>界面预览 · 本地演示数据</sub></p>
-
-## 🌿 关于项目
-
-校园二手交易和普通电商并不完全相同。用户活动范围集中，交易更依赖当面沟通和时间协调；
-商品生命周期会随开学、考试周和毕业季快速变化；平台除了撮合交易，还要处理通知、举报、
-内容治理和运营复盘。
-
-拾光校园从“发布一件闲置、找到一个买家”出发，持续补齐这些容易被忽略的环节：交易地点、
-预约是否有效、订单进行到哪一步、消息是否被看到、问题由谁处理，以及运营者如何理解站内
-真实需求。
-
-项目按真实业务链路长期迭代。一个功能通常会经过设计说明、数据模型、页面交互、权限边界、
-数据库迁移、后台运营和自动化测试，再进入主分支。README 负责快速了解与进入，完整规则
-维护在 [`docs/`](docs/)。
-
-> **当前状态：** 持续维护中。核心交易、消息通知、社区治理和运营看板已形成闭环；近期迭代
-> 重点放在界面一致性、移动端体验、搜索入口和生产环境可靠性。
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-<h3>🧭 发现</h3>
-
-按分类、价格、成色和校园地点筛选；收藏、关注搜索、价格轨迹与供需信号帮助用户找到合适的好物。
-
-</td>
-<td width="50%" valign="top">
-
-<h3>🤝 交易</h3>
-
-覆盖出售、免费赠送、限期借用、预约、改期、交付确认、评价、争议和借用归还。
-
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-
-<h3>💬 社区</h3>
-
-留言、私信、站内通知、未读提醒、通知偏好、举报回访与内容申诉连接起每一次互动。
-
-</td>
-<td width="50%" valign="top">
-
-<h3>📊 运营</h3>
-
-从搜索、浏览、收藏、预约和交付中形成可解释指标，支持需求跟进、运营告警和效果复盘。
-
-</td>
-</tr>
-</table>
 
 ---
 
 <a id="preview"></a>
 ## 📸 产品预览
 
-### 发现校园好物
-
 <p align="center">
-  <img src="docs/screenshots/discover.png" alt="商品发现页，包含关键词搜索、分类、校园地点筛选、商品卡片和排序" width="100%" />
+  <a href="docs/screenshots/home.png"><img src="docs/screenshots/home.png" alt="拾光校园首页，展示品牌主视觉、导航与在售商品概览" width="100%" /></a>
 </p>
 
-<p align="center"><sub>关键词、分类、交易地点与商品状态在同一个筛选入口内完成 · 本地演示数据</sub></p>
+<p align="center"><strong>首页 · 从校园场景进入交易与互助</strong><br /><sub>品牌主视觉、全局入口、未读提醒和正在流转的好物 · 本地演示数据</sub></p>
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="docs/screenshots/item-detail.png" alt="商品详情页，展示商品图片、价格、校园地点和价格参考" width="100%" />
-<p align="center"><strong>商品详情</strong><br /><sub>图片、地点、价格参考与交易操作</sub></p>
+<a href="docs/screenshots/discover.png"><img src="docs/screenshots/discover.png" alt="发现页，展示关键词、分类、校园地点、商品状态和排序筛选" width="100%" /></a>
+<p align="center"><strong>发现好物</strong><br /><sub>分类、价格、成色与校园地点组合筛选</sub></p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/notifications.png" alt="通知中心，展示未读统计、类型分布、筛选和批量延后操作" width="100%" />
-<p align="center"><strong>通知中心</strong><br /><sub>未读统计、类型分布、筛选与批量处理</sub></p>
+<a href="docs/screenshots/item-detail.png"><img src="docs/screenshots/item-detail.png" alt="商品详情页，展示商品图片、价格、校园地点和价格参考" width="100%" /></a>
+<p align="center"><strong>商品详情</strong><br /><sub>交易信息、地点、价格参考与操作入口</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/screenshots/inbox.png"><img src="docs/screenshots/inbox.png" alt="消息工作台，展示未读统计、搜索筛选、会话列表和批量已读" width="100%" /></a>
+<p align="center"><strong>消息工作台</strong><br /><sub>会话整理、未读聚焦、收到与发出视图</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="docs/screenshots/profile.png"><img src="docs/screenshots/profile.png" alt="账户中心，展示校园认证、互助贡献、联系方式和个人活动入口" width="100%" /></a>
+<p align="center"><strong>账户中心</strong><br /><sub>校园身份、可信资料、贡献进度与活动入口</sub></p>
 </td>
 </tr>
 </table>
 
-### 账户与消息
+<p align="center">
+  <a href="docs/screenshots/operations.png"><img src="docs/screenshots/operations.png" alt="运营看板，展示供给、搜索、预约、互助和看板构建观测" width="100%" /></a>
+</p>
+
+<p align="center"><strong>运营看板 · 把校园交易现场变成可解释的运营信号</strong><br /><sub>供给、需求、搜索、交付、互助与告警共用同一套指标口径 · 本地演示数据</sub></p>
+
+<p align="center"><sub>全部截图来自当前本地页面与演示数据；登录、通知、公开档案等更多界面见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
+
+---
+
+## 🧭 这是一个怎样的项目
+
+校园二手交易不是普通电商的缩小版。活动范围集中，交易更依赖当面沟通和时间协调；
+商品生命周期会随开学、考试周和毕业季快速变化；平台除了撮合交易，还要处理通知、
+举报、内容治理和运营复盘。
+
+拾光校园从“发布一件闲置、找到一个买家”出发，持续补齐交易地点、预约是否有效、
+订单进行到哪一步、消息是否被看到、问题由谁处理，以及运营者如何理解站内真实需求。
+项目按真实业务链路长期迭代：一个功能通常会经过场景设计、数据模型、页面交互、权限边界、
+数据库迁移、后台运营和自动化测试，再进入主分支。
+
+> **当前状态：** 持续维护中。核心交易、消息通知、社区治理、专题运营和运营看板已形成闭环；
+> 近期迭代重点放在账户与消息工作台、移动端体验、界面一致性和生产环境可靠性。
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<a href="docs/screenshots/login.png"><img src="docs/screenshots/login.png" alt="登录页，展示品牌介绍、校园身份说明与登录表单" width="100%" /></a>
-<p align="center"><strong>登录与账户入口</strong><br /><sub>品牌信息、登录表单与继续交易的清晰入口</sub></p>
+<h3>🛍️ 校园交易闭环</h3>
+<p>出售、赠送、借用、求购与失物招领共用一条清晰的发布和发现入口；预约、交付、归还、评价与争议都有对应状态。</p>
 </td>
 <td width="50%" valign="top">
-<img src="docs/screenshots/inbox.png" alt="消息中心，展示私信统计、会话列表和批量已读操作" width="100%" />
-<p align="center"><strong>消息中心</strong><br /><sub>会话列表、未读统计与批量已读</sub></p>
+<h3>🔎 搜索与供需判断</h3>
+<p>组合筛选、关注的搜索、价格轨迹、推荐反馈和供需信号，让“有没有人需要”不再只靠感觉判断。</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>💬 消息与社区治理</h3>
+<p>留言、私信、通知、未读提醒、通知偏好、举报回访与内容申诉连接起每一次互动，并保留处理边界。</p>
+</td>
+<td width="50%" valign="top">
+<h3>📊 运营与基础设施</h3>
+<p>专题目标、用户漏斗、运营告警、定时任务、PostgreSQL、Redis、对象存储与备份恢复共同支撑长期运行。</p>
 </td>
 </tr>
 </table>
 
-### 运营看板
+### 一条交易如何走完
 
 <p align="center">
-  <img src="docs/screenshots/operations.png" alt="运营数据概览，展示供给、搜索、预约、互助和看板构建耗时" width="100%" />
+  <strong>发布</strong> → <strong>发现</strong> → <strong>沟通</strong> → <strong>预约</strong> → <strong>交付</strong> → <strong>评价</strong> → <strong>治理</strong>
 </p>
 
-<p align="center"><sub>管理员视角下的供给、搜索、预约、互助和看板构建观测 · 本地演示数据</sub></p>
+出售、免费赠送和限期借用会在预约之后进入不同状态分支；求购匹配和失物招领是两条并行支线。
+完整流程图见[校园交易闭环](docs/business-flow.svg)，规则与边缘情况见[功能手册](docs/feature-handbook.md)。
 
-<p align="center"><sub>全部截图均来自当前本地页面与演示数据；个人资料、公开交易档案等更多页面见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
+> **运营纪律：** 看板与治理工作台只读消费业务事实，不自动修改交易状态。
+> 指标会明确样本、分母、周期和缺失值，避免用不可解释的数字替代判断。
 
 ---
 
@@ -151,17 +133,20 @@
 | 🎓 **校园身份与可信交易** | 校园邮箱认证、公开档案、安全提示与确认记录 |
 | 🎪 **校园专题与个人足迹** | 专题浏览、加入与退出、参与区间、目标进度、严格用户漏斗和运营导出 |
 
-### 一条交易链路
+### 业务主线与旁路
 
-<p align="center">
-  <strong>发现</strong> → <strong>筛选</strong> → <strong>了解</strong> → <strong>沟通</strong> → <strong>预约</strong> → <strong>交付</strong> → <strong>反馈</strong> → <strong>治理</strong>
-</p>
+```mermaid
+flowchart LR
+    Browse["发现 / 搜索"] --> Talk["沟通与预约"]
+    Talk --> Deal["交付 / 归还"]
+    Deal --> Trust["评价与可信记录"]
+    Govern["治理与申诉"] -. 留痕 .-> Talk
+    Ops["运营看板"] -. 只读观测 .-> Browse
+    Ops -. 只读观测 .-> Deal
+```
 
-出售、免费赠送和限期借用会在预约之后进入不同状态分支；求购匹配和失物招领是两条并行支线。
+出售、免费赠送和限期借用会在预约后进入不同状态分支；求购匹配与失物招领是两条并行支线。
 完整流程图见[校园交易闭环](docs/business-flow.svg)，业务规则见[功能手册](docs/feature-handbook.md)。
-
-> **运营纪律：**看板与治理工作台只读消费业务事实，不自动修改交易状态。
-> 指标会明确样本、分母、周期和缺失值，避免用不可解释的数字替代判断。
 
 ---
 
@@ -188,6 +173,12 @@ templates/        页面模板
 static/           CSS、JavaScript 与静态资源
 docs/             功能、设计、架构和运营文档
 ```
+
+<p align="center">
+  <a href="docs/architecture.svg"><img src="docs/architecture.svg" alt="拾光校园系统架构，展示 Django 应用、业务模块、数据存储、通知中心和运营看板之间的关系" width="100%" /></a>
+</p>
+
+<p align="center"><sub>应用边界、共享数据事实与运营读取路径 · 点击查看架构图原图</sub></p>
 
 模块、测试和设计文档索引见[模块与测试地图](docs/module-map.md)。
 

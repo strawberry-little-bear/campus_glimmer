@@ -44,8 +44,8 @@
 </tr>
 <tr>
 <td width="50%" valign="top">
-<a href="profile.png"><img src="profile.png" alt="个人资料页，展示账户信息、校园身份、互助贡献和我的活动" width="100%" /></a>
-<p align="center"><strong>个人资料</strong><br /><sub>账户信息、校园身份、贡献与活动入口</sub></p>
+<a href="profile.png"><img src="profile.png" alt="账户中心，展示校园认证、互助贡献、联系方式和最近活动" width="100%" /></a>
+<p align="center"><strong>账户中心</strong><br /><sub>校园认证、可信资料、贡献进度与活动入口</sub></p>
 </td>
 <td width="50%" valign="top">
 <a href="public-profile.png"><img src="public-profile.png" alt="公开交易档案，展示公开资料、交易表现和校园互助反馈" width="100%" /></a>
@@ -54,8 +54,8 @@
 </tr>
 <tr>
 <td width="50%" valign="top">
-<a href="inbox.png"><img src="inbox.png" alt="消息中心，展示私信统计、会话列表、未读消息和批量已读" width="100%" /></a>
-<p align="center"><strong>消息中心</strong><br /><sub>会话列表、未读统计和批量已读</sub></p>
+<a href="inbox.png"><img src="inbox.png" alt="消息工作台，展示未读统计、搜索筛选、会话列表和批量已读" width="100%" /></a>
+<p align="center"><strong>消息工作台</strong><br /><sub>会话整理、未读聚焦、收到与发出视图</sub></p>
 </td>
 <td width="50%" valign="top">
 <a href="operations.png"><img src="operations.png" alt="运营数据概览，展示供给、搜索、预约、互助和看板构建耗时" width="100%" /></a>
@@ -75,9 +75,9 @@
 | [`login.png`](login.png) | `1424 × 969` | 登录页；品牌信息、认证表单与全局导航 |
 | [`item-detail.png`](item-detail.png) | `1424 × 969` | 详情页；图片、状态、价格、地点和价格参考 |
 | [`notifications.png`](notifications.png) | `1424 × 969` | 通知中心；未读统计、类型分布和批量操作 |
-| [`profile.png`](profile.png) | `1424 × 969` | 个人资料；账户、校园身份、贡献和活动入口 |
+| [`profile.png`](profile.png) | `1424 × 969` | 账户中心；校园认证、贡献、联系方式与活动入口 |
 | [`public-profile.png`](public-profile.png) | `1424 × 969` | 公开档案；公开信誉、互助反馈和在售摘要 |
-| [`inbox.png`](inbox.png) | `1424 × 969` | 消息中心；会话、未读筛选和批量已读 |
+| [`inbox.png`](inbox.png) | `1424 × 969` | 消息工作台；未读统计、搜索筛选、会话与批量已读 |
 | [`operations.png`](operations.png) | `1424 × 969` | 运营看板；管理员指标、告警和构建耗时 |
 
 ## 🔄 更新截图时
