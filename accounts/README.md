@@ -22,6 +22,12 @@
 <p align="center"><strong>账户中心</strong><br /><sub>校园认证、可信资料、贡献进度与活动入口</sub></p>
 </td>
 <td width="50%" valign="top">
+<a href="../docs/screenshots/edit-profile.png"><img src="../docs/screenshots/edit-profile.png" alt="编辑资料页，展示头像预览、账户信息、个人简介与联系方式表单" width="100%" /></a>
+<p align="center"><strong>编辑资料</strong><br /><sub>头像、简介与联系方式；仅自己可见的信息单独分区</sub></p>
+</td>
+</tr>
+<tr>
+<td width="100%" valign="top">
 <a href="../docs/screenshots/public-profile.png"><img src="../docs/screenshots/public-profile.png" alt="公开交易档案，展示公开资料、交易表现和校园互助反馈" width="100%" /></a>
 <p align="center"><strong>公开交易档案</strong><br /><sub>只展示公开信誉、贡献与在售商品摘要</sub></p>
 </td>

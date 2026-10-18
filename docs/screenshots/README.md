@@ -4,7 +4,7 @@
 
 # screenshots · 系统界面预览
 
-**十张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
+**十一张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
@@ -48,16 +48,22 @@
 <p align="center"><strong>账户中心</strong><br /><sub>校园认证、可信资料、贡献进度与活动入口</sub></p>
 </td>
 <td width="50%" valign="top">
-<a href="contributions.png"><img src="contributions.png" alt="贡献中心，展示互助等级、贡献进度、徽章墙和最近贡献事件" width="100%" /></a>
-<p align="center"><strong>贡献中心</strong><br /><sub>等级、贡献进度、徽章解锁与最近互助记录</sub></p>
+<a href="edit-profile.png"><img src="edit-profile.png" alt="编辑资料页，展示头像预览、账户信息、个人简介与联系方式表单" width="100%" /></a>
+<p align="center"><strong>编辑资料</strong><br /><sub>头像、简介与联系方式；与账户中心同一套视觉语言</sub></p>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
+<a href="contributions.png"><img src="contributions.png" alt="贡献中心，展示互助等级、贡献进度、徽章墙和最近贡献事件" width="100%" /></a>
+<p align="center"><strong>贡献中心</strong><br /><sub>等级、贡献进度、徽章解锁与最近互助记录</sub></p>
+</td>
+<td width="50%" valign="top">
 <a href="public-profile.png"><img src="public-profile.png" alt="公开交易档案，展示公开资料、交易表现和校园互助反馈" width="100%" /></a>
 <p align="center"><strong>公开交易档案</strong><br /><sub>公开信誉、贡献、在售商品和评价摘要</sub></p>
 </td>
-<td width="50%" valign="top">
+</tr>
+<tr>
+<td width="100%" valign="top">
 <a href="inbox.png"><img src="inbox.png" alt="消息工作台，展示未读统计、搜索筛选、会话列表和批量已读" width="100%" /></a>
 <p align="center"><strong>消息工作台</strong><br /><sub>会话整理、未读聚焦、收到与发出视图</sub></p>
 </td>
@@ -82,6 +88,7 @@
 | [`item-detail.png`](item-detail.png) | `1424 × 969` | 详情页；图片、状态、价格、地点和价格参考 |
 | [`notifications.png`](notifications.png) | `1424 × 969` | 通知中心；未读统计、类型分布和批量操作 |
 | [`profile.png`](profile.png) | `1424 × 969` | 账户中心；校园认证、贡献、联系方式与活动入口 |
+| [`edit-profile.png`](edit-profile.png) | `1424 × 969` | 编辑资料；头像预览、账户信息、简介与联系方式表单 |
 | [`public-profile.png`](public-profile.png) | `1424 × 969` | 公开档案；公开信誉、互助反馈和在售摘要 |
 | [`contributions.png`](contributions.png) | `1424 × 969` | 贡献中心；等级、贡献进度、徽章与最近贡献 |
 | [`inbox.png`](inbox.png) | `1424 × 969` | 消息工作台；未读统计、搜索筛选、会话与批量已读 |
