@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -142,6 +142,18 @@ class CampusCampaignAdmin(admin.ModelAdmin):
     @admin.display(description='摘要订阅', ordering='subscription_total')
     def subscription_count(self, obj):
         return obj.subscription_total
+
+
+@admin.register(CampaignGoal)
+class CampaignGoalAdmin(admin.ModelAdmin):
+    list_display = (
+        'campaign', 'metric', 'target_value', 'starts_at', 'ends_at',
+        'is_active', 'updated_at',
+    )
+    list_filter = ('is_active', 'metric', 'campaign')
+    search_fields = ('campaign__title', 'campaign__slug', 'note')
+    list_select_related = ('campaign',)
+    readonly_fields = ('created_at', 'updated_at')
 
 
 @admin.register(CampaignRegistration)

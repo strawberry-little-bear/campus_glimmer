@@ -1812,7 +1812,23 @@
         <div><span>周期摘要</span><strong>{{ campaign_analytics.summary.period_sent_digest_count }}</strong><small>按通知去重</small></div>
         <div><span>摘要阅读率</span><strong>{{ campaign_analytics.summary.digest_read_rate }}%</strong><small>{{ campaign_analytics.summary.period_read_digest_count }} 条已读</small></div>
         <div><span>专题预约</span><strong>{{ campaign_analytics.summary.orders }}</strong></div>
+        <div><span>启用目标</span><strong>{{ campaign_analytics.summary.goal_count }}</strong><small>已达成 {{ campaign_analytics.summary.achieved_goal_count }} · 需推进 {{ campaign_analytics.summary.goal_attention_count }}</small></div>
         <div class="campaign-summary-warning"><span>需要关注</span><strong>{{ campaign_analytics.summary.attention_count }}</strong></div>
+    </div>
+    <div class="campaign-funnel-block mt-3">
+        <div class="campaign-subheading">
+            <div><h3>用户级转化漏斗</h3><p>先看浏览用户，再看其中真正创建预约、并最终完成交易的去重买家。</p></div>
+            <span>汇总仅把各专题的用户数相加，不跨专题去重</span>
+        </div>
+        <div class="conversion-funnel campaign-funnel-grid" aria-label="校园专题浏览到完成交易的用户漏斗">
+            {% for stage in campaign_analytics.summary.funnel_steps %}
+            <div class="conversion-stage conversion-stage-{{ stage.key }}">
+                <div class="conversion-stage-head"><div class="conversion-stage-title"><span class="conversion-stage-index">{{ forloop.counter }}</span><div><strong>{{ stage.label }}</strong><small>{{ stage.note }}</small></div></div><strong class="conversion-stage-count">{{ stage.count }}</strong></div>
+                <div class="conversion-track"><span style="width: {{ stage.width }}%"></span></div>
+                <span class="conversion-stage-rate">{% if forloop.first %}漏斗起点{% else %}相对上一步 {{ stage.rate }}%{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% if campaign_analytics.attention_rows %}
     <div class="campaign-attention-list mt-3">
@@ -1821,6 +1837,25 @@
         {% endfor %}
     </div>
     {% endif %}
+    <div class="campaign-subheading mt-4">
+        <div><h3>专题目标与节奏</h3><p>目标按自己的起止时间计算，不受看板 7 天或 30 天窗口切换影响。</p></div>
+        <a href="{% url 'admin:listings_campaigngoal_changelist' %}" class="btn btn-sm btn-outline-success"><i class="bi bi-sliders me-1"></i>配置专题目标</a>
+    </div>
+    {% if campaign_analytics.goal_rows %}
+    <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-goal-table"><thead><tr><th>专题 / 目标</th><th>完成进度</th><th>目标窗口</th><th>节奏偏差</th><th>状态</th><th>说明</th></tr></thead><tbody>
+        {% for goal in campaign_analytics.goal_rows %}
+        <tr>
+            <td><strong>{{ goal.campaign_title }}</strong><small class="d-block text-muted">{{ goal.metric_label }} · 目标 {{ goal.target_value }}</small></td>
+            <td><div class="campaign-goal-value"><strong>{{ goal.current_value }}</strong><span>/ {{ goal.target_value }}</span><small>{{ goal.progress_percent }}%</small></div><div class="campaign-goal-track"><span class="campaign-goal-fill campaign-goal-fill-{{ goal.status_tone }}" style="width: {{ goal.progress_width }}%"></span></div><small class="text-muted">还差 {{ goal.remaining_value }}</small></td>
+            <td><small>{{ goal.starts_at|date:'Y-m-d H:i' }}<br>— {% if goal.ends_at %}{{ goal.ends_at|date:'Y-m-d H:i' }}{% else %}专题未设结束时间{% endif %}</small></td>
+            <td>{% if goal.pace_delta is not None %}<strong class="{% if goal.pace_delta < 0 %}text-danger{% else %}text-success{% endif %}">{{ goal.pace_delta }} 个百分点</strong><small class="d-block text-muted">完成率 − 时间进度</small>{% else %}<span class="text-muted">开放窗口不判断</span>{% endif %}</td>
+            <td><span class="campaign-performance campaign-performance-{{ goal.status_tone }}">{{ goal.status_label }}</span></td>
+            <td>{% if goal.note %}{{ goal.note }}{% else %}<span class="text-muted">未填写目标说明</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% if campaign_analytics.goal_rows_truncated %}<div class="empty-inline mt-2">当前只展示前 12 个启用目标，完整目标列表可在后台继续查看。</div>{% endif %}
+    {% else %}<div class="empty-inline mt-2">当前统计范围内还没有启用的专题目标。运营可在后台为专题设置新增商品、浏览用户、收藏用户、报名用户、预约用户或完成交易用户目标。</div>{% endif %}
     {% if campaign_analytics.rows %}
     <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 campaign-analytics-table"><thead><tr><th>专题</th><th>供给</th><th>报名</th><th>摘要订阅</th><th>待发送</th><th>周期摘要</th><th>曝光</th><th>收藏</th><th>预约</th><th>完成</th><th>转化</th><th>判断</th></tr></thead><tbody>
         {% for campaign in campaign_analytics.rows %}
@@ -1840,8 +1875,23 @@
         </tr>
         {% endfor %}
     </tbody></table></div>
+    <div class="campaign-subheading mt-4"><div><h3>各专题用户漏斗</h3><p>预约用户必须同时出现在本报告窗口的浏览记录中；完成交易按订单当前状态统计。</p></div></div>
+    <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-funnel-table"><thead><tr><th>专题</th><th>浏览用户</th><th>预约用户</th><th>浏览 → 预约</th><th>完成交易用户</th><th>预约 → 完成</th><th>收藏 / 报名意向分支</th><th>意向分支率</th></tr></thead><tbody>
+        {% for campaign in campaign_analytics.rows %}
+        <tr>
+            <td><strong>{{ campaign.title }}</strong><small class="d-block text-muted">分支不进入连续漏斗分母</small></td>
+            <td>{{ campaign.funnel_viewers }}<small class="d-block text-muted">{{ campaign.views }} 次浏览</small></td>
+            <td>{{ campaign.funnel_order_users }}<small class="d-block text-muted">先浏览后预约</small></td>
+            <td>{{ campaign.viewer_to_order_user_rate }}%</td>
+            <td>{{ campaign.funnel_completed_users }}<small class="d-block text-muted">当前已完成</small></td>
+            <td>{{ campaign.order_to_complete_user_rate }}%</td>
+            <td>{{ campaign.viewer_favorite_users }} 收藏用户 / {{ campaign.viewer_registration_users }} 报名用户</td>
+            <td>{{ campaign.intent_rate }}%<small class="d-block text-muted">{{ campaign.intent_user_count }} 位意向用户</small></td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
     {% else %}<div class="empty-inline mt-3">当前统计周期还没有专题行为数据。</div>{% endif %}
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>报名只表示用户关注专题，摘要订阅则表示用户额外同意接收上新提醒；两者都不锁定商品、不创建订单，也不进入预约率或成交率的分子、分母。待发送命中会在发送前重新校验报名、订阅、专题和商品状态。合并摘要跨专题时，各专题行会各计一次同一条通知，顶部汇总按通知去重；摘要已读只代表触达被看到，不代表购买意向。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i><strong>漏斗口径：</strong>浏览用户按报告窗口内最近一次浏览去重；预约用户是浏览用户中在同一窗口创建预约的去重买家；完成交易用户再要求其对应订单当前状态为 <code>completed</code>。收藏与报名是意向分支，不强行拼成连续漏斗。顶部漏斗汇总会把各专题用户数相加，同一用户参与多个专题会被重复计数，因此只适合看整体规模，不能当作全站去重用户数。<br><strong>目标口径：</strong>目标值实时从业务表重算，不保存快照；目标窗口独立于看板周期。节奏偏差等于完成率减去已流逝时间比例，低于 -10 个百分点标记为需要推进。<br><strong>报名与摘要：</strong>报名只表示用户关注专题，摘要订阅则表示用户额外同意接收上新提醒；两者都不锁定商品、不创建订单，也不进入预约率或成交率的分子、分母。合并摘要跨专题时，各专题行会各计一次同一条通知，顶部汇总按通知去重；摘要已读只代表触达被看到，不代表购买意向。</div>
 </section>
 <section class="content-card ops-panel mb-4 campaign-phase-review-panel">
     <div class="ops-panel-heading">

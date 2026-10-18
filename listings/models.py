@@ -321,6 +321,79 @@ class CampusCampaign(models.Model):
             raise ValidationError({'ends_at': '结束时间必须晚于开始时间。'})
 
 
+class CampaignGoal(models.Model):
+    """One operating target attached to a campaign and its live window.
+
+    A goal stores intent, never a precomputed value. The dashboard recomputes
+    progress from the same event tables used by the campaign report, so a goal
+    cannot drift away from the records it is supposed to track.
+    """
+
+    METRIC_CHOICES = (
+        ('new_items', '周期新增商品'),
+        ('viewers', '浏览用户'),
+        ('favorite_users', '收藏用户'),
+        ('registration_users', '报名用户'),
+        ('order_users', '预约用户'),
+        ('completed_order_users', '完成交易用户'),
+    )
+
+    campaign = models.ForeignKey(
+        CampusCampaign, on_delete=models.CASCADE,
+        related_name='goals', verbose_name='校园专题',
+    )
+    metric = models.CharField('目标指标', max_length=30, choices=METRIC_CHOICES)
+    target_value = models.PositiveIntegerField('目标值')
+    starts_at = models.DateTimeField(
+        '目标开始时间', null=True, blank=True,
+        help_text='留空时使用专题开始时间。',
+    )
+    ends_at = models.DateTimeField(
+        '目标结束时间', null=True, blank=True,
+        help_text='留空时使用专题结束时间；专题也未结束时计算到当前时刻。',
+    )
+    note = models.CharField('目标说明', max_length=200, blank=True)
+    is_active = models.BooleanField('启用', default=True)
+    created_at = models.DateTimeField('创建时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '校园专题目标'
+        verbose_name_plural = '校园专题目标'
+        ordering = ['campaign', 'metric']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['campaign', 'metric'],
+                name='unique_campaign_goal_metric',
+            ),
+            models.CheckConstraint(
+                condition=Q(target_value__gt=0),
+                name='campaign_goal_target_positive',
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=['campaign', 'is_active', 'metric'],
+                name='campaign_goal_active_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.campaign.title} · {self.get_metric_display()} · {self.target_value}'
+
+    def clean(self):
+        super().clean()
+        if self.target_value is not None and self.target_value <= 0:
+            raise ValidationError({'target_value': '目标值必须大于 0。'})
+        if self.ends_at and self.starts_at and self.ends_at <= self.starts_at:
+            raise ValidationError({'ends_at': '目标结束时间必须晚于开始时间。'})
+        if self.campaign_id and self.starts_at and self.starts_at < self.campaign.starts_at:
+            raise ValidationError({'starts_at': '目标开始时间不能早于专题开始时间。'})
+        campaign_end = self.campaign.ends_at if self.campaign_id else None
+        if self.ends_at and campaign_end and self.ends_at > campaign_end:
+            raise ValidationError({'ends_at': '目标结束时间不能晚于专题结束时间。'})
+
+
 class CampaignRegistration(models.Model):
     """One user's participation interval in a campus campaign.
 

@@ -8984,6 +8984,12 @@ def operations_dashboard_export(request):
         '周期专题摘要', campaigns['summary']['period_sent_digest_count'],
         '周期专题摘要已读', campaigns['summary']['period_read_digest_count'],
         '专题摘要阅读率（%）', campaigns['summary']['digest_read_rate'],
+        '启用专题目标', campaigns['summary']['goal_count'],
+        '已达成目标', campaigns['summary']['achieved_goal_count'],
+        '需推进目标', campaigns['summary']['goal_attention_count'],
+        '漏斗浏览用户', campaigns['summary']['funnel_viewers'],
+        '漏斗预约用户（浏览后）', campaigns['summary']['funnel_order_users'],
+        '漏斗完成交易用户（预约后）', campaigns['summary']['funnel_completed_users'],
         '专题预约', campaigns['summary']['orders'],
         '专题完成交易', campaigns['summary']['completed_orders'],
         '浏览转预约（%）', campaigns['summary']['view_to_order_rate'],
@@ -8991,10 +8997,34 @@ def operations_dashboard_export(request):
         '周期天数', campaigns['period_days'],
     ])
     writer.writerow([])
+    writer.writerow(['专题目标与节奏'])
+    writer.writerow(['专题', '指标', '目标值', '当前值', '完成率（%）', '剩余量',
+                     '开始时间', '结束时间', '时间进度（%）', '节奏偏差（百分点）',
+                     '状态', '说明'])
+    if not campaigns['all_goal_rows']:
+        writer.writerow(['当前统计范围内还没有启用的专题目标。'])
+    else:
+        for goal in campaigns['all_goal_rows']:
+            writer.writerow([
+                goal['campaign_title'],
+                goal['metric_label'],
+                goal['target_value'],
+                goal['current_value'],
+                goal['progress_percent'],
+                goal['remaining_value'],
+                goal['starts_at'].strftime('%Y-%m-%d %H:%M:%S'),
+                goal['ends_at'].strftime('%Y-%m-%d %H:%M:%S')
+                if goal['ends_at'] else '',
+                '' if goal['elapsed_percent'] is None else goal['elapsed_percent'],
+                '' if goal['pace_delta'] is None else goal['pace_delta'],
+                goal['status_label'],
+                goal['note'],
+            ])
+    writer.writerow([])
     writer.writerow(['专题', '周期新增商品', '当前在售', '参与卖家',
                      '当前活跃报名', '周期新增报名',
                      '当前摘要订阅', '待发送摘要命中', '周期摘要', '周期摘要已读',
-                     '浏览', '浏览用户', '收藏', '浏览转收藏（%）',
+                     '浏览', '收藏', '浏览转收藏（%）',
                      '预约', '完成交易', '完成率（%）',
                      '收藏转预约（%）', '浏览转预约（%）', '判断'])
     if not campaigns['rows']:
@@ -9013,7 +9043,6 @@ def operations_dashboard_export(request):
                 row['period_sent_digest_count'],
                 row['period_read_digest_count'],
                 row['views'],
-                row['viewers'],
                 row['favorites'],
                 row['view_to_favorite_rate'],
                 row['orders'],
@@ -9022,6 +9051,30 @@ def operations_dashboard_export(request):
                 row['favorite_to_order_rate'],
                 row['view_to_order_rate'],
                 row['performance_label'],
+            ])
+    writer.writerow([])
+    writer.writerow(['各专题用户漏斗'])
+    writer.writerow([
+        '专题', '浏览用户', '预约用户（浏览后）', '浏览转预约用户（%）',
+        '完成交易用户（预约后）', '预约转完成用户（%）',
+        '收藏用户意向分支', '报名用户意向分支', '意向分支率（%）',
+        '意向用户数',
+    ])
+    if not campaigns['rows']:
+        writer.writerow(['当前统计周期还没有专题行为数据。'])
+    else:
+        for row in campaigns['rows']:
+            writer.writerow([
+                row['title'],
+                row['funnel_viewers'],
+                row['funnel_order_users'],
+                row['viewer_to_order_user_rate'],
+                row['funnel_completed_users'],
+                row['order_to_complete_user_rate'],
+                row['viewer_favorite_users'],
+                row['viewer_registration_users'],
+                row['intent_rate'],
+                row['intent_user_count'],
             ])
     writer.writerow([])
     writer.writerow(['需要关注的专题', '判断', '说明'])
@@ -9041,7 +9094,17 @@ def operations_dashboard_export(request):
         '同一个用户多次操作会被计多次。',
     ])
     writer.writerow([
-        '转化率用于横向比较专题，不代表任何单个用户的完整行为路径，'
+        '用户漏斗按严格路径计算：预约用户必须同时出现在报告窗口的浏览用户中，'
+        '完成交易用户还必须对应订单当前状态为 completed；收藏和报名是意向分支，'
+        '不进入连续漏斗的分母。顶部漏斗汇总会把各专题用户数相加，同一用户参与'
+        '多个专题会被重复计数，不是全站去重用户数。',
+    ])
+    writer.writerow([
+        '专题目标按目标自己的起止时间实时重算，不随看板 7 天或 30 天窗口改变；'
+        '节奏偏差等于完成率减去已流逝时间比例，低于 -10 个百分点标记为需要推进。',
+    ])
+    writer.writerow([
+        '事件转化率用于横向比较专题，不代表任何单个用户的完整行为路径，'
         '也不代表专题本身的质量：运营人员仍需结合商品质量和活动内容判断。',
     ])
     writer.writerow([
