@@ -5075,6 +5075,106 @@ a { color: inherit; text-decoration: none; }
     background: var(--primary);
 }
 
+/* 编辑资料页：表单字段沿用设计系统的输入语言，头像预览与 Hero 联动 */
+.profile-edit-page .account-hero-main {
+    align-items: center;
+}
+
+.profile-field label {
+    display: block;
+    margin-bottom: 7px;
+    color: #40554c;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.profile-field .form-control {
+    width: 100%;
+    min-height: 46px;
+    padding: 10px 14px;
+    border: 1px solid #dbe6e0;
+    border-radius: 13px;
+    background: #fcfdfc;
+    color: var(--ink);
+    font-size: .85rem;
+    box-shadow: none;
+    transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+
+.profile-field textarea.form-control {
+    min-height: 110px;
+}
+
+.profile-field .form-control:focus {
+    border-color: #86c9ac;
+    background: #fff;
+    box-shadow: var(--focus-ring);
+}
+
+.profile-field .form-text {
+    margin-top: 7px;
+    color: #8a9a92;
+    font-size: .68rem;
+    line-height: 1.65;
+}
+
+.profile-field .errorlist {
+    margin: 0 0 7px;
+    padding: 0;
+    color: #b14d45;
+    font-size: .7rem;
+    list-style: none;
+}
+
+.profile-edit-fields {
+    display: grid;
+    gap: 17px;
+    margin-top: 18px;
+}
+
+.profile-avatar-card .profile-field .form-control {
+    padding: 8px 12px;
+    font-size: .78rem;
+}
+
+.profile-avatar-hint {
+    margin: 10px 0 0;
+    color: #8a9a92;
+    font-size: .68rem;
+    line-height: 1.65;
+}
+
+.profile-contact-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.profile-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.profile-edit-actions .btn {
+    min-width: 128px;
+}
+
+@media (max-width: 575.98px) {
+    .profile-contact-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-edit-actions .btn {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
 @media (max-width: 1199.98px) {
     .account-hero {
         align-items: flex-start;

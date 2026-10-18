@@ -5,7 +5,7 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>{{ title }}</h2>
+    <h1 class="h3 mb-0">{{ title }}</h1>
     <div class="d-flex flex-wrap gap-2">
         <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
         <a href="{% url 'bulk_create_items' %}" class="btn btn-outline-primary">批量发布</a>
@@ -122,7 +122,7 @@
                         <tbody>
                             {% for item in items %}
                             <tr>
-                                <td><input type="checkbox" name="item_ids" value="{{ item.id }}" class="form-check-input bulk-item-checkbox" form="bulk-campaign-form"></td>
+                                <td><input type="checkbox" name="item_ids" value="{{ item.id }}" class="form-check-input bulk-item-checkbox" form="bulk-campaign-form" aria-label="选择商品 {{ item.title }}"></td>
                                 <td>
                                     <div class="d-flex align-items-center">
                                         {% if item.images.first %}

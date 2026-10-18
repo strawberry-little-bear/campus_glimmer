@@ -50,7 +50,9 @@ class NotificationPreferenceForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         for field_name, field in self.fields.items():
             if field_name == 'quiet_hours_enabled':
-                field.widget = forms.CheckboxInput(attrs={'class': 'form-check-input'})
+                field.widget = forms.CheckboxInput(
+                    attrs={'class': 'form-check-input', 'aria-labelledby': 'quiet-hours-title'},
+                )
             elif field_name in {'quiet_hours_start', 'quiet_hours_end'}:
                 field.required = False
                 field.widget = forms.TimeInput(

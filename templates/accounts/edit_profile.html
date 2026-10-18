@@ -4,64 +4,111 @@
 {% block title %}编辑资料 - 拾光校园{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card shadow">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0">编辑个人资料</h5>
+<div class="account-hub profile-edit-page">
+    <section class="account-hero">
+        <div class="account-hero-main">
+            <div class="account-avatar-wrap">
+                <img id="avatar-preview" src="{{ user.profile.avatar.url }}" alt="{{ user.username }}的头像" class="account-avatar">
             </div>
-            <div class="card-body">
-                <form method="POST" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h5 class="mb-3">账户信息</h5>
-                            {% for field in u_form %}
-                            <div class="mb-3">
-                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                {{ field.errors }}
-                                {{ field }}
-                                {% if field.help_text %}
-                                <div class="form-text text-muted">{{ field.help_text }}</div>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        </div>
-                        
-                        <div class="col-md-6">
-                            <h5 class="mb-3">个人资料</h5>
-                            {% for field in p_form %}
-                            <div class="mb-3">
-                                {% if field.name == 'avatar' %}
-                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                <div class="mb-2">
-                                    <img id="avatar-preview" src="{{ user.profile.avatar.url }}" alt="头像预览" class="avatar-md">
-                                </div>
-                                {{ field.errors }}
-                                {{ field }}
-                                {% else %}
-                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                {{ field.errors }}
-                                {{ field }}
-                                {% endif %}
-                                
-                                {% if field.help_text %}
-                                <div class="form-text text-muted">{{ field.help_text }}</div>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    
-                    <div class="mt-4 d-flex justify-content-between">
-                        <a href="{% url 'profile' %}" class="btn btn-outline-secondary">取消</a>
-                        <button type="submit" class="btn btn-success">保存更改</button>
-                    </div>
-                </form>
+            <div class="account-identity">
+                <span class="eyebrow eyebrow-soft">Edit profile</span>
+                <h1>编辑个人资料</h1>
+                <p>更新头像、简介和联系方式。联系方式仅自己可见，公开档案只会展示头像、昵称、简介与交易信誉。</p>
             </div>
         </div>
-    </div>
+        <div class="account-hero-actions">
+            <a href="{% url 'public_profile' user.id %}" class="btn btn-light"><i class="bi bi-person-badge me-2"></i>公开档案</a>
+            <a href="{% url 'profile' %}" class="btn btn-primary"><i class="bi bi-arrow-left me-2"></i>返回账户中心</a>
+        </div>
+    </section>
+
+    <form method="POST" enctype="multipart/form-data" class="profile-edit-form">
+        {% csrf_token %}
+        <div class="row g-4 align-items-start">
+            <div class="col-lg-7">
+                <section class="account-panel">
+                    <div class="account-panel-head">
+                        <div>
+                            <span class="eyebrow eyebrow-soft">Account</span>
+                            <h2><i class="bi bi-person-gear me-2"></i>账户信息</h2>
+                        </div>
+                        <small class="account-panel-hint">用户名与登录邮箱</small>
+                    </div>
+                    <div class="profile-edit-fields">
+                        {% for field in u_form %}
+                        <div class="profile-field">
+                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field.errors }}
+                            {{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </section>
+            </div>
+            <div class="col-lg-5">
+                <aside class="account-side-stack">
+                    <section class="account-side-card profile-avatar-card">
+                        <div class="account-side-head">
+                            <span class="account-side-icon"><i class="bi bi-person-circle"></i></span>
+                            <span><small>展现在公开档案</small><h2>头像</h2></span>
+                        </div>
+                        {% for field in p_form %}
+                        {% if field.name == 'avatar' %}
+                        <div class="profile-field">
+                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            {{ field.errors }}
+                            {{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                        <p class="profile-avatar-hint">建议使用正方形图片，上传后可在页面顶部实时预览。</p>
+                    </section>
+                    <p class="account-privacy-note"><i class="bi bi-shield-lock me-2"></i>联系方式仅自己可见，不会出现在公开档案或商品页面。</p>
+                </aside>
+            </div>
+        </div>
+
+        <section class="account-panel mt-4">
+            <div class="account-panel-head">
+                <div>
+                    <span class="eyebrow eyebrow-soft">Profile</span>
+                    <h2><i class="bi bi-person-vcard me-2"></i>个人资料</h2>
+                </div>
+                <small class="account-panel-hint">联系方式仅自己可见</small>
+            </div>
+            <div class="profile-edit-fields">
+                {% for field in p_form %}
+                {% if field.name == 'bio' %}
+                <div class="profile-field">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field.errors }}
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            <div class="profile-contact-grid">
+                {% for field in p_form %}
+                {% if field.name != 'avatar' and field.name != 'bio' %}
+                <div class="profile-field">
+                    <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                    {{ field.errors }}
+                    {{ field }}
+                    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </section>
+
+        <div class="profile-edit-actions">
+            <a href="{% url 'profile' %}" class="btn btn-outline-secondary"><i class="bi bi-x-lg me-2"></i>取消</a>
+            <button type="submit" class="btn btn-success"><i class="bi bi-check2 me-2"></i>保存更改</button>
+        </div>
+    </form>
 </div>
 {% endblock %}
 
@@ -70,15 +117,16 @@
     document.addEventListener('DOMContentLoaded', function() {
         const avatarInput = document.getElementById('id_avatar');
         const avatarPreview = document.getElementById('avatar-preview');
-        
+        if (!avatarInput || !avatarPreview) return;
+
         avatarInput.addEventListener('change', function() {
             if (this.files && this.files[0]) {
                 const reader = new FileReader();
-                
+
                 reader.onload = function(e) {
                     avatarPreview.src = e.target.result;
-                }
-                
+                };
+
                 reader.readAsDataURL(this.files[0]);
             }
         });
