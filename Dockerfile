@@ -1,10 +1,25 @@
 FROM python:3.12-slim
 
+ARG POSTGRES_MAJOR=16
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
+
+# Keep the backup client in lockstep with docker-compose.prod.yml. A newer
+# pg_dump can emit settings that the production PostgreSQL major cannot restore.
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y ca-certificates curl \
+    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/keyrings/postgresql.asc \
+    && . /etc/os-release \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install --no-install-recommends -y "postgresql-client-${POSTGRES_MAJOR}" \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt

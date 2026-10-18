@@ -1,0 +1,130 @@
+name: campus-glimmer-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-campus_glimmer}
+      POSTGRES_USER: ${POSTGRES_USER:-campus_glimmer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env.production 中设置 POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?请在 .env.production 中设置 REDIS_PASSWORD}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", 'redis-cli --no-auth-warning -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?请在 .env.production 中设置 MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env.production 中设置 MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    networks:
+      - backend
+
+  minio_init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    restart: "no"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?请在 .env.production 中设置 MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?请在 .env.production 中设置 MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: ${MINIO_BUCKET:-campus-glimmer}
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do
+          echo "waiting for minio"
+          sleep 2
+        done
+        mc mb --ignore-existing "local/$$MINIO_BUCKET"
+        mc version enable "local/$$MINIO_BUCKET" || true
+    depends_on:
+      - minio
+    networks:
+      - backend
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_REQUIRE_PRODUCTION_SERVICES: "1"
+      DJANGO_SESSION_ENGINE: django.contrib.sessions.backends.cached_db
+    ports:
+      - "${WEB_BIND:-127.0.0.1:8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio_init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "/app/docker/healthcheck.py"]
+      interval: 30s
+      timeout: 5s
+      start_period: 45s
+      retries: 3
+    stop_grace_period: 30s
+    networks:
+      - backend
+
+  backup:
+    build: .
+    restart: unless-stopped
+    entrypoint: ["python", "docker/backup.py"]
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      BACKUP_DIR: /backups
+    volumes:
+      - "${BACKUP_HOST_DIR:-./backups}:/backups"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio_init:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  backend:
+    internal: false

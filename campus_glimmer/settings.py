@@ -1,12 +1,31 @@
 import os
 from pathlib import Path
 
+from .deployment import (
+    cache_config,
+    database_config,
+    storage_config,
+    validate_production_services,
+)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-local-development-only-change-me')
 DEBUG = os.getenv('DJANGO_DEBUG', '1').lower() in {'1', 'true', 'yes'}
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost,testserver').split(',') if host.strip()]
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('DJANGO_CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
+
+
+def _env_bool(name, default=False):
+    fallback = '1' if default else '0'
+    return os.getenv(name, fallback).lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _env_int(name, default):
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _hsts_seconds(value=None):
@@ -32,6 +51,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -61,12 +81,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'campus_glimmer.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.getenv('DJANGO_DB_PATH', str(BASE_DIR / 'db.sqlite3')),
-    }
-}
+DATABASE_URL = os.getenv('DJANGO_DATABASE_URL', '').strip()
+DATABASES = database_config(
+    DATABASE_URL,
+    sqlite_path=os.getenv('DJANGO_DB_PATH', str(BASE_DIR / 'db.sqlite3')),
+    conn_max_age=_env_int('DJANGO_DATABASE_CONN_MAX_AGE', 0 if DEBUG else 60),
+    conn_health_checks=True,
+)
+
+CACHE_URL = os.getenv('DJANGO_CACHE_URL', '').strip()
+CACHES = cache_config(
+    CACHE_URL,
+    key_prefix=os.getenv('DJANGO_CACHE_KEY_PREFIX', 'campus-glimmer'),
+    socket_connect_timeout=_env_int('DJANGO_CACHE_CONNECT_TIMEOUT', 3),
+    socket_timeout=_env_int('DJANGO_CACHE_SOCKET_TIMEOUT', 3),
+)
+SESSION_ENGINE = os.getenv('DJANGO_SESSION_ENGINE', 'django.contrib.sessions.backends.db')
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -83,8 +113,47 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-MEDIA_URL = '/media/'
+WHITENOISE_MAX_AGE = 31_536_000
+MEDIA_URL = os.getenv('DJANGO_MEDIA_URL', '/media/')
 MEDIA_ROOT = BASE_DIR / 'media'
+
+STORAGE_BACKEND = os.getenv('DJANGO_STORAGE_BACKEND', 'filesystem').strip()
+S3_OPTIONS = {
+    'bucket_name': os.getenv('DJANGO_S3_BUCKET', '').strip(),
+    'region_name': os.getenv('DJANGO_S3_REGION', 'us-east-1').strip(),
+    'endpoint_url': os.getenv('DJANGO_S3_ENDPOINT_URL', '').strip() or None,
+    'access_key': os.getenv('DJANGO_S3_ACCESS_KEY_ID', '').strip() or None,
+    'secret_key': os.getenv('DJANGO_S3_SECRET_ACCESS_KEY', '').strip() or None,
+    'custom_domain': os.getenv('DJANGO_S3_CUSTOM_DOMAIN', '').strip() or None,
+    'public_endpoint_url': os.getenv('DJANGO_S3_PUBLIC_ENDPOINT_URL', '').strip() or None,
+    'addressing_style': os.getenv('DJANGO_S3_ADDRESSING_STYLE', 'path').strip(),
+    'signature_version': os.getenv('DJANGO_S3_SIGNATURE_VERSION', 's3v4').strip(),
+    'querystring_auth': _env_bool('DJANGO_S3_QUERYSTRING_AUTH', True),
+    'querystring_expire': _env_int('DJANGO_S3_QUERYSTRING_EXPIRE', 3600),
+    'file_overwrite': False,
+    'default_acl': None,
+    'location': os.getenv('DJANGO_S3_LOCATION', '').strip() or '',
+}
+STATICFILES_BACKEND = (
+    'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    if not DEBUG
+    else 'django.contrib.staticfiles.storage.StaticFilesStorage'
+)
+STORAGES = storage_config(
+    STORAGE_BACKEND,
+    s3_options=S3_OPTIONS,
+    staticfiles_backend=STATICFILES_BACKEND,
+)
+
+REQUIRE_PRODUCTION_SERVICES = _env_bool('DJANGO_REQUIRE_PRODUCTION_SERVICES', False)
+validate_production_services(
+    debug=DEBUG,
+    required=REQUIRE_PRODUCTION_SERVICES,
+    database_url=DATABASE_URL,
+    cache_url=CACHE_URL,
+    storage_backend=STORAGE_BACKEND,
+    secret_key=SECRET_KEY,
+)
 
 LOGIN_REDIRECT_URL = 'home'
 LOGIN_URL = 'login'

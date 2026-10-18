@@ -9,3 +9,7 @@ media/
 .DS_Store
 .idea/
 .vscode/
+.env.*
+!.env.example
+!.env.production.example
+backups/

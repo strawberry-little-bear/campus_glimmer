@@ -2,11 +2,13 @@ import importlib.util
 import io
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.db import OperationalError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+
+from .health import _probe_object_storage
 
 
 class HealthCheckTests(SimpleTestCase):
@@ -24,7 +26,7 @@ class HealthCheckTests(SimpleTestCase):
 
 
 class ReadyCheckTests(TestCase):
-    def test_ready_check_reports_database_as_ok(self):
+    def test_ready_check_reports_database_and_cache_as_ok(self):
         response = self.client.get(reverse('ready_check'))
 
         self.assertEqual(response.status_code, 200)
@@ -34,7 +36,7 @@ class ReadyCheckTests(TestCase):
             {
                 'status': 'ok',
                 'service': 'campus-glimmer',
-                'checks': {'database': 'ok'},
+                'checks': {'database': 'ok', 'cache': 'ok'},
             },
         )
 
@@ -53,13 +55,74 @@ class ReadyCheckTests(TestCase):
             {
                 'status': 'unavailable',
                 'service': 'campus-glimmer',
-                'checks': {'database': 'unavailable'},
+                'checks': {'database': 'unavailable', 'cache': 'ok'},
             },
         )
         self.assertNotIn('secret.sqlite3', response.content.decode())
         self.assertNotIn('database is locked', response.content.decode())
         self.assertIn('OperationalError', '\n'.join(logged.output))
         self.assertNotIn('secret.sqlite3', '\n'.join(logged.output))
+
+    def test_ready_check_returns_503_when_cache_is_unavailable(self):
+        with patch('campus_glimmer.health.cache') as cache_backend:
+            cache_backend.set.side_effect = ConnectionError('redis host unavailable')
+            with self.assertLogs('campus_glimmer.health', level='WARNING') as logged:
+                response = self.client.get(reverse('ready_check'))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            json.loads(response.content)['checks'],
+            {'database': 'ok', 'cache': 'unavailable'},
+        )
+        self.assertIn('ConnectionError', '\n'.join(logged.output))
+        self.assertNotIn('redis host unavailable', response.content.decode())
+
+    @override_settings(STORAGE_BACKEND='s3')
+    def test_ready_check_includes_object_storage_when_s3_is_enabled(self):
+        with patch('campus_glimmer.health._probe_object_storage') as probe:
+            response = self.client.get(reverse('ready_check'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            json.loads(response.content)['checks'],
+            {'database': 'ok', 'cache': 'ok', 'object_storage': 'ok'},
+        )
+        probe.assert_called_once_with()
+
+    @override_settings(STORAGE_BACKEND='s3')
+    def test_object_storage_probe_uses_the_boto_client(self):
+        storage = Mock()
+        storage.bucket_name = 'campus-glimmer-test'
+        with patch(
+            'django.core.files.storage.storages',
+            {'default': storage},
+        ):
+            _probe_object_storage()
+
+        storage.connection.meta.client.head_bucket.assert_called_once_with(
+            Bucket='campus-glimmer-test',
+        )
+
+    @override_settings(STORAGE_BACKEND='minio')
+    def test_ready_check_returns_503_when_object_storage_is_unavailable(self):
+        with patch(
+            'campus_glimmer.health._probe_object_storage',
+            side_effect=PermissionError('bucket secret'),
+        ):
+            with self.assertLogs('campus_glimmer.health', level='WARNING') as logged:
+                response = self.client.get(reverse('ready_check'))
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            json.loads(response.content)['checks'],
+            {
+                'database': 'ok',
+                'cache': 'ok',
+                'object_storage': 'unavailable',
+            },
+        )
+        self.assertIn('PermissionError', '\n'.join(logged.output))
+        self.assertNotIn('bucket secret', response.content.decode())
 
 
 class ContainerHealthcheckTests(SimpleTestCase):

@@ -8,3 +8,5 @@ __pycache__
 media
 staticfiles
 .env
+.env*
+backups
