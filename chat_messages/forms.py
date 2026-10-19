@@ -17,6 +17,7 @@ class CommentForm(forms.ModelForm):
 
 class PrivateMessageForm(forms.ModelForm):
     content = forms.CharField(
+        label='消息内容',
         max_length=4000,
         widget=forms.Textarea(attrs={'rows': 4, 'class': 'form-control', 'placeholder': '写下你想说的话…'}),
     )
