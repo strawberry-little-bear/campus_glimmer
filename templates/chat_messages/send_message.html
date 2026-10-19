@@ -1,44 +1,48 @@
-<!-- templates/messages/send_message.html -->
 {% extends 'base.html' %}
 
-{% block title %}发送消息 - 拾光校园{% endblock %}
+{% block title %}发送消息 · 拾光校园{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0">发送消息给 {{ receiver.username }}</h5>
-            </div>
-            <div class="card-body">
-                {% if item %}
-                <div class="alert alert-info">
-                    <div class="d-flex align-items-center">
-                        {% if item.images.first %}
-                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-3"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
-                        {% endif %}
-                        <div>
-                            <p class="mb-0">关于商品: <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></p>
-                            <p class="mb-0 text-success">¥{{ item.price }}</p>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-                
-                <form method="POST">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        {{ form.content.label_tag }}
-                        {{ form.content }}
-                        {{ form.content.errors }}
-                    </div>
-                    <div class="d-flex justify-content-between">
-                        <a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'inbox' %}{% endif %}" class="btn btn-outline-secondary">取消</a>
-                        <button type="submit" class="btn btn-success">发送消息</button>
-                    </div>
-                </form>
-            </div>
+<div class="form-page-heading">
+    <a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'inbox' %}{% endif %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回</a>
+    <span class="eyebrow eyebrow-soft">Private message</span>
+    <h1>发送消息给 {{ receiver.username }}</h1>
+    <p>把问题和期望说清楚，对方回复起来会更快。</p>
+</div>
+
+<div class="form-card content-card">
+    {% if item %}
+    <div class="msg-target-card">
+        {% if item.images.first %}
+        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+        {% endif %}
+        <div class="msg-target-body">
+            <span class="msg-target-label">关于商品</span>
+            <a class="msg-target-title" href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
+            <span class="msg-target-price">¥{{ item.price }}</span>
         </div>
     </div>
+    {% endif %}
+
+    <form method="POST">
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="form-section">
+            <h2><span>01</span>消息内容</h2>
+            <p class="text-muted small">可以先问成色、发货方式或面交时间；不要在私信里直接转账。</p>
+            <div class="row g-3">
+                <div class="col-12">
+                    <label for="{{ form.content.id_for_label }}" class="form-label">{{ form.content.label }}</label>
+                    {{ form.content }}
+                    {% if form.content.errors %}<div class="text-danger small mt-1">{{ form.content.errors|striptags }}</div>{% endif %}
+                    {% if form.content.help_text %}<div class="form-text">{{ form.content.help_text }}</div>{% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="form-actions">
+            <a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'inbox' %}{% endif %}" class="btn btn-light">取消</a>
+            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-send me-2"></i>发送消息</button>
+        </div>
+    </form>
 </div>
 {% endblock %}
