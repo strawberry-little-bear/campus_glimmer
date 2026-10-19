@@ -37,12 +37,15 @@
 | --- | --- |
 | `.btn-light` / `.btn-outline-secondary` / `.btn-link` | 次级操作：`--ink-soft` 文字、`--line` 边框、11px 圆角 |
 | `.btn-outline-danger` / `.btn-danger` | 危险操作：`#b25548` 药丸按钮 |
-| `.btn-outline-warning` / `.btn-warning` / `.btn-dark` | 与语义色板一致的强调按钮 |
+| `.btn-outline-warning` / `.btn-warning` / `.btn-dark` / `.btn-outline-dark` | 与语义色板一致的强调按钮 |
+| `.btn-success` / `.btn-outline-success` | 成功操作：`#1f7653` 实底或描边，与徽章成功色同源 |
 | `.badge` 配 `.text-bg-*` 或 `.bg-*` | 淡底深字药丸，与 `.order-status-*` 同一套语义色 |
 | `.form-label` / `.form-text` | `--ink-soft` / `--muted`，小号加粗 |
+| `.form-control` / `.form-select` | 低优先级基线：`--line` 边框 + 11px 圆角，各作用域仍可继续覆写 |
 | `.alert` 配 `.alert-*` | 品牌色描边与浅底，替代 Bootstrap 原色 |
 | `.card` / `.card-header` / `.card-body` / `.card-footer` | 20px 圆角、`--line` 描边、柔和投影 |
 | `.list-group` / `.list-group-item` | 透明底 + `--line` 分隔线 |
+| `.input-group-text` / `.dropdown-divider` / `.table-hover` | 中性色板：`--surface-soft` 附加件、`--line` 分隔线与表格悬停底色 |
 | `.pagination` / `.page-link` | 10px 圆角、`--primary` 选中态 |
 | `.text-primary` / `.text-success` / `.text-danger` / `.text-warning` / `.text-info` / `.text-muted` | 品牌语义色 |
 
