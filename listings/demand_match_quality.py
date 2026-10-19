@@ -109,7 +109,13 @@ def _decided_responses(start, end):
 
 def _build_score_bands(responses):
     """Acceptance rate by score band, plus the average score of each outcome."""
-    rows = responses.values('match_score').annotate(count=Count('id'))
+    # 一个分段的总数和其中被采纳的数原本分两次 GROUP BY 拉，问的却是同一批行。
+    # 合成一次带条件计数的聚合，按 match_score 分组一趟拿出来：查询数减半，
+    # 每个分段的四格一个都没换。
+    rows = responses.values('match_score').annotate(
+        count=Count('id'),
+        accepted=Count('id', filter=Q(status='accepted')),
+    )
     band_counts = {}
     for row in rows:
         label = _band_of(row['match_score'])
@@ -118,17 +124,8 @@ def _build_score_bands(responses):
         })
         entry['count'] += row['count']
         entry['score_sum'] += row['count'] * row['match_score']
-
-    accepted_rows = responses.filter(status='accepted').values('match_score').annotate(
-        count=Count('id'),
-    )
-    for row in accepted_rows:
-        label = _band_of(row['match_score'])
-        entry = band_counts.setdefault(label, {
-            'count': 0, 'accepted': 0, 'score_sum': 0, 'accepted_score_sum': 0,
-        })
-        entry['accepted'] += row['count']
-        entry['accepted_score_sum'] += row['count'] * row['match_score']
+        entry['accepted'] += row['accepted']
+        entry['accepted_score_sum'] += row['accepted'] * row['match_score']
 
     bands = []
     for low, high, label in SCORE_BANDS:
@@ -154,16 +151,28 @@ def _build_score_bands(responses):
     return bands
 
 
-def _build_dimension_effect(responses):
+def _build_dimension_effect(responses, total, accepted_count):
     """Whether each dimension the score adds actually separates accepted from rejected."""
+    # 四个维度原本各自四次 COUNT（带/不带 × 总数/采纳数），16 次往返问的都是同一批
+    # 已决断响应。合成一次 aggregate：`match_reason` 是 CharField(blank=True)，
+    # 永远不为 NULL，所以「不带」正好是全集减去「带」，不需要另发一次 exclude。
+    # 维度之间的四格因此仍然逐维度独立算，只是共享同一次扫描。
+    aggregates = {}
+    for key, marker in MATCH_DIMENSIONS:
+        aggregates['with_%s' % key] = Count(
+            'id', filter=Q(match_reason__contains=marker),
+        )
+        aggregates['with_accepted_%s' % key] = Count(
+            'id', filter=Q(match_reason__contains=marker, status='accepted'),
+        )
+    counts = responses.aggregate(**aggregates)
+
     rows = []
     for key, marker in MATCH_DIMENSIONS:
-        with_dimension = responses.filter(match_reason__contains=marker)
-        without_dimension = responses.exclude(match_reason__contains=marker)
-        with_count = with_dimension.count()
-        without_count = without_dimension.count()
-        with_accepted = with_dimension.filter(status='accepted').count()
-        without_accepted = without_dimension.filter(status='accepted').count()
+        with_count = counts['with_%s' % key]
+        without_count = total - with_count
+        with_accepted = counts['with_accepted_%s' % key]
+        without_accepted = accepted_count - with_accepted
         with_rate = _percent(with_accepted, with_count)
         without_rate = _percent(without_accepted, without_count)
         gap = round(with_rate - without_rate, 1) if with_count and without_count else None
@@ -236,8 +245,13 @@ def _build_monotonicity(bands):
 def _build_over_promised(responses, bands):
     """High scores the requester turned down -- the clearest over-promise signal."""
     high = responses.filter(match_score__gte=HIGH_SCORE_FLOOR)
-    high_count = high.count()
-    rejected_count = high.filter(status='rejected').count()
+    # 总数与被拒数问的是同一批高分响应，合成一次聚合，不再先 count 再 filter count。
+    high_stats = high.aggregate(
+        high_count=Count('id'),
+        rejected_count=Count('id', filter=Q(status='rejected')),
+    )
+    high_count = high_stats['high_count']
+    rejected_count = high_stats['rejected_count']
     rate = _percent(rejected_count, high_count)
     if high_count < MIN_BAND_RESPONSES:
         return {
@@ -316,13 +330,23 @@ def build_demand_match_quality(days=30, now=None):
     start = _period_start(days, timezone.localdate(now))
 
     responses = _decided_responses(start, now)
-    total = responses.count()
-    accepted_count = responses.filter(status='accepted').count()
-    rejected_count = responses.filter(status='rejected').count()
+    # 三个头条计数原本各发一次 COUNT，而 accepted + rejected 正好铺满 total
+    # （`_decided_responses` 只收这两种状态）。合成一次聚合拿齐，省两次往返。
+    headline = responses.aggregate(
+        total=Count('id'),
+        accepted_count=Count('id', filter=Q(status='accepted')),
+        rejected_count=Count('id', filter=Q(status='rejected')),
+    )
+    total = headline['total']
+    accepted_count = headline['accepted_count']
+    rejected_count = headline['rejected_count']
     overall_rate = _percent(accepted_count, total)
+    # 平均分原来先 exists() 再 aggregate：空集时 Avg 返回 None，exists() 只是
+    # 为了不让 float(None) 抛异常。直接判空即可，省掉一次 exists。
+    average_score = responses.aggregate(avg=Avg('match_score'))['avg']
 
     bands = _build_score_bands(responses)
-    dimension_rows = _build_dimension_effect(responses)
+    dimension_rows = _build_dimension_effect(responses, total, accepted_count)
     monotonicity = _build_monotonicity(bands)
     over_promised = _build_over_promised(responses, bands)
     findings = _build_dimension_findings(dimension_rows)
@@ -355,8 +379,7 @@ def build_demand_match_quality(days=30, now=None):
             'noise_points': DECISION_NOISE_POINTS,
             # 数据库给回来的是 Decimal，统一成 float，免得模板和导出各自处理一次 None。
             'average_score': (
-                round(float(responses.aggregate(avg=Avg('match_score'))['avg']), 1)
-                if responses.exists() else None
+                round(float(average_score), 1) if average_score is not None else None
             ),
         },
         'score_bands': bands,
