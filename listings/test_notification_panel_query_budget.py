@@ -33,7 +33,8 @@ from .notification_preference_bypass_diagnosis import (
     build_notification_preference_bypass_diagnosis,
 )
 from .notification_preference_usage import (
-    _preference_fields, build_notification_preference_usage,
+    _preference_fields, _recently_notified_users_by_kind,
+    build_notification_preference_usage,
 )
 
 
@@ -262,17 +263,35 @@ class NotificationPanelQueryBudgetTests(TestCase):
     def test_preference_usage_stays_within_budget(self):
         now = timezone.now()
         seed_panel_data(now)
+        with CaptureQueriesContext(connection) as captured:
+            build_notification_preference_usage(days=30, now=now)
+        # 四条：偏好行是否存在、一次取回全部类型的「窗口内收到过」集合、一次
+        # aggregate 出全部开关的四格、一次数收到过通知的用户。类型数量涨跌都不该
+        # 改变这个数——这正是这次改动要守住的性质。
+        self.assertLessEqual(
+            len(captured), 4,
+            'notification_preference_usage 用了 %d 次查询，预算 4：'
+            '「窗口内收到过」是不是又回到逐类型查询了？' % len(captured),
+        )
+
+    def test_preference_usage_query_count_ignores_the_field_count(self):
+        """查询数不随开关个数增长。
+
+        上一次收敛把四格从 27x4 次 COUNT 降到一次 aggregate，但「窗口内收到过」仍
+        然是每个类型一次查询——预算跟着字段数线性涨。新增一个开关就该多一次往返，
+        而那个开关多半还没有任何通知。
+        """
+        now = timezone.now()
+        seed_panel_data(now)
         fields = len(_preference_fields())
         with CaptureQueriesContext(connection) as captured:
             build_notification_preference_usage(days=30, now=now)
-        # 逐类型取「窗口内收到过」的用户集合是有意的：一次一个索引命中，比 25 次
-        # UNION 更合适（见 _recently_notified_users 的注释）。除此之外只允许
-        # exists、一次 aggregate、一次 distinct count。
-        self.assertLessEqual(
-            len(captured), fields + 3,
-            'notification_preference_usage 用了 %d 次查询，预算 %d：'
-            '四格又回到逐字段 COUNT 了？' % (len(captured), fields + 3),
+        self.assertNotEqual(fields, 0)
+        self.assertEqual(
+            len(captured), 4,
+            '查询数 %d 跟着字段数 %d 走了：' % (len(captured), fields),
         )
+
 
     def test_preference_bypass_diagnosis_stays_within_budget(self):
         now = timezone.now()
@@ -299,3 +318,133 @@ class NotificationPanelQueryBudgetTests(TestCase):
             'notification_kind_coverage 用了 %d 次查询，预算 5：'
             '又在按类型逐个查接收人或偏好了？' % len(captured),
         )
+
+class RecentlyNotifiedUsersEquivalenceTests(TestCase):
+    """「窗口内收到过」的批量版必须和逐类型版给出同一批用户。
+
+    批量版把 27 次 `kind = ?` 换成一次 `kind IN (...)`，看起来只是换了问法，但有两
+    处容易悄悄走偏：`DISTINCT` 的列、和窗口的上下界。所以这里刻意用最笨的写法——一
+    个类型一条查询——当基准，逐个类型比对。oracle 不用被改动的那个查询，改错了集合
+    才会红。
+    """
+
+    def setUp(self):
+        self.now = timezone.now()
+        self.fields = _preference_fields()
+        self.start = self.now - timedelta(days=30)
+
+    def naive_by_kind(self):
+        """一个类型一条查询，最笨也最不容易和实现一起错。"""
+        return {
+            field: set(
+                Notification.objects.filter(
+                    kind=field, created_at__gte=self.start,
+                    created_at__lt=self.now + timedelta(seconds=60),
+                ).values_list('recipient_id', flat=True).distinct()
+            )
+            for field in self.fields
+        }
+
+    def seed(self, plan):
+        category = make_category()
+        seller = make_user('eqvseed-seller')
+        make_item(seller, category)
+        for index, (field, offset_seconds, count) in enumerate(plan):
+            user = make_user('equiv-%02d' % index)
+            NotificationPreference.objects.create(user=user, **{field: False})
+            for repeat in range(count):
+                make_notification(
+                    user, field, self.now - timedelta(seconds=offset_seconds),
+                )
+
+    def test_batch_version_matches_one_query_per_kind(self):
+        self.seed([
+            ('order_created', 3600, 1),
+            ('message_received', 7200, 3),
+            ('rating_received', 86400 * 20, 2),
+        ])
+        expected = self.naive_by_kind()
+        actual = _recently_notified_users_by_kind(
+            self.fields, self.start, self.now,
+        )
+        self.assertEqual(
+            {field: actual.get(field, set()) for field in self.fields},
+            expected,
+        )
+
+    def test_a_user_with_several_notifications_counts_once(self):
+        """同一用户同一类型多条通知只算一个人。
+
+        `notified_users` 是「有多少人」，不是「发了几条」。批量版少了 DISTINCT 的
+        语义就会把它变成条数，而面板上这一格会无声无息地翻倍。
+        """
+        self.seed([('order_created', 3600, 5)])
+        actual = _recently_notified_users_by_kind(
+            self.fields, self.start, self.now,
+        )
+        self.assertEqual(actual['order_created'], {
+            user.id for user in User.objects.filter(username__startswith='equiv-')
+        })
+
+    def test_the_upper_bound_keeps_the_sixty_second_margin(self):
+        """上界取 `end + 60 秒`：刚写入的行不能被窗口切掉。
+
+        `Notification.created_at` 是 `auto_now_add`，而视图先取 `now`、通知后写，两者
+        间隔可以超过一秒。上界严严地等于 `now` 会把刚写入的行整批排除，那看起来就像
+        一个计算错误。余量给够了，但不能无限给——超过 60 秒的行仍然必须排除。
+        """
+        self.seed([('order_created', -30, 1)])
+        just_after = _recently_notified_users_by_kind(
+            self.fields, self.start, self.now,
+        )
+        self.assertEqual(len(just_after['order_created']), 1)
+
+        Notification.objects.all().delete()
+        make_notification(
+            make_user('equiv-late'), 'order_created',
+            self.now + timedelta(seconds=120),
+        )
+        beyond_margin = _recently_notified_users_by_kind(
+            self.fields, self.start, self.now,
+        )
+        self.assertEqual(beyond_margin['order_created'], set())
+
+    def test_the_lower_bound_excludes_rows_before_the_window(self):
+        """窗口之外的行不进分子，也不进分母。"""
+        self.seed([('order_created', 86400 * 40, 1)])
+        actual = _recently_notified_users_by_kind(
+            self.fields, self.start, self.now,
+        )
+        self.assertEqual(actual['order_created'], set())
+
+    def test_kinds_without_notifications_get_an_empty_set(self):
+        """没收过通知的类型给空集合，不是缺键。
+
+        调用方直接 `notified[field]`，缺键会 KeyError；而空集合会让面板走「没有偏好
+        行的用户单列」那条早退分支。两件事都不能省。
+        """
+        self.seed([('order_created', 3600, 1)])
+        actual = _recently_notified_users_by_kind(
+            self.fields, self.start, self.now,
+        )
+        for field in self.fields:
+            self.assertIn(field, actual)
+        empty = [f for f in self.fields if f != 'order_created']
+        self.assertTrue(empty)
+        for field in empty:
+            self.assertEqual(actual[field], set())
+
+    def test_panel_numbers_agree_with_the_naive_recount(self):
+        """面板上每个开关的 `notified_users` 等于逐类型重算的集合大小。"""
+        self.seed([
+            ('order_created', 3600, 2),
+            ('message_received', 7200, 1),
+            ('rating_received', 86400 * 10, 4),
+        ])
+        report = build_notification_preference_usage(days=30, now=self.now)
+        expected = self.naive_by_kind()
+        for row in report['rows']:
+            self.assertEqual(
+                row['notified_users'], len(expected[row['field']]),
+                row['field'],
+            )

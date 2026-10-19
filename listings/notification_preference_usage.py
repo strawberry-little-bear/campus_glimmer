@@ -161,8 +161,8 @@ def _preference_fields():
     ]
 
 
-def _recently_notified_users(kind, start, end):
-    """窗口内真的收到过这一类通知的用户集合。
+def _recently_notified_users_by_kind(kinds, start, end):
+    """窗口内真的收到过各类通知的用户集合，按类型各一份。
 
     注意这是「通知存在」的下界，不是「事件发生」的下界——被开关挡掉的通知
     一行都没有，见模块文档字符串第一节。这里不试图还原事件数。
@@ -172,12 +172,27 @@ def _recently_notified_users(kind, start, end):
     上界严严地等于 `now` 会把刚写入的行整批排除，而那看起来就像一个计算错误。
     余量取 60 秒而不是 1 秒：统计窗口是 7/30/90/365 天，多收 1 分钟内的行不改变任何一个比例的方向，
     而丢掉刚刚发生的行会。
+
+    一次查询拿回全部类型。**这不是把 N 条查询 UNION 起来**：UNION 只是把往返次数
+    塞进一条 SQL，执行计划不会变好，而一张运营页面上的多层 UNION 会让优化器放弃索
+    引、退成全表扫描。这里是一次 `kind IN (...)` 的范围扫描，命中
+    `notification_recipient_kind_idx`，数据库要读的行数和逐类型查「去重收件人」完全
+    一样——两边都是同一批 (类型, 收件人) 对——只是从 27 次往返变成 1 次。
+
+    `.order_by()` 是显式清空模型默认的 `-created_at`：留着它，`DISTINCT` 会把
+    `created_at` 一起选出来，同一对 (类型, 收件人) 会按通知条数重复出现。Python
+    那边照样按集合去重，但没必要让数据库白搬这些行。
     """
-    return set(
-        Notification.objects.filter(
-            kind=kind, created_at__gte=start, created_at__lt=end + timedelta(seconds=60),
-        ).values_list('recipient_id', flat=True).distinct()
-    )
+    # 每个要问的类型都先给一份空集合：调用方直接 `notified[field]`，缺键会
+    # KeyError，而「没收过」和「没这一格」是两件不同的事——前者是 0，后者是报错。
+    notified = {kind: set() for kind in kinds}
+    rows = Notification.objects.filter(
+        kind__in=kinds, created_at__gte=start,
+        created_at__lt=end + timedelta(seconds=60),
+    ).order_by().values_list('kind', 'recipient_id').distinct()
+    for kind, recipient_id in rows:
+        notified[kind].add(recipient_id)
+    return notified
 
 
 def build_notification_preference_usage(days=30, now=None):
@@ -186,10 +201,10 @@ def build_notification_preference_usage(days=30, now=None):
     start = now - timedelta(days=days)
     fields = _preference_fields()
 
-    # 逐类型拿「窗口内收到过」的用户集合。每个类型一次查询，一次一个索引命中
-    # `notification_recipient_kind_idx`；不做 N 次 UNION，那会让 SQL 变成
-    # 一张运营页面上的性能问题。
-    notified = {field: _recently_notified_users(field, start, now) for field in fields}
+    # 一次查询拿回全部类型的「窗口内收到过」集合，见
+    # `_recently_notified_users_by_kind`：数据库读的行数和逐类型查一模一样，往返从
+    # 27 次变成 1 次。
+    notified = _recently_notified_users_by_kind(fields, start, now)
 
     # 偏好行按用户逐行读。没有偏好行的用户单列，不并入「开着」。
     # 空平台不报 25 行全 0：那会让面板出现一堆空行，而空行和「没有人用这个开关」
