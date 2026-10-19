@@ -58,12 +58,13 @@ from collections import namedtuple
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from chat_messages.models import ModerationEvent
 
 from .models import Notification, NotificationPreference
-from .notifications import quiet_hours_active
+from .notifications import quiet_hours_for_users
 
 
 # 统计窗口的可选天数，和看板其他模块保持一致。
@@ -260,14 +261,12 @@ def _fetch_quiet_authors(author_ids, now):
     并且只把它用来解释**当前**还没发出通知的那批，不去追认历史。
 
     这一条是模块里最弱的一节，所以门槛卡得最死：样本不足时只报人数，不给方向。
+
+    逐用户调用 `quiet_hours_active` 会把作者数变成查询数：作者数是审核记录数的子集，
+    90 天视图上完全可能上百。这里用 `quiet_hours_for_users` 一次取回全部偏好行，
+    时段判断仍复用同一个 `quiet_window_active`，两处逻辑不会漂移。
     """
-    quiet = set()
-    for user_id in author_ids:
-        # 免打扰逐用户查一次：它是纯 Python 判断，没有 ORM 表达方式，
-        # 而作者数是审核记录数的子集，通常不大。
-        if quiet_hours_active(User(id=user_id), now=now):
-            quiet.add(user_id)
-    return quiet
+    return quiet_hours_for_users(author_ids, now=now)
 
 
 def _fetch_author_activities(author_ids, start, now):
@@ -403,11 +402,15 @@ def _build_preference_grid(records):
     reviewed_ids = {
         record.event['author_id'] for record in records if record.event['author_id']
     }
-    grid = {key: 0 for key in (
-        'reviewed_switch_on', 'reviewed_switch_off',
-        'unreviewed_switch_on', 'unreviewed_switch_off',
-    )}
-    # 全站用户逐个看开关状态。
+    # 「被复核过、又关着」的人直接从记录里数：`_build_records` 已经按作者把偏好行
+    # 取齐了，`record.preference` 就是那个用户那一行。
+    reviewed_switch_off = len({
+        record.event['author_id'] for record in records
+        if record.event['author_id'] and record.preference is not None
+        and not record.preference[PREFERENCE_FIELD]
+    })
+    reviewed_switch_on = len(reviewed_ids) - reviewed_switch_off
+    # 后两格要全站分母，所以还要两个计数。
     #
     # **没有偏好行的用户算「开着」。** `NotificationPreference` 不是注册时建的，是用户
     # 第一次走进设置页、或者第一次收到通知时由 `get_or_create` 现建的。一个从没进过
@@ -415,20 +418,26 @@ def _build_preference_grid(records):
     # `get_or_create` 建出默认全开的一行，`getattr(preference, kind, True)` 取到 True。
     # 也就是说「没有行」和「行上写着开着」在行为上完全等价。只数库里的行，会把这群人
     # 整群漏掉，而他们恰恰是全站的大多数——漏掉之后「开关开着」两格会小到没有意义。
-    switch_off_ids = set(NotificationPreference.objects.filter(
+    #
+    # 这里只向数据库要两个计数，不再把全表偏好行和全站用户主键读进内存。这两个集合
+    # 都随站点规模增长，而看板每打开一次就要搬一遍；`user` 是 OneToOne 且级联删除，
+    # 「关着的人」必然是「全部用户」的子集，相减不会出现负数。
+    switch_off_total = NotificationPreference.objects.filter(
         **{PREFERENCE_FIELD: False},
-    ).values_list('user_id', flat=True))
-    all_ids = set(User.objects.values_list('id', flat=True))
-    for user_id in all_ids:
-        switch_on = user_id not in switch_off_ids
-        if user_id in reviewed_ids:
-            grid['reviewed_switch_on' if switch_on else 'reviewed_switch_off'] += 1
-        else:
-            grid['unreviewed_switch_on' if switch_on else 'unreviewed_switch_off'] += 1
-    return grid
+    ).count()
+    user_total = User.objects.count()
+    unreviewed_switch_off = switch_off_total - reviewed_switch_off
+    return {
+        'reviewed_switch_on': reviewed_switch_on,
+        'reviewed_switch_off': reviewed_switch_off,
+        'unreviewed_switch_on': (
+            user_total - len(reviewed_ids) - unreviewed_switch_off
+        ),
+        'unreviewed_switch_off': unreviewed_switch_off,
+    }
 
 
-def _build_activity_contrast(records, days, now):
+def _build_activity_contrast(records):
     """关掉的人和开着的人，各自还有没有在社区里说话。只报形状。
 
     这一节是全模块最容易被读歪的一节，所以口径卡得最死：报的是**同期人群的对照形状**，
@@ -449,14 +458,32 @@ def _build_activity_contrast(records, days, now):
 
     # 和偏好四格同一处理：没有偏好行的用户算「开着」。他们没进过设置页，
     # 而 `create_notification` 对这种人照样发通知。只数库里的行会漏掉全站大多数。
-    switch_off_ids = set(NotificationPreference.objects.filter(
-        user_id__in=reviewed_ids, **{PREFERENCE_FIELD: False},
-    ).values_list('user_id', flat=True))
+    #
+    # 这个集合不再单独查库：`_build_records` 已经按作者把偏好行取齐了，同一批作者
+    # 再走一遍 `NotificationPreference` 只是重复劳动。
+    switch_off_ids = {
+        record.event['author_id'] for record in records
+        if record.event['author_id'] and record.preference is not None
+        and not record.preference[PREFERENCE_FIELD]
+    }
     switch_on_ids = reviewed_ids - switch_off_ids
 
-    start = _period_start(days, timezone.localtime(now).date())
-    off_activities = _fetch_author_activities(switch_off_ids, start, now)
-    on_activities = _fetch_author_activities(switch_on_ids, start, now)
+    # 发言行为也直接用记录里已经取好的那一份。`_build_records` 为同一批作者、同一个
+    # 窗口问过同样的三个表，`author_activities` 就是那一遍的结果；按「关 / 开」两组
+    # 再各问一遍，只是把同样的 SQL 跑两遍。按人拆开和分别传两组人进去拿到的东西一致，
+    # 因为 `_fetch_author_activities` 返回的键恰好就是传进去的那批人。
+    activities = {
+        record.event['author_id']: record.author_activities
+        for record in records if record.event['author_id']
+    }
+    off_activities = {
+        user_id: acts for user_id, acts in activities.items()
+        if user_id in switch_off_ids
+    }
+    on_activities = {
+        user_id: acts for user_id, acts in activities.items()
+        if user_id not in switch_off_ids
+    }
 
     result_rows = []
     for kind, label in ACTIVITY_KINDS:
@@ -550,10 +577,16 @@ def _build_read_rows(records):
 def _build_baseline_read_rate(days, now):
     """同期全部通知的整体已读率。作对照分母，不单独下结论。"""
     start = _period_start(days, timezone.localtime(now).date())
-    sent = Notification.objects.filter(created_at__gte=start, created_at__lte=now).count()
-    read = Notification.objects.filter(
-        created_at__gte=start, created_at__lte=now, is_read=True,
-    ).count()
+    # 发送数和已读数是同一个筛选条件下的两次计数，合成一次 aggregate：
+    # 拆成两个 count 会让同一段 WHERE 在数据库里跑两遍。
+    totals = Notification.objects.filter(
+        created_at__gte=start, created_at__lte=now,
+    ).aggregate(
+        sent=Count('id'),
+        read=Count('id', filter=Q(is_read=True)),
+    )
+    sent = totals['sent']
+    read = totals['read']
     return {
         'sent_count': sent,
         'read_count': read,
@@ -584,7 +617,7 @@ def build_moderation_notice_preference(days=30, now=None):
     outcome = _build_outcome_stats(records)
     reach_rows = _build_reach_rows(records)
     grid = _build_preference_grid(records)
-    activity = _build_activity_contrast(records, days, now)
+    activity = _build_activity_contrast(records)
     read_rows = _build_read_rows(records)
     baseline = _build_baseline_read_rate(days, now)
 

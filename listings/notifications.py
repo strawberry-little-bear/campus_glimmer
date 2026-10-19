@@ -27,10 +27,27 @@ def actionable_unread_q(now=None):
     )
 
 
+def quiet_window_active(preference, *, now=None):
+    """Whether an already-resolved preference row sits inside its quiet window now.
+
+    Windows that cross midnight are supported, for example 22:00–08:00.
+
+    This is the time-of-day arithmetic on its own, with no database access. Keeping it
+    apart from `quiet_hours_active` lets a caller that already holds a batch of
+    preference rows evaluate every one of them without paying a query per user.
+    """
+    now = now or timezone.now()
+    current = timezone.localtime(now).time().replace(tzinfo=None)
+    start = preference.quiet_hours_start
+    end = preference.quiet_hours_end
+    if start < end:
+        return start <= current < end
+    return current >= start or current < end
+
+
 def quiet_hours_active(recipient, *, now=None):
     """Whether the recipient is currently inside their local quiet-hours window.
 
-    Windows that cross midnight are supported, for example 22:00–08:00.
     Quiet hours only suppress badge-style reminders; notifications remain stored
     and can still be opened deliberately from the notification center.
     """
@@ -38,13 +55,35 @@ def quiet_hours_active(recipient, *, now=None):
     preference = NotificationPreference.objects.filter(user=recipient).first()
     if not preference or not preference.quiet_hours_enabled:
         return False
+    return quiet_window_active(preference, now=now)
 
-    current = timezone.localtime(now).time().replace(tzinfo=None)
-    start = preference.quiet_hours_start
-    end = preference.quiet_hours_end
-    if start < end:
-        return start <= current < end
-    return current >= start or current < end
+
+def quiet_hours_for_users(user_ids, *, now=None):
+    """The subset of ``user_ids`` currently inside their quiet-hours window.
+
+    Batch counterpart to `quiet_hours_active`. The single-user version resolves one
+    recipient's preference row per call, so a caller looking at a whole cohort would
+    turn the cohort size into a query count. This resolves every row in one query and
+    applies the same `quiet_window_active` arithmetic to each of them, so the two paths
+    cannot drift apart.
+
+    Users without a preference row are never in quiet hours: the row does not exist
+    until the user first opens the settings page, and the default is no window.
+    """
+    now = now or timezone.now()
+    user_ids = list(user_ids)
+    if not user_ids:
+        return set()
+    rows = NotificationPreference.objects.filter(
+        user_id__in=user_ids,
+    ).only(
+        'user_id', 'quiet_hours_enabled', 'quiet_hours_start', 'quiet_hours_end',
+    )
+    return {
+        row.user_id
+        for row in rows
+        if row.quiet_hours_enabled and quiet_window_active(row, now=now)
+    }
 
 
 def active_unread_notifications(recipient, *, now=None, quiet=None):
