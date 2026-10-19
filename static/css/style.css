@@ -36,6 +36,33 @@ a { color: inherit; text-decoration: none; }
    和米白 + 校园绿的整体气质不一致。这里把剩下的常用组件一次性对齐，
    避免以后每改一个页面就要单独补一段样式。颜色沿用站点已有的
    成功 / 警告 / 危险色板，与 .order-status-*、.dispute-status-* 保持一致。 */
+/* Bootstrap 根变量：把默认色板整体对齐到品牌，而不是一类一类补规则。
+   Bootstrap 的 :root 定义的是自定义属性，body { color: var(--ink) } 只改 body
+   自身的计算色，改不了 --bs-body-color 本身。而 .card、.dropdown-menu、
+   .list-group-item、.accordion-button、.popover-body、.offcanvas-body 都直接
+   或间接引用它，这些位置此前一直是 Bootstrap 的中性近黑 #212529，不是品牌墨色。
+   我们的样式表在 base.html 里排在 bootstrap.min.css 之后，同特异性下后者胜出，
+   所以这里的 :root 覆写可以稳定生效。
+   约束：--bs-body-bg 不能动。.form-control / .form-select 的背景取自它，改成米白
+   会让输入框在白卡片上发灰；这两处只覆写边框、圆角和文字色。 */
+:root {
+    --bs-body-color: #15251f;
+    --bs-body-color-rgb: 21, 37, 31;
+    --bs-emphasis-color: #15251f;
+    --bs-emphasis-color-rgb: 21, 37, 31;
+    --bs-secondary-color: rgba(21, 37, 31, .72);
+    --bs-tertiary-bg: #f7faf8;
+    --bs-border-color: #e5ece8;
+    --bs-border-color-translucent: rgba(32, 76, 59, .14);
+    --bs-link-color: #1d8a68;
+    --bs-link-color-rgb: 29, 138, 104;
+    --bs-link-hover-color: #146a50;
+    --bs-link-hover-color-rgb: 20, 106, 80;
+    --bs-primary-rgb: 29, 138, 104;
+    --bs-warning-text-emphasis: #8c651d;
+    --bs-light-bg-subtle: #f7faf8;
+}
+
 
 /* 次级按钮：站内大量"取消""返回""查看"用的是这几个类 */
 .btn-outline-secondary { --bs-btn-color: var(--ink-soft); --bs-btn-border-color: var(--line-strong); --bs-btn-hover-color: var(--primary-dark); --bs-btn-hover-bg: var(--surface-soft); --bs-btn-hover-border-color: #c2d9cc; --bs-btn-active-color: var(--primary-dark); --bs-btn-active-bg: var(--mint); --bs-btn-active-border-color: #a7d4c0; border-radius: 11px; font-weight: 700; }

@@ -49,10 +49,14 @@
 | `.pagination` / `.page-link` | 10px 圆角、`--primary` 选中态 |
 | `.text-primary` / `.text-success` / `.text-danger` / `.text-warning` / `.text-info` / `.text-muted` | 品牌语义色 |
 
+兼容层之前还有一处补不到的根因：Bootstrap 的 `:root` 把 `--bs-body-color`、`--bs-emphasis-color`、`--bs-border-color` 等定义成自定义属性，`body { color: var(--ink) }` 只改 body 自身的计算色，改不了这些变量本身。而 `.card`、`.dropdown-menu`、`.list-group-item`、`.accordion-button` 都直接或间接引用它们，这些位置此前一直是 Bootstrap 的中性近黑 `#212529`，表格单元格更是纯黑。所以在兼容层最前面加了一段 `:root` 覆写，把这些根变量整体对齐到品牌色板（`--ink` / `--line` / `--primary`），比一类一类补规则更稳，新增页面也自动受益。
+
 两点实现约束：
 
 1. Bootstrap 5.3 的 `.text-bg-*` 与 `.text-*` 自带 `!important`，覆写必须同步带上，否则不生效；
-2. `.bg-*` 只收敛到 `.badge.bg-*`，不要写成 `.bg-success` 这样的全局规则，否则会误伤进度条等确实需要实色背景的元素。
+2. `.bg-*` 只收敛到 `.badge.bg-*`，不要写成 `.bg-success` 这样的全局规则，否则会误伤进度条等确实需要实色背景的元素；
+3. `--bs-body-bg` 不要动。`.form-control` / `.form-select` 的背景取自它，改成米白会让输入框在白卡片上发灰，这两处只覆写边框、圆角和文字色；
+4. 模板里不要再写 `bg-light` / `bg-success` 这类会被 `!important` 盖住兼容层的类，`.card-header` 和 `.progress-bar` 已有品牌规则，直接删掉多余类名即可。
 
 全部模板已经不再使用 `list-group`，相应规则保留在兼容层里上下文防身；申诉列表用 `.mod-event-*`，心愿单侧栏用 `.filter-stack` + `.filter-link`，争议证据用 `.dispute-evidence-row`。
 
