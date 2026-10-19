@@ -6434,3 +6434,171 @@ a { color: inherit; text-decoration: none; }
         height: 28px;
     }
 }
+
+/* --------------------------------------------------------------------------
+   内容审核队列事件列表
+
+   原页面用 Bootstrap list-group 平铺事件，卡片边界、内容框与操作区没有
+   视觉分隔，复核时很难快速定位“看内容”和“做决定”两个区域。这里改为
+   与消息工作台一致的卡片列表：头部集中状态徽章，正文放被审内容，
+   底部固定操作区。
+   -------------------------------------------------------------------------- */
+.mod-event-list {
+    display: grid;
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.mod-event {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #fff;
+}
+
+.mod-event.is-pending {
+    border-color: #eed6a8;
+    box-shadow: 0 8px 22px rgba(154, 111, 32, .06);
+}
+
+.mod-event-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-soft);
+}
+
+.mod-event-head .badge {
+    font-weight: 600;
+}
+
+.mod-event-head-time {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: .74rem;
+    white-space: nowrap;
+}
+
+.mod-event-author {
+    color: var(--ink-soft);
+    font-size: .78rem;
+}
+
+.mod-event-body {
+    padding: 16px 18px;
+}
+
+.mod-event-content {
+    padding: 13px 15px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--surface-soft);
+    font-size: .87rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.mod-event-rule {
+    display: block;
+    margin-top: 8px;
+    color: #b4452f;
+    font-size: .76rem;
+}
+
+.mod-event-item-link {
+    margin-top: 10px;
+    font-size: .78rem;
+}
+
+.mod-event-appeal {
+    margin-top: 12px;
+    padding: 13px 15px;
+    border: 1px solid var(--line-strong);
+    border-radius: 13px;
+    background: #fff;
+}
+
+.mod-event-appeal-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.mod-event-appeal-head strong {
+    font-size: .82rem;
+}
+
+.mod-event-appeal-head .badge {
+    font-weight: 600;
+}
+
+.mod-event-appeal-statement {
+    margin: 0;
+    font-size: .82rem;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.mod-event-appeal-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.mod-event-appeal-form label {
+    flex: 1 1 260px;
+    margin: 0;
+    color: var(--muted);
+    font-size: .76rem;
+    font-weight: 700;
+}
+
+.mod-event-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 18px 16px;
+}
+
+.mod-event-actions form {
+    margin: 0;
+}
+
+.mod-event-reviewed {
+    padding: 0 18px 16px;
+    color: var(--muted);
+    font-size: .76rem;
+}
+
+@media (max-width: 767.98px) {
+    .mod-event-head {
+        padding: 12px 14px;
+    }
+
+    .mod-event-head-time {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .mod-event-body {
+        padding: 14px;
+    }
+
+    .mod-event-actions,
+    .mod-event-reviewed {
+        padding-inline: 14px;
+    }
+
+    .mod-event-actions .btn {
+        flex: 1 1 auto;
+    }
+}
