@@ -11,56 +11,58 @@
 </div>
 
 <section class="content-card">
-    <div class="list-group list-group-flush">
+    <div class="mod-event-list">
         {% for event in events %}
-        <article class="list-group-item px-0 py-4">
-            <div class="d-flex flex-wrap justify-content-between gap-2 mb-2">
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <span class="badge text-bg-light">{{ event.get_channel_display }}</span>
-                    <span class="badge {% if event.risk_tier == 'critical' %}text-bg-danger{% elif event.risk_tier == 'elevated' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.get_risk_tier_display }}</span>
-                    <span class="badge text-bg-danger">确认违规</span>
-                    <small class="text-muted">{{ event.reviewed_at|date:'Y-m-d H:i' }} 复核</small>
-                </div>
-                {% if event.item %}<a class="small" href="{% url 'item_detail' event.item.id %}">查看关联商品</a>{% endif %}
+        <article class="mod-event{% if event.appeal and event.appeal.status == 'pending' %} is-pending{% endif %}">
+            <div class="mod-event-head">
+                <span class="badge text-bg-light">{{ event.get_channel_display }}</span>
+                <span class="badge {% if event.risk_tier == 'critical' %}text-bg-danger{% elif event.risk_tier == 'elevated' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.get_risk_tier_display }}</span>
+                <span class="badge text-bg-danger">确认违规</span>
+                <span class="mod-event-head-time">{{ event.reviewed_at|date:'Y-m-d H:i' }} 复核</span>
             </div>
-            <div class="p-3 rounded-3 bg-light mb-3">
-                <p class="mb-2" style="white-space: pre-wrap; word-break: break-word;">{{ event.content }}</p>
-                <small class="text-danger">命中规则：{{ event.matched_terms }}</small>
-            </div>
+            <div class="mod-event-body">
+                <div class="mod-event-content">{{ event.content }}<span class="mod-event-rule"><i class="bi bi-fingerprint me-1"></i>命中规则：{{ event.matched_terms }}</span></div>
+                {% if event.item %}<div class="mod-event-item-link small text-muted">关联商品：<a href="{% url 'item_detail' event.item.id %}">{{ event.item.title }}</a></div>{% endif %}
 
-            {% if event.appeal %}
-            <div class="p-3 rounded-3 border">
-                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                    <span class="badge {% if event.appeal.status == 'pending' %}text-bg-warning{% elif event.appeal.status == 'accepted' %}text-bg-success{% elif event.appeal.status == 'accepted_without_restore' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.appeal.get_status_display }}</span>
-                    <span class="badge text-bg-light">{{ event.appeal.get_reason_display }}</span>
-                    <small class="text-muted">{{ event.appeal.submitted_at|date:'Y-m-d H:i' }} 提交</small>
+                {% if event.appeal %}
+                <div class="mod-event-appeal">
+                    <div class="mod-event-appeal-head">
+                        <strong>我的申诉</strong>
+                        <span class="badge {% if event.appeal.status == 'pending' %}text-bg-warning{% elif event.appeal.status == 'accepted' %}text-bg-success{% elif event.appeal.status == 'accepted_without_restore' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.appeal.get_status_display }}</span>
+                        <span class="badge text-bg-light">{{ event.appeal.get_reason_display }}</span>
+                        <small class="text-muted">{{ event.appeal.submitted_at|date:'Y-m-d H:i' }} 提交</small>
+                    </div>
+                    <p class="mod-event-appeal-statement">{{ event.appeal.statement }}</p>
+                    {% if event.appeal.status == 'pending' %}
+                    <p class="small text-muted mb-0 mt-2"><i class="bi bi-hourglass-split me-1"></i>管理员会结合原始内容、命中规则和你的说明再次复核。</p>
+                    {% else %}
+                    <div class="small text-muted mt-2"><strong>处理说明</strong><br>{{ event.appeal.resolution_note|linebreaksbr }}</div>
+                    {% endif %}
                 </div>
-                <p class="small" style="white-space: pre-wrap;">{{ event.appeal.statement }}</p>
-                {% if event.appeal.status == 'pending' %}<small class="text-muted">管理员会结合原始内容、命中规则和你的说明再次复核。</small>{% else %}<div class="small text-muted"><strong>处理说明</strong><br>{{ event.appeal.resolution_note|linebreaksbr }}</div>{% endif %}
-            </div>
-            {% else %}
-            <form method="post" action="{% url 'submit_moderation_appeal' event.id %}">
-                {% csrf_token %}
-                <div class="row g-2">
-                    <div class="col-md-4">
-                        <label class="form-label small" for="appeal-reason-{{ event.id }}">申诉原因</label>
-                        <select id="appeal-reason-{{ event.id }}" name="reason" class="form-select">
+                {% else %}
+                <form method="post" action="{% url 'submit_moderation_appeal' event.id %}" class="mod-event-appeal-form">
+                    {% csrf_token %}
+                    <label>申诉原因
+                        <select name="reason" class="form-select form-select-sm mt-1">
                             <option value="not_violation">内容不违规</option>
                             <option value="missing_context">缺少语境</option>
                             <option value="other">其他需要补充的情况</option>
                         </select>
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label small" for="appeal-statement-{{ event.id }}">申诉说明</label>
-                        <textarea id="appeal-statement-{{ event.id }}" name="statement" rows="3" maxlength="1000" class="form-control" required placeholder="请补充当时的语境或你认为需要复核的原因。"></textarea>
-                    </div>
-                </div>
-                <button class="btn btn-primary btn-sm mt-3" type="submit"><i class="bi bi-send me-1"></i>提交申诉</button>
-            </form>
-            {% endif %}
+                    </label>
+                    <label>申诉说明
+                        <textarea name="statement" rows="3" maxlength="1000" class="form-control form-control-sm mt-1" required placeholder="请补充当时的语境或你认为需要复核的原因。"></textarea>
+                    </label>
+                    <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send me-1"></i>提交申诉</button>
+                </form>
+                {% endif %}
+            </div>
         </article>
         {% empty %}
-        <div class="text-center py-5 text-muted"><i class="bi bi-shield-check fs-2 d-block mb-2"></i>当前没有确认违规的内容记录。</div>
+        <div class="empty-state py-5">
+            <i class="bi bi-shield-check display-6 d-block mb-3"></i>
+            <h3>当前没有确认违规的内容记录</h3>
+            <p>被确认违规的留言和私信会出现在这里，每条可以提交一次申诉。</p>
+        </div>
         {% endfor %}
     </div>
 </section>

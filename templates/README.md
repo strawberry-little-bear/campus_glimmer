@@ -38,6 +38,7 @@ flowchart TD
 | [`base.html`](base.html) | 全站导航、品牌、消息提示、未读角标、页脚和公共脚本 |
 | [`accounts/`](accounts/) | 账户中心、登录、资料编辑、公开主页和校园认证 |
 | [`chat_messages/`](chat_messages/) | 消息工作台、会话、审核队列和申诉页面 |
+| [`chat_messages/moderation_appeals.html`](chat_messages/moderation_appeals.html) | 用户侧的内容申诉，与审核队列共用 `.mod-event-*` 组件 |
 | [`listings/`](listings/) | 首页、商品、搜索、订单、通知、运营看板和治理页面 |
 | [`listings/_item_card.html`](listings/_item_card.html) | 商品卡片复用片段 |
 
@@ -55,6 +56,7 @@ flowchart TD
 ## 🛠️ 修改检查
 
 - 复用结构优先抽成下划线前缀片段，例如 `_item_card.html`；
+- 审核队列和用户申诉是同一类内容的两端，改一边时同时看 `moderation_queue.html` 和 `moderation_appeals.html`，保持 `.mod-event-*` 结构一致；
 - 运营看板已按分区拆到 `listings/operations/` 下，新增分区用 `{% include %}` 挂到主模板，不要再往单文件里继续堆；
 - 图片补齐 `alt`，装饰元素使用空 `alt` 或 `aria-hidden`；
 - 表单必须保留 `{% csrf_token %}`；

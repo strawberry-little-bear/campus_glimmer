@@ -19,16 +19,12 @@
                 <h2 class="h5 mb-0">心愿单分组</h2>
                 <span class="badge text-bg-light">{{ favorites|length }}</span>
             </div>
-            <div class="list-group mb-4">
-                <a href="{% url 'favorite_list' %}" class="list-group-item list-group-item-action {% if not selected_collection %}active{% endif %}">
-                    <i class="bi bi-grid me-2"></i>全部收藏
-                </a>
+            <div class="filter-stack mb-4">
+                <a class="filter-link {% if not selected_collection %}active{% endif %}" href="{% url 'favorite_list' %}"><span><i class="bi bi-grid me-1"></i>全部收藏</span><span>{{ favorites|length }}</span></a>
                 {% for collection in collections %}
-                <a href="{% url 'favorite_list' %}?collection={{ collection.id }}" class="list-group-item list-group-item-action d-flex justify-content-between {% if selected_collection and selected_collection.id == collection.id %}active{% endif %}">
-                    <span><i class="bi bi-folder2 me-2"></i>{{ collection.name }}</span><span>{{ collection.favorite_count }}</span>
-                </a>
+                <a class="filter-link {% if selected_collection and selected_collection.id == collection.id %}active{% endif %}" href="{% url 'favorite_list' %}?collection={{ collection.id }}"><span><i class="bi bi-folder2 me-1"></i>{{ collection.name }}</span><span>{{ collection.favorite_count }}</span></a>
                 {% empty %}
-                <div class="small text-muted px-2">还没有自定义分组。</div>
+                <p class="text-muted small mb-0">还没有自定义分组，先在下面创建一个吧。</p>
                 {% endfor %}
             </div>
             <form method="post" action="{% url 'create_favorite_collection' %}">
