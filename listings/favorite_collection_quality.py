@@ -385,21 +385,28 @@ def _build_grouping_latency_rows(now):
     ).values_list('created_at', 'grouped_at')
     instant = sum(1 for created_at, grouped_at in stamped
                   if grouped_at - created_at <= grace)
-    grouped_ever = Favorite.objects.filter(grouped_at__isnull=False).count()
-    ungrouped_now = Favorite.objects.filter(
-        collection__isnull=True, grouped_at__isnull=True,
-    ).count()
-    released = Favorite.objects.filter(
-        collection__isnull=True, grouped_at__isnull=False,
-    ).count()
+    # 四个计数是同一张表上的四组筛选，合成一条 aggregate 问完。SQLite 和 PostgreSQL
+    # 都支持在 Count 上挂 filter，四条 COUNT 合成一次扫表，少三次往返、也少三次全表
+    # 扫描。筛选条件一个字没改，只是换了问法。
+    totals = Favorite.objects.aggregate(
+        grouped_ever=Count('id', filter=Q(grouped_at__isnull=False)),
+        ungrouped_now=Count(
+            'id', filter=Q(collection__isnull=True, grouped_at__isnull=True),
+        ),
+        released=Count(
+            'id', filter=Q(collection__isnull=True, grouped_at__isnull=False),
+        ),
+        current_total=Count('id'),
+    )
+    grouped_ever = totals['grouped_ever']
     return {
         'grace_minutes': INSTANT_GROUPING_GRACE_MINUTES,
         'instant_total': instant,
         'delayed_total': grouped_ever - instant,
-        'ungrouped_total': ungrouped_now,
-        'released_total': released,
+        'ungrouped_total': totals['ungrouped_now'],
+        'released_total': totals['released'],
         'grouped_ever_total': grouped_ever,
-        'current_total': Favorite.objects.count(),
+        'current_total': totals['current_total'],
     }
 
 
