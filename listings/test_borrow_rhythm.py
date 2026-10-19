@@ -112,7 +112,15 @@ class BorrowRhythmCrossTests(TestCase):
     def report(self, days=DEFAULT_LOOKBACK_DAYS):
         # The window has to sit after the rows: auto_now_add writes the real
         # insert time, which is later than the self.now captured in setUp.
-        return build_borrow_rhythm(days=days, now=self.now + timedelta(minutes=5))
+        # That buffer is capped at the end of the current local day. The
+        # window start is `now - days`, so when setUp happens to run in the
+        # last minutes before midnight the buffer pushes the start past a
+        # midnight-aligned row and the oldest day silently drops out of the
+        # count. Capping keeps the start on the midnight boundary, which is
+        # where every row in this module is placed.
+        end_of_day = self.at_midnight(self.today + timedelta(days=1))
+        window_end = min(self.now + timedelta(minutes=5), end_of_day)
+        return build_borrow_rhythm(days=days, now=window_end)
 
     def borrows_in_phase(self, report, phase_key):
         for row in report['rows']:

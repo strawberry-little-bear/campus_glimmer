@@ -64,6 +64,17 @@ class CampusLocationServiceRuleQualityTestBase(TestCase):
             end_time=end,
         )
 
+    def on_weekday_after_today(self, weekday):
+        """First date strictly after today that falls on the given ISO weekday.
+
+        The cross-midnight rule reads exceptions by the weekday the window
+        spills into, so an exception placed with a plain ``today + 1`` only
+        lines up on one day of the week. Deriving the date keeps the fixture
+        honest on every day the suite happens to run.
+        """
+        offset = (weekday - self.today.isoweekday() - 1) % 7 + 1
+        return self.today + timedelta(days=offset)
+
 
 class CampusLocationServiceRuleQualityTests(CampusLocationServiceRuleQualityTestBase):
     def test_empty_state_does_not_invent_signals(self):
@@ -138,8 +149,10 @@ class CampusLocationServiceRuleQualityTests(CampusLocationServiceRuleQualityTest
         self.make_window(
             midnight, weekday=1, start=time(22), end=time(2),
         )
+        # weekday=1 的 22:00-02:00 时段溢到周二，例外必须真的落在周二：
+        # 写死 today + 1 只在那天恰好是周二时才成立。
         self.make_exception(
-            midnight, self.today + timedelta(days=1),
+            midnight, self.on_weekday_after_today(2),
             exception_type=CampusLocationServiceException.CLOSED,
         )
 
