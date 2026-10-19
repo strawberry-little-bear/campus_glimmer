@@ -13451,11 +13451,30 @@ def notification_list(request):
         ('snoozed', '仅看已延后'),
         ('read', '仅看已读'),
     )
-    notification_total_all = all_notifications.count()
+    # ``notifications`` starts from ``all_notifications``, so with no status,
+    # kind or search filter the paginator's COUNT and the "全部" total are
+    # aggregates over the very same rows.  The filtered-unread counter matches
+    # the badge total for the same reason whenever the filters leave the
+    # actionable set alone: an "未读" filter is idempotent, and "已读" or
+    # "已延后" hold no actionable row at all.
+    feed_is_unfiltered = (
+        status_filter == 'all' and not kind_filter and not search_query
+    )
+    notification_total_all = (
+        paginator.count if feed_is_unfiltered else all_notifications.count()
+    )
     # The per-kind rollup below already visits every badge-eligible row, so
     # summing it yields the same total without a second COUNT over the
     # identical queryset.
     notification_unread_total = sum(unread_kind_counts.values())
+    if quiet or status_filter not in {'all', 'unread'}:
+        notification_filtered_unread_count = 0
+    elif not kind_filter and not search_query:
+        notification_filtered_unread_count = notification_unread_total
+    else:
+        notification_filtered_unread_count = notifications.filter(
+            actionable_unread_q(now),
+        ).count()
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
     return render(request, 'listings/notifications.html', {
@@ -13464,9 +13483,7 @@ def notification_list(request):
         'notification_total': paginator.count,
         'notification_total_all': notification_total_all,
         'notification_unread_total': notification_unread_total,
-        'notification_filtered_unread_count': (
-            0 if quiet else notifications.filter(actionable_unread_q(now)).count()
-        ),
+        'notification_filtered_unread_count': notification_filtered_unread_count,
         'notification_kind_options': notification_kind_options,
         'notification_status_options': notification_status_options,
         'notification_status_filter': status_filter,
@@ -13516,7 +13533,81 @@ def activity_center(request):
     all_message_queryset = PrivateMessage.objects.filter(receiver=request.user)
     filtered_notifications = notification_queryset if activity_type in {'all', 'notifications'} else Notification.objects.none()
     filtered_messages = message_queryset if activity_type in {'all', 'messages'} else PrivateMessage.objects.none()
-    total_count = filtered_notifications.count() + filtered_messages.count()
+
+    # The four headline counters below look like eight aggregates, but they
+    # collapse onto far fewer queries: with no filter active the filtered feed
+    # *is* the full feed, an "未读" filter is exactly the actionable-unread
+    # set, and a "已读" filter cannot hold an unread row at all.  Each count is
+    # therefore computed once and reused rather than issued twice.
+    notification_feed_is_full = (
+        activity_type in {'all', 'notifications'}
+        and status_filter == 'all'
+        and not search_query
+    )
+    message_feed_is_full = (
+        activity_type in {'all', 'messages'}
+        and status_filter == 'all'
+        and not search_query
+    )
+    notification_feed_is_unread = (
+        activity_type in {'all', 'notifications'}
+        and status_filter == 'unread'
+        and not search_query
+    )
+    message_feed_is_unread = (
+        activity_type in {'all', 'messages'}
+        and status_filter == 'unread'
+        and not search_query
+    )
+    notification_unread_is_shared = (
+        activity_type in {'all', 'notifications'}
+        and status_filter in {'all', 'unread'}
+        and not search_query
+    )
+    message_unread_is_shared = (
+        activity_type in {'all', 'messages'}
+        and status_filter in {'all', 'unread'}
+        and not search_query
+    )
+
+    total_notifications = filtered_notifications.count()
+    total_messages = filtered_messages.count()
+    total_count = total_notifications + total_messages
+    all_notification_count = (
+        total_notifications if notification_feed_is_full
+        else all_notification_queryset.count()
+    )
+    all_message_count = (
+        total_messages if message_feed_is_full
+        else all_message_queryset.count()
+    )
+    if quiet:
+        unread_notifications = unread_messages = 0
+        filtered_unread_notifications = filtered_unread_messages = 0
+    else:
+        unread_notifications = (
+            total_notifications if notification_feed_is_unread
+            else active_unread_notifications(
+                request.user, now=now, quiet=quiet,
+            ).count()
+        )
+        unread_messages = (
+            total_messages if message_feed_is_unread
+            else all_message_queryset.filter(is_read=False).count()
+        )
+        if status_filter == 'read':
+            # A "已读" feed holds no unread row, so both filtered-unread
+            # counters are zero by construction rather than by query.
+            filtered_unread_notifications = filtered_unread_messages = 0
+        else:
+            filtered_unread_notifications = (
+                unread_notifications if notification_unread_is_shared
+                else filtered_notifications.filter(actionable_unread_q(now)).count()
+            )
+            filtered_unread_messages = (
+                unread_messages if message_unread_is_shared
+                else filtered_messages.filter(is_read=False).count()
+            )
     page_size = 20
     try:
         page_number = max(1, int(request.GET.get('page', '1')))
@@ -13574,17 +13665,13 @@ def activity_center(request):
         'activity_type_filter': activity_type,
         'activity_status_filter': status_filter,
         'activity_search_query': search_query,
-        'activity_unread_total': (
-            0 if quiet else active_unread_notifications(
-                request.user, now=now, quiet=quiet,
-            ).count()
-        ) + (0 if quiet else all_message_queryset.filter(is_read=False).count()),
+        'activity_unread_total': unread_notifications + unread_messages,
         'activity_filtered_unread_count': (
-            0 if quiet else filtered_notifications.filter(actionable_unread_q(now)).count()
-        ) + (0 if quiet else filtered_messages.filter(is_read=False).count()),
+            filtered_unread_notifications + filtered_unread_messages
+        ),
         'notification_quiet_hours_active': quiet,
-        'activity_notification_count': all_notification_queryset.count(),
-        'activity_message_count': all_message_queryset.count(),
+        'activity_notification_count': all_notification_count,
+        'activity_message_count': all_message_count,
     })
 
 
