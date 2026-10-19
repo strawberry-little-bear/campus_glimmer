@@ -51,6 +51,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # 动态响应此前完全不走压缩：看板一页 580KB 左右的 HTML 原样下发，普通页面
+    # 也有 16KB 左右。部署是 gunicorn 直出、没有反向代理，所以只能在这里压。
+    # 放在 WhiteNoise 之前，保证拿到的是最终响应体；Django 5.2 会把强 ETag
+    # 自动降级为弱 ETag，不会破坏条件请求。
+    'django.middleware.gzip.GZipMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
