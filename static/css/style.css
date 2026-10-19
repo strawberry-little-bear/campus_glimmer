@@ -29,6 +29,93 @@ a { color: inherit; text-decoration: none; }
 .user-menu img, .comment-row img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
 .btn-primary { --bs-btn-bg: var(--primary); --bs-btn-border-color: var(--primary); --bs-btn-hover-bg: var(--primary-dark); --bs-btn-hover-border-color: var(--primary-dark); border-radius: 11px; font-weight: 700; }
 .btn-outline-primary { --bs-btn-color: var(--primary); --bs-btn-border-color: #a7d4c0; --bs-btn-hover-bg: var(--primary); --bs-btn-hover-border-color: var(--primary); border-radius: 11px; font-weight: 700; }
+
+/* ---- Bootstrap 兼容层 ----
+   站内仍有部分模板直接使用 Bootstrap 组件类。此前设计系统只覆写了
+   .btn-primary 与 .btn-outline-primary，其余组件落在 Bootstrap 默认观感上，
+   和米白 + 校园绿的整体气质不一致。这里把剩下的常用组件一次性对齐，
+   避免以后每改一个页面就要单独补一段样式。颜色沿用站点已有的
+   成功 / 警告 / 危险色板，与 .order-status-*、.dispute-status-* 保持一致。 */
+
+/* 次级按钮：站内大量"取消""返回""查看"用的是这几个类 */
+.btn-outline-secondary { --bs-btn-color: var(--ink-soft); --bs-btn-border-color: var(--line-strong); --bs-btn-hover-color: var(--primary-dark); --bs-btn-hover-bg: var(--surface-soft); --bs-btn-hover-border-color: #c2d9cc; --bs-btn-active-color: var(--primary-dark); --bs-btn-active-bg: var(--mint); --bs-btn-active-border-color: #a7d4c0; border-radius: 11px; font-weight: 700; }
+.btn-light { --bs-btn-color: var(--ink-soft); --bs-btn-bg: var(--surface-soft); --bs-btn-border-color: var(--line); --bs-btn-hover-color: var(--primary-dark); --bs-btn-hover-bg: var(--mint); --bs-btn-hover-border-color: #c2d9cc; --bs-btn-active-color: var(--primary-dark); --bs-btn-active-bg: var(--mint); border-radius: 11px; font-weight: 700; }
+.btn-outline-danger { --bs-btn-color: #b25548; --bs-btn-border-color: #e6c3bc; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #b25548; --bs-btn-hover-border-color: #b25548; --bs-btn-active-color: #fff; --bs-btn-active-bg: #9c4a3e; --bs-btn-active-border-color: #9c4a3e; border-radius: 11px; font-weight: 700; }
+.btn-danger { --bs-btn-color: #fff; --bs-btn-bg: #b25548; --bs-btn-border-color: #b25548; --bs-btn-hover-bg: #9c4a3e; --bs-btn-hover-border-color: #9c4a3e; border-radius: 11px; font-weight: 700; }
+.btn-outline-warning { --bs-btn-color: #8c651d; --bs-btn-border-color: #ecd6ac; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #d99a3c; --bs-btn-hover-border-color: #d99a3c; --bs-btn-active-bg: #c4862f; border-radius: 11px; font-weight: 700; }
+.btn-warning { --bs-btn-color: #5f4210; --bs-btn-bg: #f6c885; --bs-btn-border-color: #f6c885; --bs-btn-hover-bg: #eeb568; --bs-btn-hover-border-color: #eeb568; border-radius: 11px; font-weight: 700; }
+.btn-dark { --bs-btn-color: #fff; --bs-btn-bg: #2f4a3f; --bs-btn-border-color: #2f4a3f; --bs-btn-hover-bg: #24382f; --bs-btn-hover-border-color: #24382f; border-radius: 11px; font-weight: 700; }
+.btn-link { color: var(--primary); font-weight: 700; text-decoration: none; border-radius: 8px; }
+.btn-link:hover, .btn-link:focus { color: var(--primary-dark); text-decoration: underline; }
+
+/* 表单标签与说明文字：此前只有 .auth-form / .appointment-form 等少数作用域内覆写，
+   散落在业务页里的 .form-label / .form-text 还是 Bootstrap 默认的灰色小字。 */
+.form-label { margin-bottom: 6px; color: var(--ink-soft); font-size: .82rem; font-weight: 700; }
+.form-text { margin-top: 6px; color: var(--muted); font-size: .72rem; line-height: 1.6; }
+
+/* 徽章：20 多个运营面板各自覆写过 .badge，但业务页面里的裸 .badge 仍是
+   Bootstrap 的实色块。统一成淡底 + 深字的药丸，与 lifecycle-tag 等同风格。 */
+.badge { --bs-badge-font-weight: 700; padding: 5px 9px; border-radius: 999px; font-size: .68rem; letter-spacing: .01em; white-space: nowrap; }
+.text-bg-primary { color: #fff !important; background-color: var(--primary) !important; }
+.text-bg-success { color: #1f7653 !important; background-color: #ddf4e9 !important; }
+.text-bg-secondary { color: #5f6f68 !important; background-color: #eaf0ec !important; }
+.text-bg-light { color: var(--ink-soft) !important; background-color: var(--surface-soft) !important; }
+.text-bg-warning { color: #8c651d !important; background-color: #fff3cd !important; }
+.text-bg-danger { color: #a1543e !important; background-color: #ffe9e3 !important; }
+.text-bg-info { color: #1c6681 !important; background-color: #dff4fb !important; }
+.text-bg-dark { color: #fff !important; background-color: #2f4a3f !important; }
+
+/* 少数页面用 {% if %} 动态拼 bg-success / bg-warning / bg-secondary（如我的商品
+   状态徽章），走的是 Bootstrap 实色。只收敛到 .badge 上，避免误伤进度条等
+   确实需要实色背景的元素。 */
+.badge.bg-primary { color: #fff !important; background-color: var(--primary) !important; }
+.badge.bg-success { color: #1f7653 !important; background-color: #ddf4e9 !important; }
+.badge.bg-secondary { color: #5f6f68 !important; background-color: #eaf0ec !important; }
+.badge.bg-warning { color: #8c651d !important; background-color: #fff3cd !important; }
+.badge.bg-danger { color: #a1543e !important; background-color: #ffe9e3 !important; }
+.badge.bg-info { color: #1c6681 !important; background-color: #dff4fb !important; }
+.badge.bg-light { color: var(--ink-soft) !important; background-color: var(--surface-soft) !important; }
+.badge.bg-dark { color: #fff !important; background-color: #2f4a3f !important; }
+
+/* Bootstrap 卡片骨架：我的商品页还在用 card / card-header 老写法。 */
+.card-header { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-soft); color: var(--ink); font-size: .86rem; font-weight: 700; }
+.card-body { padding: 16px; }
+.card-footer { padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface-soft); }
+
+/* 语义文字色：Bootstrap 的蓝 / 红 / 绿与品牌色系不一致，统一到站点色板。 */
+.text-primary { color: var(--primary) !important; }
+.text-success { color: #1f7653 !important; }
+.text-danger { color: #b25548 !important; }
+.text-warning { color: #8c651d !important; }
+.text-info { color: #1c6681 !important; }
+.text-muted { color: var(--muted) !important; }
+
+/* 提示条：.alert 此前只做了圆角和投影，各语义色仍是 Bootstrap 默认。 */
+.alert { border: 1px solid var(--line); font-size: .82rem; }
+.alert-warning { color: #7d5a19; background: #fffaf0; border-color: #f0dfc7; }
+.alert-danger { color: #9c4a3e; background: #fff7f5; border-color: #f1d8d2; }
+.alert-success { color: #1f7653; background: #f3faf5; border-color: #d5eadc; }
+.alert-info { color: #1c6681; background: #f2fafd; border-color: #cfe8f3; }
+
+/* 列表组：争议证据等处直接使用了 Bootstrap 列表组。 */
+.list-group { border-radius: 14px; }
+.list-group-item { border-color: var(--line); background: transparent; color: var(--ink-soft); font-size: .84rem; }
+.list-group-flush > .list-group-item { border-width: 0 0 1px; }
+
+/* 卡片：业务页面里偶见的裸 .card。 */
+.card { border: 1px solid var(--line); border-radius: 20px; background: var(--surface); box-shadow: var(--card-shadow); }
+
+/* 进度条 */
+.progress { height: 8px; border-radius: 999px; background: var(--surface-soft); }
+.progress-bar { background: var(--primary); border-radius: 999px; }
+
+/* 分页：站内已有 .mailbox-pagination / .thread-pagination 两套包裹类，
+   这里给裸 .pagination 兜底，避免换页条掉回 Bootstrap 默认观感。 */
+.pagination { gap: 6px; margin: 0; }
+.page-link { border: 1px solid var(--line); border-radius: 10px; color: var(--ink-soft); background: #fff; font-size: .8rem; font-weight: 700; padding: 7px 12px; }
+.page-link:hover { color: var(--primary-dark); background: var(--mint); border-color: #c2d9cc; }
+.page-item.active .page-link { color: #fff; background: var(--primary); border-color: var(--primary); }
+.page-item.disabled .page-link { color: #a9b6af; background: var(--surface-soft); border-color: var(--line); }
 .flash-stack { max-width: 760px; margin: 0 auto 1rem; }
 .alert { border: 0; border-radius: 14px; box-shadow: var(--shadow); }
 /* A confirmation that a filter was saved is only half useful without a way back
