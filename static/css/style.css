@@ -53,6 +53,25 @@ a { color: inherit; text-decoration: none; }
 .form-label { margin-bottom: 6px; color: var(--ink-soft); font-size: .82rem; font-weight: 700; }
 .form-text { margin-top: 6px; color: var(--muted); font-size: .72rem; line-height: 1.6; }
 
+/* 成功色与深色描边按钮：站内“保存更改”“发布新商品”等主操作一直用 Bootstrap 的
+   #198754，和品牌绿 #1d8a68 明显不是一个色系；运营看板还残留一个 btn-outline-dark。
+   这里按既有成功色板补齐，让这几类按钮回到同一套观感，主操作仍以 .btn-primary 为主。 */
+.btn-success { --bs-btn-color: #fff; --bs-btn-bg: #1f7653; --bs-btn-border-color: #1f7653; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #175f43; --bs-btn-hover-border-color: #175f43; --bs-btn-active-color: #fff; --bs-btn-active-bg: #14543a; --bs-btn-active-border-color: #14543a; border-radius: 11px; font-weight: 700; }
+.btn-outline-success { --bs-btn-color: #1f7653; --bs-btn-border-color: #a9d6bf; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #1f7653; --bs-btn-hover-border-color: #1f7653; --bs-btn-active-color: #fff; --bs-btn-active-bg: #175f43; --bs-btn-active-border-color: #175f43; border-radius: 11px; font-weight: 700; }
+.btn-outline-dark { --bs-btn-color: #2f4a3f; --bs-btn-border-color: #b9c9c1; --bs-btn-hover-color: #fff; --bs-btn-hover-bg: #2f4a3f; --bs-btn-hover-border-color: #2f4a3f; --bs-btn-active-color: #fff; --bs-btn-active-bg: #24382f; --bs-btn-active-border-color: #24382f; border-radius: 11px; font-weight: 700; }
+
+/* 裸表单控件：.form-control / .form-select 此前只在 .auth-form、.profile-field、
+   .advanced-filter-form 等作用域内被覆写，散落在业务页里的输入框仍是 Bootstrap
+   默认灰边（例如收藏分组、保存关注）。这里补一条低优先级基线，各作用域仍可继续覆写。 */
+.form-control, .form-select { border-color: var(--line); border-radius: 11px; color: var(--ink); font-size: .84rem; }
+.form-control:focus, .form-select:focus { border-color: #9ed4bc; box-shadow: 0 0 0 4px rgba(29, 138, 104, .08); }
+
+/* 输入组附加件、下拉分隔线与表格悬停：Bootstrap 默认的浅灰底和半透明分隔线
+   落在米白底上会发灰，统一到品牌的中性色板。 */
+.input-group-text { background: var(--surface-soft); border-color: var(--line); color: var(--muted); font-size: .82rem; }
+.dropdown-divider { --bs-dropdown-divider-bg: var(--line); }
+.table-hover > tbody > tr:hover { --bs-table-hover-bg: var(--surface-soft); }
+
 /* 徽章：20 多个运营面板各自覆写过 .badge，但业务页面里的裸 .badge 仍是
    Bootstrap 的实色块。统一成淡底 + 深字的药丸，与 lifecycle-tag 等同风格。 */
 .badge { --bs-badge-font-weight: 700; padding: 5px 9px; border-radius: 999px; font-size: .68rem; letter-spacing: .01em; white-space: nowrap; }
