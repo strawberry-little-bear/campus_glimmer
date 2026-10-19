@@ -156,6 +156,7 @@ from .price_insights import build_price_insight
 from .price_changes import notify_item_price_drop, record_item_price_change
 from .price_history import (
     build_item_price_history, build_item_price_history_maintenance,
+    load_item_price_history_state,
 )
 from .campus_location_service_hours import evaluate_location_service_window
 from .price_change_quality import build_price_change_quality_panel
@@ -723,7 +724,9 @@ def search_suggestions(request):
 
 def item_detail(request, item_id):
     item = get_object_or_404(
-        Item.objects.select_related('category', 'seller', 'location').prefetch_related('images', 'comments__author__profile'),
+        Item.objects.select_related(
+            'category', 'seller', 'seller__profile', 'location',
+        ).prefetch_related('images', 'comments__author__profile'),
         id=item_id,
     )
     search_id = request.GET.get('search_id', '').strip()
@@ -750,6 +753,7 @@ def item_detail(request, item_id):
     related_items = Item.objects.available().filter(category=item.category).exclude(id=item.id).select_related('seller', 'location').prefetch_related('images')[:4]
     seller_ratings = Rating.objects.filter(ratee=item.seller).select_related('rater', 'order')[:5]
     rating_summary = Rating.objects.filter(ratee=item.seller).aggregate(average=Avg('score'), count=Count('id'))
+    price_history_state = load_item_price_history_state(item)
     context = {
         'item': item,
         'active_order': Order.objects.filter(
@@ -757,11 +761,13 @@ def item_detail(request, item_id):
         ).order_by('-created_at').first(),
         'related_items': related_items,
         'rating_summary': rating_summary,
-        'seller_reputation': build_seller_reputation(item.seller),
+        'seller_reputation': build_seller_reputation(
+            item.seller, rating_stats=rating_summary,
+        ),
         'price_insight': build_price_insight(item),
-        'price_history': build_item_price_history(item),
+        'price_history': build_item_price_history(item, state=price_history_state),
         'price_history_maintenance': build_item_price_history_maintenance(
-            item, request.user
+            item, request.user, state=price_history_state,
         ),
         'seller_ratings': seller_ratings,
         'seller_verification': CampusVerification.objects.filter(
@@ -863,7 +869,7 @@ def recommendation_feedback(request, item_id):
 
 @login_required
 def report_item(request, item_id):
-    item = get_object_or_404(Item, id=item_id)
+    item = get_object_or_404(Item.objects.select_related('seller'), id=item_id)
     if item.seller == request.user:
         messages.error(request, '不能举报自己发布的商品。')
         return redirect('item_detail', item_id=item.id)
@@ -2487,7 +2493,7 @@ def new_item(request):
 
 @login_required
 def edit_item(request, item_id):
-    item = get_object_or_404(Item, id=item_id)
+    item = get_object_or_404(Item.objects.select_related('seller'), id=item_id)
     if item.seller != request.user:
         messages.error(request, '您没有权限编辑此商品。')
         return redirect('item_detail', item_id=item.id)
@@ -2546,7 +2552,7 @@ def edit_item(request, item_id):
 
 @login_required
 def delete_item(request, item_id):
-    item = get_object_or_404(Item, id=item_id)
+    item = get_object_or_404(Item.objects.select_related('seller'), id=item_id)
     if item.seller != request.user:
         messages.error(request, '您没有权限删除此商品。')
         return redirect('item_detail', item_id=item.id)
@@ -2559,7 +2565,7 @@ def delete_item(request, item_id):
 
 @login_required
 def mark_sold(request, item_id):
-    item = get_object_or_404(Item, id=item_id)
+    item = get_object_or_404(Item.objects.select_related('seller'), id=item_id)
     if item.seller != request.user:
         messages.error(request, '您没有权限更改此商品状态。')
         return redirect('item_detail', item_id=item.id)
@@ -13341,7 +13347,7 @@ def submit_lost_found_feedback(request, lead_id):
 @login_required
 def unread_summary(request):
     quiet = quiet_hours_active(request.user)
-    unread_notifications = active_unread_notifications(request.user)
+    unread_notifications = active_unread_notifications(request.user, quiet=quiet)
     unread_messages = (
         PrivateMessage.objects.none() if quiet else
         PrivateMessage.objects.filter(receiver=request.user, is_read=False)
@@ -13421,7 +13427,9 @@ def notification_list(request):
     kind_counts = dict(
         all_notifications.values('kind').annotate(count=Count('id')).values_list('kind', 'count')
     )
-    badge_notifications = active_unread_notifications(request.user, now=now)
+    badge_notifications = active_unread_notifications(
+        request.user, now=now, quiet=quiet,
+    )
     unread_kind_counts = dict(
         badge_notifications
         .values('kind')
@@ -13444,7 +13452,10 @@ def notification_list(request):
         ('read', '仅看已读'),
     )
     notification_total_all = all_notifications.count()
-    notification_unread_total = badge_notifications.count()
+    # The per-kind rollup below already visits every badge-eligible row, so
+    # summing it yields the same total without a second COUNT over the
+    # identical queryset.
+    notification_unread_total = sum(unread_kind_counts.values())
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
     return render(request, 'listings/notifications.html', {
@@ -13564,7 +13575,9 @@ def activity_center(request):
         'activity_status_filter': status_filter,
         'activity_search_query': search_query,
         'activity_unread_total': (
-            0 if quiet else active_unread_notifications(request.user, now=now).count()
+            0 if quiet else active_unread_notifications(
+                request.user, now=now, quiet=quiet,
+            ).count()
         ) + (0 if quiet else all_message_queryset.filter(is_read=False).count()),
         'activity_filtered_unread_count': (
             0 if quiet else filtered_notifications.filter(actionable_unread_q(now)).count()

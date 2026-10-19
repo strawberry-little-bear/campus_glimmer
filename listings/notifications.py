@@ -47,10 +47,16 @@ def quiet_hours_active(recipient, *, now=None):
     return current >= start or current < end
 
 
-def active_unread_notifications(recipient, *, now=None):
-    """Return unread notifications that should currently affect the inbox badge."""
+def active_unread_notifications(recipient, *, now=None, quiet=None):
+    """Return unread notifications that should currently affect the inbox badge.
+
+    Callers that already resolved the recipient's quiet-hours state pass it
+    in as ``quiet`` so the preference row is not fetched a second time.
+    """
     now = now or timezone.now()
-    if quiet_hours_active(recipient, now=now):
+    if quiet is None:
+        quiet = quiet_hours_active(recipient, now=now)
+    if quiet:
         return Notification.objects.none()
     return Notification.objects.filter(
         recipient=recipient,

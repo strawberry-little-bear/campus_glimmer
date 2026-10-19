@@ -83,12 +83,28 @@ def _load_recent_changes(item):
     return total_change_count, changes
 
 
-def build_item_price_history(item):
+def load_item_price_history_state(item):
+    """Load the price-change window once for both price-history surfaces.
+
+    The item detail page renders the public chart and the seller-only
+    maintenance card from the same rows, so the view loads them a single
+    time and hands the tuple to both builders.  ``None`` is returned when
+    the item cannot have a price history at all, so a caller never pays
+    for a query whose result would be discarded anyway.
+    """
+    if item.trade_mode != 'sale' or item.price is None:
+        return None
+    return _load_recent_changes(item)
+
+
+def build_item_price_history(item, *, state=None):
     """Return a renderable, date-granularity price window for a sale item."""
     if item.trade_mode != 'sale' or item.price is None:
         return _hidden()
 
-    total_change_count, changes = _load_recent_changes(item)
+    total_change_count, changes = (
+        _load_recent_changes(item) if state is None else state
+    )
     if len(changes) < MIN_CHANGE_COUNT:
         return _hidden()
 
@@ -144,7 +160,7 @@ def build_item_price_history(item):
     }
 
 
-def build_item_price_history_maintenance(item, viewer):
+def build_item_price_history_maintenance(item, viewer, *, state=None):
     """Return a read-only price-history diagnosis for the item seller."""
     if (
         item.trade_mode != 'sale'
@@ -154,7 +170,9 @@ def build_item_price_history_maintenance(item, viewer):
     ):
         return {'visible': False}
 
-    total_change_count, changes = _load_recent_changes(item)
+    total_change_count, changes = (
+        _load_recent_changes(item) if state is None else state
+    )
     if total_change_count == 0:
         return {
             'visible': True,

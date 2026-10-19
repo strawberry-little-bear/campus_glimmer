@@ -258,13 +258,15 @@ def record_mutual_aid_feedback_contribution(feedback):
     )
 
 
-def build_contribution_badges(queryset):
+def build_contribution_badges(queryset, *, total_events=None, kind_counts=None):
     'Return earned and next-step badge progress without exposing source records.'
-    total_events = queryset.count()
-    kind_counts = {
-        row['kind']: row['count']
-        for row in queryset.values('kind').annotate(count=Count('id'))
-    }
+    if total_events is None:
+        total_events = queryset.count()
+    if kind_counts is None:
+        kind_counts = {
+            row['kind']: row['count']
+            for row in queryset.values('kind').annotate(count=Count('id'))
+        }
     badges = []
     for rule in CONTRIBUTION_BADGE_RULES:
         current = kind_counts.get(rule['kind'], 0) if rule['metric'] == 'kind' else total_events
@@ -323,6 +325,8 @@ def build_contribution_summary(user):
         'remaining_points': remaining_points,
         'progress_percent': progress,
         'kind_counts': kind_counts,
-        'badges': build_contribution_badges(queryset),
+        'badges': build_contribution_badges(
+            queryset, total_events=total_events, kind_counts=kind_counts,
+        ),
         'recent_events': list(queryset[:5]),
     }

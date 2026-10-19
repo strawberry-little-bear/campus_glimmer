@@ -97,7 +97,7 @@ def _build_conversation_data(user, conversation_users):
         row.latest_message_id for row in conversation_users if row.latest_message_id
     ]
     latest_messages = PrivateMessage.objects.select_related(
-        'sender', 'receiver', 'item',
+        'sender', 'sender__profile', 'receiver', 'receiver__profile', 'item',
     ).in_bulk(latest_message_ids)
     return [
         {
@@ -119,10 +119,10 @@ def inbox(request):
 
     received_messages = PrivateMessage.objects.filter(
         receiver=request.user,
-    ).select_related('sender', 'item').order_by('-created_at')
+    ).select_related('sender', 'sender__profile', 'item').order_by('-created_at')
     sent_messages = PrivateMessage.objects.filter(
         sender=request.user,
-    ).select_related('receiver', 'item').order_by('-created_at')
+    ).select_related('receiver', 'receiver__profile', 'item').order_by('-created_at')
 
     if search_query:
         received_messages = received_messages.filter(
@@ -302,13 +302,17 @@ def send_message(request, receiver_id, item_id=None):
 
 @login_required
 def conversation(request, user_id):
-    other_user = get_object_or_404(User, id=user_id)
+    other_user = get_object_or_404(
+        User.objects.select_related('profile'), id=user_id,
+    )
 
     # 获取与特定用户的所有对话
     messages_queryset = PrivateMessage.objects.filter(
         (Q(sender=request.user) & Q(receiver=other_user)) |
         (Q(sender=other_user) & Q(receiver=request.user))
-    ).select_related('sender', 'receiver', 'item').order_by('created_at')
+    ).select_related(
+        'sender', 'sender__profile', 'receiver', 'receiver__profile', 'item',
+    ).order_by('created_at')
 
     # 打开会话时一次性更新未读状态，避免逐条保存造成额外查询。
     _mark_messages_read(messages_queryset.filter(receiver=request.user, is_read=False))

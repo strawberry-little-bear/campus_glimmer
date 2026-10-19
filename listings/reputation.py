@@ -5,7 +5,7 @@ from django.db.models import Avg, Count, Q
 from .models import Item, MeetingIncident, MutualAidFeedback, Order, Rating
 
 
-def build_seller_reputation(seller):
+def build_seller_reputation(seller, *, rating_stats=None):
     """Build a small explainable reputation card without exposing private data."""
     order_stats = Order.objects.filter(seller=seller).aggregate(
         completed=Count('id', filter=Q(status__in={'completed', 'returned'})),
@@ -16,9 +16,10 @@ def build_seller_reputation(seller):
     closed_orders = completed + cancelled
     completion_rate = round(completed * 100 / closed_orders, 1) if closed_orders else None
 
-    rating_stats = Rating.objects.filter(ratee=seller).aggregate(
-        average=Avg('score'), count=Count('id'),
-    )
+    if rating_stats is None:
+        rating_stats = Rating.objects.filter(ratee=seller).aggregate(
+            average=Avg('score'), count=Count('id'),
+        )
     rating_count = rating_stats['count'] or 0
     average = round(float(rating_stats['average']), 1) if rating_stats['average'] is not None else None
     active_listings = Item.objects.available().filter(seller=seller).count()
