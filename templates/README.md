@@ -55,6 +55,7 @@ flowchart TD
 ## 🛠️ 修改检查
 
 - 复用结构优先抽成下划线前缀片段，例如 `_item_card.html`；
+- 运营看板已按分区拆到 `listings/operations/` 下，新增分区用 `{% include %}` 挂到主模板，不要再往单文件里继续堆；
 - 图片补齐 `alt`，装饰元素使用空 `alt` 或 `aria-hidden`；
 - 表单必须保留 `{% csrf_token %}`；
 - 不要只靠模板隐藏按钮来保护操作，服务端仍需校验；

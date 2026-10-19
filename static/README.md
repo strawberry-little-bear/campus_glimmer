@@ -29,6 +29,31 @@
 
 样式入口是 [`css/style.css`](css/style.css)。新组件优先复用 `:root` 变量和现有 Bootstrap 组件，不要另起一套主题。
 
+## 🧩 Bootstrap 兼容层
+
+站内仍有一批历史模板直接使用 Bootstrap 的组件类（次级按钮、徽章、表单标签、提示条、列表组、分页等）。为了让这些页面不掉回 Bootstrap 默认观感，[`css/style.css`](css/style.css) 在主题变量之后提供了一层兼容规则，把常用组件类统一映射到上面的品牌色板：
+
+| Bootstrap 类 | 兼容后的表现 |
+| --- | --- |
+| `.btn-light` / `.btn-outline-secondary` / `.btn-link` | 次级操作：`--ink-soft` 文字、`--line` 边框、11px 圆角 |
+| `.btn-outline-danger` / `.btn-danger` | 危险操作：`#b25548` 药丸按钮 |
+| `.btn-outline-warning` / `.btn-warning` / `.btn-dark` | 与语义色板一致的强调按钮 |
+| `.badge` 配 `.text-bg-*` 或 `.bg-*` | 淡底深字药丸，与 `.order-status-*` 同一套语义色 |
+| `.form-label` / `.form-text` | `--ink-soft` / `--muted`，小号加粗 |
+| `.alert` 配 `.alert-*` | 品牌色描边与浅底，替代 Bootstrap 原色 |
+| `.card` / `.card-header` / `.card-body` / `.card-footer` | 20px 圆角、`--line` 描边、柔和投影 |
+| `.list-group` / `.list-group-item` | 透明底 + `--line` 分隔线 |
+| `.pagination` / `.page-link` | 10px 圆角、`--primary` 选中态 |
+| `.text-primary` / `.text-success` / `.text-danger` / `.text-warning` / `.text-info` / `.text-muted` | 品牌语义色 |
+
+两点实现约束：
+
+1. Bootstrap 5.3 的 `.text-bg-*` 与 `.text-*` 自带 `!important`，覆写必须同步带上，否则不生效；
+2. `.bg-*` 只收敛到 `.badge.bg-*`，不要写成 `.bg-success` 这样的全局规则，否则会误伤进度条等确实需要实色背景的元素。
+
+新增页面时优先使用设计系统自有类，只有复用历史结构时才依赖这层兼容。动手前先在 `style.css` 里搜一遍目标类名，确认是否已有更贴合的规则。
+
+
 ## 🧭 页面增强如何工作
 
 ```mermaid
@@ -63,6 +88,7 @@ flowchart LR
 ## 🛠️ 修改检查
 
 - 颜色、阴影和圆角优先复用现有主题值；
+- 需要 Bootstrap 组件类时，先确认兼容层已覆盖；新增语义色只能扩在 `:root` 或兼容层里，不要散落到页面模板；
 - 桌面、平板和移动端断点都要检查；关键页面至少覆盖 `1424px`、`1024px` 和 `390px`；
 - 运营页面和用户页面保持可区分的视觉层级，但不要分裂成两套设计语言；
 - 图片资源优先 WebP / 压缩后的 PNG，商品上传图由 `listings/image_processing.py` 处理；
