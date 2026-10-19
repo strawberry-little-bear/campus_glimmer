@@ -205,6 +205,16 @@ def _build_preference_rows(rows, sent_by_kind, read_by_kind):
     哪一类」是一份考勤表，不是一份看板。
     """
     recipients_by_kind = _recipients_by_kind(sent_by_kind)
+    # 偏好行原来按类型逐个 `user_id__in=...` 取：周期内有几种发过的类型就查几次，
+    # 而类型之间取的是同一批用户——一个人会收到好几种通知。先取并集、只查一次，
+    # 再在内存里按 user_id 索引复用。查询数从「周期内有几种类型」降到 1，
+    # 逐类型数出来的开关状态一个都没变。
+    preference_index = {
+        preference.user_id: preference
+        for preference in _preferences_for(
+            {user_id for ids in recipients_by_kind.values() for user_id in ids}
+        )
+    }
     result = []
     for row in rows:
         kind = row['kind']
@@ -215,8 +225,9 @@ def _build_preference_rows(rows, sent_by_kind, read_by_kind):
         if not recipients:
             continue
         off = 0
-        for preference in _preferences_for(recipients):
-            if not getattr(preference, kind, True):
+        for user_id in recipients:
+            preference = preference_index.get(user_id)
+            if preference is not None and not getattr(preference, kind, True):
                 off += 1
         result.append({
             'kind': kind,
@@ -240,13 +251,16 @@ def _recipients_by_kind(sent_by_kind):
     偏好是用户私域。这里只取 id 用来查开关，最终面板上出现的是「多少个接收人关掉了」，
     不是「谁关掉了」。
     """
-    result = {}
-    for kind in sent_by_kind:
-        ids = set(
-            Notification.objects.filter(kind=kind)
-            .values_list('recipient_id', flat=True)
-        )
-        result[kind] = ids
+    result = {kind: set() for kind in sent_by_kind}
+    if not sent_by_kind:
+        return result
+    # 原本一个类型一次查询：周期里有 19 种发过的类型就是 19 次往返，每次拉的都只有
+    # 「kind + recipient_id」两列。改成一次分组查询把同样的行一次拉完，内存里的形状
+    # 不变（还是按类型分组的 id 集合），往返从 N 次降到 1 次。
+    for kind, recipient_id in Notification.objects.filter(
+        kind__in=list(sent_by_kind),
+    ).values_list('kind', 'recipient_id').distinct():
+        result.setdefault(kind, set()).add(recipient_id)
     return result
 
 

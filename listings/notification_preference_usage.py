@@ -186,8 +186,8 @@ def build_notification_preference_usage(days=30, now=None):
     start = now - timedelta(days=days)
     fields = _preference_fields()
 
-    # 逐类型拿「窗口内收到过」的用户集合。25 次查询，一次一个索引命中
-    # `notification_recipient_kind_idx`；不做 25 次 UNION，那会让 SQL 变成
+    # 逐类型拿「窗口内收到过」的用户集合。每个类型一次查询，一次一个索引命中
+    # `notification_recipient_kind_idx`；不做 N 次 UNION，那会让 SQL 变成
     # 一张运营页面上的性能问题。
     notified = {field: _recently_notified_users(field, start, now) for field in fields}
 
@@ -215,19 +215,40 @@ def build_notification_preference_usage(days=30, now=None):
             'has_data': False,
         }
 
+    # 每个开关的四格原本是四次 COUNT：27 个开关就是一百多次往返，而它们报的都是同一批
+    # 偏好行的不同切面。合成一次 aggregate 让数据库只扫一遍表——查询数从一百次降到
+    # 一次，四格的口径一个都没换：开的还是开、关的还是关，「近期收到过」仍然只认
+    # 上面那份逐类型用户集合，不重新定义。
+    switch_aggregates = {}
+    for field in fields:
+        switch_aggregates['on_%s' % field] = Count('id', filter=Q(**{field: True}))
+        switch_aggregates['off_%s' % field] = Count('id', filter=Q(**{field: False}))
+        seen = notified[field]
+        if not seen:
+            # 空集合走原来的早退分支：第 2 格是 0，第 4 格就是「开着」的全部。
+            continue
+        switch_aggregates['off_seen_%s' % field] = Count(
+            'id', filter=Q(**{field: False, 'user_id__in': seen}),
+        )
+        switch_aggregates['on_seen_%s' % field] = Count(
+            'id', filter=Q(**{field: True, 'user_id__in': seen}),
+        )
+    switch_aggregates['quiet_on'] = Count('id', filter=Q(**{QUIET_HOURS_FIELD: True}))
+    switch_aggregates['quiet_off'] = Count('id', filter=Q(**{QUIET_HOURS_FIELD: False}))
+    switch_aggregates['rows_total'] = Count('id')
+    preference_counts = NotificationPreference.objects.aggregate(**switch_aggregates)
+
     rows = []
     for field in fields:
-        on_with_row = NotificationPreference.objects.filter(**{field: True}).count()
-        off_with_row = NotificationPreference.objects.filter(**{field: False}).count()
+        on_with_row = preference_counts['on_%s' % field]
+        off_with_row = preference_counts['off_%s' % field]
         seen = notified[field]
         # 第 2 格：近期收到过、开关却关着。只可能是窗口前收到的，或者汇总类
         # 通知在另一个时刻生成——两种都记，不拆，因为拆不开。
-        off_but_seen = NotificationPreference.objects.filter(
-            **{field: False}, user_id__in=seen,
-        ).count() if seen else 0
-        on_but_unseen = NotificationPreference.objects.filter(
-            **{field: True},
-        ).exclude(user_id__in=seen).count() if seen else on_with_row
+        off_but_seen = preference_counts['off_seen_%s' % field] if seen else 0
+        on_but_unseen = (
+            on_with_row - preference_counts['on_seen_%s' % field] if seen else on_with_row
+        )
         rows.append({
             'field': field,
             'group': _group_of(field),
@@ -242,12 +263,13 @@ def build_notification_preference_usage(days=30, now=None):
         })
 
     # 免打扰总闸单独一行。它和通知类型不是一类东西，但摆在同一张表单里。
-    quiet_on = NotificationPreference.objects.filter(**{QUIET_HOURS_FIELD: True}).count()
-    quiet_off = NotificationPreference.objects.filter(**{QUIET_HOURS_FIELD: False}).count()
+    # 这两个计数已经并进上面那一次 aggregate，不再各发一次 COUNT。
+    quiet_on = preference_counts['quiet_on']
+    quiet_off = preference_counts['quiet_off']
 
     # 没有偏好行的用户数：收到过通知却还没建过偏好行的。
     users_with_notification = Notification.objects.values('recipient').distinct().count()
-    rows_total = NotificationPreference.objects.count()
+    rows_total = preference_counts['rows_total']
     users_without_row = max(0, users_with_notification - rows_total)
 
     by_group = []

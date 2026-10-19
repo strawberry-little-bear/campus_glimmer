@@ -20,7 +20,7 @@
 不修改任何写入链路。
 """
 
-from django.db.models import F
+from django.db.models import Count, F, Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -80,6 +80,12 @@ def build_notification_preference_bypass_diagnosis(*, days=30, now=None):
             'has_candidates': False,
         }
 
+    # 「有多少人关掉了这个开关」和 usage 面板问的是同一批偏好行。这里同样一次
+    # aggregate 拿全部开关，不再一个字段一次 COUNT。
+    off_counts = NotificationPreference.objects.aggregate(**{
+        'off_%s' % field: Count('id', filter=Q(**{field: False})) for field in fields
+    })
+
     rows = []
     totals = {
         'off_seen_users': 0,
@@ -98,11 +104,22 @@ def build_notification_preference_bypass_diagnosis(*, days=30, now=None):
             **{preference_field: False},
         )
 
-        seen_rows = recent.count()
-        seen_users = recent.values('recipient').distinct().count()
-        suspicious = recent.filter(occurred_at__gt=F('preference_updated_at'))
-        suspicious_rows = suspicious.count()
-        suspicious_users = suspicious.values('recipient').distinct().count()
+        # 「与后关一致」和「偏好写入后仍出现」筛的是同一批行，原本却分成四次往返
+        # （两次 count、两次 distinct count）。合成一次 aggregate 一次拿出来，口径不变：
+        # 可疑仍然是「发生时间晚于整行偏好的最后写入时间」，仍然只是下界。
+        stats = recent.aggregate(
+            seen_rows=Count('id'),
+            seen_users=Count('recipient', distinct=True),
+            suspicious_rows=Count('id', filter=Q(occurred_at__gt=F('preference_updated_at'))),
+            suspicious_users=Count(
+                'recipient', distinct=True,
+                filter=Q(occurred_at__gt=F('preference_updated_at')),
+            ),
+        )
+        seen_rows = stats['seen_rows']
+        seen_users = stats['seen_users']
+        suspicious_rows = stats['suspicious_rows']
+        suspicious_users = stats['suspicious_users']
         consistent_users = max(0, seen_users - suspicious_users)
 
         writer = SUMMARY_WRITERS.get(field, 'notifications.create_notification')
@@ -111,7 +128,7 @@ def build_notification_preference_bypass_diagnosis(*, days=30, now=None):
             'label': labels.get(field, field),
             'writer': writer,
             'path_label': '汇总写入' if field in SUMMARY_WRITERS else '统一写入',
-            'off_users': NotificationPreference.objects.filter(**{field: False}).count(),
+            'off_users': off_counts['off_%s' % field],
             'seen_users': seen_users,
             'seen_rows': seen_rows,
             'consistent_users': consistent_users,
