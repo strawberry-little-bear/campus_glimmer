@@ -13,8 +13,8 @@
 <div class="form-card content-card">
     {% if item %}
     <div class="msg-target-card">
-        {% if item.images.first %}
-        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+        {% if item.images.all.0 %}
+        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
         {% endif %}
         <div class="msg-target-body">
             <span class="msg-target-label">关于商品</span>

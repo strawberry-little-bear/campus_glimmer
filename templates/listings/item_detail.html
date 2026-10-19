@@ -8,7 +8,7 @@
     <div class="col-lg-7">
         <div class="detail-gallery">
             <div class="detail-main-image">
-                {% if item.images.first %}<img src="{{ item.images.first.detail_image_url }}" alt="{{ item.title }}" id="mainProductImage"{% if item.images.first.detail_image_width %} width="{{ item.images.first.detail_image_width }}" height="{{ item.images.first.detail_image_height }}"{% endif %}{% if item.images.first.detail_image_srcset %} srcset="{{ item.images.first.detail_image_srcset }}" sizes="(max-width: 576px) 100vw, 60vw"{% endif %} decoding="async">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage" decoding="async">{% endif %}
+                {% if item.images.all.0 %}<img src="{{ item.images.all.0.detail_image_url }}" alt="{{ item.title }}" id="mainProductImage"{% if item.images.all.0.detail_image_width %} width="{{ item.images.all.0.detail_image_width }}" height="{{ item.images.all.0.detail_image_height }}"{% endif %}{% if item.images.all.0.detail_image_srcset %} srcset="{{ item.images.all.0.detail_image_srcset }}" sizes="(max-width: 576px) 100vw, 60vw"{% endif %} decoding="async">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" id="mainProductImage" decoding="async">{% endif %}
                 <span class="detail-status status-{% if item.status == 'available' and item.is_expired %}expired{% else %}{{ item.status }}{% endif %}">{% if item.status == 'available' and item.is_expired %}已过期{% else %}{{ item.get_status_display }}{% endif %}</span>
             </div>
             {% if item.images.count > 1 %}
@@ -158,7 +158,7 @@
         {% if related_items %}
         <section class="content-card">
             <div class="card-section-heading"><h2>同类好物</h2><a href="{% url 'item_list_by_category' item.category.id %}" class="text-link">更多</a></div>
-            {% for related_item in related_items %}<a class="related-item" href="{% url 'item_detail' related_item.id %}">{% if related_item.images.first %}<img src="{{ related_item.images.first.list_image_url }}" alt="{{ related_item.title }}"{% if related_item.images.first.list_image_width %} width="{{ related_item.images.first.list_image_width }}" height="{{ related_item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" decoding="async">{% endif %}<span><strong>{{ related_item.title }}</strong><small>¥{{ related_item.price|floatformat:2 }}</small></span></a>{% endfor %}
+            {% for related_item in related_items %}<a class="related-item" href="{% url 'item_detail' related_item.id %}">{% if related_item.images.all.0 %}<img src="{{ related_item.images.all.0.list_image_url }}" alt="{{ related_item.title }}"{% if related_item.images.all.0.list_image_width %} width="{{ related_item.images.all.0.list_image_width }}" height="{{ related_item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">{% else %}<img src="{% static 'img/no-image.png' %}" alt="暂无图片" decoding="async">{% endif %}<span><strong>{{ related_item.title }}</strong><small>¥{{ related_item.price|floatformat:2 }}</small></span></a>{% endfor %}
         </section>
         {% endif %}
     </div>

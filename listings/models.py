@@ -1005,6 +1005,11 @@ class ItemImage(models.Model):
     def __str__(self):
         return f'{self.item.title}的图片'
 
+    class Meta:
+        ordering = ['id']
+        verbose_name = '商品图片'
+        verbose_name_plural = '商品图片'
+
 
 class FavoriteCollection(models.Model):
     """A user-owned group for organizing saved campus items."""

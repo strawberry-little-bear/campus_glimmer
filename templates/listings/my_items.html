@@ -125,8 +125,8 @@
                                 <td><input type="checkbox" name="item_ids" value="{{ item.id }}" class="form-check-input bulk-item-checkbox" form="bulk-campaign-form" aria-label="选择商品 {{ item.title }}"></td>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+                                        {% if item.images.all.0 %}
+                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
@@ -203,8 +203,8 @@
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+                                        {% if item.images.all.0 %}
+                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
@@ -251,8 +251,8 @@
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+                                        {% if item.images.all.0 %}
+                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
@@ -299,8 +299,8 @@
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        {% if item.images.first %}
-                                        <img src="{{ item.images.first.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.first.list_image_width %} width="{{ item.images.first.list_image_width }}" height="{{ item.images.first.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+                                        {% if item.images.all.0 %}
+                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
                                         {% endif %}
                                         <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
                                     </div>
