@@ -33,7 +33,15 @@ from .models import (
 
 class MeetingServiceWindowQualityTestBase(TestCase):
     def setUp(self):
-        self.now = timezone.make_aware(datetime(2026, 10, 18, 12, 0))
+        # 本面板按构建时刻向前看，页面和导出用的是 timezone.now()，不是这里传入的
+        # self.now。固定写死日历日期会让页面用例变成“看运行时刻的彩票”：约定时间
+        # 晚于当天 20:00 时，预约已经落在过去，前视查询会静默把它丢掉。所以这里按
+        # 真实时钟推导：取“明天及以后的第一个周一”，任何时刻都在未来，且星期与
+        # 各用例登记的 weekday=1 每周时段保持对齐。
+        self.appointment_date = self._next_monday_after_tomorrow()
+        self.now = timezone.make_aware(
+            datetime.combine(self.appointment_date - timedelta(days=1), time(12, 0)),
+        )
         self.seller = User.objects.create_user(
             username='window-audit-seller', password='safe-password-123',
         )
@@ -43,6 +51,12 @@ class MeetingServiceWindowQualityTestBase(TestCase):
         self.category = Category.objects.create(name='开放时段审计分类')
         self.location = CampusLocation.objects.create(name='审计图书馆')
         self.counter = 0
+
+    @staticmethod
+    def _next_monday_after_tomorrow():
+        """Return the first Monday on or after tomorrow, as a local date."""
+        day = timezone.localtime(timezone.now()).date() + timedelta(days=1)
+        return day + timedelta(days=(1 - day.isoweekday()) % 7)
 
     def make_appointment(self, *, location='unset', hour=10, minute=0,
                          status='confirmed', title='开放时段审计商品'):
@@ -68,7 +82,7 @@ class MeetingServiceWindowQualityTestBase(TestCase):
             status='confirmed',
         )
         start_at = timezone.make_aware(
-            datetime.combine(date(2026, 10, 19), time(hour, minute)),
+            datetime.combine(self.appointment_date, time(hour, minute)),
         )
         return MeetingAppointment.objects.create(
             order=order,
@@ -132,13 +146,13 @@ class MeetingServiceWindowQualityClassificationTests(MeetingServiceWindowQuality
         self.make_appointment(location=replacement, hour=11, title='替换时段外商品')
         closed = CampusLocationServiceException.objects.create(
             location=self.location,
-            effective_date=date(2026, 10, 19),
+            effective_date=self.appointment_date,
             exception_type=CampusLocationServiceException.CLOSED,
             reason='假期闭馆',
         )
         replacement_exception = CampusLocationServiceException.objects.create(
             location=replacement,
-            effective_date=date(2026, 10, 19),
+            effective_date=self.appointment_date,
             exception_type=CampusLocationServiceException.REPLACEMENT,
             reason='考试周缩短开放',
         )
@@ -148,7 +162,7 @@ class MeetingServiceWindowQualityClassificationTests(MeetingServiceWindowQuality
         )
         CampusLocationServiceException.objects.create(
             location=unused,
-            effective_date=date(2026, 10, 20),
+            effective_date=self.appointment_date + timedelta(days=1),
             exception_type=CampusLocationServiceException.CLOSED,
             reason='设备检修',
         )
@@ -165,7 +179,7 @@ class MeetingServiceWindowQualityClassificationTests(MeetingServiceWindowQuality
         self.assertEqual(metrics['unused_location_count'], 1)
         self.assertIn('假期闭馆', panel['risk_rows'][0]['reason'])
         self.assertIn('考试周缩短开放', panel['risk_rows'][1]['reason'])
-        self.assertEqual(closed.effective_date, date(2026, 10, 19))
+        self.assertEqual(closed.effective_date, self.appointment_date)
 
     def test_inactive_exception_falls_back_to_weekly_rule(self):
         CampusLocationServiceWindow.objects.create(
@@ -175,7 +189,7 @@ class MeetingServiceWindowQualityClassificationTests(MeetingServiceWindowQuality
         appointment = self.make_appointment(hour=20, title='停用例外商品')
         CampusLocationServiceException.objects.create(
             location=self.location,
-            effective_date=date(2026, 10, 19),
+            effective_date=self.appointment_date,
             exception_type=CampusLocationServiceException.CLOSED,
             reason='已停用例外',
             is_active=False,
@@ -250,6 +264,8 @@ class MeetingServiceWindowQualityPageTests(MeetingServiceWindowQualityTestBase):
         self.assertEqual(export.status_code, 200)
         self.assertContains(page, '交付开放时段风险')
         self.assertContains(page, f'#{appointment.order_id}')
+        # 前置条件自检：页面和导出按 timezone.now() 前视，预约必须仍在未来
+        self.assertGreater(appointment.start_at, timezone.now())
         self.assertIn('交付开放时段风险', export_text)
         self.assertIn(f'订单 {appointment.order_id}', export_text)
         self.assertIn('安排不在登记每周开放时段内', export_text)

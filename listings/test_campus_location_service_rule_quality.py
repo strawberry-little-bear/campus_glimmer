@@ -27,8 +27,11 @@ from .models import (
 
 class CampusLocationServiceRuleQualityTestBase(TestCase):
     def setUp(self):
-        self.now = timezone.make_aware(datetime(2026, 10, 18, 12, 0))
-        self.today = date(2026, 10, 18)
+        # 看板页面和导出按 timezone.now() 取“今天”，写死日历日期会让这里的
+        # 页面用例在真实日期跨过 2026-10-19 之后静默失配：例外落到过去，被
+        # 生命周期过滤悄悄剔掉。改为跟随真实时钟推导，构建期与页面期共用同一基准。
+        self.today = timezone.localtime(timezone.now()).date()
+        self.now = timezone.make_aware(datetime.combine(self.today, time(12, 0)))
 
     def make_location(self, name, **kwargs):
         return CampusLocation.objects.create(name=name, **kwargs)
@@ -136,7 +139,7 @@ class CampusLocationServiceRuleQualityTests(CampusLocationServiceRuleQualityTest
             midnight, weekday=1, start=time(22), end=time(2),
         )
         self.make_exception(
-            midnight, date(2026, 10, 20),
+            midnight, self.today + timedelta(days=1),
             exception_type=CampusLocationServiceException.CLOSED,
         )
 
@@ -201,7 +204,7 @@ class CampusLocationServiceRuleQualityTests(CampusLocationServiceRuleQualityTest
     def test_builder_is_read_only_and_stable(self):
         location = self.make_location('只读规则地点')
         window = self.make_window(location, weekday=1, start=time(22), end=time(2))
-        exception = self.make_exception(location, date(2026, 10, 20))
+        exception = self.make_exception(location, self.today + timedelta(days=1))
         snapshots = {
             model: list(model.objects.values())
             for model in (
