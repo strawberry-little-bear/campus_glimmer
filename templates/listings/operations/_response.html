@@ -1,0 +1,307 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 notification-response-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Response quality</span><h2>通知处理时效与触达质量</h2></div>
+        <span class="ops-panel-hint">区分「送达」与「被处理」，衡量每种提醒的真实价值</span>
+    </div>
+    {% if notification_response.has_data %}
+    <div class="notification-response-summary">
+        <div><span>周期发送</span><strong>{{ notification_response.summary.sent }}</strong><small>去重后的通知条数</small></div>
+        <div><span>已处理</span><strong>{{ notification_response.summary.handled }}</strong><small>处理率 {{ notification_response.summary.handling_rate }}%</small></div>
+        <div><span>中位处理时长</span><strong>{{ notification_response.summary.median_label }}</strong><small>P90 {{ notification_response.summary.p90_label }}</small></div>
+        <div class="notification-response-warning"><span>超一周未处理</span><strong>{{ notification_response.summary.stale_unread }}</strong><small>占未读 {{ notification_response.summary.unread }} 条</small></div>
+    </div>
+
+    <div class="notification-response-critical mt-3">
+        <div class="notification-response-critical-heading">
+            <strong>交易关键类通知</strong>
+            <span>直接影响成交与交付的提醒，单独看处理率</span>
+        </div>
+        <div class="notification-response-critical-stats">
+            <span>覆盖类型 <strong>{{ notification_response.critical_summary.count }}</strong> 种</span>
+            <span>发送 <strong>{{ notification_response.critical_summary.sent }}</strong> 条</span>
+            <span>已读 <strong>{{ notification_response.critical_summary.read }}</strong> 条</span>
+            <span>已读率 <strong>{{ notification_response.critical_summary.read_rate }}%</strong></span>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-7">
+            <div class="notification-response-block">
+                <div class="notification-response-block-heading"><strong>处理时长分布</strong><span>共 {{ notification_response.latency_total }} 条已处理</span></div>
+                <ul class="notification-response-buckets">
+                    {% for bucket in notification_response.latency_buckets %}
+                    <li>
+                        <span class="notification-response-bucket-label">{{ bucket.label }}</span>
+                        <span class="notification-response-bucket-track"><span style="width: {% widthratio bucket.count notification_response.latency_total 100 %}%;"></span></span>
+                        <span class="notification-response-bucket-value">{{ bucket.count }} 条<small>{{ bucket.share }}%</small></span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="notification-response-block">
+                <div class="notification-response-block-heading"><strong>发送与处理时段</strong><span>找出没人处理的发送时间</span></div>
+                <div class="notification-response-hours">
+                    {% for point in notification_response.hour_profile %}
+                    <span class="notification-response-hour" title="{{ point.label }} 发送 {{ point.sent }} 条 / 处理 {{ point.read }} 条">
+                        <span class="notification-response-hour-bar" style="height: {% widthratio point.sent notification_response.hour_max 100 %}%;"></span>
+                        {% if point.read %}<span class="notification-response-hour-dot"></span>{% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+                <div class="notification-response-hours-legend"><span><i class="notification-response-hour-bar"></i>发送量</span><span><i class="notification-response-hour-dot"></i>该时段有处理记录</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ops-table-wrap mt-3">
+        <table class="table ops-table align-middle mb-0">
+            <thead><tr><th>通知类型</th><th>发送</th><th>已读</th><th>已读率</th><th>平均处理时长</th><th>最快 / 最慢</th><th>状态</th></tr></thead>
+            <tbody>
+                {% for row in notification_response.kind_rows %}
+                <tr>
+                    <td><strong>{{ row.label }}</strong>{% if row.is_business_critical %}<span class="notification-response-critical-badge">交易关键</span>{% endif %}<small class="d-block text-muted">{{ row.kind }}</small></td>
+                    <td>{{ row.sent }}</td>
+                    <td>{{ row.read }}<small class="d-block text-muted">未读 {{ row.unread }}</small></td>
+                    <td>{{ row.read_rate }}%</td>
+                    <td>{{ row.avg_label }}</td>
+                    <td>{{ row.fastest_label }}<small class="d-block text-muted">最长 {{ row.slowest_label }}</small></td>
+                    <td>{% if row.needs_attention %}<span class="notification-response-attention">需关注</span>{% else %}<span class="notification-response-healthy">正常</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if notification_response.attention_rows %}
+    <div class="notification-response-attention-list mt-3">
+        <div class="notification-response-block-heading"><strong>需要关注的类型</strong><span>已读率低于 50% 或平均处理时长超过一周</span></div>
+        <ul>
+            {% for row in notification_response.attention_rows %}
+            <li><strong>{{ row.label }}</strong><span>已读率 {{ row.read_rate }}% · 平均 {{ row.avg_label }}</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="notification-response-recommendations mt-3">
+        <div class="notification-response-block-heading"><strong>运营建议</strong><span>基于本周期实测数据生成</span></div>
+        <ul>
+            {% for recommendation in notification_response.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有通知数据，发送第一条提醒后这里会开始统计处理时效。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>处理时长按「标记已读时间 − 通知创建时间」计算，反映的是用户查看并处理提醒的快慢，不代表交易本身是否完成；超一周未处理视为已忽略。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 chat-response-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Chat response</span><h2>私信响应时效</h2></div>
+        <span class="ops-panel-hint">区分「发出去」与「被打开」</span>
+    </div>
+    {% if chat_response.has_data %}
+    <div class="chat-response-summary">
+        <div><span>周期发出</span><strong>{{ chat_response.summary.sent }}</strong><small>去重后的私信条数</small></div>
+        <div><span>已被打开</span><strong>{{ chat_response.summary.opened }}</strong><small>打开率 {{ chat_response.summary.open_rate }}%</small></div>
+        <div><span>中位打开时长</span><strong>{{ chat_response.summary.median_label }}</strong><small>P90 {{ chat_response.summary.p90_label }}</small></div>
+        <div class="chat-response-warning"><span>超期未打开</span><strong>{{ chat_response.summary.unopened }}</strong><small>默默期之后仍未打开</small></div>
+    </div>
+
+    <div class="chat-response-health mt-3">
+        <div><span>其中</span><strong>{{ chat_response.summary.opened_untimed }}</strong><small>条为旧数据，无法计时长</small></div>
+        <div><span>会话数</span><strong>{{ chat_response.conversation_health.total }}</strong><small>双向会话 {{ chat_response.conversation_health.two_way }}占全部会话 {{ chat_response.conversation_health.two_way_rate }}%</small></div>
+        <div><span>只发过一句</span><strong>{{ chat_response.conversation_health.single_message }}</strong><small>没有往下说</small></div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-7">
+            <div class="chat-response-block">
+                <div class="chat-response-block-heading"><strong>打开时长分布</strong><span>共 {{ chat_response.latency_total }}条已打开</span></div>
+                <ul class="chat-response-buckets">
+                    {% for bucket in chat_response.latency_buckets %}
+                    <li>
+                        <span class="chat-response-bucket-label">{{ bucket.label }}</span>
+                        <span class="chat-response-bucket-track"><span style="width: {% widthratio bucket.count chat_response.latency_total 100 %}%;"></span></span>
+                        <span class="chat-response-bucket-value">{{ bucket.count }}条已打开<small>{{ bucket.share }}%</small></span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="chat-response-block">
+                <div class="chat-response-block-heading"><strong>发出与打开时段</strong><span>找出没人打开的时间</span></div>
+                <div class="chat-response-hours">
+                    {% for point in chat_response.hour_profile %}
+                    <span class="chat-response-hour" title="{{ point.label }} 周期发出 {{ point.sent }} 已被打开 {{ point.opened }}">
+                        <span class="chat-response-hour-bar" style="height: {% widthratio point.sent chat_response.hour_max 100 %}%;"></span>
+                        {% if point.opened %}<span class="chat-response-hour-dot"></span>{% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+                <div class="chat-response-hours-legend"><span><i class="chat-response-hour-bar"></i>发送量</span><span><i class="chat-response-hour-dot"></i>该时段有打开记录</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ops-table-wrap mt-3">
+        <table class="table ops-table align-middle mb-0">
+            <thead><tr><th>角色</th><th>发出</th><th>打开</th><th>打开率</th><th>中位时长</th><th>样本</th></tr></thead>
+            <tbody>
+                {% for row in chat_response.role_rows %}
+                <tr>
+                    <td><strong>{{ row.label }}</strong></td>
+                    <td>{{ row.sent }}</td>
+                    <td>{{ row.opened }}</td>
+                    <td>{{ row.open_rate }}%</td>
+                    <td>{{ row.median_label }}</td>
+                    <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-xl-6">
+            <div class="chat-response-block h-100">
+                <div class="chat-response-block-heading"><strong>按商品分类看私信响应</strong><span>按名称排列，不按打开率排名</span></div>
+                {% if chat_response.category_rows %}
+                <div class="ops-table-wrap chat-response-category-table">
+                    <table class="table ops-table align-middle mb-0">
+                        <thead><tr><th>场景</th><th>私信</th><th>已打开</th><th>打开率</th><th>中位打开</th><th>P90</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in chat_response.category_rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.sent }}</td>
+                                <td>{{ row.opened }}</td>
+                                <td>{{ row.open_rate }}%</td>
+                                <td>{{ row.median_label }}</td>
+                                <td>{{ row.p90_label }}</td>
+                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="chat-response-context-note mb-0">另有 {{ chat_response.unlinked_messages }} 条私信未关联商品，单独计数，不进入这张表的分母。</p>
+                {% else %}<div class="empty-inline mb-0">当前周期没有关联商品的私信，无法按商品分类分层。</div>{% endif %}
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="chat-response-block h-100">
+                <div class="chat-response-block-heading"><strong>按交易方式看私信响应</strong><span>固定顺序：出售、免费赠送、限期借用</span></div>
+                {% if chat_response.trade_mode_rows %}
+                <div class="ops-table-wrap chat-response-trade-mode-table">
+                    <table class="table ops-table align-middle mb-0">
+                        <thead><tr><th>场景</th><th>私信</th><th>已打开</th><th>打开率</th><th>中位打开</th><th>P90</th><th>样本</th></tr></thead>
+                        <tbody>
+                            {% for row in chat_response.trade_mode_rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.sent }}</td>
+                                <td>{{ row.opened }}</td>
+                                <td>{{ row.open_rate }}%</td>
+                                <td>{{ row.median_label }}</td>
+                                <td>{{ row.p90_label }}</td>
+                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="chat-response-context-note mb-0">样本不足时仍显示已发生的数字，但不把它读成方向。</p>
+                {% else %}<div class="empty-inline mb-0">当前周期没有关联商品的私信，无法按交易方式分层。</div>{% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有私信数据，发出第一条私信后这里会开始统计响应时效。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>响应时长按「第一次被标记为已读的时间−私信发出时间」计算，只统计带时间戳的样本；未读私信不计入时长分布，否则会把没回复当成零秒回复。本面板只给运营看，不对对话双方暴露「对方已读」，也不给任何人打回复速度分。</div>
+    <div class="ops-footer-note text-start mt-2"><i class="bi bi-info-circle me-1"></i>{{ chat_response.context_note }}分类与交易方式不输出用户名、商品标题或私信内容，也不给任何场景或回复速度打分。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 chat-response-trend-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Response trend</span><h2>私信响应时效跨周期对比</h2></div>
+        <span class="ops-panel-hint">周期 {{ chat_response_trend.period_days }} 天·与上一个等长周期比</span>
+    </div>
+    {% if chat_response_trend.has_data %}
+    <div class="chat-response-trend-summary">
+        <div><span>本周期发出</span><strong>{{ chat_response_trend.current.sent }}</strong><small>上一周期 {{ chat_response_trend.previous.sent }}</small></div>
+        <div><span>本周期打开率</span><strong>{% if chat_response_trend.current.open_rate != None %}{{ chat_response_trend.current.open_rate }}%{% else %}—{% endif %}</strong><small>上一周期 {% if chat_response_trend.previous.open_rate != None %}{{ chat_response_trend.previous.open_rate }}%{% else %}—{% endif %}</small></div>
+        <div><span>本周期中位打开</span><strong>{{ chat_response_trend.current.median_label }}</strong><small>上一周期 {{ chat_response_trend.previous.median_label }}</small></div>
+        <div{% if chat_response_trend.drivers %} class="chat-response-trend-warning"{% endif %}><span>有方向的变化</span><strong>{% if chat_response_trend.drivers %}是{% else %}否{% endif %}</strong><small>{% if chat_response_trend.drivers %}{% for row in chat_response_trend.drivers %}{{ row.label }}{% if not forloop.last %}、{% endif %}{% endfor %}{% else %}没有指标越过阈值{% endif %}</small></div>
+    </div>
+
+    <div class="chat-response-trend-reading mt-3">
+        <div class="chat-response-trend-block-heading"><strong>整体指标的跨周期对比</strong><span>时长按倍数判（{{ chat_response_trend.latency_drift_factor }} 倍），比例按百分点判（{{ chat_response_trend.trend_delta_points }} 个百分点）</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 chat-response-trend-table">
+                <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>变化</th><th>方向</th></tr></thead>
+                <tbody>
+                    {% for row in chat_response_trend.metric_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.current_label }}</td>
+                        <td>{{ row.previous_label }}</td>
+                        <td>{{ row.delta_display }}</td>
+                        <td>{% if row.has_direction %}<span class="chat-response-trend-direction" data-tone="{{ row.tone }}">{{ row.direction_label }}</span>{% else %}<span class="text-muted">只报数不判方向</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="chat-response-trend-note mb-0"><i class="bi bi-info-circle me-1"></i>{{ chat_response_trend.summary }}</p>
+        <p class="chat-response-trend-note mb-0">P90 与双向会话占比只报数不判方向：一封信躺半个月就能把 P90 抬起来，而会话变得双向不等于更健康——也可能是两个人为一件谁都不买的商品聊了很久。</p>
+        <p class="chat-response-trend-note mb-0">中位时长需要两侧各 {{ chat_response_trend.min_latency_sample }} 条带时间戳的样本，比例需要两侧各 {{ chat_response_trend.min_sent_sample }} 条私信；任一侧不足就只报数字，不猜方向。上一周期的打开时刻若在 read_at 上线前就发生过，那周期没有可比的时长，不是变快了。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">两个周期内都没有私信记录，发出第一条私信后这里会开始统计跨周期变化。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>两条曲线都按私信发出时刻归期，两侧窗口等长、都从本地午夜切，与搜索趋势面板同一套口径。未打开按「占本周期发出总量的比例」判，不按次数差判：次数是原始计数，量涨起来每条曲线都会跟着涨。本模块只报告，不改写任何一条私信、不调整静默期阈值、不给任何人打回复速度分。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 chat-trade-correlation-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Chat and trade</span><h2>私信响应与成交的共同变化</h2></div>
+        <span class="ops-panel-hint">固定 {{ chat_trade_correlation.outcome_window_days }} 天观察窗·只看共同变化</span>
+    </div>
+    {% if chat_trade_correlation.has_data %}
+    <div class="chat-trade-correlation-summary">
+        <div><span>成熟且可计时</span><strong>{{ chat_trade_correlation.summary.eligible_conversations }}</strong><small>进入响应档分母</small></div>
+        <div><span>窗口内有订单</span><strong>{{ chat_trade_correlation.summary.ordered_conversations }}</strong><small>订单创建于询问之后</small></div>
+        <div><span>7 天内成交</span><strong>{{ chat_trade_correlation.summary.completed_conversations }}</strong><small>completed 或 returned</small></div>
+        <div><span>成交率</span><strong>{% if chat_trade_correlation.summary.completion_rate != None %}{{ chat_trade_correlation.summary.completion_rate }}%{% else %}—{% endif %}</strong><small>分母为可计时会话</small></div>
+        <div><span>未满 7 天</span><strong>{{ chat_trade_correlation.summary.immature_conversations }}</strong><small>单独观察，不进分母</small></div>
+        <div><span>无法计时</span><strong>{{ chat_trade_correlation.summary.untimed_conversations }}</strong><small>已满窗口但没有 read_at</small></div>
+    </div>
+    <div class="ops-table-wrap mt-3">
+        <table class="table ops-table align-middle mb-0 chat-trade-correlation-table">
+            <thead><tr><th>响应档</th><th>会话</th><th>带时戳询问</th><th>中位打开</th><th>有订单</th><th>7天内成交</th><th>成交率</th><th>样本</th></tr></thead>
+            <tbody>
+                {% for row in chat_trade_correlation.rows %}
+                <tr>
+                    <td><strong>{{ row.label }}</strong></td>
+                    <td>{{ row.conversations }}</td>
+                    <td>{{ row.timed_inquiries }}</td>
+                    <td>{{ row.median_label }}</td>
+                    <td>{{ row.ordered }}</td>
+                    <td>{{ row.completed }}</td>
+                    <td>{% if row.completion_rate != None %}{{ row.completion_rate }}%{% else %}—{% endif %}</td>
+                    <td>{% if row.has_sample %}<span class="chat-trade-correlation-ok">够</span>{% else %}<span class="chat-trade-correlation-thin">样本不足</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="chat-trade-correlation-note mb-0"><i class="bi bi-info-circle me-1"></i>{{ chat_trade_correlation.note }}</p>
+    <p class="chat-trade-correlation-note mb-0">每个响应档需要 {{ chat_trade_correlation.min_bucket_sample }} 个成熟且可计时的会话才把成交率读成可用信号；不足时数字照报。统计周期内触碰过但第一条询问在周期外的会话有 {{ chat_trade_correlation.summary.started_before_period }} 个，不算新会话。</p>
+    <p class="chat-trade-correlation-note mb-0">面板不输出用户名、商品标题、订单号或私信内容，也不按用户、商品、分类或响应速度排名；不给回复速度打分，不把结果写回推荐、信誉或风控。</p>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有关联商品的买家私信，出现第一条新会话后这里会开始统计共同变化。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这不是因果结论：响应快与成交可能同时来自商品热度、开学季、价格、库存或双方时间安排。此面板只把对齐后的分母放在一起，供运营继续观察。</div>
+</section>

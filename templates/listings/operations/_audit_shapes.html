@@ -1,0 +1,224 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 borrow-days-shape-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Borrow days shape</span><h2>默认借用天数的形状</h2></div>
+        <span class="ops-panel-hint">卖家当初允许借多久，第一次被数字读到</span>
+    </div>
+    <p class="borrow-days-shape-note mb-3"><i class="bi bi-hourglass-split me-1"></i><code>Item.borrow_days</code> 是借用域里唯一一个由出借方亲手写下的数字，也是 <code>Order.return_due_at</code> 的唯一来源。它是全站唯一一个在业务模块里出现次数为零的字段：<strong>写入路径有，显示路径有，统计路径没有。</strong>借用域已经有四个模块在数东西——<code>borrow_risk</code> 按分类和押金分层，<code>borrow_rhythm</code> 把它和学期阶段交叉，<code>borrow_escalation</code> 管三级催收阶梯，<code>governance_sla</code> 管治理队列时效——四个模块全部从「东西还没回来」切进去，没有一个从「卖家当初允许借多久」切进去。</p>
+    {% if not borrow_days_shape.has_data %}
+    <div class="empty-inline">{{ borrow_days_shape.summary }}</div>
+    {% endif %}
+    {% if borrow_days_shape.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>借用商品</span><strong>{{ borrow_days_shape.item_count }}</strong><small>其中在架 {{ borrow_days_shape.in_stock_count }} 件</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内借用</span><strong>{{ borrow_days_shape.borrow_count }}</strong><small>回看 {{ borrow_days_shape.days }} 天，与 <code>borrow_risk</code> 同一批订单</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>停在默认 {{ borrow_days_shape.default_borrow_days }} 天</span><strong>{% if borrow_days_shape.default_share is None %}—{% else %}{{ borrow_days_shape.default_share }}%{% endif %}</strong><small>表单上的占位符，被原样接受的比例</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>配置与实际同档</span><strong>{{ borrow_days_shape.matched_count }}</strong><small>不一致 {{ borrow_days_shape.mismatch_count }} 笔</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>一、借用商品配了多长的期限</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>期限档</th><th>商品数</th><th>其中在架</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_days_shape.item_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.item_count }}{% if row.item_count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{{ row.in_stock_count }}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if row.is_small_sample %}不足 {{ borrow_days_shape.min_item_sample }} 件，只作参考{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分母是<strong>全部借用商品</strong>，包括从没被借出去的：借用商品的配置分布和「被用过的期限分布」是两个问题，只读被借过的商品会让前者看起来像后者。档位取表单上的原值 1/3/7/14/30/90，<strong>不取分位数</strong>——运营看表时要能认出自己在表单上选的那一档，一个每月都会移动的分位边界什么也说明不了。<strong>0 样本档全列：「90 天上没有人」本身是结论，不是表格的缺口。</strong></p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>二、配的天数 vs 实际借了多久</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>期限档</th><th>配置的借用</th><th>配置占比（%）</th><th>实际归还的借用</th><th>实际占比（%）</th><th>平均实际天数</th><th>最长实际天数</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_days_shape.configured_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.configured_count }}</td>
+                        <td>{% if row.configured_share is None %}—{% else %}{{ row.configured_share }}{% endif %}</td>
+                        <td>{{ row.actual_count }}</td>
+                        <td>{% if row.actual_share is None %}—{% else %}{{ row.actual_share }}{% endif %}</td>
+                        <td>{% if row.average_actual_days is None %}—{% else %}{{ row.average_actual_days }}{% endif %}</td>
+                        <td>{% if row.max_actual_days is None %}—{% else %}{{ row.max_actual_days }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">配 7 天、3 天后归还，<strong>两列各记一格</strong>：配置侧记 4-7 天档，实际侧记 1-3 天档。报一个差值列会看不出是哪一侧在动。<strong>配置列的分母是周期内全部借用，实际列的分母是其中已归还的借用</strong>——两个分母不是同一个数，分开报；不知道这一点的读者会把完成率读成时长分布。还挂在 <code>borrowed</code> 的订单是右删失样本，实际时长还不存在，只进配置列，周期内共 {{ borrow_days_shape.censored_count }} 笔，不进实际列的任何分母。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>三、借用天数 × 催收</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>期限档</th><th>借用</th><th>升级</th><th>第三级</th><th>已闭环</th><th>跟进中</th><th>升级率（%）</th><th>第三级率（%）</th><th>逾期笔数</th><th>平均超期天数</th><th>平均超期占配置（%）</th><th>平均闭环（天）</th></tr></thead>
+                <tbody>
+                    {% for row in borrow_days_shape.band_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.borrow_count }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">样本不足</span>{% endif %}</td>
+                        <td>{{ row.escalated_count }}</td>
+                        <td>{{ row.level_three_count }}</td>
+                        <td>{{ row.resolved_count }}</td>
+                        <td>{{ row.open_count }}</td>
+                        <td>{% if row.escalation_rate is None %}—{% else %}{{ row.escalation_rate }}{% endif %}</td>
+                        <td>{% if row.level_three_rate is None %}—{% else %}{{ row.level_three_rate }}{% endif %}</td>
+                        <td>{{ row.overdue_count }}</td>
+                        <td>{% if row.average_overdue_days is None %}—{% else %}{{ row.average_overdue_days }}{% endif %}</td>
+                        <td>{% if row.average_overdue_ratio is None %}—{% else %}{{ row.average_overdue_ratio }}{% endif %}</td>
+                        <td>{% if row.average_close_days is None %}—{% else %}{{ row.average_close_days }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><strong>分母包含从未升级过的借用</strong>，和 <code>borrow_risk</code> 读同一批订单、同一个口径，两表可以并排读；只看升级过的订单会让每一档的升级率都变成 100%。这是 <code>borrow_risk</code> 的第三个分层维度——它按分类和押金切，这里按卖家定的期限切。<strong>主口径是「超期天数 / 配置天数」而不是绝对天数</strong>：逾期 3 天对一笔 7 天的借用和对一笔 90 天的借用是两件不同的事。绝对超期天数仍然单列，因为那是和借用者沟通时真的会用到的数。</p>
+    </div>
+
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i><strong>逾期按已归还的笔算，不按未闭环的算。</strong>一笔逾期的未闭环借用，它的逾期天数还在随时间增长，报进平均值会让这个数随读取时刻漂移。平均闭环从真正发生的那一级催收起算，不从到期日起算——在 L1 躺了一周的订单不是治理侧花了一周处理的那一单。</p>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何东西。</strong>不加迁移、不加字段、不改 <code>borrow_days</code> 的默认值、不改 1 到 90 的校验、不追改任何一笔历史订单、不动催收阶梯。<strong>不报「这个字段被改过几次」</strong>——<code>Item.updated_at</code> 会在任何一次保存上刷新，包括将来的任何字段变更，拿它推断修改次数是拿噪声当信号；库里没有记录字段变更历史的表，这个数不知道，不编。<strong>改商品的 <code>borrow_days</code> 不追溯旧订单</strong>：一笔已经借出去的订单，它的归还截止时刻在下单那一刻就定了，所以第二节只做「配置档 vs 实际档」的对照，不做任何重算。不按用户排名、不输出用户名、不列商品名、不读自由文本。<strong>不把相关性讲成因果</strong>——配 90 天的商品三天就还，可能是期限形同虚设，也可能这类东西本来就不需要借那么久；<strong>也不把长期限读成「更信任别人」</strong>，一个人可能只是因为懒或者照抄了默认值。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 dispute-evidence-shape-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Evidence shape</span><h2>证据文件的形状</h2></div>
+        <span class="ops-panel-hint">争议双方实际传了什么格式、有多大，5 MB 上限是不是在挡人</span>
+    </div>
+    <p class="borrow-days-shape-note mb-3"><i class="bi bi-paperclip me-1"></i><code>OrderDisputeEvidence.attachment</code> 上挂着 <code>validate_dispute_evidence</code>——<strong>5 MB 上限、四种扩展名</strong>，这是站内唯一一处把「治理侧要能审阅」写成代码的产品规则。而争议域唯一的读者 <code>dispute_resolution_quality</code> 只数附件条数，<code>attachment.name</code> 与 <code>attachment.size</code> 一次都没有被任何一个数字读到。<strong>一套上线运行的格式规则，运营看不到它的形状</strong>：不知道双方实际传的是什么格式、有多大、有没有人在反复撞 5 MB 上限。</p>
+    {% if not dispute_evidence_shape.has_data %}
+    <div class="empty-inline">{{ dispute_evidence_shape.summary }}</div>
+    {% endif %}
+    {% if dispute_evidence_shape.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内证据</span><strong>{{ dispute_evidence_shape.evidence_count }}</strong><small>按附件上传时刻切窗口</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>能读到大小的</span><strong>{{ dispute_evidence_shape.readable_count }}</strong><small>{% if dispute_evidence_shape.unreadable_count %}另有 {{ dispute_evidence_shape.unreadable_count }} 份读不到{% else %}全部读得到{% endif %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>贴上限（≥ {{ dispute_evidence_shape.near_limit.near_limit_label }}）</span><strong>{{ dispute_evidence_shape.near_limit.near_limit_count }}</strong><small>占能读到大小的 {{ dispute_evidence_shape.near_limit.near_limit_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>带了材料的争议</span><strong>{{ dispute_evidence_shape.dispute_count }}</strong><small>一笔最多 {{ dispute_evidence_shape.per_dispute.max_count }} 份</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>一、双方实际传的是什么格式</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>格式</th><th>份数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in dispute_evidence_shape.extension_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.count }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{{ row.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分母是<strong>窗口内全部附件，包括读不到大小的那些</strong>——扩展名只取决于 <code>attachment.name</code> 这个字符串，和文件在不在存储里无关。<strong>这是本模块唯一一张分母含「读不到大小」的表</strong>，不要拿它和第二节的分母对账。<strong>「其它」档理论上恒为 0</strong>：校验器拦着，不合规的扩展名根本存不进来。但它仍然单列——一个恒为 0 的格子是有信息的，它说明校验在生效；非 0 就说明有路径绕过了校验，<strong>那是一个 bug，不是一条产品建议</strong>。<strong>不因为「PDF 没人用」就建议下掉 PDF</strong>：格式规则是治理侧的可审阅性要求，不是使用频率的函数。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>二、文件有多大</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>大小档</th><th>份数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in dispute_evidence_shape.size_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.count }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if row.is_small_sample %}不足 {{ dispute_evidence_shape.min_sample }} 份，只作参考{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分母是<strong>能读到大小的 {{ dispute_evidence_shape.readable_count }} 份</strong>。读不到大小的 {{ dispute_evidence_shape.unreadable_count }} 份<strong>不摊派到任何一档</strong>：它是基础设施问题（文件被外部挪走、存储后端出错），不是用户传了一个奇怪的文件。<strong>0 字节的文件在这一节里是「0 KB」一格，不算读不到大小</strong>——「传了一个空文件」和「存储层出了问题」不是一回事。<strong>档位取规则里的原值，不取分位数</strong>：{{ dispute_evidence_shape.near_limit.max_size_label }} 是写在校验器里的数，{{ dispute_evidence_shape.near_limit.near_limit_label }} 是它的九成；一个每月都会移动的分位边界什么也说明不了，而这个数要能回答「上限是不是该调」——只有固定档能回答这个问题。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>三、有没有人在撞 5 MB 上限</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>观察</th><th>份数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>贴上限（≥ {{ dispute_evidence_shape.near_limit.near_limit_label }}）</td>
+                        <td>{{ dispute_evidence_shape.near_limit.near_limit_count }}</td>
+                        <td>{% if dispute_evidence_shape.near_limit.near_limit_rate is None %}—{% else %}{{ dispute_evidence_shape.near_limit.near_limit_rate }}{% endif %}</td>
+                        <td class="ops-hint">{% if dispute_evidence_shape.near_limit.near_limit_count %}一批文件反复撞上限，说明上限在挡人，该调；一个都没有，说明上限宽松，甚至可以收紧{% else %}本周期没有人贴上限{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td>已经超过上限（≥ {{ dispute_evidence_shape.near_limit.max_size_label }}）</td>
+                        <td>{{ dispute_evidence_shape.near_limit.over_limit_count }}</td>
+                        <td>{% if dispute_evidence_shape.near_limit.over_limit_rate is None %}—{% else %}{{ dispute_evidence_shape.near_limit.over_limit_rate }}{% endif %}</td>
+                        <td class="ops-hint">{% if dispute_evidence_shape.near_limit.over_limit_count %}校验器拦着，这一格非 0 就说明有路径绕过了校验——那是一个 bug{% else %}理论上恒为 0，校验在生效{% endif %}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">「贴上限」是<strong>阈值观察，不是一格分布</strong>：运营问的是「有没有人在撞上限」，不是「4.5 MB 到 5 MB 之间有几份」。<strong>不报「上传失败过几次」</strong>——<code>validate_dispute_evidence</code> 在表单层抛 <code>ValidationError</code>，失败不留任何记录，所以「有多少次上传因为超过 5 MB 被拒」这个数<strong>库里没有，不知道，不编</strong>。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>四、一笔争议带几份、总大小多少</h3>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4"><div class="ops-mini-stat"><span>带了材料的争议</span><strong>{{ dispute_evidence_shape.per_dispute.dispute_count }}</strong><small>分母只含至少一份附件的争议</small></div></div>
+            <div class="col-md-4"><div class="ops-mini-stat"><span>总大小中位</span><strong>{{ dispute_evidence_shape.per_dispute.median_total_label }}</strong><small>P90 {{ dispute_evidence_shape.per_dispute.p90_total_label }}</small></div></div>
+            <div class="col-md-4"><div class="ops-mini-stat"><span>单笔最大总大小</span><strong>{{ dispute_evidence_shape.per_dispute.max_total_label }}</strong><small>一份附件都没有的争议不在这里</small></div></div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>附件份数</th><th>争议数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in dispute_evidence_shape.per_dispute.count_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.count }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if row.is_small_sample %}不足 {{ dispute_evidence_shape.min_sample }} 笔，只作参考{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="table-responsive mt-3">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>争议现在处于什么状态</th><th>争议数</th><th>附件数</th><th>平均份数</th><th>总大小中位</th><th>单笔最大</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in dispute_evidence_shape.status_cross_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.dispute_count }}</td>
+                        <td>{{ row.evidence_count }}</td>
+                        <td>{{ row.average_count }}</td>
+                        <td>{{ row.median_total_label }}</td>
+                        <td>{{ row.max_total_label }}</td>
+                        <td class="ops-hint">{% if not row.gives_direction %}不足 {{ row.min_sample }} 笔，只报规模、不给方向{% else %}{{ row.note }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><strong>已完结组给方向，流程中组只报规模</strong>：<code>add_dispute_evidence</code> 只在 <code>open</code> / <code>reviewing</code> 开放，所以已完结争议的附件数在结案那一刻就定了；而还挂在流程里的争议以后还会补附件，它现在的份数<strong>只是下界</strong>。把两组的均值放在一起比，会把「还在谈」读成「材料少」。<strong>不判断「证据够不够」</strong>：平台没有能力判断一段聊天记录能不能证明「商品与描述不符」，这个判断只有处理人能做。<strong>一份附件都没有的争议不在这张表里</strong>——本模块按证据上传时刻切窗口，看不见没有证据的争议；那个数在 <code>dispute_resolution_quality</code> 的「有没有附件」里，但它按争议发起切窗口，<strong>也不是同一批记录</strong>。</p>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何字段、不动任何文件。</strong>不加迁移、不加字段、不改 <code>validate_dispute_evidence</code> 的 5 MB 上限、不改它的四种扩展名集合。上限与格式是产品决策，本模块只把现状读出来——改不改、怎么改，是运营拿着这些数字另外做的决定。<strong>不读文件内容</strong>：不 OCR、不解码、不看图片尺寸、不判断这份截图是不是真的和这笔订单有关；只读 <code>attachment.name</code>（路径字符串）和 <code>attachment.size</code>（存储返回的字节数），这两个都是存储层的元数据。<strong>不按用户排名、不输出用户名、不按 <code>uploaded_by</code> 拆</strong>——谁传的附件本身不带方向，拆开只会得到两个同样没有解释力的数。<strong>不读 <code>note</code></strong>（自由文本，可能写着电话、微信、楼栋号），<strong>不列证据文件名</strong>（那是用户上传时的原始名，可能带着真名、身份证号、订单号）。</div>
+    {% endif %}
+</section>

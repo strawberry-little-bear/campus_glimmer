@@ -1,0 +1,111 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 lost-found-matched-outcome-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Lost &amp; found matched outcome</span><h2>失物招领确认匹配之后，记录停在哪一种终局里</h2></div>
+        <span class="ops-panel-hint">成功结局自己的收尾路径，第一次被运营读到</span>
+    </div>
+    <p class="lost-found-outcome-note mb-3"><i class="bi bi-archive me-1"></i>失物招领的成功结局是「确认匹配」。<code>review_lost_found_lead</code> 的 <code>accept</code> 分支一次做四件事：把线索置为 <code>accepted</code>、把记录置为 <code>matched</code>、把关联的那条记录也置为 <code>matched</code> 并互填 <code>matched_post</code>、把同一条记录下其余 <code>pending</code> 的线索批量清成 <code>rejected</code>。做完这四件事，<strong>这条记录的状态就再也没有被任何一行代码读过</strong>——而 <code>matched</code> 在站内是一个单向门：关闭要求 <code>active</code>，过期任务只扫 <code>active</code>，编辑只把 <code>expired</code> 救回 <code>active</code>。一条截止时间早就过了的记录，会一直挂在 <code>matched</code> 上：公开列表看不见它，发布者的「我的失物招领」看得见它，却关不掉。<code>lost_found_lead_quality</code> 报的是「有多少条记录走到了这里」，本模块报的是「走到这里之后，这些记录现在是什么样子」。</p>
+    {% if not lost_found_matched_outcome.has_data %}
+    <div class="empty-inline">{{ lost_found_matched_outcome.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>统计过的匹配记录</span><strong>{{ lost_found_matched_outcome.matched_total }}</strong><small>不按统计周期过滤</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>仍标记已匹配</span><strong>{{ lost_found_matched_outcome.outcome_rows.0.post_count }}</strong><small>确认之后什么都没做</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>其中截止时间已过</span><strong>{{ lost_found_matched_outcome.overdue_stats.measured_count }}</strong><small>最久一条已挂 {{ lost_found_matched_outcome.overdue_stats.oldest_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>只有一边认这笔账</span><strong>{{ lost_found_matched_outcome.counterpart_stats.one_sided_count }}</strong><small>另有 {{ lost_found_matched_outcome.counterpart_stats.no_counterpart_count }} 条没有关联记录</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>确认匹配之后，记录停在哪一档</h3>
+        <table class="ops-table">
+            <thead><tr><th>终局</th><th>记录数</th><th>占比（%）</th><th>其中截止时间已过</th></tr></thead>
+            <tbody>
+                {% for row in lost_found_matched_outcome.outcome_rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.post_count }}</td>
+                    <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                    <td>{{ row.overdue_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="small text-muted mt-2 mb-0">占比的分母是<strong>全部匹配记录</strong>，不是这一档自己——拿一档除一档永远得到 100%。<strong>「已被发布者关闭」「已过期」「回到寻找中」三档预期是空的</strong>：三处写入路径的前置条件都把 <code>matched</code> 挡在外面，这正是本模块要让人看见的那件事——一栏永远是 0，比一段注释更难被忽略。<strong>「仍标记已匹配」不读成问题</strong>：东西找回来了，这件事在用户心里已经结了。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>挂了一个月的「已匹配」：截止时间已过，状态还没动</h3>
+        <table class="ops-table">
+            <thead><tr><th>过期多久</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+            <tbody>
+                {% for row in lost_found_matched_outcome.overdue_stats.rows %}
+                <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td><td class="ops-hint">过期越久，越可能是发布者忘了回来收尾</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if lost_found_matched_outcome.overdue_stats.is_small_sample %}<p class="small text-muted mt-2 mb-0">截止时间已过的记录不足 {{ lost_found_matched_outcome.min_bucket_sample }} 条，年龄结构只作参考，不给方向。</p>{% endif %}
+        <p class="small text-muted mt-2 mb-0">分母是<strong>「仍标记已匹配」这一档</strong>，不是全部匹配记录。另有 {{ lost_found_matched_outcome.overdue_stats.no_deadline_count }} 条没有截止时间——没有截止时间的记录谈不上过期，那是右删失样本，不计入这个分布。<strong>按天分档</strong>：失物招领的时间尺度是天，报「19 小时」会让运营以为是小时级的问题。<strong>不报取消率</strong>：忘了和觉得没必要，观测数据里分不开。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>匹配是双向的，另一条记录跟上了吗</h3>
+        <table class="ops-table">
+            <thead><tr><th>双向性</th><th>记录数</th><th>说明</th></tr></thead>
+            <tbody>
+                <tr><td>互为匹配</td><td>{{ lost_found_matched_outcome.counterpart_stats.mutual_count }}</td><td class="ops-hint">两边都填了 <code>matched_post</code>，互相认这笔账</td></tr>
+                <tr><td>只有一边认这笔账</td><td>{{ lost_found_matched_outcome.counterpart_stats.one_sided_count }}</td><td class="ops-hint">不是 bug——用户可能删掉了自己那条记录，但它是直接证据</td></tr>
+                <tr><td>没有关联记录</td><td>{{ lost_found_matched_outcome.counterpart_stats.no_counterpart_count }}</td><td class="ops-hint">单独数，不算进双向性的分母</td></tr>
+            </tbody>
+        </table>
+        <p class="small text-muted mt-2 mb-0">填了关联记录的共 {{ lost_found_matched_outcome.counterpart_stats.measured_count }} 条，其中互为匹配的占 {% if lost_found_matched_outcome.counterpart_stats.mutual_rate is None %}—{% else %}{{ lost_found_matched_outcome.counterpart_stats.mutual_rate }}%{% endif %}。<strong>只报「两边是不是同一件事」，不报另一边是谁</strong>——标题是自由文本，可能写着证件号。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>哪种终局的记录，还有人回来填反馈</h3>
+        <table class="ops-table">
+            <thead><tr><th>终局</th><th>已确认线索</th><th>提交反馈</th><th>提交率（%）</th></tr></thead>
+            <tbody>
+                {% for row in lost_found_matched_outcome.feedback.rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.accepted_count }}</td>
+                    <td>{{ row.feedback_count }}</td>
+                    <td>{% if row.feedback_rate is None %}—{% else %}{{ row.feedback_rate }}{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">当前没有带已确认线索的匹配记录。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="small text-muted mt-2 mb-0">分母是这一档里<strong>已有已确认线索</strong>的记录；没有已确认线索的不进分母，反馈的入口只对 <code>accepted</code> 开放。<strong>只报终局维度，不重复 <code>lost_found_lead_quality</code> 的反馈维度结论</strong>——那个报提交率、完成率和标签，这个报「哪种终局更有人回来填」。「没收尾的记录也没人填反馈」正好指向同一件事：收尾路径缺失。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>截止时间已过最久的那些记录</h3>
+        <table class="ops-table">
+            <thead><tr><th>记录编号</th><th>记录类型</th><th>过期多久</th><th>有另一条关联记录</th><th>提交过反馈</th></tr></thead>
+            <tbody>
+                {% for row in lost_found_matched_outcome.list.rows %}
+                <tr>
+                    <td>{{ row.post_id }}</td>
+                    <td>{{ row.post_type_label }}</td>
+                    <td>{{ row.overdue_label }}</td>
+                    <td>{% if row.has_counterpart %}有{% else %}—{% endif %}</td>
+                    <td>{% if row.has_feedback %}有{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前没有截止时间已过的匹配记录。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if lost_found_matched_outcome.list.row_total > lost_found_matched_outcome.list.row_limit %}
+        <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ lost_found_matched_outcome.list.row_limit }} 条，当前共 {{ lost_found_matched_outcome.list.row_total }} 条，完整的在导出里。</p>
+        {% endif %}
+        <p class="small text-muted mt-2 mb-0">按过期多久降序，<strong>最该核实的排最前</strong>。清单是给「现在去核实」用的，不是给归档用的。<strong>记录编号可以报，它是数字不是身份</strong>；标题和发布者都不报——谁在什么时候确认了哪条失物招领是用户的私事，做成一份清单，失物招领就变成了公开表态。</p>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-archive me-1"></i>本模块只报告，<strong>不改写任何一条记录、任何一条线索、任何一份反馈</strong>：不替任何人关闭一条 <code>matched</code> 记录、不清空 <code>matched_post</code>、不重发通知、不把统计写回任何记录。真正该改的是收尾路径本身——而那是需求，不是统计。</div>
+    {% endif %}
+</section>

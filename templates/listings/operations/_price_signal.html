@@ -1,0 +1,448 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 refresh-response-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Refresh response</span><h2>商品刷新后的搜索回响</h2></div>
+        <span class="ops-panel-hint">只对照前后各 72 小时的搜索事件</span>
+    </div>
+    <p class="refresh-response-note mb-3"><i class="bi bi-search me-1"></i>这里的分析单位是<strong>商品当前可观察到的最近一次刷新</strong>。系统还没有刷新历史表，所以不回填更早的刷新，也不把看不到的历史当成不存在；在最近一次刷新上，累计的 <code>refresh_count</code> 就是这次刷新的次序。前后窗各 {{ refresh_response.window_hours }} 小时，中间只以刷新时间为界，共享的端点只计入后窗。</p>
+    <div class="row g-3 mb-4 refresh-response-summary">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内观察到刷新</span><strong>{{ refresh_response.summary.observed_refreshes }}</strong><small>商品 × 最近一次刷新</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>成熟且可对照</span><strong>{{ refresh_response.summary.eligible_refreshes }}</strong><small>进入下表的分母</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未满 {{ refresh_response.window_hours }} 小时</span><strong>{{ refresh_response.summary.immature_refreshes }}</strong><small>先不比较，避免截断后窗</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>无完整前窗</span><strong>{{ refresh_response.summary.no_full_pre_window_refreshes }}</strong><small>发布太晚，单独列出</small></div></div>
+    </div>
+    <div class="refresh-response-table">
+        <h3 class="h6 mb-3">刷新次序对照（前 72 小时 / 后 72 小时）</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-grid">
+                <thead>
+                    <tr>
+                        <th>刷新次序</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in refresh_response.rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.refreshes }}</td>
+                        <td>{{ row.before_impressions }}</td>
+                        <td>{{ row.after_impressions }}</td>
+                        <td>{% if row.after_median_impressions is None %}—{% else %}{{ row.after_median_impressions }}{% endif %}</td>
+                        <td>{% if row.before_click_rate is None %}—{% else %}{{ row.before_click_rate }}{% endif %}</td>
+                        <td>{% if row.after_click_rate is None %}—{% else %}{{ row.after_click_rate }}{% endif %}</td>
+                        <td>{{ row.before_favorites }}</td>
+                        <td>{{ row.after_favorites }}</td>
+                        <td>{{ row.before_orders }}</td>
+                        <td>{{ row.after_orders }}</td>
+                        <td>{% if row.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif row.refreshes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ refresh_response.min_group_items }} 件</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>{{ refresh_response.overall.label }}</td>
+                        <td>{{ refresh_response.overall.refreshes }}</td>
+                        <td>{{ refresh_response.overall.before_impressions }}</td>
+                        <td>{{ refresh_response.overall.after_impressions }}</td>
+                        <td>{% if refresh_response.overall.after_median_impressions is None %}—{% else %}{{ refresh_response.overall.after_median_impressions }}{% endif %}</td>
+                        <td>{% if refresh_response.overall.before_click_rate is None %}—{% else %}{{ refresh_response.overall.before_click_rate }}{% endif %}</td>
+                        <td>{% if refresh_response.overall.after_click_rate is None %}—{% else %}{{ refresh_response.overall.after_click_rate }}{% endif %}</td>
+                        <td>{{ refresh_response.overall.before_favorites }}</td>
+                        <td>{{ refresh_response.overall.after_favorites }}</td>
+                        <td>{{ refresh_response.overall.before_orders }}</td>
+                        <td>{{ refresh_response.overall.after_orders }}</td>
+                        <td>{% if refresh_response.overall.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif refresh_response.overall.refreshes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ refresh_response.min_group_items }} 件</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    <div class="mt-4">
+        <h3 class="h6 mb-3">哪些刷新没有进入对照</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-status">
+                <thead><tr><th>状态</th><th>数量</th><th>处理方式</th></tr></thead>
+                <tbody>
+                    <tr><td>周期内观察到的刷新</td><td>{{ refresh_response.summary.observed_refreshes }}</td><td>先全部登记，再看观察条件</td></tr>
+                    <tr><td>成熟且可对照</td><td>{{ refresh_response.summary.eligible_refreshes }}</td><td>进入次序表；每组至少 {{ refresh_response.min_group_items }} 件才标为样本可用</td></tr>
+                    <tr><td>未满 {{ refresh_response.window_hours }} 小时</td><td>{{ refresh_response.summary.immature_refreshes }}</td><td>单列，不用被截断的后窗做对照</td></tr>
+                    <tr><td>无完整前窗</td><td>{{ refresh_response.summary.no_full_pre_window_refreshes }}</td><td>单列，不把新发布商品混进对照组</td></tr>
+                    <tr><td>时间异常</td><td>{{ refresh_response.summary.invalid_timestamp_refreshes }}</td><td>单列，不猜测正确时间</td></tr>
+                    <tr><td>次序不在 1—4</td><td>{{ refresh_response.summary.unexpected_ordinal_refreshes }}</td><td>单列，不并入任何固定档</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读搜索曝光、搜索点击、收藏和预约的发生时间，<strong>不读 <code>BrowsingHistory.view_count</code></strong>——浏览历史里的浏览次数是累计聚合，不是逐次浏览事件，切开看会像很精确、实际无法核对。输出不包含用户、商品标题、搜索词或订单号，不排名、不建议自动刷新，也不把统计写回推荐或风控；后窗高于前窗只表示共同变化，不解释为因果提升。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 price-response-panel" id="price-response">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Price response</span><h2>价格调整后的搜索回响</h2></div>
+        <span class="ops-panel-hint">只对照调价前后各 72 小时</span>
+    </div>
+    <p class="refresh-response-note mb-3"><i class="bi bi-cash-coin me-1"></i>这里的分析单位是<strong>一条出售价格轨迹</strong>。前后窗各 {{ price_response.window_hours }} 小时，中间以调价时间为界，共享端点只计入后窗；一条轨迹的六天窗口里若还落着同商品的另一次调价，这条轨迹先退出对照，不把同一批事件拆给两次调价。</p>
+    <div class="row g-3 mb-4 refresh-response-summary">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内观察到调价</span><strong>{{ price_response.summary.observed_changes }}</strong><small>只登记统计周期内的轨迹</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>成熟且可对照</span><strong>{{ price_response.summary.eligible_changes }}</strong><small>进入方向表和幅度表</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未满 {{ price_response.window_hours }} 小时</span><strong>{{ price_response.summary.immature_changes }}</strong><small>先不比较，避免截断后窗</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>相邻调价重叠</span><strong>{{ price_response.summary.adjacent_change_changes }}</strong><small>不把同一事件算两次</small></div></div>
+    </div>
+
+    <div class="refresh-response-table">
+        <h3 class="h6 mb-3">方向对照（前 72 小时 / 后 72 小时）</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-grid">
+                <thead>
+                    <tr>
+                        <th>方向</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in price_response.direction_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.changes }}</td>
+                        <td>{{ row.before_impressions }}</td>
+                        <td>{{ row.after_impressions }}</td>
+                        <td>{% if row.after_median_impressions is None %}—{% else %}{{ row.after_median_impressions }}{% endif %}</td>
+                        <td>{% if row.before_click_rate is None %}—{% else %}{{ row.before_click_rate }}{% endif %}</td>
+                        <td>{% if row.after_click_rate is None %}—{% else %}{{ row.after_click_rate }}{% endif %}</td>
+                        <td>{{ row.before_favorites }}</td>
+                        <td>{{ row.after_favorites }}</td>
+                        <td>{{ row.before_orders }}</td>
+                        <td>{{ row.after_orders }}</td>
+                        <td>{% if row.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif row.changes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ price_response.min_group_changes }} 条</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td>全部</td>
+                        <td>{{ price_response.overall.changes }}</td>
+                        <td>{{ price_response.overall.before_impressions }}</td>
+                        <td>{{ price_response.overall.after_impressions }}</td>
+                        <td>{% if price_response.overall.after_median_impressions is None %}—{% else %}{{ price_response.overall.after_median_impressions }}{% endif %}</td>
+                        <td>{% if price_response.overall.before_click_rate is None %}—{% else %}{{ price_response.overall.before_click_rate }}{% endif %}</td>
+                        <td>{% if price_response.overall.after_click_rate is None %}—{% else %}{{ price_response.overall.after_click_rate }}{% endif %}</td>
+                        <td>{{ price_response.overall.before_favorites }}</td>
+                        <td>{{ price_response.overall.after_favorites }}</td>
+                        <td>{{ price_response.overall.before_orders }}</td>
+                        <td>{{ price_response.overall.after_orders }}</td>
+                        <td>{% if price_response.overall.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif price_response.overall.changes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ price_response.min_group_changes }} 条</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">零元基线保留在方向表和总览中，但它没有可解释的幅度，不进入幅度档分母。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">幅度档对照（前 72 小时 / 后 72 小时）</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table refresh-response-grid">
+                <thead>
+                    <tr>
+                        <th>方向</th><th>幅度档</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in price_response.magnitude_rows %}
+                    <tr>
+                        <td>{{ row.direction }}</td>
+                        <td>{{ row.bucket }}</td>
+                        <td>{{ row.changes }}</td>
+                        <td>{{ row.before_impressions }}</td>
+                        <td>{{ row.after_impressions }}</td>
+                        <td>{% if row.after_median_impressions is None %}—{% else %}{{ row.after_median_impressions }}{% endif %}</td>
+                        <td>{% if row.before_click_rate is None %}—{% else %}{{ row.before_click_rate }}{% endif %}</td>
+                        <td>{% if row.after_click_rate is None %}—{% else %}{{ row.after_click_rate }}{% endif %}</td>
+                        <td>{{ row.before_favorites }}</td>
+                        <td>{{ row.after_favorites }}</td>
+                        <td>{{ row.before_orders }}</td>
+                        <td>{{ row.after_orders }}</td>
+                        <td>{% if row.has_sample %}<span class="badge text-bg-secondary refresh-response-ok">样本可用</span>{% elif row.changes %}<span class="badge text-bg-secondary refresh-response-thin">少于 {{ price_response.min_group_changes }} 条</span>{% else %}<span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">幅度阈值直接复用出售价格轨迹质量面板的 <code>MAGNITUDE_BUCKETS</code>，避免同一项目里出现两套相近但不同的价格分档。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">哪些调价没有进入对照</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>状态</th><th>数量</th><th>处理方式</th></tr></thead>
+                <tbody>
+                    {% for row in price_response.exclusion_rows %}
+                    <tr><td>{{ row.0 }}</td><td>{{ row.1 }}</td><td>{{ row.2 }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读 <code>SearchImpression</code>、<code>SearchClick</code>、<code>Favorite</code> 和 <code>Order</code> 的时间；刻意不读累计的 <code>BrowsingHistory.view_count</code>，也不输出用户名、商品标题、描述、搜索词、订单号或通知原文。后窗高于前窗不代表调价带来因果提升，本面板不预测价格、不自动改价、不给卖家定价评分。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 category-price-reference-panel" id="category-price-reference">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Category price reference</span><h2>分类调价参考</h2></div>
+        <span class="ops-panel-hint">当前价格快照，不按看板周期过滤</span>
+    </div>
+    <p class="small text-muted mb-3"><i class="bi bi-tags me-1"></i>{{ category_price_reference.note }}</p>
+    {% if not category_price_reference.has_data %}
+    <div class="empty-inline">{{ category_price_reference.empty_text }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>有参考的分类</span><strong>{{ category_price_reference.summary.category_count }}</strong><small>每个分类最多 {{ category_price_reference.max_sample_count }} 件样本</small></div></div>
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>当前在售</span><strong>{{ category_price_reference.summary.active_item_total }}</strong><small>只数仍可由卖家调整的供给</small></div></div>
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>区间外在售</span><strong>{{ category_price_reference.summary.out_of_range_item_total }}</strong><small>高于 {{ category_price_reference.summary.above_item_total }} / 低于 {{ category_price_reference.summary.below_item_total }}</small></div></div>
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>边界提醒</span><strong>{{ category_price_reference.summary.low_sample_category_count }} / {{ category_price_reference.summary.wide_range_category_count }}</strong><small>样本不足分类 / 区间过宽分类</small></div></div>
+    </div>
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">分类价格参考</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table category-price-reference-table">
+                <thead><tr><th>分类</th><th>样本</th><th>中位数</th><th>常见区间</th><th>当前在售</th><th>低于 / 区间内 / 高于</th><th>区间外</th><th>宽度</th><th>状态与读法</th></tr></thead>
+                <tbody>
+                    {% for row in category_price_reference.rows %}
+                    <tr{% if row.is_attention_needed %} class="ops-row-emphasis"{% endif %}>
+                        <td><strong>{{ row.name }}</strong></td>
+                        <td>{{ row.sample_count }}<small class="d-block text-muted">{{ row.sample_scope }} · {{ row.confidence_label }}</small></td>
+                        <td>¥{{ row.median_price|floatformat:2 }}</td>
+                        <td>¥{{ row.lower_price|floatformat:2 }}–{{ row.upper_price|floatformat:2 }}{% if row.is_widened %}<small class="d-block text-muted">四分位相同，已按中位数 ±10% 放宽</small>{% endif %}</td>
+                        <td>{{ row.active_count }}</td>
+                        <td>{{ row.below_count }} / {{ row.within_count }} / {{ row.above_count }}</td>
+                        <td>{% if row.out_of_range_count %}<span class="supply-lifecycle-flag">{{ row.out_of_range_count }}</span>{% else %}{{ row.out_of_range_count }}{% endif %}{% if row.out_of_range_share is not None %}<small class="d-block text-muted">{{ row.out_of_range_share }}%</small>{% else %}<small class="d-block text-muted">样本不足，不报占比</small>{% endif %}</td>
+                        <td>{{ row.width_percent|floatformat }}%</td>
+                        <td><span class="badge text-bg-secondary">{{ row.status_label }}</span><small class="d-block text-muted">{{ row.hint }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>样本沿用商品详情页价格参考，但不逐件调用详情页函数，避免看板引入逐商品 N+1 查询。已预订与已售出可作为价格证据，不计入当前运营动作；本面板不输出商品或卖家，不自动改价，也不把“高于常见区间”读成卖贵了。</div>
+    {% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4 price-change-quality-panel" id="price-change-quality">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Price change quality</span><h2>出售价格轨迹质量</h2></div>
+        <span class="ops-panel-hint">卖家改价的方向、幅度、重复调价与当前分类视图</span>
+    </div>
+    <p class="small text-muted mb-3"><i class="bi bi-graph-down-arrow me-1"></i>收藏商品降价提醒让普通出售商品的每次成功改价都进入 <code>ItemPriceChange</code>。对买家这是一条提醒；对运营，它同时说明供给侧在什么时候真的动了价格。本面板只读聚合，<strong>不读商品标题、卖家用户名、通知原文或收藏人名单</strong>。</p>
+    {% if not price_change_quality.has_data %}
+    <div class="empty-inline">{{ price_change_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>价格轨迹</span><strong>{{ price_change_quality.totals.change_count }}</strong><small>看板周期内的出售商品改价</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>涉及商品</span><strong>{{ price_change_quality.totals.item_count }}</strong><small>按商品去重</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>涉及卖家</span><strong>{{ price_change_quality.totals.seller_count }}</strong><small>不输出任何卖家名单</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>降价轨迹</span><strong>{{ price_change_quality.totals.drop_count }}</strong><small>{% if price_change_quality.totals.drop_share is None %}样本不足，不报占比{% else %}占全部轨迹 {{ price_change_quality.totals.drop_share }}%{% endif %}</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>上涨轨迹</span><strong>{{ price_change_quality.totals.rise_count }}</strong><small>{% if price_change_quality.totals.rise_share is None %}样本不足，不报占比{% else %}占全部轨迹 {{ price_change_quality.totals.rise_share }}%{% endif %}</small></div></div>
+        <div class="col-md-4 col-xl-2"><div class="ops-mini-stat"><span>零元基线</span><strong>{{ price_change_quality.totals.zero_base_count }}</strong><small>从 0 元调到正价，不进幅度</small></div></div>
+    </div>
+    {% if price_change_quality.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>有效轨迹少于 {{ price_change_quality.min_sample }} 条，本面板只报数字，不给方向结论、占比或分档解读。</p>
+    {% endif %}
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">方向与幅度</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>方向</th><th>条数</th><th>占全部轨迹（%）</th><th>中位幅度（%）</th><th>P90 幅度（%）</th></tr></thead>
+                <tbody>
+                    {% for direction in price_change_quality.directions.values %}
+                    <tr>
+                        <td>{{ direction.label }}</td>
+                        <td>{{ direction.count }}</td>
+                        <td>{% if direction.share is None %}—{% else %}{{ direction.share }}{% endif %}</td>
+                        <td>{% if direction.median_ratio is None %}—{% else %}{{ direction.median_ratio }}{% endif %}</td>
+                        <td>{% if direction.p90_ratio is None %}—{% else %}{{ direction.p90_ratio }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">零元基线会计入总览和小样本判断，但没有可解释的方向幅度，因此不进入这张表的中位数、P90 或分档分母。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">幅度分档</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+                <thead><tr><th>方向</th><th>档位</th><th>条数</th><th>占同方向（%）</th></tr></thead>
+                <tbody>
+                    {% for row in price_change_quality.magnitude_rows %}
+                    <tr>
+                        <td>{{ row.direction }}</td>
+                        <td>{{ row.bucket }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-4">
+            <h3 class="h6 mb-3">同一件商品改了几次</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>重复调价</th><th>商品数</th></tr></thead>
+                    <tbody>
+                        {% for row in price_change_quality.repeat_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.item_count }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">这里只看见统计窗口内的轨迹，功能上线前的编辑没有流水，所以「多次调价」是下界，不是完整历史。</p>
+        </div>
+        <div class="col-lg-8">
+            <h3 class="h6 mb-3">出售价格轨迹 · 当前分类视图</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>当前分类</th><th>轨迹数</th><th>降价</th><th>上涨</th><th>零元基线</th><th>降价占比（%）</th><th>小样本</th></tr></thead>
+                    <tbody>
+                        {% for row in price_change_quality.category_rows %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>{{ row.change_count }}</td>
+                            <td>{{ row.drop_count }}</td>
+                            <td>{{ row.rise_count }}</td>
+                            <td>{{ row.zero_base_count }}</td>
+                            <td>{% if row.drop_share is None %}—{% else %}{{ row.drop_share }}{% endif %}</td>
+                            <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">少于 {{ price_change_quality.min_sample }} 条</span>{% else %}<span class="badge text-bg-secondary">样本可用</span>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分类读商品<strong>当前分类</strong>；商品后来改分类时，旧轨迹无法还原当时的分类，所以这是当前视图，不伪装成历史分类。分类行不足 {{ price_change_quality.min_sample }} 条时只报数字。</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只报告：<strong>不回填历史轨迹、不把降价率解释成成交率或卖家意愿、不给卖家打分、不自动改价、不把统计写回任何记录</strong>。商品详情页仍不展示价格历史，这一产品口径等轨迹积累后再单独评估。</div>
+    {% endif %}
+</section>
+
+<section class="ops-panel relist-freshness-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Relist freshness</span><h2>重新上架的那件商品，为什么一回来就沉底</h2></div>
+        <span class="ops-panel-hint">编辑延长截止时间重新上架，没有重置新鲜度</span>
+    </div>
+    <p class="relist-freshness-note mb-3"><i class="bi bi-arrow-counterclockwise me-1"></i><code>freshness_age_days</code> 读的是 <code>last_refreshed_at or created_at</code>，而 <code>last_refreshed_at</code> 只在 <code>refresh_item</code> 里被写入。<code>edit_item</code> 的重新上架分支只改 <code>status</code>，<strong>不碰新鲜度、不碰刷新次数</strong>。所以重新上架这个动作在系统里没有留下任何时间戳，一件上学期发布、这学期重新上架的商品，一回到在售列表就带着整个假期的欠账，<code>_level_for</code> 直接判「沉底较久」。</p>
+    {% if not relist_freshness.has_data %}
+    <div class="empty-inline">{{ relist_freshness.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>带着截止时间在售</span><strong>{{ relist_freshness.denominator.deadline_live_count }}</strong><small>分母，无截止时间的商品没有重新上架这个动作</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat relist-freshness-mini-stat-warning"><span>带着新鲜度欠账</span><strong>{{ relist_freshness.denominator.drifted_count }}</strong><small>占带着截止时间在售 {{ relist_freshness.drifted_share }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>现在就能刷新</span><strong>{{ relist_freshness.quota.ready_count }}</strong><small>额度没用尽、间隔也没占着，一刷就灵</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>彻底没有互动</span><strong>{{ relist_freshness.engagement.silent_count }}</strong><small>无浏览无收藏无成交，刷新救不回来</small></div></div>
+    </div>
+    {% if relist_freshness.arrears.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>在售商品不足 {{ relist_freshness.min_measured_items }} 件，占比只报数字不给方向。</p>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">欠账商品欠了多少天</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>距发布</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in relist_freshness.arrears.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">第一档的下界就是 <code>STALE_DAYS</code>（{{ relist_freshness.stale_days }} 天），和生命周期诊断、供给侧看板是同一个数。判据里限定了 <code>refresh_count == 0</code>，所以 <code>last_refreshed_at</code> 必为空，欠账天数就等于距发布天数。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">刷新额度对这批商品是不是空的</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>已刷新次数</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in relist_freshness.quota.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>这是本模块最要紧的一组。</strong>判据限定了从没刷新过，所以第一档必然等于全部——4 次额度一次没用过，24 小时间隔也没占着。<strong>问题最好解决的一批商品，恰好也是系统最没提醒过的那一批。</strong></p>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">欠账商品现在的生命周期等级</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>生命周期等级</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in relist_freshness.levels.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">等级不是本模块自己算的，从 <code>lifecycle_diagnostics._level_for</code> 原样复用——判据只允许有一份。供给侧看板报过「发布超 45 天无互动」的总量，但把三种情况混进了一个数字：一直沉底的、重新上架过的、发布时设了很长截止时间的。第三种不需要运营介入，前两种要做的动作完全不同。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">欠账商品里还有没有互动</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分组</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>仍有浏览、收藏或成交</td><td>{{ relist_freshness.engagement.engaged_count }}</td><td>{% if relist_freshness.engagement.engaged_share is None %}—{% else %}{{ relist_freshness.engagement.engaged_share }}{% endif %}</td></tr>
+                        <tr class="relist-freshness-row-lie"><td>三者皆无</td><td>{{ relist_freshness.engagement.silent_count }}</td><td>{% if relist_freshness.engagement.silent_share is None %}—{% else %}{{ relist_freshness.engagement.silent_share }}{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>「一刷就灵」不能套到全部欠账商品上。</strong>三者皆无的那部分，刷回去也只是让一件没人看的商品再沉一次，需要的是重新拍照或降价。取消的订单不算互动——取消是失败，不是需求。</p>
+        </div>
+    </div>
+
+    <h3 class="h6 mb-3 mt-2">带着新鲜度欠账的商品清单</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>商品</th><th>分类</th><th>距发布（天）</th><th>刷新次数</th><th>生命周期等级</th></tr></thead>
+            <tbody>
+                {% for row in relist_freshness.drift_list.rows %}
+                <tr>
+                    <td>{{ row.item.title }}</td>
+                    <td>{{ row.category_label }}</td>
+                    <td>{{ row.arrears_days }}</td>
+                    <td>{{ row.refresh_count }}</td>
+                    <td>{{ row.level_label }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前没有带着新鲜度欠账的在售商品。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if relist_freshness.drift_list.truncated %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>带着新鲜度欠账的商品共 {{ relist_freshness.drift_list.total_count }} 件，以上只列 {{ relist_freshness.drift_list.limit }} 件。</p>
+    {% endif %}
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">为什么先看板、后改口径</h3>
+            <p class="relist-freshness-why mb-0">改口径有三条路，每条都有代价：重新上架时重置 <code>last_refreshed_at</code> 等于送一次刷新，还绕过了额度；加一个 <code>relisted_at</code> 字段要迁移，且所有历史商品这一列都是 NULL，得先决定 NULL 时回落到哪；让 <code>_level_for</code> 认这一档改的是等级语义，供给侧看板的计数会跟着变，运营手里的历史数字对不上。<strong>三条都值得做，但先得知道规模。</strong>如果只有十几件，在卖家编辑页加一句「重新上架不会让商品回到前排，需要刷新」就够；如果是成百上千件，那它值得一个字段。</p>
+        </div>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不在重新上架时重置 <code>last_refreshed_at</code>、不给重新上架记时间戳、不加字段、不改 <code>_level_for</code> 的等级判据、不自动帮卖家刷新</strong>。刻意没有推断「它是否重新上架过」——重新上架不留时间戳，而 <code>expires_at</code> 在未来这个信号新发布的商品也会有。这里报的是<strong>新鲜度欠账</strong>这个可观测量，不是重新上架这个不可观测量。</div>
+    {% endif %}
+</section>

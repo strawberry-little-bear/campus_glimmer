@@ -1,0 +1,68 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<div class="row g-4 mb-4">
+    <div class="col-xl-8">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading">
+                <div><span class="eyebrow eyebrow-soft">Activity trend</span><h2>每日活动趋势</h2></div>
+                <span class="ops-panel-hint">发布 / 搜索 / 预约</span>
+            </div>
+            <div class="activity-chart" aria-label="每日活动趋势">
+                {% for point in activity_trend %}
+                <div class="activity-row">
+                    <time datetime="{{ point.date|date:'Y-m-d' }}">{{ point.date|date:'m-d' }}</time>
+                    <div class="activity-bars">
+                        <span class="activity-bar activity-bar-items" style="width: {% widthratio point.items trend_max 100 %}%" title="发布 {{ point.items }}"></span>
+                        <span class="activity-bar activity-bar-searches" style="width: {% widthratio point.searches trend_max 100 %}%" title="搜索 {{ point.searches }}"></span>
+                        <span class="activity-bar activity-bar-orders" style="width: {% widthratio point.orders trend_max 100 %}%" title="预约 {{ point.orders }}"></span>
+                    </div>
+                    <strong>{{ point.total }}</strong>
+                </div>
+                {% empty %}<p class="empty-inline mb-0">当前周期还没有活动数据。</p>{% endfor %}
+            </div>
+            <div class="activity-legend mt-3">
+                <span><i class="activity-dot activity-dot-items"></i>发布</span>
+                <span><i class="activity-dot activity-dot-searches"></i>搜索</span>
+                <span><i class="activity-dot activity-dot-orders"></i>预约</span>
+            </div>
+        </section>
+    </div>
+    <div class="col-xl-4">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Order status</span><h2>交易状态分布</h2></div></div>
+            <div class="order-status-list">
+                {% for status in order_statuses %}
+                <div class="order-status-row"><span>{{ status.label }}</span><strong>{{ status.count }}</strong></div>
+                {% empty %}<p class="empty-inline mb-0">当前周期还没有订单。</p>{% endfor %}
+            </div>
+            <div class="ops-mini-summary mt-4">
+                <span>完成交易</span><strong>{{ metrics.completed_orders }} 笔</strong>
+                <span>平均成交价</span><strong>¥{{ metrics.average_order_price|default:0|floatformat:2 }}</strong>
+                <span>待处理举报</span><strong class="text-danger"><a href="{% url 'report_list' %}" class="ops-inline-link">{{ metrics.pending_reports }}</a></strong>
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Search demand</span><h2>热门搜索</h2></div><a class="ops-panel-hint ops-inline-link" href="{% url 'search_insights' %}">查看完整洞察 <i class="bi bi-arrow-up-right"></i></a></div>
+            {% if top_searches %}
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>搜索词</th><th>次数</th><th>无结果</th><th>平均结果</th></tr></thead><tbody>
+                {% for search in top_searches %}<tr><td><strong>{{ search.query }}</strong></td><td>{{ search.search_count }}</td><td>{% if search.zero_result_count %}<span class="ops-warning">{{ search.zero_result_count }}</span>{% else %}—{% endif %}</td><td>{{ search.average_results|floatformat:1 }}</td></tr>{% endfor %}
+            </tbody></table></div>
+            {% else %}<div class="empty-inline">当前周期还没有搜索记录。</div>{% endif %}
+        </section>
+    </div>
+    <div class="col-lg-6">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Supply map</span><h2>分类与地点</h2></div><span class="ops-panel-hint">新增商品分布</span></div>
+            <div class="ops-split-list">
+                <div><h3><i class="bi bi-grid me-1"></i>分类</h3>{% for category in category_stats %}<div class="ops-rank-row"><span>{{ category.name }}</span><strong>{{ category.new_count }}</strong><small>在售 {{ category.available_count }}</small></div>{% empty %}<p class="empty-inline">暂无分类数据</p>{% endfor %}</div>
+                <div><h3><i class="bi bi-geo-alt me-1"></i>地点</h3>{% for location in location_stats %}<div class="ops-rank-row"><span>{{ location.name }}</span><strong>{{ location.new_count }}</strong><small>预约 {{ location.order_count }}</small></div>{% empty %}<p class="empty-inline">暂无地点数据</p>{% endfor %}</div>
+            </div>
+        </section>
+    </div>
+</div>

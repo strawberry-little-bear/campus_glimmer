@@ -1,0 +1,295 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 gift-application-queue-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Gift application queue</span><h2>免费领取的申请队列，第一次被运营读到</h2></div>
+        <span class="ops-panel-hint">队列长度、处理时长与申请说明，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-gift me-1"></i><code>GiftApplication</code> 是站内唯一一条「多人竞争、平台只记录不排序」的队列：一件免费商品可以被任意多的人同时申请，卖家在后台看到一列 <code>pending</code>，选定一个，其余的人由 <code>accept_gift_application</code> 在同一笔事务里置成 <code>rejected</code>。<code>applicant_note</code> 唯一的写路径是 <code>applicant_note=form.cleaned_data.get('buyer_note', '')</code>，唯一的读路径是 <code>admin.py</code> 的 <code>search_fields</code>；<code>decided_at</code> 有三处写路径——卖家选定申请人、其余的人置 <code>rejected</code>、申请人自己撤回——读路径只有后台的 <code>list_display</code> 和 <code>list_filter</code>。<strong>两个字段的差值，从来没有任何一行代码算过。</strong>而运营侧的处境比这个差更难看：现在分不出一件免费商品是「没人要」还是「有 8 个人要、卖家还没决定」——前者该去改免费商品的曝光位置，后者该去催卖家决定，后台把两者显示成同一个样子：一列 <code>pending</code>。</p>
+    {% if not gift_application_queue.has_data %}
+    <div class="empty-inline">{{ gift_application_queue.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内处理完的申请</span><strong>{{ gift_application_queue.stats.measured_count }}</strong><small>另有 {{ gift_application_queue.pending_count }} 份还挂在「等待选择」</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>中位处理时长</span><strong>{{ gift_application_queue.stats.median_label }}</strong><small>P90 {{ gift_application_queue.stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>申请说明填写率</span><strong>{{ gift_application_queue.note.fill_rate }}%</strong><small>填了 {{ gift_application_queue.note.filled_count }} / 没填 {{ gift_application_queue.note.empty_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>被申请人自己撤回</span><strong>{{ gift_application_queue.stats.withdrawn_count }}</strong><small>已逐条列在下面，等得越久越靠前</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">一件免费商品，收到了多少份申请</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>队列长度</th><th>商品数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in gift_application_queue.queue_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>分母是商品数，不是申请数</strong>：要回答的是「有多少件免费商品有五份以上的申请」，不是「有多少份申请落在五份以上的队列里」。按申请数走，一件八人竞争的商品会在分布里出现八次，「竞争激烈」那一档被同一件商品撑起来，而它其实只是一件商品。<strong>只收到一份申请的商品单独一档</strong>——一份申请的「选中率」必然是 100%，把它和八份申请的选中率混在一起平均，会得到一件压根不存在的商品。{% if gift_application_queue.stats.is_small_sample %}当前不足 {{ gift_application_queue.min_measured_applications }} 份，占比只作参考。{% endif %}</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从提交申请到卖家处理，隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>处理时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in gift_application_queue.stats.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母只收<strong>已经处理完</strong>的申请：<code>selected</code> / <code>rejected</code> / <code>withdrawn</code> 都带 <code>decided_at</code>，有起止两点；<code>pending</code> 没有处理时刻，是右删失样本，单独数在上面，不丢也不混。把它算进任何等待分布都会让「平均处理时长」偏短——一个刚提交两分钟的申请和一个提交了三周的申请，在分母里是同一条，而前者压根还没有开始被等。分档<strong>按小时和天切，不按分钟</strong>：报「平均等了 4 小时 23 分」会让运营以为这是小时级的流程，而真正要动作的对象是「卖家隔了多久才打开后台」。</p>
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">申请说明：填了的人是不是更容易被选中</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>申请说明</th><th>申请数</th><th>占比（%）</th><th>被选中</th><th>选中率（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in gift_application_queue.note.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{{ row.share }}</td>
+                            <td>{{ row.selected_count }}</td>
+                            <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">样本不足</span>{% else %}{{ row.selected_rate }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if gift_application_queue.note.is_comparable %}
+            <p class="small text-muted mt-2 mb-0">两组各自至少 {{ gift_application_queue.min_group_applications }} 份，选中率相差 {{ gift_application_queue.note.difference }} 个百分点——{{ gift_application_queue.note.direction }}。<strong>差值只做对照、不给因果</strong>：愿意写一段说明的申请人可能本来就是更认真、更想要的那批人，平台没有能力把「说明起了作用」和「这个人本来就更容易被选中」分开。差值不满 {{ gift_application_queue.note.noise_points }} 个百分点视为噪声，标出来也只是噪声。</p>
+            {% else %}
+            <p class="small text-muted mt-2 mb-0">两组各自不足 {{ gift_application_queue.min_group_applications }} 份，<strong>对照整组不给方向</strong>。选中率是稀有事件——一件商品只选中一个人，其余全是 <code>rejected</code>——所以两组的门槛比其余维度高。此时只报各自的样本量，不报差值。</p>
+            {% endif %}
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">按商品分类看，哪一类免费商品问的人多</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分类</th><th>申请数</th><th>被选中</th><th>选中率（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in gift_application_queue.category_rows %}
+                        <tr><td>{{ row.category_name }}</td><td>{{ row.applications }}</td><td>{{ row.selected_count }}</td><td>{{ row.selected_rate }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="4">当前周期没有可按分类分的申请记录。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if gift_application_queue.category_row_total > gift_application_queue.category_row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>分类最多列 {{ gift_application_queue.category_row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0"><strong>选中率高不等于商品好</strong>：一件没人申请的免费商品和一件八人抢的免费商品，选中率一个是 100%（如果它被处理了）一个是 12.5%，而这个 100% 说明的恰恰是「没人要」——单看选中率会读反。所以这一列只当参照，判断一类免费商品行不行要看的是队列长度那一列。</p>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-4">队最长的那些免费商品</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>商品</th><th>分类</th><th>队列长度</th><th>被选中</th><th>已撤回</th><th>队列档位</th></tr></thead>
+            <tbody>
+                {% for row in gift_application_queue.item_rows %}
+                <tr>
+                    <td>{{ row.title }}</td>
+                    <td>{{ row.category_name }}</td>
+                    <td>{% if row.is_crowded %}<span class="badge text-bg-warning">{{ row.queue_length }}</span>{% else %}{{ row.queue_length }}{% endif %}</td>
+                    <td>{{ row.selected_count }}</td>
+                    <td>{{ row.withdrawn_count }}</td>
+                    <td>{{ row.queue_label }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6">当前周期没有已经处理完的申请记录。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if gift_application_queue.item_row_total > gift_application_queue.item_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>商品最多列 {{ gift_application_queue.item_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <h3 class="h6 mb-3 mt-4">被申请人自己撤回的申请</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>商品</th><th>申请人</th><th>申请说明</th><th>等了</th><th>提交申请</th><th>撤回</th></tr></thead>
+            <tbody>
+                {% for row in gift_application_queue.withdrawn_rows %}
+                <tr>
+                    <td>{{ row.item_title }}</td>
+                    <td>{{ row.applicant_username }}</td>
+                    <td>{% if row.note_length %}<span class="badge text-bg-info">{{ row.note_length }} 字</span>{% else %}未填写{% endif %}</td>
+                    <td>{{ row.decided_label }}</td>
+                    <td>{{ row.created_at|date:'Y-m-d H:i' }}</td>
+                    <td>{{ row.decided_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6">当前周期没有被申请人自己撤回的申请。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if gift_application_queue.withdrawn_row_total > gift_application_queue.withdrawn_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ gift_application_queue.withdrawn_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">撤回<strong>单独一档，不和「未选中」混在一起</strong>：它是申请人自己点的，可能是改主意了，也可能是等太久等不住了——平台没有能力区分这两者。所以这里只报规模，<strong>不给方向</strong>。每行只带说明的字数，<strong>一个字符的正文都不读</strong>：<code>applicant_note</code> 是自由文本，可能写着电话、微信、楼栋号。说明文字会由 <code>accept_gift_application</code> 原样带进订单的 <code>buyer_note</code>，那是申请人在这个队列里唯一一次自由表达，本模块不替它做任何加工。</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-gift me-1"></i>本模块只报告，<strong>不给卖家排序、不替卖家推荐申请人、不改任何一条申请的状态</strong>：队列现在是按先来后到排的，任何「更该被选中」的排序都是平台在替一个具体的人做决定，而这个决定会直接决定另一个人能不能拿到东西。不催卖家、不给申请人发提醒、不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4 item-image-coverage-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Item image coverage</span><h2>商品图片配了多少张，第一次被运营读到</h2></div>
+        <span class="ops-panel-hint">在架商品的图片覆盖度，以及无图商品的交易表现</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-images me-1"></i><code>ItemImage</code> 是全站唯一一个「产品侧已经用上、运营侧却从未量化」的字段。交易安全卡早就在判 <code>if not item.images.exists()</code> 挂警告，各个建议模块也在不做依据地喂「引导卖家补充图片」，但没有任何地方数过商品到底配了几张图。这个面板把它数出来，但<strong>只报告，不改写</strong>。</p>
+
+    {% if item_image_coverage.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>在架商品</span><strong>{{ item_image_coverage.coverage.total }}</strong><small>分母只含在架商品</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>一张图都没配</span><strong>{{ item_image_coverage.coverage.no_image_count }}</strong><small>详情页直接露出空图位</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>无图占比</span><strong>{{ item_image_coverage.coverage.no_image_rate }}%</strong><small>无图数 / 在架总数</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>无图且被举报</span><strong>{{ item_image_coverage.coverage.no_image_reported_count }}</strong><small>只统计更新前已存在的举报</small></div></div>
+    </div>
+    <p class="small text-muted mb-3"><i class="bi bi-info-circle me-1"></i>{{ item_image_coverage.summary }}</p>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <h3>有图 / 无图对照</h3>
+            <p class="small text-muted">成交率的分母是订单笔数，不是商品件数。</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>分组</th><th>商品数</th><th>订单数</th><th>成交数</th><th>成交率</th><th>取消率</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>有图商品</td>
+                            <td>{{ item_image_coverage.contrast.with_image.item_count }}</td>
+                            <td>{{ item_image_coverage.contrast.with_image.order_count }}</td>
+                            <td>{{ item_image_coverage.contrast.with_image.dealt_count }}</td>
+                            <td>{{ item_image_coverage.contrast.with_image.dealt_rate }}%</td>
+                            <td>{{ item_image_coverage.contrast.with_image.cancelled_rate }}%</td>
+                        </tr>
+                        <tr>
+                            <td>无图商品</td>
+                            <td>{{ item_image_coverage.contrast.no_image.item_count }}</td>
+                            <td>{{ item_image_coverage.contrast.no_image.order_count }}</td>
+                            <td>{{ item_image_coverage.contrast.no_image.dealt_count }}</td>
+                            <td>{{ item_image_coverage.contrast.no_image.dealt_rate }}%</td>
+                            <td>{{ item_image_coverage.contrast.no_image.cancelled_rate }}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% if not item_image_coverage.contrast.is_measurable %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-exclamation-triangle me-1"></i>两组商品数均小于 {{ item_image_coverage.min_measured_items }}，不展示差距结论。</p>
+            {% elif item_image_coverage.contrast.gap_is_meaningful %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-arrow-left-right me-1"></i>差距 {{ item_image_coverage.contrast.gap_points }} 个百分点，超过 {{ item_image_coverage.noise_points }} 个百分点的噪声线。<strong>但这只是对照，不是因果</strong>。</p>
+            {% else %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-dash-circle me-1"></i>差距 {{ item_image_coverage.contrast.gap_points }} 个百分点，未超过 {{ item_image_coverage.noise_points }} 个百分点的噪声线，不视为真实差异。</p>
+            {% endif %}
+        </div>
+        <div class="col-lg-6">
+            <h3>图片数分档</h3>
+            <p class="small text-muted">最后一档不叫「传满」，<code>max_num=5</code> 是产品约束而不是运营结论。</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>图片数</th><th>商品数</th><th>占比</th><th>订单数</th><th>成交数</th><th>成交率</th></tr></thead>
+                    <tbody>
+                        {% for row in item_image_coverage.image_counts.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.item_count }}</td>
+                            <td>{{ row.item_share }}%</td>
+                            <td>{{ row.order_count }}</td>
+                            <td>{{ row.dealt_count }}</td>
+                            <td>{{ row.dealt_rate }}%{% if row.is_small_sample %} <span class="badge text-bg-warning">样本少</span>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-6">
+            <h3>按交易方式看无图情况</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>交易方式</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
+                    <tbody>
+                        {% for row in item_image_coverage.by_trade_mode.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.item_count }}</td>
+                            <td>{{ row.no_image_count }}</td>
+                            <td>{{ row.no_image_rate }}%</td>
+                            <td>{{ row.order_count }}</td>
+                            <td>{{ row.dealt_rate }}%{% if row.is_small_sample %} <span class="badge text-bg-warning">样本少</span>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3>按分类看无图情况</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead><tr><th>分类</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
+                    <tbody>
+                        {% for row in item_image_coverage.by_category.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.item_count }}</td>
+                            <td>{{ row.no_image_count }}</td>
+                            <td>{{ row.no_image_rate }}%</td>
+                            <td>{{ row.order_count }}</td>
+                            <td>{{ row.dealt_rate }}%{% if row.is_small_sample %} <span class="badge text-bg-warning">样本少</span>{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6">当前没有带分类的在架商品。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <h3 class="mt-3">一张图都没配的商品</h3>
+    <p class="small text-muted">按上架时间从新到旧排列，<strong>不按商品进行排名</strong>。</p>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead><tr><th>商品</th><th>分类</th><th>交易方式</th><th>举报数</th><th>上架时间</th></tr></thead>
+            <tbody>
+                {% for row in item_image_coverage.no_image_rows.rows %}
+                <tr>
+                    <td>{{ row.item.title }}</td>
+                    <td>{{ row.category_label }}</td>
+                    <td>{{ row.trade_mode_label }}</td>
+                    <td>{% if row.report_count %}{{ row.report_count }}{% else %}&mdash;{% endif %}</td>
+                    <td>{{ row.item.created_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前在架商品都至少配了一张图。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if item_image_coverage.no_image_rows.row_total > item_image_coverage.no_image_rows.row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>无图商品共 {{ item_image_coverage.no_image_rows.row_total }} 件，以上只列 {{ item_image_coverage.no_image_rows.row_limit }} 件。</p>
+    {% endif %}
+
+    {% if item_image_coverage.coverage.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-exclamation-triangle me-1"></i>当前在架商品只有 {{ item_image_coverage.coverage.total }} 件，低于 {{ item_image_coverage.coverage.min_measured_items }} 的视测门槛，占比仅供参考。</p>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-images me-1"></i>本面板只报告，<strong>不改写商品、不要求卖家补图、不按卖家联系</strong>。上传后又删图不留历史，这里只能读到剩下几张；<code>ItemImage</code> 没有 <code>is_primary</code>、没有 <code>order</code>、没有 <code>created_at</code>，所以“哪张是封面”、“先传了哪张”这两件事都答不了，本面板也就不装作能答。</div>
+    {% else %}
+    <p class="text-muted mb-0"><i class="bi bi-inbox me-1"></i>当前没有在架商品，图片覆盖度也就无从谈起。</p>
+    {% endif %}
+</section>

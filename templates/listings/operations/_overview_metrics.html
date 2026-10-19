@@ -1,0 +1,40 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<div class="ops-metric-grid mb-4">
+    <div class="ops-metric-card ops-metric-green">
+        <span><i class="bi bi-box-seam"></i>当前在售</span>
+        <strong>{{ metrics.active_items }}</strong>
+        <small>平台仍可交易的商品</small>
+    </div>
+    <div class="ops-metric-card ops-metric-orange">
+        <span><i class="bi bi-stars"></i>新增商品</span>
+        <strong>{{ metrics.new_items }}</strong>
+        <small>统计周期内发布</small>
+    </div>
+    <div class="ops-metric-card ops-metric-blue">
+        <span><i class="bi bi-receipt"></i>交易预约</span>
+        <strong>{{ metrics.orders }}</strong>
+        <small>完成率 {{ metrics.completion_rate }}%</small>
+    </div>
+    <div class="ops-metric-card ops-metric-purple">
+        <span><i class="bi bi-search"></i>搜索行为</span>
+        <strong>{{ metrics.searches }}</strong>
+        <small>其中 {{ metrics.zero_result_searches }} 次无结果{% if metrics.zero_result_rate %}（{{ metrics.zero_result_rate }}%）{% endif %}</small>
+    </div>
+    <div class="ops-metric-card ops-metric-green">
+        <span><i class="bi bi-speedometer2"></i>搜索质量</span>
+        <strong>{{ metrics.search_quality_score }}</strong>
+        <small>{{ metrics.search_quality_level }} · 点击率 {{ metrics.search_click_through_rate }}%</small>
+    </div>
+    <div class="ops-metric-card ops-metric-teal">
+        <span><i class="bi bi-arrow-left-right"></i>供需匹配</span>
+        <strong>{{ metrics.demand_matches }}</strong>
+        <small>{{ metrics.demand_match_demands }} 条求购被触达 · 阅读率 {{ metrics.demand_match_read_rate }}%</small>
+    </div>
+    <div class="ops-metric-card ops-metric-gold">
+        <span><i class="bi bi-heart-pulse"></i>互助积分</span>
+        <strong>{{ metrics.contribution_points }}</strong>
+        <small>{{ metrics.contribution_users }} 位参与者 · {{ metrics.contribution_events }} 次贡献</small>
+    </div>
+</div>

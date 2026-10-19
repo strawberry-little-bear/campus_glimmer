@@ -1,0 +1,208 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 handoff-code-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Handover proof</span><h2>在现场念出来的那六位数字</h2></div>
+        <span class="ops-panel-hint">确认码的生成、核对与锁定，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-shield-lock me-1"></i>交付确认码是这套系统里少见的"平台自己推荐、自己记录、自己从不统计"的机制：五个字段都有完整的写入路径，有行锁、有五次错误锁定、有"重新生成即作废旧码"的语义，而读取路径只有后台和订单详情页。交易安全卡在订单进入"待当面交付"时会明确建议"建议启用交付确认码"并给出按钮——一个平台在向用户推荐一个自己从不统计使用情况的机制。</p>
+    {% if not handoff_code_usage.has_data %}
+    <div class="empty-inline">{{ handoff_code_usage.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>生成率</span><strong>{{ handoff_code_usage.adoption_stats.issue_rate }}%</strong><small>{{ handoff_code_usage.adoption_stats.issued_count }} / {{ handoff_code_usage.adoption_stats.total }} 笔走完当面交付</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>现场核对率</span><strong>{{ handoff_code_usage.adoption_stats.use_rate }}%</strong><small>以生成过确认码的订单为分母</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>一次就对</span><strong>{{ handoff_code_usage.attempt_stats.first_try_rate }}%</strong><small>描述的是最后一枚码，重新生成会归零</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>撞到 {{ handoff_code_usage.lock_threshold }} 次锁定</span><strong>{{ handoff_code_usage.attempt_stats.locked_count }}</strong><small>共 {{ handoff_code_usage.attempt_stats.issued_total }} 笔生成过</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">生成之后，现场发生了什么</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>情况</th><th>笔数</th><th>占生成过（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in handoff_code_usage.attempt_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">错误次数记的是<strong>最后一枚码</strong>的错误次数，不是这笔订单累计的错误次数——重新生成会把它归零。所以这一列必须和"重新生成过"合起来读：单看它，一个现场出过问题、后来换过码的订单一手滑就对的订单一模一样，而这是两回事。</p>
+            <h3 class="h6 mb-3 mt-4">生成到现场核对隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>间隔</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in handoff_code_usage.issue_gap_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <table class="table table-sm align-middle ops-table mt-3 handoff-code-mini-table">
+                <tbody>
+                    <tr><th scope="row">中位间隔</th><td>{{ handoff_code_usage.issue_gap_stats.median_label }}</td><td>{{ handoff_code_usage.issue_gap_stats.measured_count }} 笔可测量</td></tr>
+                    <tr><th scope="row">P90 间隔</th><td>{{ handoff_code_usage.issue_gap_stats.p90_label }}</td><td>&mdash;</td></tr>
+                    <tr><th scope="row">重新生成过（下界）</th><td>{{ handoff_code_usage.adoption_stats.regenerated_count }}</td><td>{{ handoff_code_usage.adoption_stats.regenerated_rate }}%</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">用过确认码的订单更可能做成吗</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分组</th><th>笔数</th><th>做成数</th><th>完成率（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>用过确认码</td><td>{{ handoff_code_usage.outcome_contrast.used_count }}</td><td>{{ handoff_code_usage.outcome_contrast.used_success_count }}</td><td>{{ handoff_code_usage.outcome_contrast.used_success_rate }}</td></tr>
+                        <tr><td>生成过但没用</td><td>{{ handoff_code_usage.outcome_contrast.unused_count }}</td><td>{{ handoff_code_usage.outcome_contrast.unused_success_count }}</td><td>{{ handoff_code_usage.outcome_contrast.unused_success_rate }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">
+                {% if handoff_code_usage.outcome_contrast.has_direction %}
+                两组相差 {{ handoff_code_usage.outcome_contrast.gap_points }} 个百分点，已过噪声带。<strong>这是对照，不是结论</strong>——愿意生成码的双方可能本来就是更认真的那批人，平台没有能力把"码起了作用"和"这对双方本来就靠谱"分开。
+                {% elif handoff_code_usage.outcome_contrast.is_small_sample %}
+                两组各自不足 {{ handoff_code_usage.outcome_contrast.min_measured_orders }} 笔，完成率对照只报数字、不给方向。
+                {% else %}
+                两组差值落在噪声带内，不给方向：两个方向相差几个百分点，在几十条样本上和一次抛硬币没有区别。
+                {% endif %}
+                取消的订单两组都留着——取消不是失败，把它剔掉会让两边的完成率一起变好看，而那正好是最该被看见的那批订单。
+            </p>
+            <h3 class="h6 mb-3 mt-4">撞到锁定的订单</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>商品</th><th>买家</th><th>卖家</th><th>错误次数</th><th>重新生成过</th><th>最终状态</th></tr></thead>
+                    <tbody>
+                        {% for row in handoff_code_usage.locked_rows %}
+                        <tr>
+                            <td><strong>{{ row.item_title }}</strong></td>
+                            <td>{{ row.buyer }}</td>
+                            <td>{{ row.seller }}</td>
+                            <td>{{ row.attempts }}</td>
+                            <td>{% if row.regenerated %}是（{{ row.generation_count }} 次）{% else %}否{% endif %}</td>
+                            <td>{{ row.status_label }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6">当前周期没有撞到锁定的订单。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if handoff_code_usage.locked_rows|length > handoff_code_usage.locked_row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ handoff_code_usage.locked_row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0">错误次数达到上限，意味着现场发生过一次真实的沟通问题，而不是手滑打错一位。每一行都带上后来有没有重新生成、有没有最终做成——因为一笔锁定之后换码顺利交付的订单，和一笔锁定后就僵在那里的订单，要做的动作完全不一样。</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>分母只收已经离开"待当面交付"阶段的订单：一个现在还挂在本阶段的订单，见面还没发生，根本谈不上有没有生成码，把它算进分母会让生成率凭空变小，这是右删失样本。重新生成从站内通知反推，卖家关掉订单状态通知后生成不再留痕，所以这一列报的是下界不是准数。本模块只报告，不自动派单、不改确认码、不新增提醒，也不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4 return-handshake-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Return handshake</span><h2>归还登记的那两次握手</h2></div>
+        <span class="ops-panel-hint">借用方点一下、发布者再点一下，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-arrow-repeat me-1"></i>借用的归还是这套系统里唯一一个「两个人各自点一下、顺序完全由双方自己决定」的闭环：买家点「登记我已归还」写 <code>buyer_returned_at</code>，卖家点「确认已收到归还物品」写 <code>seller_returned_at</code>，两个字段都写上，订单才从「借用中」变成「已归还」，商品才重新开放借用，催收阶梯才被关闭。已经有四个模块在读借用的逾期，它们全都从「东西还没回来」这一侧切进去；而「还没回来」只是问题的一半——另一半是东西已经回来了、或者借用方说已经回来了，而另一方没有点确认。</p>
+    {% if not return_handshake.has_data %}
+    <div class="empty-inline">{{ return_handshake.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>握手完成率</span><strong>{{ return_handshake.completion_stats.completion_rate }}%</strong><small>{{ return_handshake.completion_stats.returned_count }} / {{ return_handshake.completion_stats.concluded_total }} 笔走完借用</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>发布者先登记</span><strong>{{ return_handshake.first_registered_stats.seller_first_count }}</strong><small>反常路径：通常说明双方对「归还」的定义不一致</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>等待中位</span><strong>{{ return_handshake.wait_stats.median_label }}</strong><small>P90 {{ return_handshake.wait_stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已登记未确认</span><strong>{{ return_handshake.stalled_stats.registered_count }}</strong><small>另有 {{ return_handshake.stalled_stats.overdue_count }} 笔逾期未归还</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">借用出去之后，有多少走完了归还握手</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>周期内走完借用的订单</td><td>{{ return_handshake.completion_stats.concluded_total }}</td><td>—</td></tr>
+                        <tr><td>双方都登记了归还</td><td>{{ return_handshake.completion_stats.returned_count }}</td><td>{{ return_handshake.completion_stats.completion_rate }}</td></tr>
+                        <tr><td>带着真实借用记录被取消</td><td>{{ return_handshake.completion_stats.cancelled_count }}</td><td>—</td></tr>
+                        <tr><td>两次握手都点了的订单</td><td>{{ return_handshake.completion_stats.both_registered_count }}</td><td>—</td></tr>
+                        <tr><td>还挂在借用中（右删失样本）</td><td>{{ return_handshake.still_borrowed_count }}</td><td>—</td></tr>
+                        <tr><td>从没进入借用就被取消</td><td>{{ return_handshake.cancelled_before_count }}</td><td>—</td></tr>
+                        {% if return_handshake.no_borrow_count %}
+                        <tr><td>状态是已归还却查不到进入借用中的事件</td><td>{{ return_handshake.no_borrow_count }}</td><td>—</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母只收已经离开「借用中」的订单。已经离开的意思是走到了「已归还」，或者带着一次真实的借用记录被取消；<strong>从来没进入过借用就被取消的订单，握手压根没开始，不算进来</strong>。还挂在「借用中」的订单是右删失样本——握手还没有结束，根本谈不上有没有完成——把它算进分母会让完成率凭空变小，所以它单独数出来，不丢也不混。「两次握手都点了」和「走到了已归还」应当相等；不相等说明有订单两次握手都点了却没有走到已归还，那是数据里的一处矛盾，值得单独看一眼。</p>
+            <h3 class="h6 mb-3 mt-4">谁先登记</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>先登记的一方</th><th>笔数</th><th>占登记过（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in return_handshake.first_registered_stats.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                        <tr><td>双方都还没登记</td><td>{{ return_handshake.first_registered_stats.unregistered_count }}</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">借用方先登记是正常路径。<strong>发布者先登记是反常的</strong>——它意味着他先收到了东西、而借用方还没点，这个顺序在借用的语境里通常说明双方对「归还」的定义不一致（东西放下了但没交接，或者放下了一个不一样的东西）。这个维度不能从等待间隔里推出来，而且它决定了两件事：现在在等哪一方，以及先登记那一刻到第二个时间戳之间的间隔归谁。{% if not return_handshake.first_registered_stats.has_direction %}当前不足 {{ return_handshake.first_registered_stats.min_measured_orders }} 笔，方向只作参考。{% endif %}</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">双方都登记的，等了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>等待时长</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in return_handshake.wait_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">只收<strong>双方都登记了</strong>的订单：等待有终点才谈得上等了多久。等待时长一律<strong>按天分档，不按小时</strong>——一次归还等待的时间尺度是天，报「平均等了 26 小时」对一个按周借用、按周归还的场景没有意义。中位 {{ return_handshake.wait_stats.median_label }}，P90 {{ return_handshake.wait_stats.p90_label }}，最快 {{ return_handshake.wait_stats.fastest_label }}，最慢 {{ return_handshake.wait_stats.slowest_label }}。{% if return_handshake.wait_stats.is_small_sample %}当前不足 {{ return_handshake.wait_stats.min_measured_orders }} 笔，占比只作参考。{% endif %}</p>
+            <h3 class="h6 mb-3 mt-4">仍挂在借用中的订单：两类，动作相反</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>情况</th><th>笔数</th><th>等待多久</th></tr></thead>
+                    <tbody>
+                        <tr><td>逾期未归还：双方都没登记，而预计归还时间已过</td><td>{{ return_handshake.stalled_stats.overdue_count }}</td><td>—</td></tr>
+                        <tr><td>已登记未确认：一方已登记，另一方没有</td><td>{{ return_handshake.stalled_stats.registered_count }}</td><td>中位 {{ return_handshake.stalled_stats.median_label }}</td></tr>
+                        <tr><td>其中等了超过一周</td><td>{{ return_handshake.stalled_stats.over_week_count }}</td><td>—</td></tr>
+                        <tr><td>其中等了超过两周</td><td>{{ return_handshake.stalled_stats.over_two_weeks_count }}</td><td>最久 {{ return_handshake.stalled_stats.slowest_label }}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">这两类都表现为「订单还没结束」，但<strong>运营动作完全相反</strong>：逾期未归还是催收阶梯该管的事，本模块只报数、不改阶梯、不提前催收；已登记未确认是「去提醒另一方点一下」的事，和催收无关——东西很可能已经回来了。把它们合成一个「进行中的借用」数字，会让人以为问题只有一种。这一列的等待从先登记那一刻算到现在，而「现在」不属于任何统计周期，所以它按订单的一生累计，不按周期切。</p>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-4">已登记未确认的订单</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>商品</th><th>买家</th><th>卖家</th><th>先登记的一方</th><th>在等谁</th><th>已等多久</th><th>预计归还</th><th>登记之后还有没有动静</th></tr></thead>
+            <tbody>
+                {% for row in return_handshake.stalled_rows %}
+                <tr>
+                    <td><strong>{{ row.item_title }}</strong></td>
+                    <td>{{ row.buyer }}</td>
+                    <td>{{ row.seller }}</td>
+                    <td>{{ row.first_label }}</td>
+                    <td>{{ row.waiting_for }}</td>
+                    <td>{{ row.waiting_label }}</td>
+                    <td>{{ row.due_label }}{% if row.is_overdue %}（已逾期）{% endif %}</td>
+                    <td>{% if row.moved_after_register %}有：{{ row.last_event_label }}{% else %}无事件{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8">当前周期没有一方已登记、另一方未确认的借用订单。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if return_handshake.stalled_rows|length > return_handshake.stalled_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ return_handshake.stalled_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">这里报的是<strong>「登记之后订单再也没有动过」</strong>，不是「卡住」。前者是 <code>OrderEvent</code> 里可以直接数出来的事实，后者是一个判断——平台没有能力区分一笔订单是忘了、在争议中、还是双方已经在线下解决了，也就不该替运营下这个结论。一条登记之后双方又提交了争议、又补了证据的订单，和一条登记之后订单再也没动过的订单，要做的动作完全不同：前者去治理工作台看争议，后者去提醒另一方点一下按钮。等得越久的排在越前面——清单是给「现在去核实」用的。</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告握手完成度，<strong>不自动推进任何一笔订单</strong>：不写 <code>seller_returned_at</code>、不改订单状态、不重新开放商品、不关闭催收。卖家没有点确认，可能因为他还没收到东西，可能因为买家登记错了，可能因为他就是想拖——平台没有能力区分这三者，也就不该替其中任何一种做决定。一个自动关掉催收的看板，会在卖家真的没收到东西时替他撤掉上报，那是比这个缺口严重得多的错。不改 <code>confirm_return</code> 的任何逻辑、不加超时、不改催收阶梯的触发条件、不新增提醒类型，也不把统计写回任何记录。</div>
+    {% endif %}
+</section>

@@ -1,0 +1,191 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 phase-preparation-panel" id="academic-phase-supply-preparation">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Phase preparation</span><h2>学期阶段供给预热</h2></div>
+        <span class="ops-panel-hint">下一阶段 {{ academic_phase_supply_preparation.lookahead_days }} 天内开始时触发</span>
+    </div>
+    {% if academic_phase_supply_preparation.has_upcoming_phase and academic_phase_supply_preparation.has_benchmark %}
+    <div class="phase-preparation-summary">
+        <div><span>下一阶段</span><strong>{{ academic_phase_supply_preparation.upcoming_phase_label }}</strong><small>{{ academic_phase_supply_preparation.upcoming_start_date|date:"m月d日" }} 开始 · 还有 {{ academic_phase_supply_preparation.days_until }} 天</small></div>
+        <div><span>历史基准</span><strong>{{ academic_phase_supply_preparation.benchmark_term_name }}</strong><small>{{ academic_phase_supply_preparation.benchmark_phase_label }} · {{ academic_phase_supply_preparation.benchmark_day_count }} 天</small></div>
+        <div><span>值得预热分类</span><strong>{{ academic_phase_supply_preparation.guidance_total }}</strong><small>历史搜索 ≥ {{ academic_phase_supply_preparation.min_guidance_searches }} 次且无结果 ≥ {{ academic_phase_supply_preparation.min_guidance_zero_results }} 次</small></div>
+        <div class="phase-preparation-warning"><span>节奏偏慢</span><strong>{{ academic_phase_supply_preparation.slow_total }}</strong><small>当前 {{ academic_phase_supply_preparation.preparation_days }} 天新增未到基准 {{ academic_phase_supply_preparation.pace_threshold_percent }}%</small></div>
+    </div>
+
+    <div class="phase-preparation-reading mt-3">
+        <div class="phase-preparation-block-heading">
+            <strong>分类预热表</strong>
+            <span>基准：{{ academic_phase_supply_preparation.benchmark_start_date|date:"Y-m-d" }} 至 {{ academic_phase_supply_preparation.benchmark_end_date|date:"Y-m-d" }}；当前窗口：{{ academic_phase_supply_preparation.lead_start_date|date:"Y-m-d" }} 至 {{ academic_phase_supply_preparation.lead_end_date|date:"Y-m-d" }}</span>
+        </div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 phase-preparation-table">
+                <thead><tr><th>分类</th><th>基准搜索 / 无结果</th><th>无结果占比</th><th>基准求购 / 新增</th><th>7 天供给基准</th><th>当前求购 / 新增</th><th>当前现货</th><th>提示</th><th>节奏</th></tr></thead>
+                <tbody>
+                    {% for row in academic_phase_supply_preparation.page_rows %}
+                    <tr>
+                        <td><strong>{{ row.category_name }}</strong></td>
+                        <td>{{ row.search_count }} / {{ row.zero_result_count }}</td>
+                        <td>{% if row.zero_result_share != None %}{{ row.zero_result_share }}%{% else %}—{% endif %}</td>
+                        <td>{{ row.benchmark_demand_count }} / {{ row.benchmark_item_count }}</td>
+                        <td>{% if row.lead_baseline_items != None %}{{ row.lead_baseline_items }}{% else %}无基准{% endif %}</td>
+                        <td>{{ row.lead_demand_count }} / {{ row.lead_item_count }}</td>
+                        <td>{{ row.available_item_count }}</td>
+                        <td><span class="phase-preparation-flag phase-preparation-flag-{{ row.is_guidance_candidate|yesno:'candidate,observe' }}">{{ row.guidance_label }}</span></td>
+                        <td><span class="phase-preparation-pace phase-preparation-pace-{{ row.pace_key }}">{{ row.pace_label }}</span>{% if row.pace_percent != None %}<small class="d-block text-muted">{{ row.pace_percent }}%</small>{% endif %}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9">历史基准阶段没有可按分类观察的搜索、求购或供给。</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if academic_phase_supply_preparation.category_total > academic_phase_supply_preparation.page_rows|length %}
+        <p class="phase-preparation-note mt-2 mb-0">页面保留无结果搜索最多的前 {{ academic_phase_supply_preparation.page_row_limit }} 个分类，共 {{ academic_phase_supply_preparation.category_total }} 个；CSV 导出全量 {{ academic_phase_supply_preparation.category_total }} 行。</p>
+        {% endif %}
+    </div>
+
+    <p class="phase-preparation-note mt-3"><i class="bi bi-info-circle me-1"></i>{{ academic_phase_supply_preparation.summary }}{% if not academic_phase_supply_preparation.benchmark_kind_matched %} 未找到同学期的历史同阶段，基准退到最近的其它学期类型，季节解释要更谨慎。{% endif %}</p>
+    <p class="phase-preparation-note mb-0">7 天供给基准只是把历史阶段的新增商品折算成等长窗口，<b>不是运营目标</b>；当前现货是构建面板那一刻的快照，不预测阶段开始时还剩多少。搜索和求购按记录上的分类外键聚合，分类删除后只能归入未设置分类，不回填历史。</p>
+    {% else %}
+    <div class="empty-inline mt-3">{{ academic_phase_supply_preparation.empty_reason }}</div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里只输出分类聚合，不输出搜索词、标题、用户或链接；不自动配置专题、不改推荐、不发提醒、不创建任务。</div>
+</section><section class="content-card ops-panel mb-4 snapshot-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Snapshot</span><h2>学期阶段统计快照</h2></div>
+        <span class="ops-panel-hint">周期 {{ academic_term_snapshot_quality.period_days }} 天·只报告不改任何快照</span>
+    </div>
+    {% if academic_term_snapshot_quality.has_data %}
+    <div class="snapshot-quality-summary">
+        <div><span>快照行数</span><strong>{{ academic_term_snapshot_quality.metrics.row_total }}</strong><small>这张表现在有多少行</small></div>
+        <div><span>应有阶段覆盖</span><strong>{% if academic_term_snapshot_quality.coverage.covered_share != None %}{{ academic_term_snapshot_quality.coverage.covered_share }}%{% else %}—{% endif %}</strong><small>分母是启用中学期的应有阶段</small></div>
+        <div><span>匹配键失效的行</span><strong>{{ academic_term_snapshot_quality.metrics.orphan_total }}</strong><small>孤儿行，不是停用残留</small></div>
+        <div><span>结束过早的阶段</span><strong>{{ academic_term_snapshot_quality.metrics.stale_total }}</strong><small>结束 {{ academic_term_snapshot_quality.metrics.stale_threshold_days }} 天以上</small></div>
+    </div>
+
+    <div class="snapshot-quality-reading mt-3">
+        <div class="snapshot-quality-block-heading"><strong>这张表本身</strong><span>分子分母见每张表下方</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+                <thead><tr><th>指标</th><th>数值</th><th>分母是什么</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>快照行数</strong></td><td>{{ academic_term_snapshot_quality.metrics.row_total }}</td><td>全表，含历史残留</td></tr>
+                    <tr><td><strong>涉及学期</strong></td><td>{{ academic_term_snapshot_quality.metrics.term_total }}</td><td>按 <code>term_id</code> 去重</td></tr>
+                    <tr><td><strong>涉及阶段</strong></td><td>{{ academic_term_snapshot_quality.metrics.phase_key_total }}</td><td>按 <code>phase_key</code> 去重</td></tr>
+                    <tr><td><strong>启用中学期的应有阶段</strong></td><td>{{ academic_term_snapshot_quality.metrics.expected_phase_total }}</td><td><code>is_active=True</code> 的学期及其全部阶段</td></tr>
+                    <tr><td><strong>其中有对应快照的</strong></td><td>{{ academic_term_snapshot_quality.metrics.covered_phase_total }}</td><td>匹配键 <code>(term, phase_key, start_date)</code> 对得上</td></tr>
+                    <tr><td><strong>覆盖率</strong></td><td>{% if academic_term_snapshot_quality.coverage.covered_share != None %}{{ academic_term_snapshot_quality.coverage.covered_share }}%{% else %}—{% endif %}</td><td>分母是<b>应有阶段</b>，不是快照行</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="snapshot-quality-note mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>覆盖率的分母是应有阶段而不是快照行：用快照行当分母会把孤儿行算成「已覆盖」的一部分，而孤儿恰恰是多余的那些。</p>
+
+        <div class="snapshot-quality-block-heading mt-3"><strong>匹配键失效与停用残留</strong><span>两件事分开报，不混在一个数里</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+                <thead><tr><th>类别</th><th>行数</th><th>为什么单独报</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>孤儿行</strong></td>
+                        <td>{{ academic_term_snapshot_quality.metrics.orphan_total }}</td>
+                        <td>学期还启用着，但 <code>(phase_key, start_date)</code> 在当前阶段里找不到对应——匹配键失效的证据</td>
+                    </tr>
+                    <tr>
+                        <td><strong>停用学期残留</strong></td>
+                        <td>{{ academic_term_snapshot_quality.metrics.inactive_term_row_total }}</td>
+                        <td><code>is_active</code> 的 help_text 明写「历史数据保留」，这是设计如此，<b>不算异常</b></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="snapshot-quality-note mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>把停用残留算进孤儿，等于把一条被写死的行为报成故障。所以孤儿只指「学期还启用着、匹配键却对不上」——最常见的原因是改过 <code>AcademicTerm.starts_on</code>：<code>AcademicPhase.start_date</code> 是算出来的属性（<code>term.starts_on + start_offset</code>），一改整体平移，唯一约束全部失配，旧行不会被更新、只会被新键旁置。<b>台账里那次运行显示的「刷新阶段快照」条数不会有任何变化</b>，所以这件事只能从表里读出来。</p>
+
+        {% if academic_term_snapshot_quality.orphan_rows.orphan_rows %}
+        <div class="ops-table-wrap mt-2">
+            <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+                <thead><tr><th>学期</th><th>阶段</th><th>开始</th><th>结束</th></tr></thead>
+                <tbody>
+                    {% for row in academic_term_snapshot_quality.orphan_rows.orphan_rows %}
+                    <tr>
+                        <td><strong>{{ row.term_name }}</strong></td>
+                        <td>{{ row.phase_label }}</td>
+                        <td>{{ row.start_date }}</td>
+                        <td>{{ row.end_date }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="snapshot-quality-block-heading mt-3"><strong>结束过早的阶段</strong><span>按 end_date 判，不按 refreshed_at</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+                <thead><tr><th>指标</th><th>数值</th><th>分母是什么</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>结束过早的阶段</strong></td><td>{{ academic_term_snapshot_quality.metrics.stale_total }}</td><td>结束于 {{ academic_term_snapshot_quality.metrics.stale_threshold_days }} 天之前</td></tr>
+                    <tr><td><strong>占全部快照</strong></td><td>{% if academic_term_snapshot_quality.stale_rows.stale_share != None %}{{ academic_term_snapshot_quality.stale_rows.stale_share }}%{% else %}—{% endif %}</td><td>分母是快照行数</td></tr>
+                </tbody>
+            </table>
+        </div>
+        {% if academic_term_snapshot_quality.stale_rows.stale_rows %}
+        <div class="ops-table-wrap mt-2">
+            <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+                <thead><tr><th>学期</th><th>阶段</th><th>结束</th><th>已过去</th></tr></thead>
+                <tbody>
+                    {% for row in academic_term_snapshot_quality.stale_rows.stale_rows %}
+                    <tr>
+                        <td><strong>{{ row.term_name }}</strong></td>
+                        <td>{{ row.phase_label }}</td>
+                        <td>{{ row.end_date }}</td>
+                        <td>{{ row.days_since_end }} 天</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="snapshot-quality-block-heading mt-3"><strong>命令与刷新中断</strong><span>只看这一条命令，不重复运行台账的结论</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+                <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>周期内运行次数</strong></td><td>{{ academic_term_snapshot_quality.metrics.command_run_total }}</td><td>台账里 <code>sync_academic_calendar</code> 的行</td></tr>
+                    <tr><td><strong>其中失败</strong></td><td>{{ academic_term_snapshot_quality.metrics.command_failed_total }}</td><td>失败原因属于失败分类模块，这里不重复</td></tr>
+                    <tr><td><strong>没被刷到的行</strong></td><td>{{ academic_term_snapshot_quality.metrics.gap_total }}</td><td>{% if academic_term_snapshot_quality.gap_rows.has_baseline %}<code>refreshed_at</code> 早于最近一次成功运行 {{ academic_term_snapshot_quality.metrics.gap_threshold_days }} 天以上{% else %}周期内没有成功运行，没有基准，不判{% endif %}</td></tr>
+                </tbody>
+            </table>
+        </div>
+        {% if academic_term_snapshot_quality.gap_rows.gap_rows %}
+        <div class="ops-table-wrap mt-2">
+            <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+                <thead><tr><th>学期</th><th>阶段</th><th>上次刷新</th><th>距今年数</th></tr></thead>
+                <tbody>
+                    {% for row in academic_term_snapshot_quality.gap_rows.gap_rows %}
+                    <tr>
+                        <td><strong>{{ row.term_name }}</strong></td>
+                        <td>{{ row.phase_label }}</td>
+                        <td>{{ row.refreshed_at }}</td>
+                        <td>{{ row.days_since_refresh }} 天</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        <p class="snapshot-quality-note mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>「没被刷到」和孤儿是两个角度：孤儿是<b>表里有当前不存在的阶段</b>，这里是<b>当前存在的阶段没被刷到</b>。两者都报，互不替代。前者对应的阶段已经被删或学期已停用，后者对应的阶段还在、只是没写到。</p>
+
+        <p class="snapshot-quality-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ academic_term_snapshot_quality.summary }}</p>
+        {% for note in academic_term_snapshot_quality.recommendations %}
+        <p class="snapshot-quality-note mb-0">{{ note }}</p>
+        {% endfor %}
+        <p class="snapshot-quality-note mb-0">本面板<b>不报「内容陈旧度」，只报「刷新陈旧度」</b>：Django 的 <code>update_or_create</code> 会把 <code>auto_now</code> 字段显式补进 <code>update_fields</code>（<code>query.py</code> 第 1002-1014 行，源码注释写着「Add fields which are set on pre_save(), e.g. auto_now fields」），所以每次刷新都会推进 <code>refreshed_at</code>，<b>十个计数一个都没变也照推</b>。拿它当内容变化时刻，会把一条两个月前就结束、此后再也不会变的阶段一直显示为刚刚更新——这比没有数字更糟。过期判据因此看 <code>end_date</code>，只有「刷新中断」才看 <code>refreshed_at</code>。</p>
+        <p class="snapshot-quality-note mb-0">同理不报<b>快照数与实时数的偏差</b>：理论上可以两边都算一遍再相比，但那是在给一个没人读的缓存做体检——它不准的根源恰恰是没人读。要报这个偏差，得先让它有读路径（<code>build_academic_calendar</code> 至今是拿 <code>AcademicPhase</code>实时算的），那是一个功能改动，不是一次度量。</p>
+        <p class="snapshot-quality-note mb-0">本模块只报告，不刷新任何快照、不删任何孤儿行、不改任何 <code>AcademicTerm.starts_on</code>、不删任何 <code>AcademicPhase</code>、不改唯一约束、不加迁移。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">快照表还是空的。第一次运行 <code>sync_academic_calendar</code> 之后，这里会开始统计。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>这张表从迁移 0052 起长期只被写；学期日历现在会按封闭阶段读取它，本面板继续负责表自身的规模、覆盖、孤儿行与刷新状态。覆盖率低于 {{ academic_term_snapshot_quality.metrics.coverage_warn_percent }}% 时才单独提示，百分之几的缺口可以是手工维护的正常痕迹。</div>
+</section>

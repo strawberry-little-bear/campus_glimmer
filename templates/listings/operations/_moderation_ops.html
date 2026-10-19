@@ -1,0 +1,283 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 moderation-rule-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Moderation rule quality</span><h2>内容审核规则的误判与漏判，第一次被运营读到</h2></div>
+        <span class="ops-panel-hint">四条关键词规则，复核之后判得准不准</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-shield-exclamation me-1"></i><code>chat_messages/moderation.py</code> 有四条关键词规则——微信导流 40 分、外部链接 20 分、手机号 35 分、高风险交易 50 分——命中后相加、封顶 100，再按 60 / 30 切成 high / medium / low。<code>risk_score</code> 唯一的读路径是 <code>models.py</code> 的 <code>ordering</code> 和 <code>Index</code>，<strong>没有任何一行代码拿它和另一个数比过大小</strong>；<code>matched_terms</code> 的读路径是后台的 <code>search_fields</code> 和审核队列页的一个搜索框，<strong>没有人按规则拆开统计过</strong>；<code>reviewed_at</code> 的读路径只有后台的 <code>list_filter</code>，<strong>「复核时刻减拦截时刻」这个差从来没有任何一行代码算过</strong>。而 <code>governance_sla.py</code> 已经为商品举报、交易争议、交付预约异常、借用逾期催收四条队列建好了统一的时效视图，<strong>唯独漏了内容审核这一条</strong>。于是运营能回答「有多少高风险审核在等」，回答不了「规则说高风险的，复核之后真的是高风险吗」——而这套规则全是关键词匹配，一条正常分享课程资料链接的留言会被「外部链接」拦下来，和真的导流内容排在同一列。</p>
+    {% if not moderation_rule_quality.has_data %}
+    <div class="empty-inline">{{ moderation_rule_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内复核完的记录</span><strong>{{ moderation_rule_quality.stats.measured_count }}</strong><small>另有 {{ moderation_rule_quality.pending_count }} 条还挂在「待复核」</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>整体误判率</span><strong>{{ moderation_rule_quality.stats.false_positive_rate }}%</strong><small>{{ moderation_rule_quality.stats.dismissed_count }} 条复核后放行 / 共 {{ moderation_rule_quality.stats.measured_count }} 条</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>中位复核时长</span><strong>{{ moderation_rule_quality.stats.median_label }}</strong><small>P90 {{ moderation_rule_quality.stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>疑似漏判</span><strong>{{ moderation_rule_quality.missed_row_total }}</strong><small>确认违规，却只命中了轻规则</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">四条规则，各自判得准不准</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>规则</th><th>权重</th><th>命中</th><th>确认</th><th>误判</th><th>误判率（%）</th><th>漏判率（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_rule_quality.rule_rows %}
+                        <tr>
+                            <td>{{ row.rule_name }}{% if row.is_flagged %} <span class="badge text-bg-warning">该收紧</span>{% endif %}{% if row.never_hit %} <span class="badge text-bg-secondary">未命中</span>{% endif %}</td>
+                            <td>{{ row.weight }}</td>
+                            <td>{{ row.hit_count }}</td>
+                            <td>{{ row.confirmed_count }}</td>
+                            <td>{{ row.dismissed_count }}</td>
+                            <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">样本不足</span>{% else %}{{ row.false_positive_rate }}{% endif %}</td>
+                            <td>{% if row.never_hit %}—{% elif row.is_small_sample %}<span class="badge text-bg-secondary">样本不足</span>{% else %}{{ row.false_negative_rate }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>一条记录会同时出现在多个规则组里</strong>——这是故意的：要回答的是「微信导流这条规则准不准」，所有命中它的记录都是它的样本，包括那些同时命中了手机号的。<strong>误判率和漏判率分开报，不合成一个「准确率」</strong>：两个数的分母不一样，合成一个数会把两个问题压成一个说不清的数，而它们指向的动作完全相反——误判率高该去收紧规则，漏判率高该去补规则。低于 {{ moderation_rule_quality.min_rule_events }} 条样本的规则不给方向：几条样本上的百分比不是方向。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从拦截到复核，隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>复核时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_rule_quality.stats.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">分母只收<strong>已经复核完</strong>的记录：<code>confirmed</code> 和 <code>dismissed</code> 都带 <code>reviewed_at</code>，有起止两点；<code>pending</code> 没有复核时刻，是右删失样本，单独数在上面，不丢也不混。把它算进任何时长分布都会让「平均复核时长」偏短——一条刚拦下两分钟的内容和一条拦了三周的内容，在分母里是同一条，而前者压根还没有开始被复核。<strong>复核早于拦截的记录被夹到零</strong>，归到最短的一档：那只会发生在后台补录或改状态的时候，不该让一条负数把分布拉歪。</p>
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">分数段：高分的档是不是真的更容易确认违规</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>分数段</th><th>条数</th><th>确认违规</th><th>确认率（%）</th><th>这一档是什么</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_rule_quality.score_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.confirmed }}</td><td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">样本不足</span>{% else %}{{ row.confirmed_rate }}{% endif %}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>权重只报分布，不重新拟合</strong>：记录里只有相加之后的分数，一条 55 分的记录可能是 40 + 20 减 5，也可能是 50 + 20 减 15，从分数反推不出权重组合。所以分数只当参照，它唯一能回答的问题是「高分的档是不是真的更容易确认违规」。<strong>不按单分切</strong>：一条 20 分和一条 21 分的记录没有区别，而运营要看的是档位之间的差别。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">按渠道分开报：留言和私信</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>渠道</th><th>条数</th><th>确认违规</th><th>误判放行</th><th>误判率（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_rule_quality.channel_rows %}
+                        <tr><td>{{ row.channel_label }}</td><td>{{ row.count }}</td><td>{{ row.confirmed_count }}</td><td>{{ row.dismissed_count }}</td><td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">样本不足</span>{% else %}{{ row.false_positive_rate }}{% endif %}</td>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>渠道分开报，不合并</strong>：用户在这两条渠道上写东西的心态完全不同——留言是公开的、写给所有来看商品的人，私信是一对一的、写给另一个同学的。混在一起报会让两边都被稀释：一条留课程资料链接的留言和一条私信里的微信号，前者多半是正常分享，后者几乎一定是导流。</p>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-4">疑似漏判：确认违规，却只命中了轻规则</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+            <thead><tr><th>记录</th><th>渠道</th><th>风险等级</th><th>分数</th><th>命中的规则</th><th>复核耗时</th><th>拦截于</th><th>复核于</th></tr></thead>
+            <tbody>
+                {% for row in moderation_rule_quality.missed_rows %}
+                <tr>
+                    <td>#{{ row.event_id }}</td>
+                    <td>{{ row.channel_label }}</td>
+                    <td>{{ row.risk_level_label }}</td>
+                    <td>{{ row.risk_score }}</td>
+                    <td>{{ row.rules }}</td>
+                    <td>{{ row.review_label }}</td>
+                    <td>{{ row.created_at|date:'Y-m-d H:i' }}</td>
+                    <td>{{ row.reviewed_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8">当前周期没有「确认违规却没命中高风险交易」的记录。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if moderation_rule_quality.missed_row_total > moderation_rule_quality.missed_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ moderation_rule_quality.missed_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">判据是<strong>确认违规、且命中的规则里没有高风险交易</strong>。高风险交易那一条的权重是 50，单它一条就能跨过 60 的高风险线；确认违规却只命中外部链接或手机号的记录，说明<strong>真正该拦的东西没有对应的规则</strong>——那是要补规则的对象。<strong>每行只带分数和规则名，一个字符的正文都不读</strong>：<code>content</code> 是自由文本，可能写着电话、微信、楼栋号。{% if moderation_rule_quality.stats.is_small_sample %}当前不足 {{ moderation_rule_quality.min_measured_events }} 条，占比只作参考。{% endif %}</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-exclamation me-1"></i>本模块只报告，<strong>不改任何一条审核记录、不自动确认或放行、不按 <code>risk_score</code> 做任何自动放行、不改 <code>_RULES</code> 和权重、不改 60 / 30 的分档阈值</strong>：规则是发版本的代码，不是运营可以随手调的参数；而放行一条真的导流内容，代价是另一个同学被骗。复核人的决定是这个队列里唯一的质量标注，本模块只是把它读出来。</div>
+    {% endif %}
+</section>
+
+
+
+<section class="content-card ops-panel mb-4 moderation-appeal-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Moderation appeal quality</span><h2>内容申诉处理质量，第一次被运营读到</h2></div>
+        <span class="ops-panel-hint">提交、处理与当前积压分成三条时间线</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-shield-exclamation me-1"></i>申诉链路可用之后，运营还需要知道作者为什么申诉、待处理申诉等了多久、改判后是否真的恢复内容。提交按 <code>submitted_at</code> 归期，处理按 <code>resolved_at</code> 归期，待处理申诉没有处理时刻，按当前时刻单独报等待年龄，不混进任何处理时长分布。</p>
+    {% if not moderation_appeal_quality.has_data %}
+    <div class="empty-inline">{{ moderation_appeal_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内提交申诉</span><strong>{{ moderation_appeal_quality.submission.submitted_count }}</strong><small>{{ moderation_appeal_quality.submission.appellant_count }} 位申诉人</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>同期确认违规</span><strong>{{ moderation_appeal_quality.submission.original_decision_count }}</strong><small>可见申诉率 {{ moderation_appeal_quality.submission.appeal_rate }}%（下界）</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>当前待处理</span><strong>{{ moderation_appeal_quality.pending.measured_count }}</strong><small>最久 {{ moderation_appeal_quality.pending.oldest_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>处理成立率</span><strong>{{ moderation_appeal_quality.outcome.accepted_rate }}%</strong><small>已处理 {{ moderation_appeal_quality.outcome.measured_count }} 条</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">确认违规之后，有多少人提出申诉</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>口径</th><th>数值</th><th>说明</th></tr></thead>
+                    <tbody>
+                        <tr><td>周期内提交</td><td>{{ moderation_appeal_quality.submission.submitted_count }}</td><td class="small text-muted">按 submitted_at 归期</td></tr>
+                        <tr><td>同期确认违规</td><td>{{ moderation_appeal_quality.submission.original_decision_count }}</td><td class="small text-muted">包含后来被申诉改判的记录</td></tr>
+                        <tr><td>可见申诉率</td><td>{{ moderation_appeal_quality.submission.appeal_rate }}%</td><td class="small text-muted">无申诉时效，只能是当前下界</td></tr>
+                        <tr><td>历史结论进入本周期</td><td>{{ moderation_appeal_quality.submission.historical_decision_count }}</td><td class="small text-muted">提交在周期内，原判在周期外</td></tr>
+                        <tr><td>原判到提交</td><td>{{ moderation_appeal_quality.submission.delay.median_label }}</td><td class="small text-muted">P90 {{ moderation_appeal_quality.submission.delay.p90_label }}</td></tr>
+                        <tr><td>申诉说明长度</td><td>{{ moderation_appeal_quality.submission.statement.median }}</td><td class="small text-muted">只数字数，不读内容</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">申诉人为什么提交</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>原因</th><th>申诉</th><th>申诉人</th><th>提交占比（%）</th><th>样本</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_appeal_quality.reason_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.appellant_count }}</td><td>{{ row.share }}</td><td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">样本不足</span>{% else %}可看方向{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">原因只说明用户主张，不判断主张是否成立；样本不足时只报计数。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">处理结论与恢复缺口</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>结论</th><th>数量</th><th>已处理占比（%）</th><th>口径</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_appeal_quality.outcome.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{% if row.status == 'accepted_without_restore' %}计入申诉成立，另报恢复缺口{% else %}按 resolved_at 归期{% endif %}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="4">当前周期还没有处理完的申诉。</td></tr>
+                        {% endfor %}
+                        <tr><td>成立但未恢复 / 两种成立</td><td>{{ moderation_appeal_quality.outcome.counts.accepted_without_restore }}</td><td>{{ moderation_appeal_quality.outcome.accepted_without_restore_rate }}</td><td class="small text-muted">缺历史恢复材料，不伪装成已恢复</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">申诉成立率不等于审核准确率；已处理样本低于 {{ moderation_appeal_quality.min_direction_sample }} 条时，比例只作参考。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从提交到处理完成，隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>处理时长</th><th>条数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_appeal_quality.resolution.duration.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="4">当前周期还没有处理完的申诉。</td></tr>
+                        {% endfor %}
+                        <tr><td>中位 / P90</td><td>{{ moderation_appeal_quality.resolution.duration.median_label }}</td><td>{{ moderation_appeal_quality.resolution.duration.p90_label }}</td><td class="small text-muted">待处理申诉不计入</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">换人复核了吗</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>复核人关系</th><th>条数</th><th>占比（%）</th><th>口径</th></tr></thead>
+                    <tbody>
+                        <tr><td>同一人</td><td>{{ moderation_appeal_quality.resolution.reviewer.same_count }}</td><td>{{ moderation_appeal_quality.resolution.reviewer.same_rate }}</td><td class="small text-muted">另列换人比例；缺失任一人时不算</td></tr>
+                        <tr><td>换过人</td><td>{{ moderation_appeal_quality.resolution.reviewer.different_count }}</td><td>{{ moderation_appeal_quality.resolution.reviewer.different_rate }}</td><td class="small text-muted">不评价对错，只报事实</td></tr>
+                        <tr><td>留痕缺失</td><td>{{ moderation_appeal_quality.resolution.reviewer.unknown_count }}</td><td>—</td><td class="small text-muted">不猜同人或换人</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">当前待处理申诉与等待年龄</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>申诉</th><th>渠道</th><th>原因</th><th>提交于</th><th>等待</th><th>说明字数</th><th>原复核留痕</th></tr></thead>
+                    <tbody>
+                        {% for row in moderation_appeal_quality.pending.rows|slice:":20" %}
+                        <tr><td>#{{ row.appeal_id }}</td><td>{{ row.channel_label }}</td><td>{{ row.reason_label }}</td><td>{{ row.submitted_at|date:'Y-m-d H:i' }}</td><td>{{ row.wait_label }}</td><td>{{ row.statement_length }}</td><td>{% if row.has_original_reviewer %}有{% else %}缺{% endif %}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="7">当前没有待处理的内容申诉。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if moderation_appeal_quality.pending.row_total > moderation_appeal_quality.pending.row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>待处理申诉共 {{ moderation_appeal_quality.pending.row_total }} 条，以上只列最久的 {{ moderation_appeal_quality.pending.row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-lock me-2"></i>本面板只报告：不读申诉说明与处理说明的内容，只数长度；不展示用户名和被拦截正文；不自动调整关键词规则、风险分级或队列顺序。没有申诉时效，申诉率只能作为当前下界，不用于考核。</div>
+    {% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4 governance-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h2>治理队列处理时效</h2></div>
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'governance_workbench' %}?days={{ period_days }}"><i class="bi bi-shield-check me-1"></i>进入治理工作台</a>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>待处理</span><strong>{{ governance_sla.total_open }}</strong><small>三类队列合计</small></div>
+        <div{% if governance_sla.total_overdue %} class="supply-lifecycle-summary-warning"{% endif %}><span>已超期</span><strong>{{ governance_sla.total_overdue }}</strong><small>超过各自处理时限</small></div>
+        <div><span>时限内完成率</span><strong>{% if governance_sla.within_sla_rate %}{{ governance_sla.within_sla_rate|floatformat }}%{% else %}—{% endif %}</strong><small>周期内已处理事项</small></div>
+        <div><span>周期处理量</span><strong>{{ governance_sla.total_closed }}</strong><small>最近 {{ governance_sla.days }} 天</small></div>
+    </div>
+
+    {% if governance_sla.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各队列处理情况</strong><span>时限不同：预约异常阻塞一次线下交付，举报只是离线复核</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                <thead><tr><th>队列</th><th>周期内</th><th>已处理</th><th>待处理</th><th>超期</th><th>中位耗时</th><th>P90 耗时</th><th>处理时限</th></tr></thead>
+                <tbody>
+                    {% for queue in governance_sla.queues %}
+                    <tr>
+                        <td data-label="队列">{{ queue.label }}</td>
+                        <td data-label="周期内">{{ queue.total }}</td>
+                        <td data-label="已处理">{{ queue.closed }}</td>
+                        <td data-label="待处理">{{ queue.open }}</td>
+                        <td data-label="超期">{% if queue.overdue %}<span class="supply-lifecycle-flag">{{ queue.overdue }}</span>{% else %}0{% endif %}</td>
+                        <td data-label="中位耗时">{{ queue.median_label }}</td>
+                        <td data-label="P90 耗时">{{ queue.p90_label }}</td>
+                        <td data-label="处理时限">{{ queue.sla_label }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if governance_sla.recommendations %}
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>治理建议</strong><span>仅在越过时限或接近上限时给出</span></div>
+        <ul>
+            {% for recommendation in governance_sla.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。待处理清单不按统计周期过滤：周期开始前就超期的事项，恰恰是最不该被藏起来的那一件。</div>
+</section>

@@ -1,0 +1,236 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 meeting-attendance-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Handover reality</span><h2>约好的那一次见面</h2></div>
+        <span class="ops-panel-hint">响应时长与到场登记，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-people me-1"></i>交付预约一直在记两段时间：对方多久回应一个提议（<code>responded_at</code>），以及双方各自什么时候登记到场。四个字段全都有写入路径，而读取路径只有一处——订单详情页把它们显示给用户本人看。运营侧一条统计都没有：没有人知道提议交上去之后对方多久才理，也没有人知道约了时间的订单里到底有几个人真的到了现场。</p>
+    {% if not meeting_attendance.has_data %}
+    <div class="empty-inline">{{ meeting_attendance.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>得到回应</span><strong>{{ meeting_attendance.response_stats.responded_count }}</strong><small>共 {{ meeting_attendance.response_stats.total }} 次安排 · {{ meeting_attendance.response_stats.response_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>回应中位耗时</span><strong>{{ meeting_attendance.response_stats.median_label }}</strong><small>P90 {{ meeting_attendance.response_stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>双方都到场</span><strong>{{ meeting_attendance.attendance_stats.both_arrived_count }}</strong><small>占已结束确认预约 {{ meeting_attendance.attendance_stats.both_arrival_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>与到场记录矛盾的异常</span><strong>{{ meeting_attendance.incident_crosscheck.contradicted_count }}</strong><small>共 {{ meeting_attendance.incident_crosscheck.total }} 条未到场异常</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">对方多久回应一个提议</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>回应耗时</th><th>安排数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.response_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <table class="table table-sm align-middle ops-table mt-3 meeting-attendance-mini-table">
+                <tbody>
+                    <tr><th scope="row">回应后确认</th><td>{{ meeting_attendance.response_stats.accepted_count }}</td><td>{{ meeting_attendance.response_stats.accept_rate }}%</td></tr>
+                    <tr><th scope="row">回应后未接受</th><td>{{ meeting_attendance.response_stats.declined_count }}</td><td>&mdash;</td></tr>
+                    <tr><th scope="row">周期结束仍未回应</th><td>{{ meeting_attendance.response_stats.pending_count }}</td><td>&mdash;</td></tr>
+                </tbody>
+            </table>
+            <h3 class="h6 mb-3 mt-4">到场与迟到</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>角色</th><th>签到人数</th><th>到场率（%）</th><th>平均偏移</th><th>最晚一次</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.attendance_stats.lateness_rows %}
+                        <tr>
+                            <td>{{ row.role }}</td>
+                            <td>{{ row.arrived_count }}</td>
+                            <td>{{ row.arrival_rate }}</td>
+                            <td>{{ row.average_offset_label }}</td>
+                            <td>{{ row.worst_offset_label }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <table class="table table-sm align-middle ops-table mt-3 meeting-attendance-mini-table">
+                <tbody>
+                    <tr><th scope="row">双方都到场</th><td>{{ meeting_attendance.attendance_stats.both_arrived_count }}</td><td>{{ meeting_attendance.attendance_stats.both_arrival_rate }}%</td></tr>
+                    <tr><th scope="row">只有一方到场</th><td>{{ meeting_attendance.attendance_stats.one_sided_count }}</td><td>{{ meeting_attendance.attendance_stats.one_sided_rate }}%</td></tr>
+                    <tr><th scope="row">双方都没到场</th><td>{{ meeting_attendance.attendance_stats.neither_arrived_count }}</td><td>&mdash;</td></tr>
+                </tbody>
+            </table>
+            <h3 class="h6 mb-3 mt-4">迟到分档</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>相对约定开始</th><th>买家</th><th>卖家</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.attendance_stats.lateness_bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.buyer_count }}</td>
+                            <td>{{ row.seller_count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">「对方未到场」说得准吗</h3>
+            <p class="small text-muted">提交人说的是一句主观陈述，而签到记录是系统里另一方亲手留下的动作。两者对不上的那一条，不是要判定谁在说谎——平台没有能力也不该去判定——而是要被运营看见。</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>对照结果</th><th>条数</th><th>占该类异常（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td><span class="meeting-attendance-verdict meeting-attendance-verdict-contradicted">有到场登记</span></td><td>{{ meeting_attendance.incident_crosscheck.contradicted_count }}</td><td>{{ meeting_attendance.incident_crosscheck.contradicted_rate }}</td></tr>
+                        <tr><td><span class="meeting-attendance-verdict meeting-attendance-verdict-supported">支持提交人</span></td><td>{{ meeting_attendance.incident_crosscheck.supported_count }}</td><td>&mdash;</td></tr>
+                        <tr><td><span class="meeting-attendance-verdict meeting-attendance-verdict-no_record">无记录可依</span></td><td>{{ meeting_attendance.incident_crosscheck.no_record_count }}</td><td>&mdash;</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            {% if meeting_attendance.incident_crosscheck.contradicted_rows %}
+            <h3 class="h6 mb-3 mt-4">待核实的矛盾</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>商品</th><th>提交人</th><th>被指控方</th><th>被指控方到场登记</th><th>约定开始</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.incident_crosscheck.contradicted_rows %}
+                        <tr>
+                            <td><strong>{{ row.item_title }}</strong></td>
+                            <td>{{ row.reporter }}</td>
+                            <td>{{ row.accused }}</td>
+                            <td>{{ row.accused_arrived_label }}</td>
+                            <td>{{ row.start_at|date:'Y-m-d H:i' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if meeting_attendance.incident_crosscheck.contradicted_rows|length > meeting_attendance.incident_crosscheck.contradiction_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ meeting_attendance.incident_crosscheck.contradiction_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            {% endif %}
+            <h3 class="h6 mb-3 mt-4">未接受原因的取值</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                    <thead><tr><th>取值</th><th>次数</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.decline_stats.reason_rows %}
+                        <tr><td>{{ row.reason }}</td><td>{{ row.count }}</td></tr>
+                        {% empty %}
+                        <tr><td>（空）</td><td>0</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">{% if meeting_attendance.decline_stats.is_constant_value and meeting_attendance.decline_stats.declined_count %}当前只有一个取值——这个字段的写入路径是视图里的一句硬编码，用户从来没有机会填它。{% else %}被对方未接受的安排，当前还没有取值分布可言。{% endif %}</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>到场统计的分母只收"约定结束时间已经过去"的确认预约：还没到结束时间的约会谈不到"有没有人到"，把它算进分母会让到场率凭空变小，{{ meeting_attendance.attendance_stats.still_open_count }} 次还没到核对时间的预约已单独排除。双方都没到场不等于爽约——爽约只能由用户提交异常，系统不自动判定。这里只报告，不改签到窗口、不新增提醒、不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4 meeting-service-window-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Service window audit</span><h2>交付开放时段风险</h2></div>
+        <span class="ops-panel-hint">只看未来安排，按登记规则重新解释</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-clock-history me-1"></i>{{ meeting_service_window_quality.period_note }}这里的“风险”不是违规判定：交易双方仍可协商到登记时段之外；它只表示地点档案、单日例外和这笔未来安排需要人工核对。</p>
+    {% if not meeting_service_window_quality.has_data %}
+    <div class="empty-inline">{{ meeting_service_window_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未来安排</span><strong>{{ meeting_service_window_quality.metrics.total_count }}</strong><small>待确认或已确认且尚未开始</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>登记规则外</span><strong>{{ meeting_service_window_quality.metrics.registered_outside_count }}</strong><small>每周时段外 {{ meeting_service_window_quality.metrics.weekly_outside_count }} · 例外相关 {{ meeting_service_window_quality.metrics.closed_exception_count|add:meeting_service_window_quality.metrics.replacement_outside_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未登记每周时段</span><strong>{{ meeting_service_window_quality.metrics.unregistered_count }}</strong><small>只提醒补档案，不当成错误</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>例外无同日安排</span><strong>{{ meeting_service_window_quality.metrics.unused_count }}</strong><small>未来例外 {{ meeting_service_window_quality.metrics.future_count }} 条 · 覆盖 {{ meeting_service_window_quality.metrics.unused_location_count }} 个地点</small></div></div>
+    </div>
+    {% if meeting_service_window_quality.location_rows %}
+    <h3 class="h6 mb-3">按地点核对</h3>
+    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>未来安排</th><th>登记规则外</th><th>例外相关</th><th>未登记时段</th><th>需人工核对</th></tr></thead><tbody>
+        {% for row in meeting_service_window_quality.location_rows %}<tr{% if row.attention_count %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ row.location_name }}</strong></td>
+            <td>{{ row.total_count }}</td>
+            <td>{{ row.registered_outside_count }}</td>
+            <td>{{ row.exception_count }}</td>
+            <td>{{ row.unregistered_count }}</td>
+            <td><strong>{{ row.attention_count }}</strong></td>
+        </tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+    {% if meeting_service_window_quality.risk_page_rows %}
+    <h3 class="h6 mb-3">即将发生的核对清单</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>订单</th><th>地点</th><th>安排时间</th><th>状态</th><th>分类</th><th>原因</th></tr></thead><tbody>
+        {% for row in meeting_service_window_quality.risk_page_rows %}
+        <tr>
+            <td><strong>#{{ row.order_id }}</strong></td>
+            <td>{{ row.location_name }}</td>
+            <td>{{ row.start_at|date:'m-d H:i' }} — {{ row.end_at|date:'H:i' }}</td>
+            <td>{{ row.status_label }}</td>
+            <td>{{ row.kind_label }}</td>
+            <td class="meeting-service-window-reason">{{ row.reason }}</td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% if meeting_service_window_quality.risk_total_count > meeting_service_window_quality.risk_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>页面最多列 {{ meeting_service_window_quality.risk_row_limit }} 条，完整清单在 CSV 导出中，本次共 {{ meeting_service_window_quality.risk_total_count }} 条。</p>
+    {% endif %}
+    {% else %}
+    <div class="empty-inline">当前没有需要核对开放时段的未来安排。</div>
+    {% endif %}
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>{{ meeting_service_window_quality.boundary_note }}清单只带订单号、地点和时间，不带用户名、商品标题或联系方式；页面与 CSV 共用同一个构建器。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 campus-service-rule-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Service rule audit</span><h2>校园开放规则配置审计</h2></div>
+        <span class="ops-panel-hint">先解释规则形状，再交给人工确认</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-sliders me-1"></i>{{ campus_location_service_rule_quality.period_note }}这里的“信号”不是错误判定：未登记、重叠和跨午夜截断都可以是刻意选择；本面板只把它们会得到的实际解释集中摆出来。</p>
+    {% if not campus_location_service_rule_quality.has_data %}
+    <div class="empty-inline">{{ campus_location_service_rule_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>启用地点</span><strong>{{ campus_location_service_rule_quality.metrics.active_location_count }}</strong><small>已登记 {{ campus_location_service_rule_quality.metrics.registered_location_count }} · 未登记 {{ campus_location_service_rule_quality.metrics.unregistered_location_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>启用每周时段</span><strong>{{ campus_location_service_rule_quality.metrics.active_window_count }}</strong><small>跨午夜 {{ campus_location_service_rule_quality.metrics.cross_midnight_window_count }} · 重叠或相邻组合 {{ campus_location_service_rule_quality.metrics.weekly_overlap_or_adjacent_group_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>启用单日例外</span><strong>{{ campus_location_service_rule_quality.metrics.active_exception_count }}</strong><small>过去 {{ campus_location_service_rule_quality.metrics.past_exception_count }} · 今天 {{ campus_location_service_rule_quality.metrics.today_exception_count }} · 未来 {{ campus_location_service_rule_quality.metrics.future_exception_count }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>配置信号</span><strong>{{ campus_location_service_rule_quality.metrics.signal_total }}</strong><small>只提示含义确认，不自动修复规则</small></div></div>
+    </div>
+    {% if campus_location_service_rule_quality.location_rows %}
+    <h3 class="h6 mb-3">按地点聚合</h3>
+    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>状态</th><th>启用每周时段</th><th>停用每周时段</th><th>启用例外</th><th>配置信号</th></tr></thead><tbody>
+        {% for row in campus_location_service_rule_quality.location_rows %}<tr{% if row.signal_count %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ row.location_name }}</strong></td>
+            <td>{{ row.location_active_label }}</td>
+            <td>{{ row.active_window_count }}</td>
+            <td>{{ row.inactive_window_count }}</td>
+            <td>{{ row.active_exception_count }}</td>
+            <td><strong>{{ row.signal_count }}</strong></td>
+        </tr>{% endfor %}
+    </tbody></table></div>
+    {% endif %}
+    {% if campus_location_service_rule_quality.rule_page_rows %}
+    <h3 class="h6 mb-3">配置核对清单</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>生效日期</th><th>状态</th><th>信号</th><th>配置</th><th>解释</th></tr></thead><tbody>
+        {% for row in campus_location_service_rule_quality.rule_page_rows %}
+        <tr>
+            <td><strong>{{ row.location_name }}</strong></td>
+            <td>{% if row.effective_date %}{{ row.effective_date|date:'Y-m-d' }}{% else %}—{% endif %}</td>
+            <td>{{ row.location_active_label }}</td>
+            <td>{{ row.signal_label }}</td>
+            <td>{{ row.config }}</td>
+            <td class="meeting-service-window-reason">{{ row.reason }}</td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% if campus_location_service_rule_quality.rule_total_count > campus_location_service_rule_quality.rule_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>页面最多列 {{ campus_location_service_rule_quality.rule_row_limit }} 条，完整清单在 CSV 导出中，本次共 {{ campus_location_service_rule_quality.rule_total_count }} 条。</p>
+    {% endif %}
+    {% else %}
+    <div class="empty-inline">当前开放规则没有需要确认含义的配置信号。</div>
+    {% endif %}
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>{{ campus_location_service_rule_quality.boundary_note }}清单只包含地点、日期和规则文本，不关联订单、预约或用户；页面与 CSV 共用同一个构建器。</div>
+</section>

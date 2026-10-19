@@ -1,0 +1,494 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 recommendation-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Recommendation</span><h2>首页推荐卡挑得准不准</h2></div>
+        <span class="ops-panel-hint">周期 {{ recommendation_quality.period_days }} 天·只报告不改权重</span>
+    </div>
+    {% if recommendation_quality.has_data %}
+    <div class="recommendation-quality-summary">
+        <div><span>反馈总数</span><strong>{{ recommendation_quality.feedback_loop.feedback_total }}</strong><small>分母是有过反馈的推荐</small></div>
+        <div><span>正反馈比例</span><strong>{% if recommendation_quality.feedback_loop.positive_rate != None %}{{ recommendation_quality.feedback_loop.positive_rate }}%{% else %}—{% endif %}</strong><small>「想看看」除以全部反馈</small></div>
+        <div><span>改口数</span><strong>{{ recommendation_quality.feedback_loop.switched_total }}</strong><small>先想看后不感兴趣</small></div>
+        <div><span>被看见的卡</span><strong>{{ recommendation_quality.feedback_loop.viewed_recommendations }}</strong><small>窗口内第一次被看见</small></div>
+        <div><span>反馈率</span><strong>{% if recommendation_quality.feedback_loop.feedback_rate != None %}{{ recommendation_quality.feedback_loop.feedback_rate }}%{% else %}—{% endif %}</strong><small>分母已落库，仍是下界</small></div>
+    </div>
+
+    <div class="recommendation-quality-reading mt-3">
+        <div class="recommendation-quality-block-heading"><strong>按理由拆</strong><span>一条理由要凑够 {{ recommendation_quality.metrics.min_reason_feedback }} 条反馈才给方向</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+                <thead><tr><th>理由</th><th>反馈数</th><th>想看看</th><th>不感兴趣</th><th>正反馈比例</th><th>改口数</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_quality.reason_rows %}
+                    {% if row.feedback_count %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.feedback_count }}</td>
+                        <td>{{ row.interested_count }}</td>
+                        <td>{{ row.dismissed_count }}</td>
+                        <td>{% if row.positive_rate != None %}{{ row.positive_rate }}%{% else %}—{% endif %}</td>
+                        <td>{{ row.switched_count }}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ recommendation_quality.metrics.min_reason_feedback }} 条</span>{% else %}<span class="recommendation-quality-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="recommendation-quality-block-heading mt-3"><strong>按推荐当时的理由</strong><span>一张卡要凑够 {{ recommendation_quality.metrics.min_recommendation_impressions }} 次被看见才给方向</span></div>
+        <p class="recommendation-quality-note mb-0">这一层读的是<strong>推荐那一刻</strong>挂在那张卡上的理由：`Recommendation` 在渲染时就把理由和分数算好了，`views.home` 把它们跟着卡一起写进 `RecommendationImpression`，落库是零成本的。上面「按理由拆」那一层读的是<strong>反馈时刻重算</strong>的理由——两句回答的不是同一个问题：这一层问「当时挂这句话的卡，用户点了吗」，那一层问「这句理由今天还成立吗」。用户点完按钮又去收藏、又去浏览，会让后一句滑走，前一句不会。</p>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+                <thead><tr><th>当时的理由</th><th>被看见</th><th>被点开</th><th>反馈率</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_quality.reason_impression_rows %}
+                    {% if row.shown_count %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.shown_count }}</td>
+                        <td>{{ row.feedback_count }}</td>
+                        <td>{% if row.feedback_rate != None %}{{ row.feedback_rate }}%{% else %}—{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ recommendation_quality.metrics.min_recommendation_impressions }} 次</span>{% else %}<span class="recommendation-quality-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="recommendation-quality-block-heading mt-3"><strong>按推荐当时的分数档</strong><span>这套打分今天在把什么样的商品推上首页</span></div>
+        <p class="recommendation-quality-note mb-0">档位边界照三个可解释的加分取（+10 反馈匹配、+8 分类匹配、+5 地点匹配），不按分数等分——运营能动手改的就是这三个常数。只报规模不报反馈率：分数是五部分相加的结果，两个同分的商品可能一个靠新鲜度一个靠分类，「这一档的反馈率更高」说明不了任何可改的东西。</p>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+                <thead><tr><th>分数档</th><th>被看见</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_quality.score_bands %}
+                    {% if row.shown_count %}
+                    <tr><td><strong>{{ row.label }}</strong></td><td>{{ row.shown_count }}</td></tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="recommendation-quality-note mb-0"><i class="bi bi-info-circle me-1"></i>{{ recommendation_quality.summary }}</p>
+        {% for note in recommendation_quality.recommendations %}
+        <p class="recommendation-quality-note mb-0">{{ note }}</p>
+        {% endfor %}
+        <p class="recommendation-quality-note mb-0">理由按反馈时刻重算，走 <code>recommendations.py</code> 的 <code>recommendation_reason_key</code>，首页渲染的那句话和面板按它归组的那句话是同一句。复算里的「你标记过想看」只对改过口的行生效：只表过一次态的行，点击本身就是入集合的那个动作，那句话在点击那一刻还没出现。复算还原的是点击那一刻的理由，不是推荐当时的理由——用户在那之后又收藏或浏览过的东西会改变它。</p>
+        <p class="recommendation-quality-note mb-0">反馈率的分母从这一轮起真正落库：首页每次渲染推荐卡都写一行 `RecommendationImpression`，「被看见」这件事本身进了库，不再拿 `BrowsingHistory` 反推。此前反推的分母是窗口内<b>全部</b>被点开过的商品，一件从搜索点进去的商品也占分母、却没有推荐卡可点，所以反馈率只能报下界。现在仍是下界、只低不高，但偏低的来源只剩三种：反馈的 `updated_at` 可能在窗口外；按钮的动机可能来自窗口外那次看见；曝光表自上线起才开始积累，跨过上线时刻的周期前半段分母是缺的。不和反馈取交集——取交集会让反馈率恒为 100%，这个数字就不存在了。空分母报「—」不报 0%：一周一张卡都没渲染过，反馈率不存在，不是零。</p>
+        <p class="recommendation-quality-note mb-0">匿名访客的看见也计入分母（`user` 存 null）：首页「为你挑选」对没登录的人照常渲染，只是标题换成「校园里正在被关注」、反馈按钮收起来。不记他们，首页最大的那部分流量就整块不在分母里，反馈率会变成一个只有登录用户才配被统计的数。账号注销后那些看见仍然算数——`user` 取 `SET_NULL`，发生过的看见不该跟着账号一起消失。</p>
+        <p class="recommendation-quality-note mb-0">两条理由的正反馈比例相差不满 {{ recommendation_quality.metrics.reason_noise_points }} 个百分点视为噪声，同一个量级的理由之间的这点差别，运营看不出来、也动不了手。本面板只报告，不调 +10、不调 0.8、不调 +8、不改任何一句理由文案、不把负反馈的商品加进黑名单。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期既没有推荐反馈、也没有首页推荐曝光——推荐卡一次都没被渲染过。用户打开首页看到「为你挑选」那一栏、或在卡上点第一次「想看看」「不感兴趣」后，这里会开始统计。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>按理由聚合，不按用户、不按商品：按用户是排名（隐私，也不是运营射程），按商品让被推一万次和一次不可比。理由是打分的可解释输出，也是运营唯一能动手改的东西。「想看看」之后有没有真的去看，只算表态之后 {{ recommendation_quality.metrics.followup_window_days }} 天内的浏览与下单——先看后点不算，超过窗口的浏览可能是用户在翻历史记录。本模块只报告，不改权重。</div>
+</section>
+<section class="content-card ops-panel mb-4 recommendation-impression-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Exposure log</span><h2>推荐曝光日志质量</h2></div>
+        <span class="ops-panel-hint">周期 {{ recommendation_impression_quality.period_days }} 天·只读落库行</span>
+    </div>
+    {% if recommendation_impression_quality.has_data %}
+    <div class="recommendation-impression-quality-summary">
+        <div><span>周期内落库曝光</span><strong>{{ recommendation_impression_quality.summary.total_impressions }}</strong><small>主统计只读到当前时刻</small></div>
+        <div><span>匿名或已注销</span><strong>{% if recommendation_impression_quality.summary.anonymous_share != None %}{{ recommendation_impression_quality.summary.anonymous_share }}%{% else %}—{% endif %}</strong><small>合法形状，不是缺失</small></div>
+        <div><span>重复多出的行</span><strong>{{ recommendation_impression_quality.summary.repeat_rows }}</strong><small>只看登录用户</small></div>
+        <div><span>时间在未来</span><strong>{{ recommendation_impression_quality.summary.future_count }}</strong><small>单列，不进主统计</small></div>
+    </div>
+
+    <div class="recommendation-impression-quality-reading mt-3">
+        <div class="recommendation-impression-quality-block-heading"><strong>字段与结构</strong><span>匿名、零分和重复都不是错误</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-impression-quality-table">
+                <thead><tr><th>检查对象</th><th>行数</th><th>状态</th><th>怎么读</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_impression_quality.field_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.count }}</td>
+                        <td><span class="recommendation-impression-quality-{% if row.is_anomaly %}attention{% else %}ok{% endif %}">{{ row.status }}</span></td>
+                        <td>{{ row.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="recommendation-impression-quality-block-heading mt-3"><strong>理由分布</strong><span>一条理由要凑够 {{ recommendation_impression_quality.metrics.min_reason_impressions }} 次被看见才标记样本够</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-impression-quality-table">
+                <thead><tr><th>理由</th><th>曝光</th><th>占比（%）</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in recommendation_impression_quality.reason_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share != None %}{{ row.share }}{% else %}—{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ recommendation_impression_quality.metrics.min_reason_impressions }} 次</span>{% else %}<span class="recommendation-impression-quality-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="recommendation-impression-quality-block-heading mt-3"><strong>重复与覆盖</strong><span>重复不是错误；间隙不能判失败</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 recommendation-impression-quality-table">
+                <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>登录用户曝光</strong></td><td>{{ recommendation_impression_quality.summary.logged_in_impressions }}</td><td>匿名行不进入重复分母</td></tr>
+                    <tr><td><strong>重复的用户商品对</strong></td><td>{{ recommendation_impression_quality.summary.repeat_pairs }}</td><td>同一登录用户看见同一商品不止一次</td></tr>
+                    <tr><td><strong>重复行占比</strong></td><td>{% if recommendation_impression_quality.summary.repeat_share != None %}{{ recommendation_impression_quality.summary.repeat_share }}%{% else %}—{% endif %}</td><td>分母是登录用户曝光</td></tr>
+                    <tr><td><strong>覆盖自然日</strong></td><td>{{ recommendation_impression_quality.summary.active_days }} / {{ recommendation_impression_quality.summary.calendar_days }}</td><td>无写入日 {{ recommendation_impression_quality.summary.zero_days }} 天</td></tr>
+                    <tr><td><strong>最长观测间隙</strong></td><td>{% if recommendation_impression_quality.summary.longest_gap_hours != None %}{{ recommendation_impression_quality.summary.longest_gap_hours }} 小时{% else %}—{% endif %}</td><td>只描述已落库行的间隔</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="recommendation-impression-quality-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ recommendation_impression_quality.note }}</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有首页推荐曝光行。首页推荐卡第一次被渲染并成功写入后，这里会开始读它的落库形状。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>本面板只读 <code>RecommendationImpression</code>：不新增渲染批次，不修改首页推荐和写入路径，不把结构形状读成推荐效果，不按用户、商品或卖家排名。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 opportunity-impression-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Exposure ledger</span><h2>机会流曝光日志质量</h2></div>
+        <span class="ops-panel-hint">周期 {{ opportunity_impression_quality.period_days }} 天·只读落库行</span>
+    </div>
+    {% if opportunity_impression_quality.has_data %}
+    <div class="opportunity-impression-quality-summary">
+        <div><span>周期内展示行</span><strong>{{ opportunity_impression_quality.summary.total_impressions }}</strong><small>容忍 {{ opportunity_impression_quality.summary_metrics.future_tolerance_minutes }} 分钟时钟偏差</small></div>
+        <div><span>用户 / 目标</span><strong>{{ opportunity_impression_quality.summary.user_count }} / {{ opportunity_impression_quality.summary.target_count }}</strong><small>只输出去重计数</small></div>
+        <div><span>重复展示行</span><strong>{{ opportunity_impression_quality.summary.repeat_rows }}</strong><small>第一次之后多出的独立展示</small></div>
+        <div><span>同刻重复组</span><strong>{{ opportunity_impression_quality.summary.same_timestamp_pairs }}</strong><small>只提示核对，不自动删除</small></div>
+    </div>
+
+    <div class="opportunity-impression-quality-reading mt-3">
+        <div class="opportunity-impression-quality-block-heading"><strong>类型分布</strong><span>当前类型固定列出，历史或异常值聚合</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>类型</th><th>展示行</th><th>占比（%）</th><th>状态</th><th>怎么读</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_impression_quality.kind_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share != None %}{{ row.share }}{% else %}—{% endif %}</td>
+                        <td><span class="opportunity-impression-quality-{% if row.is_anomaly %}attention{% else %}ok{% endif %}">{{ row.status }}</span></td>
+                        <td>{{ row.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-impression-quality-block-heading mt-3"><strong>目标一致性</strong><span>四类互斥，异常行不从总数扣除</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>口径</th><th>展示行</th><th>占比（%）</th><th>状态</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_impression_quality.target_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong><br><small class="text-muted">{{ row.definition }}</small></td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share != None %}{{ row.share }}{% else %}—{% endif %}</td>
+                        <td><span class="opportunity-impression-quality-{% if row.is_anomaly %}attention{% else %}ok{% endif %}">{{ row.status }}</span></td>
+                        <td>{{ row.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-impression-quality-block-heading mt-3"><strong>重复与覆盖</strong><span>重复不是错误；间隙不能判失败</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>窗口内第一次被看见</strong></td><td>{{ opportunity_impression_quality.summary.first_seen_pairs }}</td><td>忽略率分母按（用户, 机会）去重</td></tr>
+                    <tr><td><strong>重复展示的用户目标对</strong></td><td>{{ opportunity_impression_quality.summary.repeat_pairs }}</td><td>同一用户在不同时刻再次看见同一机会</td></tr>
+                    <tr><td><strong>重复展示行占比</strong></td><td>{% if opportunity_impression_quality.summary.repeat_share != None %}{{ opportunity_impression_quality.summary.repeat_share }}%{% else %}—{% endif %}</td><td>分母是周期内全部展示行</td></tr>
+                    <tr><td><strong>时间在未来</strong></td><td>{{ opportunity_impression_quality.summary.future_count }}</td><td>超过当前时间 {{ opportunity_impression_quality.summary_metrics.future_tolerance_minutes }} 分钟才单列</td></tr>
+                    <tr><td><strong>覆盖自然日</strong></td><td>{{ opportunity_impression_quality.summary.active_days }} / {{ opportunity_impression_quality.summary.calendar_days }}</td><td>零展示日 {{ opportunity_impression_quality.summary.zero_days }} 天</td></tr>
+                    <tr><td><strong>最长观测间隙</strong></td><td>{% if opportunity_impression_quality.summary.longest_gap_hours != None %}{{ opportunity_impression_quality.summary.longest_gap_hours }} 小时{% else %}—{% endif %}</td><td>只描述已落库行的间隔</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-impression-quality-block-heading mt-3"><strong>逐日展示</strong><span>页面与 CSV 都只保留最近 {{ opportunity_impression_quality.daily_row_limit }} 天</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+                <thead><tr><th>自然日</th><th>展示行</th><th>用户数</th><th>目标数</th><th>重复行</th><th>状态</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_impression_quality.daily_rows %}
+                    <tr>
+                        <td>{{ row.date }}</td>
+                        <td>{{ row.impressions }}</td>
+                        <td>{{ row.user_count }}</td>
+                        <td>{{ row.target_count }}</td>
+                        <td>{{ row.repeat_rows }}</td>
+                        <td>{% if row.has_data %}<span class="opportunity-impression-quality-ok">有展示</span>{% else %}<span class="text-muted">零展示</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if opportunity_impression_quality.daily_rows_truncated %}
+        <p class="opportunity-impression-quality-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>本窗口逐日明细超过 {{ opportunity_impression_quality.daily_row_limit }} 天，页面与 CSV 同步截断为最近 {{ opportunity_impression_quality.daily_row_limit }} 天；汇总指标仍覆盖完整回看周期。</p>
+        {% endif %}
+        <p class="opportunity-impression-quality-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ opportunity_impression_quality.note }}</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有机会流曝光行。机会流第一次渲染机会并成功写入后，这里会开始读它的落库形状。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>本面板只读 <code>OpportunityImpression</code>：不修改机会流和写入失败策略，不输出用户名、标题、内容或目标链接，不按用户、目标或类型排名。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 opportunity-dismissal-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Opportunity</span><h2>机会流上被按「不再显示」的机会</h2></div>
+        <span class="ops-panel-hint">周期 {{ opportunity_dismissal_quality.period_days }} 天·只报告不改静默期</span>
+    </div>
+    {% if opportunity_dismissal_quality.has_data %}
+    <div class="opportunity-dismissal-summary">
+        <div><span>忽略总数</span><strong>{{ opportunity_dismissal_quality.metrics.dismissal_total }}</strong><small>窗口内按过「暂不展示」</small></div>
+        <div><span>今天仍能重算分数</span><strong>{{ opportunity_dismissal_quality.metrics.scored_total }}</strong><small>还有在售商品能匹配上</small></div>
+        <div><span>已经匹配不上</span><strong>{{ opportunity_dismissal_quality.metrics.unscored_total }}</strong><small>之后把商品下架了</small></div>
+        <div><span>重复忽略占比</span><strong>{% if opportunity_dismissal_quality.metrics.repeat_share != None %}{{ opportunity_dismissal_quality.metrics.repeat_share }}%{% else %}—{% endif %}</strong><small>同一条被同一个人再按</small></div>
+    </div>
+
+    <div class="opportunity-dismissal-reading mt-3">
+        <div class="opportunity-dismissal-block-heading"><strong>按机会类型拆</strong><span>忽略的规模与结构</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>忽略数</th><th>涉及用户数</th><th>人均忽略</th><th>其中重复忽略</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.kind_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{{ row.user_count }}</td>
+                        <td>{% if row.per_user != None %}{{ row.per_user }}{% else %}—{% endif %}</td>
+                        <td>{{ row.repeated_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-dismissal-block-heading mt-3"><strong>按分数档拆</strong><span>一档要凑够 {{ opportunity_dismissal_quality.metrics.min_band_sample }} 条忽略才给方向</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>分数档</th><th>忽略数</th><th>占本类型可打分忽略</th><th>档内平均分</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.band_rows %}
+                    {% if row.dismissal_count %}
+                    <tr>
+                        <td>{{ row.kind_label }}</td>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{% if row.share_of_kind != None %}{{ row.share_of_kind }}%{% else %}—{% endif %}</td>
+                        <td>{% if row.average_score != None %}{{ row.average_score }}{% else %}—{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ opportunity_dismissal_quality.metrics.min_band_sample }} 条</span>{% else %}<span class="opportunity-dismissal-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-dismissal-block-heading mt-3"><strong>按理由拆</strong><span>理由在忽略时刻重算，走两个匹配器自己</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>理由</th><th>忽略数</th><th>占本类型可打分忽略</th><th>平均分</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.reason_rows %}
+                    {% if row.dismissal_count %}
+                    <tr>
+                        <td>{{ row.kind_label }}</td>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{{ row.share_of_kind }}%</td>
+                        <td>{{ row.average_score }}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ opportunity_dismissal_quality.metrics.min_reason_sample }} 条</span>{% else %}<span class="opportunity-dismissal-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="opportunity-dismissal-block-heading mt-3"><strong>忽略率</strong><span>分母来自 <code>OpportunityImpression</code>，被看见过才进分母</span></div>
+        <div class="opportunity-dismissal-summary">
+            <div><span>窗口内第一次被看见</span><strong>{{ opportunity_dismissal_quality.dismissal_rate.denominator }}</strong><small>按（用户, 机会）去重</small></div>
+            <div><span>其中被按「不再显示」</span><strong>{{ opportunity_dismissal_quality.dismissal_rate.numerator }}</strong></div>
+            <div><span>忽略率</span><strong>{% if opportunity_dismissal_quality.dismissal_rate.rate != None %}{{ opportunity_dismissal_quality.dismissal_rate.rate }}%{% else %}—{% endif %}</strong><small>下界，只低不高</small></div>
+            <div><span>渲染过不止一次</span><strong>{% if opportunity_dismissal_quality.metrics.impression_total %}{{ opportunity_dismissal_quality.metrics.impression_total|add:"-"|add:opportunity_dismissal_quality.metrics.first_seen_total }}{% else %}0{% endif %}</strong><small>同一机会被重复看到</small></div>
+        </div>
+        <div class="ops-table-wrap mt-2">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>分数档</th><th>被看见次数</th><th>其中被忽略</th><th>忽略率</th><th>渲染过不止一次</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.rate_rows %}
+                    <tr>
+                        <td>{{ row.kind_label }}</td>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.shown_count }}</td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{% if row.dismissal_rate != None %}{{ row.dismissal_rate }}%{% else %}<span class="text-muted">分母为空</span>{% endif %}</td>
+                        <td>{{ row.repeat_show_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="opportunity-dismissal-note mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>忽略率的分母从这一轮起真正落库：<code>OpportunityImpression</code> 在 <code>views.opportunity_feed</code> 每次渲染时写一行，一次 <code>bulk_create</code>。它刻意<b>不设</b>（用户, 目标）唯一约束——忽略该折叠，展示不该，折叠会让分母变小、忽略率虚高。分母只数窗口内第一次被看见的（用户, 机会），分子要求该机会在窗口内至少被展示过一次；这个数仍然是<b>下界</b>，只低不高（窗口外看到、窗口内才按按钮的忽略进不了分子）。空分母报 <code>None</code> 不报 0；分母不足 {{ opportunity_dismissal_quality.metrics.min_impressions }} 条只报数字、不给方向。历史数据不回填，曝光表自上线起才开始积累。</p>
+
+        <div class="opportunity-dismissal-block-heading mt-3"><strong>忽略率</strong><span>分母来自 <code>OpportunityImpression</code>，被看见过才进分母</span></div>
+        <div class="opportunity-dismissal-summary">
+            <div><span>窗口内第一次被看见</span><strong>{{ opportunity_dismissal_quality.dismissal_rate.denominator }}</strong><small>按（用户, 机会）去重</small></div>
+            <div><span>其中被按「不再显示」</span><strong>{{ opportunity_dismissal_quality.dismissal_rate.numerator }}</strong></div>
+            <div><span>忽略率</span><strong>{% if opportunity_dismissal_quality.dismissal_rate.rate != None %}{{ opportunity_dismissal_quality.dismissal_rate.rate }}%{% else %}—{% endif %}</strong><small>下界，只低不高</small></div>
+            <div><span>渲染过不止一次</span><strong>{% if opportunity_dismissal_quality.metrics.impression_total %}{{ opportunity_dismissal_quality.metrics.impression_total|add:"-"|add:opportunity_dismissal_quality.metrics.first_seen_total }}{% else %}0{% endif %}</strong><small>同一机会被重复看到</small></div>
+        </div>
+        <div class="ops-table-wrap mt-2">
+            <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+                <thead><tr><th>类型</th><th>分数档</th><th>被看见次数</th><th>其中被忽略</th><th>忽略率</th><th>渲染过不止一次</th></tr></thead>
+                <tbody>
+                    {% for row in opportunity_dismissal_quality.rate_rows %}
+                    <tr>
+                        <td>{{ row.kind_label }}</td>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.shown_count }}</td>
+                        <td>{{ row.dismissal_count }}</td>
+                        <td>{% if row.dismissal_rate != None %}{{ row.dismissal_rate }}%{% else %}<span class="text-muted">分母为空</span>{% endif %}</td>
+                        <td>{{ row.repeat_show_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="opportunity-dismissal-note mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>忽略率的分母从这一轮起真正落库：<code>OpportunityImpression</code> 在 <code>views.opportunity_feed</code> 每次渲染时写一行，一次 <code>bulk_create</code>。它刻意<b>不设</b>（用户, 目标）唯一约束——忽略该折叠，展示不该，折叠会让分母变小、忽略率虚高。分母只数窗口内第一次被看见的（用户, 机会），分子要求该机会在窗口内至少被展示过一次；这个数仍然是<b>下界</b>，只低不高（窗口外看到、窗口内才按按钮的忽略进不了分子）。空分母报 <code>None</code> 不报 0；分母不足 {{ opportunity_dismissal_quality.metrics.min_impressions }} 条只报数字、不给方向。历史数据不回填，曝光表自上线起才开始积累。</p>
+
+        <p class="opportunity-dismissal-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ opportunity_dismissal_quality.summary }}</p>
+        {% for note in opportunity_dismissal_quality.recommendations %}
+        <p class="opportunity-dismissal-note mb-0">{{ note }}</p>
+        {% endfor %}
+        {% for kind, shape in opportunity_dismissal_quality.score_shape.items %}
+        {% if shape.has_comparison %}
+        <p class="opportunity-dismissal-note mb-0">{{ shape.summary }}</p>
+        {% endif %}
+        {% endfor %}
+        <p class="opportunity-dismissal-note mb-0">按分数档和按理由那两处的分子分母<b>仍然都是忽略</b>，报的是忽略自己的形状，不是率——它们回答「什么样的机会被按掉」，上面那张表才回答「多少被看见的机会被按掉」。唯一另一个自带分母的比例是<b>重复忽略占比</b>。</p>
+        <p class="opportunity-dismissal-note mb-0">重复忽略的判据是间接的：<code>OpportunityDismissal</code> 上有 <code>(user, demand)</code> 和 <code>(user, lost_found_post)</code> 两个无条件唯一约束，写入走 <code>update_or_create</code> 且 <code>defaults</code> 里只更 <code>expires_at</code>，所以同一个人第二次按「不再显示」不产生新行，只把旧行的 <code>expires_at</code> 往后推 {{ opportunity_dismissal_quality.metrics.silence_days }} 天，<code>created_at</code> 停在第一次按下的时刻。两列距离落在 (30, 35] 天即判为重复忽略。它数不到「第二次忽略恰好也落在第一次附近」的情形，也分不清「用户主动又按」和「别的东西更新了这一行」。</p>
+        <p class="opportunity-dismissal-note mb-0">分数在忽略时刻重算，走 <code>demand_matching._match_demand</code> 和 <code>lost_found_matching.score_lost_found_posts</code> 自己，不在运营模块里另写一套。复算取这个用户名下<b>当前在售</b>的商品或<b>活跃</b>的失物记录里分数最高的那一次匹配，还原的是「如果今天再进池，这条机会是多少分」，不是忽略那一刻的分数——用户之后可能把商品下架、降价、改了分类。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有人在机会流上按过「暂不展示」，机会流也没有产生过展示。用户第一次按下、或第一次看到机会流之后，这里会开始统计。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>按理由聚合，不按用户、不按商品：按用户是排名（隐私，也不是运营射程），按商品让被忽略一万次和一次不可比。理由是打分的可解释输出，也是运营唯一能动手改的东西。两条占比相差不满 {{ opportunity_dismissal_quality.metrics.noise_points }} 个百分点视为噪声。本模块只报告，不改任何一行的 <code>expires_at</code>、不改 {{ opportunity_dismissal_quality.metrics.silence_days }} 天静默期、不动两个匹配器的任何常数、不给任何人排名。</div>
+</section>
+<section class="content-card ops-panel mb-4 favorite-collection-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Wishlist</span><h2>用户建的心愿单分组</h2></div>
+        <span class="ops-panel-hint">周期 {{ favorite_collection_quality.period_days }} 天·只报告不改任何分组</span>
+    </div>
+    {% if favorite_collection_quality.has_data %}
+    <div class="favorite-collection-summary">
+        <div><span>当前分组</span><strong>{{ favorite_collection_quality.metrics.group_total }}</strong><small>快照，不是窗口</small></div>
+        <div><span>当前收藏</span><strong>{{ favorite_collection_quality.metrics.favorite_total }}</strong><small>其中 {{ favorite_collection_quality.penetration.grouped_favorite_total }} 条已归组</small></div>
+        <div><span>已归组收藏占比</span><strong>{% if favorite_collection_quality.penetration.grouped_favorite_share != None %}{{ favorite_collection_quality.penetration.grouped_favorite_share }}%{% else %}—{% endif %}</strong><small>分母是全部收藏</small></div>
+        <div><span>建过分组的人</span><strong>{% if favorite_collection_quality.penetration.collector_share != None %}{{ favorite_collection_quality.penetration.collector_share }}%{% else %}—{% endif %}</strong><small>分母是有收藏的用户</small></div>
+    </div>
+
+    <div class="favorite-collection-reading mt-3">
+        <div class="favorite-collection-block-heading"><strong>窗口内新建</strong><span>按 created_at 归期，这一列写进去就不再动</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+                <thead><tr><th>对象</th><th>窗口内新建</th><th>当前总量</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>心愿单分组</strong></td><td>{{ favorite_collection_quality.metrics.window_collection_count }}</td><td>{{ favorite_collection_quality.metrics.group_total }}</td></tr>
+                    <tr><td><strong>收藏</strong></td><td>{{ favorite_collection_quality.metrics.window_favorite_count }}</td><td>{{ favorite_collection_quality.metrics.favorite_total }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="favorite-collection-note mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>「窗口内新建」和「当前总量」是两件事，不放进同一列：分组可以被删（删完收藏变未分组），收藏可以被取消（<code>toggle_favorite</code> 的 <code>delete</code> 分支）。所以左边数的是这 {{ favorite_collection_quality.period_days }} 天发生过什么，右边数的是现在有什么。</p>
+
+        <div class="favorite-collection-block-heading mt-3"><strong>分组大小分布</strong><span>分子分母都是分组，问的是往里放了几条</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+                <thead><tr><th>大小档</th><th>分组数</th><th>占全部分组</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in favorite_collection_quality.scale_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.group_count }}</td>
+                        <td>{% if row.share_of_groups != None %}{{ row.share_of_groups }}%{% else %}—{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ favorite_collection_quality.metrics.min_band_sample }} 个</span>{% else %}<span class="favorite-collection-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="favorite-collection-note mb-0 mt-2">空分组不在任何一档里：0 条没有「几条」可放。当前共有 {{ favorite_collection_quality.metrics.empty_group_total }} 个空分组，其中 {{ favorite_collection_quality.metrics.stale_empty_total }} 个建于 {{ favorite_collection_quality.metrics.empty_grace_days }} 天之前——后者占空分组的 {% if favorite_collection_quality.empty_rows.stale_share != None %}{{ favorite_collection_quality.empty_rows.stale_share }}%{% else %}—{% endif %}，才是「建了不会用」的真信号；刚建的空分组是良性解释。</p>
+
+        <div class="favorite-collection-block-heading mt-3"><strong>分组渗透</strong><span>两个分母不同，必须分开报</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+                <thead><tr><th>指标</th><th>数值</th><th>分母是什么</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>已归组收藏占比</strong></td>
+                        <td>{% if favorite_collection_quality.penetration.grouped_favorite_share != None %}{{ favorite_collection_quality.penetration.grouped_favorite_share }}%{% else %}—{% endif %}</td>
+                        <td>全部收藏（{{ favorite_collection_quality.penetration.favorite_total }} 条）。未分组的收藏就是一条普通收藏，和分组功能无关。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>建过分组的人占比</strong></td>
+                        <td>{% if favorite_collection_quality.penetration.collector_share != None %}{{ favorite_collection_quality.penetration.collector_share }}%{% else %}—{% endif %}</td>
+                        <td>有收藏的用户（{{ favorite_collection_quality.penetration.favoriter_count }} 人）。没收藏的人看不到分组功能，算进分母会把渗透率压低。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>只收藏、从没建分组</strong></td>
+                        <td>{{ favorite_collection_quality.penetration.favoriter_only_count }} 人</td>
+                        <td>绝对量，不是比例。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>建了分组、但没收藏</strong></td>
+                        <td>{{ favorite_collection_quality.penetration.collector_only_count }} 人</td>
+                        <td>绝对量。<code>create_favorite_collection</code> 只要求登录、不要求有收藏，所以这批人存在。他们用了分组功能但分组是空的，不该被渗透率吞掉。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {% if favorite_collection_quality.name_rows %}
+        <div class="favorite-collection-block-heading mt-3"><strong>分组名收敛</strong><span>只有 {{ favorite_collection_quality.metrics.min_name_sample }} 个以上用户用过的名字才进榜</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+                <thead><tr><th>分组名</th><th>使用用户数</th><th>分组数</th><th>收藏数</th><th>平均大小</th></tr></thead>
+                <tbody>
+                    {% for row in favorite_collection_quality.name_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.user_count }}</td>
+                        <td>{{ row.group_count }}</td>
+                        <td>{{ row.favorite_count }}</td>
+                        <td>{% if row.average_size != None %}{{ row.average_size }}{% else %}—{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="favorite-collection-note mb-0 mt-2">分组名在同一个用户内唯一（<code>UniqueConstraint(fields=['user', 'name'])</code>），所以「使用用户数」天然就是去重过的，不需要另做去重。</p>
+        {% endif %}
+
+        <p class="favorite-collection-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ favorite_collection_quality.summary }}</p>
+        {% for note in favorite_collection_quality.recommendations %}
+        <p class="favorite-collection-note mb-0">{{ note }}</p>
+        {% endfor %}
+        {% if favorite_collection_quality.size_shape.has_comparison %}
+        <p class="favorite-collection-note mb-0">{{ favorite_collection_quality.size_shape.summary }}</p>
+        {% endif %}
+        <p class="favorite-collection-note mb-0">本面板<b>不报「先收藏后归类」</b>：<code>Favorite</code> 没有 <code>updated_at</code>，<code>views.update_favorite_collection</code> 走 <code>save(update_fields=['collection'])</code>，模型里也没有任何 <code>auto_now</code> 字段，所以这次保存不刷新任何时间列。一条 60 天前收藏的商品，昨天被移进分组，它在这个库里的全部痕迹就是 <code>created_at = 60 天前</code>、<code>collection = 那个分组</code>——<b>它是什么时候被归类的，不存在。</b>窗口内新建的收藏读出来的 <code>collection</code> 是今天读到的值，不是它创建时的值，报出来会被读成「收藏时就归组率」，而它其实混着大量后来才移进去的收藏。</p>
+        <p class="favorite-collection-note mb-0">同理不报<b>分组改名频率</b>：<code>FavoriteCollection</code> 有 <code>updated_at</code>，但应用内没有改名路由——<code>create_favorite_collection</code> 走 <code>get_or_create</code>，同名时不写；<code>update_favorite_collection</code> 改的是 <code>Favorite.collection</code>，不是分组名。唯一写入路径是 Django admin 的保存，所以 <code>updated_at != created_at</code> 只说明「有人在后台动过这条分组」，数不到改名。同理不报<b>删分组之后收藏去哪了</b>：<code>Favorite.collection</code> 是 <code>on_delete=SET_NULL</code>，删分组不删收藏、只把它们变成未分组，而删分组只走 admin，删完的收藏和从来没归过类的收藏长得一模一样。</p>
+        <p class="favorite-collection-note mb-0">四类分母各自独立，不能混：当前全部收藏、当前全部分组、当前有收藏的用户、窗口内新建。拿「有收藏的用户」当分母去报分组渗透率，会把没收藏过任何东西的人也算进分母，而他们根本看不到分组功能。「当前」是快照不是窗口，所以窗口内的新建规模和当前快照在面板上分开摆。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">站内还没有任何心愿单分组。第一个分组建出来之后，这里会开始统计。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>空分组按 <code>FavoriteCollection.created_at</code> 拆「刚建」和「早就建了还空着」，{{ favorite_collection_quality.metrics.empty_grace_days }} 天没有理论依据，取的是「一个真心想用分组的人不会一周都想不起来往里放第一条」这个量级。两条占比相差不满 {{ favorite_collection_quality.metrics.noise_points }} 个百分点视为噪声。本模块只报告，不新建分组、不合并分组、不改任何一条 <code>Favorite.collection</code>、不改任何分组名、不动 <code>FavoriteCollectionForm</code> 的任何校验、不给任何用户排名、不预设任何分组名。</div>
+</section>
