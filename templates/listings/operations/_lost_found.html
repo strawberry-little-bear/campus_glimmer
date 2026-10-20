@@ -19,7 +19,7 @@
 
     <div class="ops-panel-block">
         <h3>确认匹配之后，记录停在哪一档</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>终局</th><th>记录数</th><th>占比（%）</th><th>其中截止时间已过</th></tr></thead>
             <tbody>
                 {% for row in lost_found_matched_outcome.outcome_rows %}
@@ -37,7 +37,7 @@
 
     <div class="ops-panel-block">
         <h3>挂了一个月的「已匹配」：截止时间已过，状态还没动</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>过期多久</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
             <tbody>
                 {% for row in lost_found_matched_outcome.overdue_stats.rows %}
@@ -51,7 +51,7 @@
 
     <div class="ops-panel-block">
         <h3>匹配是双向的，另一条记录跟上了吗</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>双向性</th><th>记录数</th><th>说明</th></tr></thead>
             <tbody>
                 <tr><td>互为匹配</td><td>{{ lost_found_matched_outcome.counterpart_stats.mutual_count }}</td><td class="ops-hint">两边都填了 <code>matched_post</code>，互相认这笔账</td></tr>
@@ -64,7 +64,7 @@
 
     <div class="ops-panel-block">
         <h3>哪种终局的记录，还有人回来填反馈</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>终局</th><th>已确认线索</th><th>提交反馈</th><th>提交率（%）</th></tr></thead>
             <tbody>
                 {% for row in lost_found_matched_outcome.feedback.rows %}
@@ -84,7 +84,7 @@
 
     <div class="ops-panel-block">
         <h3>截止时间已过最久的那些记录</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>记录编号</th><th>记录类型</th><th>过期多久</th><th>有另一条关联记录</th><th>提交过反馈</th></tr></thead>
             <tbody>
                 {% for row in lost_found_matched_outcome.list.rows %}

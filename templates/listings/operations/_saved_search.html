@@ -199,7 +199,7 @@
 
     <div class="ops-panel-block">
         <h3>这条关注此刻停在哪一档</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>状态</th><th>关注数</th><th>占比（%）</th><th>缓冲区命中</th><th>其中商品已不可交易</th></tr></thead>
             <tbody>
                 {% for row in saved_search_quiet_window.state_rows %}
@@ -221,7 +221,7 @@
         {% for stats in saved_search_quiet_window.buffer_blocks %}
         <div class="ops-subblock">
             <div class="ops-subblock-title">{{ stats.label }} · 平均 {{ stats.mean_label }} · 最早 {{ stats.oldest_label }}</div>
-            <table class="ops-table">
+            <table class="table table-sm align-middle ops-table">
                 <thead><tr><th>档位</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                 <tbody>
                     {% for row in stats.rows %}
@@ -242,7 +242,7 @@
             <div class="col-md-4"><div class="ops-mini-stat"><span>至今一条都没有</span><strong>{{ saved_search_quiet_window.delivered.silent_count }}</strong><small>单独数出来，不读成因果</small></div></div>
             <div class="col-md-4"><div class="ops-mini-stat"><span>静默已过期的关注</span><strong>{{ saved_search_quiet_window.delivered.total }}</strong></div></div>
         </div>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>关注条件</th><th>节奏</th><th>静默结束于</th><th>暂停至今</th><th>之后新命中</th><th>缓冲区还剩</th></tr></thead>
             <tbody>
                 {% for row in saved_search_quiet_window.delivered.rows %}
@@ -267,7 +267,7 @@
 
     <div class="ops-panel-block">
         <h3>正在静默的关注，缓冲区的年龄结构</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>关注条件</th><th>节奏</th><th>缓冲命中</th><th>最早一条</th><th>静默至</th></tr></thead>
             <tbody>
                 {% for stats in saved_search_quiet_window.buffer_blocks %}
@@ -312,7 +312,7 @@
 
     <div class="ops-panel-block">
         <h3>1 到 9 九档，用户把条数配在了哪里</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>单次最多提醒条数</th><th>关注数</th><th>占比（%）</th><th>说明</th></tr></thead>
             <tbody>
                 {% for row in saved_search_limit_shape.limit_rows %}
@@ -341,7 +341,7 @@
             <div class="col-md-4"><div class="ops-mini-stat"><span>正被挡在外面</span><strong>{{ saved_search_limit_shape.truncation.hidden_count }}</strong><small>{% if saved_search_limit_shape.truncation.hidden_share is None %}—{% else %}占 {{ saved_search_limit_shape.truncation.hidden_share }}%{% endif %}</small></div></div>
             <div class="col-md-4"><div class="ops-mini-stat"><span>正在被截断的关注</span><strong>{{ saved_search_limit_shape.truncation.truncated_search_count }}</strong><small>{% if saved_search_limit_shape.truncation.truncated_share is None %}—{% else %}占 {{ saved_search_limit_shape.truncation.truncated_share }}%{% endif %}</small></div></div>
         </div>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>关注条件</th><th>节奏</th><th>配了几条</th><th>缓冲命中</th><th>被挡掉</th></tr></thead>
             <tbody>
                 {% for row in saved_search_limit_shape.truncated_rows %}
@@ -366,7 +366,7 @@
 
     <div class="ops-panel-block">
         <h3>条数 × 节奏：只做形状描述，不给因果</h3>
-        <table class="ops-table">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>节奏</th><th>关注数</th><th>中位条数</th><th>平均条数</th><th>正被截断的关注</th><th>占比（%）</th></tr></thead>
             <tbody>
                 {% for row in saved_search_limit_shape.cadence_rows %}

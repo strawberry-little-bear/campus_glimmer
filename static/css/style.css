@@ -6724,3 +6724,104 @@ a { color: inherit; text-decoration: none; }
         flex: 1 1 auto;
     }
 }
+
+/* --------------------------------------------------------------------------
+   运营看板缺失的结构类
+
+   这些类名在模板里被大量使用，却从未在 CSS 里定义，一直处于无样式状态：
+   .ops-panel-block 是面板内的分块容器（47 处），.ops-hint 是表格里的解释说明单元格（26 处），
+   .ops-panel-notes 是面板脚注列表，.ops-row-emphasis 是需要高亮的数据行，.ops-inline-filter
+   是面板内联筛选，.ops-subblock / .ops-subblock-title 是再下一层的子块。以下按既有 ops-*
+   的配色与字号补齐，让这些说明性内容不再和真正的数据单元格拥有同样的视觉权重。
+   -------------------------------------------------------------------------- */
+
+/* 面板内分块：相邻块之间用分割线分开，而不是堆在一起 */
+.ops-panel-block + .ops-panel-block {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.ops-panel-block > h3 {
+    margin: 0 0 12px;
+    color: #29463a;
+    font-size: .95rem;
+    font-weight: 800;
+}
+
+/* 表格里的解释说明单元格：小一号、淡色、允许换行，不拉宽表格 */
+.ops-table .ops-hint {
+    color: #8b9a92;
+    font-size: .72rem;
+    line-height: 1.6;
+    white-space: normal;
+}
+
+/* 需要高亮的数据行：只浮一层底色，不改变字色和字号 */
+.ops-table tr.ops-row-emphasis > td {
+    background: var(--mint);
+}
+
+/* 面板脚注列表 */
+.ops-panel-notes {
+    display: grid;
+    gap: 7px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.ops-panel-notes li {
+    color: #7d8b84;
+    font-size: .74rem;
+    line-height: 1.65;
+}
+
+.ops-panel-notes li i {
+    margin-right: 6px;
+    color: var(--primary);
+}
+
+/* 面板内联筛选 */
+.ops-inline-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.ops-inline-filter label {
+    margin: 0;
+    color: var(--muted);
+    font-size: .74rem;
+    font-weight: 600;
+}
+
+.ops-inline-filter .form-select {
+    width: auto;
+    border-color: var(--line);
+    border-radius: 9px;
+    font-size: .78rem;
+}
+
+/* 子块与子块标题 */
+.ops-subblock + .ops-subblock {
+    margin-top: 14px;
+}
+
+.ops-subblock-title {
+    margin-bottom: 8px;
+    color: #4d6a5c;
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+@media (max-width: 575.98px) {
+    .ops-inline-filter {
+        width: 100%;
+    }
+
+    .ops-inline-filter .form-select {
+        flex: 1 1 auto;
+    }
+}
