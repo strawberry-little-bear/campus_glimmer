@@ -9,11 +9,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="拾光校园：让闲置流转，让好物遇见对的人。">
     <title>{% block title %}拾光校园 · Campus Glimmer{% endblock %}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://unpkg.com/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://unpkg.com/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <!-- Bootstrap 与图标字体已本地化到 static/vendor/，不再依赖 unpkg 与 Google Fonts。
+         这样首屏不出现跨域阻塞请求，国内网络下也不会退化成无样式页面。 -->
+    <link href="{% static 'vendor/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static 'vendor/bootstrap-icons.min.css' %}" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     {% block extra_css %}{% endblock %}
 </head>
@@ -115,7 +114,7 @@
         </div>
     </footer>
 
-    <script src="https://unpkg.com/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'js/main.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>

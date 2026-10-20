@@ -1,6 +1,7 @@
 import hashlib
 import importlib.util
 import json
+import re
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -292,3 +293,88 @@ class BackupHelperTests(SimpleTestCase):
             self.assertTrue(recent.exists())
             self.assertTrue(unrelated.exists())
             self.assertTrue(broken.exists())
+
+
+class VendoredStaticAssetTests(SimpleTestCase):
+    """首屏资源必须完全本地化。
+
+    这些断言盯的是两类只在生产环境才暴露的故障：
+
+    1. 回归到 CDN：页面在本地开发时看起来正常，但国内网络访问不到
+       unpkg / Google Fonts 时会退化成无样式 HTML。
+    2. collectstatic 直接失败：Django 的 Manifest 静态文件存储会解析 CSS 里的
+       url() 与 sourceMappingURL，引用不存在的文件会让整个构建崩掉，
+       而这件事只在 DEBUG=False 的部署流程里才会发生。
+    """
+
+    VENDOR_DIR = PROJECT_ROOT / 'static' / 'vendor'
+    VENDORED_FILES = (
+        'bootstrap.min.css',
+        'bootstrap.bundle.min.js',
+        'bootstrap-icons.min.css',
+        'fonts/bootstrap-icons.woff2',
+        'fonts/bootstrap-icons.woff',
+    )
+    THIRD_PARTY_HOSTS = (
+        'unpkg.com',
+        'cdn.jsdelivr.net',
+        'cdnjs.cloudflare.com',
+        'fonts.googleapis.com',
+        'fonts.gstatic.com',
+    )
+
+    def test_base_template_loads_every_asset_from_our_own_domain(self):
+        base = (PROJECT_ROOT / 'templates' / 'base.html').read_text(encoding='utf-8')
+
+        for host in self.THIRD_PARTY_HOSTS:
+            with self.subTest(host=host):
+                self.assertNotIn(host, base)
+
+        # 连 preconnect 都不该有：没有任何跨域请求需要预热
+        for line in base.splitlines():
+            for match in re.finditer(r'(?:href|src)="(https?://[^"]+)"', line):
+                with self.subTest(url=match.group(1)):
+                    self.fail('base.html 仍在引用外部资源：%s' % match.group(1))
+
+    def test_base_template_points_at_the_vendored_copies(self):
+        base = (PROJECT_ROOT / 'templates' / 'base.html').read_text(encoding='utf-8')
+        for asset in ('bootstrap.min.css', 'bootstrap-icons.min.css', 'bootstrap.bundle.min.js'):
+            with self.subTest(asset=asset):
+                self.assertIn("{%% static 'vendor/%s' %%}" % asset, base)
+
+    def test_vendored_dependencies_are_checked_in(self):
+        for name in self.VENDORED_FILES:
+            path = self.VENDOR_DIR / name
+            with self.subTest(file=name):
+                self.assertTrue(path.is_file(), '%s 没有入库' % name)
+                # 空文件或被截断的下载都会让页面静默缺样式
+                self.assertGreater(path.stat().st_size, 1024, '%s 体积可疑地小' % name)
+
+    def test_vendored_css_only_references_files_that_exist(self):
+        for css in sorted(self.VENDOR_DIR.glob('*.css')):
+            text = css.read_text(encoding='utf-8')
+            with self.subTest(css=css.name):
+                # sourceMappingURL 会让 ManifestStaticFilesStorage 去找 .map 文件，
+                # 找不到就整条 collectstatic 失败。
+                self.assertNotIn('sourceMappingURL', text)
+
+                for match in re.finditer(r'url\(([^)]+)\)', text):
+                    reference = match.group(1).strip('\'"')
+                    if reference.startswith('data:'):
+                        continue
+                    # 去掉 CDN 自带的缓存查询串，只保留路径部分
+                    reference = reference.split('?', 1)[0]
+                    target = (css.parent / reference).resolve()
+                    self.assertTrue(
+                        target.is_file(),
+                        '%s 引用了不存在的 %s' % (css.name, reference),
+                    )
+
+    def test_body_font_stack_does_not_depend_on_a_remote_font(self):
+        css = (PROJECT_ROOT / 'static' / 'css' / 'style.css').read_text(encoding='utf-8')
+        self.assertNotIn('@import', css)
+        for host in self.THIRD_PARTY_HOSTS:
+            self.assertNotIn(host, css)
+        # 中文优先的系统栈：各平台都有完整字形覆盖，零请求、零 FOUT
+        for family in ('PingFang SC', 'Microsoft YaHei', 'system-ui'):
+            self.assertIn(family, css)

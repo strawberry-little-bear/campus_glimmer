@@ -31,9 +31,11 @@
 
 ## 4. 暂不做 CSP 的原因
 
-本轮不添加 Content-Security-Policy。当前模板包含 CDN 字体、Bootstrap 资源以及若干模板内脚本与样式，未经清单化就配置严格 CSP，容易在生产造成静默破版；而 Report-Only 若没有上报后端，也只是一条不会形成闭环的响应头。
+本轮不添加 Content-Security-Policy。当时模板包含 CDN 字体、Bootstrap 资源以及若干模板内脚本与样式，未经清单化就配置严格 CSP，容易在生产造成静默破版；而 Report-Only 若没有上报后端，也只是一条不会形成闭环的响应头。
 
 后续可以在本轮基线上单独迭代：先盘点脚本与样式来源，再引入 nonce 或 hash，最后按“Report-Only 观察 → 强制”的顺序启用。
+
+> 后续进展：Bootstrap、Bootstrap Icons 与字体已完成本地化，`templates/base.html` 不再引用任何外部域名（由 `VendoredStaticAssetTests` 守护）。这意味着 CSP 的“外部来源盘点”已经完成且结果为空，剩下的只有模板内联脚本与样式；启用 CSP 的前置条件比本文撰写时更充分了。
 
 ## 5. 测试与验收
 

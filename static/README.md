@@ -62,6 +62,26 @@
 
 新增页面时优先使用设计系统自有类，只有复用历史结构时才依赖这层兼容。动手前先在 `style.css` 里搜一遍目标类名，确认是否已有更贴合的规则。
 
+## 📦 第三方依赖本地化
+
+Bootstrap 与 Bootstrap Icons 不再走 CDN，而是以原样文件放在 [`vendor/`](vendor/) 下，由 `templates/base.html` 通过 `{% static %}` 引用。
+
+此前 `base.html` 直接连 `unpkg.com` 和 `fonts.googleapis.com`。实测这三个请求是页面上仅有的跨域请求，且**全部阻塞渲染**：
+
+```
+fonts.googleapis.com/css2?family=Noto+Sans+SC     224ms  render-blocking
+unpkg.com/bootstrap@5.3.3/dist/css/...            169ms  render-blocking
+unpkg.com/bootstrap-icons@1.11.3/font/...         176ms  render-blocking
+```
+
+更实际的隐患是可用性：这两个域名在国内网络下经常不可达，一旦失败页面会退化成无样式 HTML。本地化之后首屏零跨域请求，冷缓存首屏内容绘制从 372ms 降到约 112ms。
+
+`campus_glimmer/test_deployment.py` 里的 `VendoredStaticAssetTests` 盯着这件事，其中两类是只在生产环境才暴露的故障：
+
+- 有人把外链加回了 `base.html`；
+- vendor 文件里的 `sourceMappingURL` 或失效 `url()` 让 `collectstatic` 在 Manifest 存储下整条失败。这不是假想：Bootstrap 自带的 `.map` 注释就让生产构建直接崩掉，而本地开发用 `StaticFilesStorage` 完全看不出问题。
+
+正文字体没有跟着本地化。Noto Sans SC 经 Google Fonts 分发时被拆成 101 个 unicode-range 分片，全量下载约 1.6 MB，对当前仓库体积不划算；改为中文优先的系统栈（苹方 / 微软雅黑 / Noto Sans CJK），零请求、零 FOUT，各平台也都有完整的中文字形覆盖，不会出现缺字方框。
 
 ## 🧭 页面增强如何工作
 
@@ -89,8 +109,9 @@ flowchart LR
 | --- | --- |
 | [`css/style.css`](css/style.css) | 全站主题、布局、账户中心、消息工作台、运营页和响应式样式 |
 | [`js/main.js`](js/main.js) | 搜索建议、未读角标轮询和轻量页面增强 |
-| [`img/default-avatar.png`](img/default-avatar.png) | 默认头像 |
+
 | [`img/no-image.png`](img/no-image.png) | 商品缺图占位 |
+| [`vendor/`](vendor/) | Bootstrap 5.3.3 与 Bootstrap Icons 1.11.3 的本地副本，版本与升级方式见 [`vendor/README.md`](vendor/README.md) |
 
 模板引用统一写 `{% static '...' %}`。生产环境由 `collectstatic` 收集到 `STATIC_ROOT`，不要手工修改收集后的文件。
 

@@ -62,7 +62,7 @@ flowchart TD
 - 表单必须保留 `{% csrf_token %}`；
 - 不要只靠模板隐藏按钮来保护操作，服务端仍需校验；
 - 视觉改动同时查看桌面和窄屏，并确认[系统截图](../docs/screenshots/)仍能代表当前界面；
-- 外部字体、Bootstrap 和图标来自 CDN，离线环境下应确认降级体验。
+- Bootstrap、Bootstrap Icons 已本地化到 `static/vendor/`，正文字体走系统栈，新增模板不要再引入任何 CDN 资源；`campus_glimmer/test_deployment.py` 会拦住外链回归。
 
 ## ✅ 验证
 
