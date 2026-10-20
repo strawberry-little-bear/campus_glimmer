@@ -307,6 +307,69 @@ def _build_search_quality(search_count, zero_result_count, result_search_count, 
     }
 
 
+def _merge_term_click_stats(term_rows, search_period, start, end):
+    """把每个搜索词的点击统计并进 `term_rows`。
+
+    点击必须单独聚合，不能和搜索次数写在同一条 `annotate` 里。早先那样写的时候，
+    数据库会把 SearchQuery、SearchClick、SearchImpression 三张表 JOIN 成笛卡尔积再
+    计数：一条搜索只要同时被点过、也被曝光过，它的每一次点击都会按曝光条数重复出现。
+    实测同一个搜索词下 2 次搜索、3 次点击、4 次曝光，`search_count` 会报 13、
+    `click_count` 和 `impression_count` 各报 12——而带 `distinct` 的
+    `clicked_searches`/`clicked_items` 反而是对的，所以错得很难看出来。
+
+    这里按 `search_query__query` 分组单独数一次点击，再按搜索词并回内存里的行。
+    `search_query__in=search_period` 保证只统计落在同一个搜索窗口里的点击。
+    """
+    if not term_rows:
+        return
+    stats = {
+        row['search_query__query']: row
+        for row in (
+            SearchClick.objects.filter(
+                search_query__in=search_period,
+                created_at__gte=start,
+                created_at__lte=end,
+            )
+            .values('search_query__query')
+            .annotate(
+                click_count=Count('id'),
+                clicked_searches=Count(
+                    'search_query',
+                    filter=Q(search_query__result_count__gt=0),
+                    distinct=True,
+                ),
+                clicked_items=Count('item', distinct=True),
+            )
+        )
+    }
+    for row in term_rows:
+        stat = stats.get(row['query'])
+        row['click_count'] = stat['click_count'] if stat else 0
+        row['clicked_searches'] = stat['clicked_searches'] if stat else 0
+        row['clicked_items'] = stat['clicked_items'] if stat else 0
+
+
+def _merge_term_impression_stats(term_rows, search_period, start, end):
+    """把每个搜索词的曝光统计并进 `term_rows`，理由同 `_merge_term_click_stats`。"""
+    if not term_rows:
+        return
+    stats = {
+        row['search_query__query']: row
+        for row in (
+            SearchImpression.objects.filter(
+                search_query__in=search_period,
+                created_at__gte=start,
+                created_at__lte=end,
+            )
+            .values('search_query__query')
+            .annotate(impression_count=Count('id'))
+        )
+    }
+    for row in term_rows:
+        stat = stats.get(row['query'])
+        row['impression_count'] = stat['impression_count'] if stat else 0
+
+
 def build_search_insights(days=30, query=''):
     """Build an actionable view of search demand for staff operations work."""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
@@ -329,8 +392,6 @@ def build_search_insights(days=30, query=''):
     if query:
         previous_search_period = previous_search_period.filter(query__icontains=query)
 
-    click_filter = Q(clicks__created_at__gte=start, clicks__created_at__lte=now)
-    impression_filter = Q(impressions__created_at__gte=start, impressions__created_at__lte=now)
     term_rows = list(
         search_period.values('query').annotate(
             search_count=Count('id'),
@@ -338,17 +399,11 @@ def build_search_insights(days=30, query=''):
             zero_result_count=Count('id', filter=Q(result_count=0)),
             average_results=Avg('result_count'),
             unique_users=Count('user', distinct=True),
-            click_count=Count('clicks', filter=click_filter),
-            impression_count=Count('impressions', filter=impression_filter),
-            clicked_searches=Count(
-                'clicks__search_query',
-                filter=click_filter & Q(result_count__gt=0),
-                distinct=True,
-            ),
-            clicked_items=Count('clicks__item', filter=click_filter, distinct=True),
             last_searched=Max('created_at'),
         ).order_by('-search_count', 'query')
     )
+    _merge_term_click_stats(term_rows, search_period, start, now)
+    _merge_term_impression_stats(term_rows, search_period, start, now)
     for row in term_rows:
         row['zero_result_rate'] = round(
             row['zero_result_count'] / row['search_count'] * 100, 1
