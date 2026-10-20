@@ -35,6 +35,148 @@ document.addEventListener('DOMContentLoaded', function () {
         window.addEventListener('resize', syncOverflow);
     });
 
+    /* ------------------------------------------------------------------
+       运营看板：分区延后渲染 + 跳转条当前位置高亮
+
+       延后只做「到点再揭开」：28 个分区的 HTML 本来就在响应体里，CSS 靠
+       html.js 把它们藏起来，这里负责在滚近时揭开。所以关掉脚本的浏览器早就
+       看到完整页面，这段代码不存在「没有 JS 就没有数据」的分支。
+       ------------------------------------------------------------------ */
+    const opsPanels = document.querySelector('.operations-panels');
+    const opsJump = document.querySelector('.ops-jump');
+    if (opsPanels && opsJump) {
+        const strip = opsJump.querySelector('.ops-jump-scroll');
+        const entries = [];
+        opsJump.querySelectorAll('.ops-jump-chip').forEach(function (chip) {
+            const id = (chip.getAttribute('href') || '').slice(1);
+            const section = id ? document.getElementById(id) : null;
+            if (section) {
+                entries.push({
+                    id: id,
+                    chip: chip,
+                    section: section,
+                    group: chip.closest('.ops-jump-group'),
+                });
+            }
+        });
+        // 跳转条按主题分组，只有组内才跟页面顺序一致；scrollspy 要的是页面顺序，
+        // 所以按文档位置重排一遍，不能直接沿用 chip 的顺序。
+        entries.sort(function (left, right) {
+            return left.section.compareDocumentPosition(right.section) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+        });
+
+        const findEntry = function (id) {
+            return entries.find(function (item) { return item.id === id; }) || null;
+        };
+
+        const deferred = opsPanels.querySelectorAll('.ops-section[data-ops-deferred]');
+
+        // 顺着文档顺序把 target 及其之前的分区一并揭开。两个地方非它不可：
+        //   * 点跳转 chip 或带 #hash 直接打开时，目标分区上面的分区还都是 300px
+        //     骨架，此时 scrollIntoView 会按骨架高度算距离，落到半路就停；
+        //   * 快速滚动时 IntersectionObserver 只在回调那一刻判断是否相交，被
+        //     一跳而过的分区早就出了根矩形，再也收不到通知，会永远停在骨架态。
+        // 这两种情形都是“已经被滚过去/要被滚过去”，一并揭开不会让用户少看东西。
+        const revealThrough = function (target) {
+            // 从文档开头揭到 target 为止，target 自己也算。target 为 null 时永远
+            // 匹配不到，于是一次揭完——无 IntersectionObserver 的旧浏览器走这条。
+            for (let i = 0; i < deferred.length; i += 1) {
+                deferred[i].classList.add('is-revealed');
+                if (deferred[i] === target) break;
+            }
+        };
+
+        const jumpTo = function (id) {
+            const entry = findEntry(id);
+            if (!entry) return;
+            revealThrough(entry.section);
+            // 撬盖之后分区才拿到真实高度。浏览器在此之前按骨架高度完成的那次
+            // 滚动一定偏，必须补这一下，scroll-margin-top 会替我们避开吸顶导航。
+            entry.section.scrollIntoView({ block: 'start', behavior: 'auto' });
+        };
+
+        // 点 chip 时先撬盖再定位。修饰键和中键放行，保住「新标签页打开」。
+        opsJump.querySelectorAll('.ops-jump-chip').forEach(function (chip) {
+            chip.addEventListener('click', function (event) {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                const id = (chip.getAttribute('href') || '').slice(1);
+                if (!findEntry(id)) return;
+                event.preventDefault();
+                history.pushState(null, '', '#' + id);
+                jumpTo(id);
+            });
+        });
+
+        if ('IntersectionObserver' in window) {
+            // rootMargin 提前 320px 撬盖：等分区真正压到视口边缘再加载，用户会
+            // 先看到骨架、再被内容顶一下，所以宁可早一点。
+            const revealObserver = new IntersectionObserver(function (records) {
+                records.forEach(function (record) {
+                    if (!record.isIntersecting) return;
+                    revealThrough(record.target);
+                    // 揭开过的分区不用再盯，剩下的还等着滚到。
+                    deferred.forEach(function (section) {
+                        if (section.classList.contains('is-revealed')) revealObserver.unobserve(section);
+                    });
+                });
+            }, { rootMargin: '320px 0px' });
+            deferred.forEach(function (section) { revealObserver.observe(section); });
+        } else {
+            revealThrough(null);
+        }
+
+        const syncActive = function (id) {
+            let current = null;
+            entries.forEach(function (entry) {
+                const active = entry.id === id;
+                entry.chip.classList.toggle('is-active', active);
+                if (active) {
+                    entry.chip.setAttribute('aria-current', 'true');
+                    current = entry;
+                } else {
+                    entry.chip.removeAttribute('aria-current');
+                }
+                if (entry.group) entry.group.classList.toggle('is-active', active);
+            });
+            if (current && strip) {
+                // 高亮了却滚出可视区等于没高亮，把当前 chip 拨回中间。
+                const left = current.chip.offsetLeft;
+                const right = left + current.chip.offsetWidth;
+                const viewLeft = strip.scrollLeft;
+                const viewRight = viewLeft + strip.clientWidth;
+                if (left < viewLeft + 24 || right > viewRight - 24) {
+                    strip.scrollTo({
+                        left: Math.max(0, left - (strip.clientWidth - current.chip.offsetWidth) / 2),
+                        behavior: 'auto',
+                    });
+                }
+            }
+        };
+
+        let ticking = false;
+        const onScroll = function () {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(function () {
+                ticking = false;
+                // 判定线取跳转条下沿：分区标题越过这条线就算「正在看的那一个」。
+                // 取最后一个越线的，而不是第一个，否则停在两个分区之间时没有高亮。
+                const line = opsJump.getBoundingClientRect().bottom + 16;
+                let current = null;
+                entries.forEach(function (entry) {
+                    if (entry.section.getBoundingClientRect().top <= line) current = entry;
+                });
+                if (current) syncActive(current.id);
+            });
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
+        onScroll();
+
+        window.addEventListener('hashchange', function () { jumpTo(location.hash.slice(1)); });
+        if (location.hash) jumpTo(location.hash.slice(1));
+    }
+
     const chat = document.querySelector('.chat-messages');
     if (chat) chat.scrollTop = chat.scrollHeight;
 

@@ -2,6 +2,9 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+    <!-- 渐进增强开关：有 JS 的浏览器拿到 js 类，运营看板才会把 28 个分区改成
+         滚动到位再揭开；关掉脚本的浏览器没有这个类，整页照常全量渲染。 -->
+    <script>document.documentElement.classList.add('js');</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="拾光校园：让闲置流转，让好物遇见对的人。">

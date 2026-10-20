@@ -63,3 +63,17 @@ OPERATIONS_DASHBOARD_SECTIONS = (
         ("ops-locations", "地点档案"),
     )),
 )
+
+# 首屏分区：打开看板就服务端渲染好的那几个，不做延后加载。取的正是页面上最靠
+# 前的四个（也是「总览」组），运营第一眼要看到的就是运营提醒、核心指标、转化
+# 漏斗和活动交易。剩下 28 个分区先占位，由前端滚到附近再揭开。
+#
+# 这个常量不参与渲染，只是把「哪些分区在首屏」这件事写下来给测试盯：
+# 模板里是逐行手写的属性，改漏一个不会有任何报错，只会让某个分区在无脚本环境
+# 下突然多出一次白屏。test_operations_deferred_sections 会逐条比对。
+OPERATIONS_DASHBOARD_FIRST_SCREEN = frozenset({
+    'ops-alerts',
+    'ops-metrics',
+    'ops-funnel',
+    'ops-charts',
+})
