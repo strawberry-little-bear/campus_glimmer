@@ -485,3 +485,92 @@ class TemplateStylesheetContractTests(SimpleTestCase):
             '页面会安静地渲染成空白：\n'
             + '\n'.join('  ' + item for item in sorted(broken)),
         )
+
+class PanelFootnoteColourTests(SimpleTestCase):
+    """运营面板脚注的色相由 --panel-footnote 提供，接管它的规则必须压过段落配色。
+
+    每个面板都有一条「.xxx-panel p { color: ... }」，而模板里的脚注恰好就是
+    <p class="rewrite-candidate-footnote">。一旦接管颜色的规则只有 (0,1,0)，
+    段落配色就会以 (0,1,1) 胜出，脚注安静地变成和正文同一个颜色：
+    页面不报错，也没有测试会红，只有对着截图才看得出来。
+
+    这个坑真实踩过：曾经把九条「.xxx-panel .rewrite-candidate-footnote」收成一条
+    带 var() 的通用规则，特异性从 (0,2,0) 掉到 (0,1,0)，九个面板的脚注同时失色。
+    """
+
+    STYLESHEET = PROJECT_ROOT / 'static' / 'css' / 'style.css'
+
+    # 注释里也会出现「.xxx-panel」这类示例选择器，不剥掉就会把
+    # 特异性算高，把真正偏弱的规则放过。
+    CSS_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.css = cls.CSS_COMMENT.sub(
+            ' ', cls.STYLESHEET.read_text(encoding='utf-8'))
+
+    @staticmethod
+    def _specificity(selector):
+        ids = len(re.findall(r'#[\w-]+', selector))
+        classes = (len(re.findall(r'\.[\w-]+', selector))
+                   + len(re.findall(r'\[[^\]]*\]', selector)))
+        types = len(re.findall(r'(?:^|[\s>+~])([a-zA-Z][\w-]*)', selector))
+        return (ids, classes, types)
+
+    def _footnote_rules(self):
+        for match in re.finditer(r'([^{}]+)\{([^{}]*)\}', self.css):
+            selector = match.group(1).strip()
+            if '.rewrite-candidate-footnote' not in selector:
+                continue
+            yield selector, match.group(2)
+
+    def test_panels_declare_a_valid_footnote_colour(self):
+        declared = re.findall(
+            r'\.([\w-]+)\s*\{[^}]*--panel-footnote:\s*([^;]+);', self.css)
+        self.assertTrue(declared, 'style.css 里没有面板声明 --panel-footnote')
+
+        broken = []
+        for panel, colour in declared:
+            colour = colour.strip()
+            if not re.fullmatch(r'#[0-9a-fA-F]{6}', colour):
+                broken.append('%s -> %r' % (panel, colour))
+        self.assertEqual(
+            broken, [],
+            '以下面板的 --panel-footnote 不是六位十六进制色值：\n'
+            + '\n'.join('  ' + item for item in sorted(broken)),
+        )
+
+    def test_footnote_rule_outranks_the_panel_paragraph_colour(self):
+        winners = [
+            (selector, body) for selector, body in self._footnote_rules()
+            if 'var(--panel-footnote' in body
+        ]
+        self.assertTrue(
+            winners,
+            '没有规则把 var(--panel-footnote) 应用到 .rewrite-candidate-footnote，'
+            '面板声明的脚注色相不会生效',
+        )
+
+        weak = []
+        for selector, _ in winners:
+            specificity = self._specificity(selector)
+            # .xxx-panel p 的特异性是 (0,1,1)，必须严格高于它
+            if specificity <= (0, 1, 1):
+                weak.append('%s -> %s' % (selector, specificity))
+        self.assertEqual(
+            weak, [],
+            '以下规则接管了脚注颜色，但特异性不高于「.xxx-panel p」(0,1,1)，'
+            '脚注会被面板的段落配色盖掉：\n'
+            + '\n'.join('  ' + item for item in sorted(weak)),
+        )
+
+    def test_default_footnote_colour_has_a_fallback(self):
+        bases = [
+            body for _, body in self._footnote_rules()
+            if re.search(r'color:\s*#[0-9a-fA-F]{6}', body)
+        ]
+        self.assertTrue(
+            bases,
+            '.rewrite-candidate-footnote 缺少默认颜色，面板外的脚注会掉成继承色',
+        )

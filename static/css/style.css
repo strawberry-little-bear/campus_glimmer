@@ -811,7 +811,12 @@ a { color: inherit; text-decoration: none; }
 .rewrite-candidate-confidence { display: inline-grid; min-width: 30px; height: 24px; padding: 0 8px; place-items: center; border-radius: 999px; color: #57766a; background: #eef6f0; font-size: .72rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .rewrite-candidate-confidence[data-level="strong"] { color: #3f7a52; background: #e2f2e8; }
 .rewrite-candidate-confidence[data-level="weak"] { color: #7b6a3c; background: #f6f1e2; }
+/* 运营面板脚注默认是外围灰绿；面板若要换成自己的色相，在主规则上声明
+   --panel-footnote 即可，不必再写一条只改颜色的派生规则。
+   第二条选择器必须压过「.xxx-panel p」这类同面板段落配色（特异性 0,1,1），
+   所以借属性选择器把权重抬到 0,2,0；少了这一层，脚注会被段落色盖掉。 */
 .rewrite-candidate-footnote { margin: 13px 0 0; color: #8b9a92; font-size: .69rem; line-height: 1.6; }
+[class*="-panel"] .rewrite-candidate-footnote { color: var(--panel-footnote, #8b9a92); }
 .rewrite-candidate-footnote i { color: #79ad88; }
 @media (max-width: 575px) { .rewrite-candidate-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.rewrite-candidate-summary > div { min-height: 72px; padding: 11px; }.rewrite-candidate-table td { white-space: normal; } }
 /* 同义词效果回流：与候选面板同属一次搜索治理，因此沿用同一套汇总卡片与
@@ -1452,13 +1457,12 @@ a { color: inherit; text-decoration: none; }
  * 绿（会面到场）等色相，图片覆盖度讲的是“商品资料完整度”，和商品本身的存储、
  * 图库有关系，所以取一个偏蓝的石碳色，和现有面板都不打道，滚动时一眼能分出这是商品资料区块。
  * 注意不用红色：无图商品多不代表错误，只代表资料缺口，用红色会误导运营当成故障去处理。 */
-.item-image-coverage-panel { padding: 14px; border: 1px solid #cfd9e3; border-radius: 14px; background: linear-gradient(135deg, #f2f6fb, #fbfcfe); color: #4a5766; }
+.item-image-coverage-panel { --panel-footnote: #4e637d; padding: 14px; border: 1px solid #cfd9e3; border-radius: 14px; background: linear-gradient(135deg, #f2f6fb, #fbfcfe); color: #4a5766; }
 .item-image-coverage-panel p { color: #5f6d7e; }
 .item-image-coverage-panel .ops-mini-stat strong { color: #3f5b80; }
 .item-image-coverage-panel .ops-mini-stat span, .item-image-coverage-panel .ops-mini-stat small { color: #7b8899; }
 .item-image-coverage-panel .table th { color: #55647a; }
 .item-image-coverage-panel .badge { font-weight: 600; }
-.item-image-coverage-panel .rewrite-candidate-footnote { color: #4e637d; }
 .item-image-coverage-panel .ops-footer-note { color: #5f6d7e; }
 /* 跟进任务接手等待与停留面板自成一组色相（灰蓝偏冷，压一层旧纸感）。
  * 为什么自成一套颜色：站内所有关于跟进任务的面板（跟进任务期限与备注、需求雷达命中）
@@ -1468,7 +1472,7 @@ a { color: inherit; text-decoration: none; }
  * 灰蓝，滚动时能和「还有没有人管」这件事对上：这一栏的数字多半是「建了很久，没人碰」。
  * 注意不用红色：没人接手不代表错误，只代表等待，用红色会让运营当成故障去处理。
  * 也不用绿色：这一栏没有任何一个方向值得被庆祝。 */
-.demand-task-aging-panel { padding: 14px; border: 1px solid #ccd6de; border-radius: 14px; background: linear-gradient(135deg, #f3f6f9, #fafbfd); color: #4b5764; }
+.demand-task-aging-panel { --panel-footnote: #4e637d; padding: 14px; border: 1px solid #ccd6de; border-radius: 14px; background: linear-gradient(135deg, #f3f6f9, #fafbfd); color: #4b5764; }
 .demand-task-aging-panel p { color: #66748a; }
 .demand-task-aging-panel .ops-mini-stat { background: #fff; }
 .demand-task-aging-panel .ops-mini-stat strong { color: #3c5670; }
@@ -1477,7 +1481,6 @@ a { color: inherit; text-decoration: none; }
 .demand-task-aging-panel .table th { color: #55647a; }
 .demand-task-aging-panel .table td { vertical-align: top; }
 .demand-task-aging-panel .badge { font-weight: 600; }
-.demand-task-aging-panel .rewrite-candidate-footnote { color: #4e637d; }
 .demand-task-aging-panel .ops-footer-note { color: #66748a; }
 /* 清单里「接手后停住」和「没人管」是两件不同的事，用两种深浅分开，
    不用两种颜色——它们都不该被当成异常高亮，只是读的时候要能一眼分开。 */
@@ -1492,7 +1495,7 @@ a { color: inherit; text-decoration: none; }
  * 语气对上：这一栏的数字多半是「用户看过，只是现在不方便」。
  * 注意不用红色：到点未读不是错误，只是沉默换了一种形式，用红色会让运营当成故障去处理。
  * 也不用绿色：延后过的通知阅读率更高或更低都不值得庆祝——那是人的差别，不是平台的成绩。 */
-.notification-snooze-return-panel { padding: 14px; border: 1px solid #ddd3c4; border-radius: 14px; background: linear-gradient(135deg, #f7f3ea, #fdfbf7); color: #5b5245; }
+.notification-snooze-return-panel { --panel-footnote: #6f6455; padding: 14px; border: 1px solid #ddd3c4; border-radius: 14px; background: linear-gradient(135deg, #f7f3ea, #fdfbf7); color: #5b5245; }
 .notification-snooze-return-panel p { color: #6f6455; }
 .notification-snooze-return-panel .ops-mini-stat { background: #fff; }
 .notification-snooze-return-panel .ops-mini-stat strong { color: #6b5a3e; }
@@ -1501,7 +1504,6 @@ a { color: inherit; text-decoration: none; }
 .notification-snooze-return-panel .table th { color: #5f5648; }
 .notification-snooze-return-panel .table td { vertical-align: top; }
 .notification-snooze-return-panel .badge { font-weight: 600; }
-.notification-snooze-return-panel .rewrite-candidate-footnote { color: #6f6455; }
 .notification-snooze-return-panel .ops-footer-note { color: #6f6455; }
 /* 五种结局里「到点之后仍未读」压暗而不是标红：它和「还在延后中」是同一条线的两端，
    都不该被当成异常高亮，只是读的时候要能一眼分开。 */
@@ -1517,7 +1519,7 @@ a { color: inherit; text-decoration: none; }
  * 会涨会跌的曲线。滚动时两个面板不会读成同一件事。
  * 注意不用红色：两个窟窿都不是故障，是两张表各走了一步，用红色会让运营当成事故去处理。
  * 也不用绿色：三种表对齐是代码的默认状态，不是平台的成绩。 */
-.notification-kind-coverage-panel { padding: 14px; border: 1px solid #d2d9de; border-radius: 14px; background: linear-gradient(135deg, #f1f5f8, #fafcfd); color: #4d5a63; }
+.notification-kind-coverage-panel { --panel-footnote: #61707a; padding: 14px; border: 1px solid #d2d9de; border-radius: 14px; background: linear-gradient(135deg, #f1f5f8, #fafcfd); color: #4d5a63; }
 .notification-kind-coverage-panel p { color: #61707a; }
 .notification-kind-coverage-panel .ops-mini-stat { background: #fff; }
 .notification-kind-coverage-panel .ops-mini-stat strong { color: #40525e; }
@@ -1526,7 +1528,6 @@ a { color: inherit; text-decoration: none; }
 .notification-kind-coverage-panel .table th { color: #4f5f6a; }
 .notification-kind-coverage-panel .table td { vertical-align: top; }
 .notification-kind-coverage-panel .badge { font-weight: 600; }
-.notification-kind-coverage-panel .rewrite-candidate-footnote { color: #61707a; }
 .notification-kind-coverage-panel .ops-footer-note { color: #61707a; }
 /* 两张表并排放，第一列的类型名压暗到可以并读，但不当成异常高亮——
    它们是这栏唯一的主角，压暗的是「占比」那一列上的小样本。 */
@@ -1544,7 +1545,7 @@ a { color: inherit; text-decoration: none; }
  * 也可能是用户此刻不在站内——归因超出本模块口径，红色会让运营当成事故去处理。
  * 也不用绿色：两组阅读率持平是常态，不是平台的成绩。 */
 
-.notification-aggregation-quality-panel { padding: 14px; border: 1px solid #d8d3e0; border-radius: 14px; background: linear-gradient(135deg, #f4f2f8, #fbfafd); color: #514a60; }
+.notification-aggregation-quality-panel { --panel-footnote: #655e75; padding: 14px; border: 1px solid #d8d3e0; border-radius: 14px; background: linear-gradient(135deg, #f4f2f8, #fbfafd); color: #514a60; }
 
 .notification-aggregation-quality-panel p { color: #655e75; }
 
@@ -1561,7 +1562,6 @@ a { color: inherit; text-decoration: none; }
 
 .notification-aggregation-quality-panel .badge { font-weight: 600; }
 
-.notification-aggregation-quality-panel .rewrite-candidate-footnote { color: #655e75; }
 
 .notification-aggregation-quality-panel .ops-footer-note { color: #655e75; }
 /* 订单承诺截止时间与催收效果面板自成一组色相（石板蓝偏靛，压一层旧钟表感）。
@@ -1577,7 +1577,7 @@ a { color: inherit; text-decoration: none; }
  * 注意不用红色：超时不是故障，是承诺与现实的差。用红色会让运营把「卖家 26 小时才确认」
  * 当成事故去追，而它多半只是发布者晚上才打开后台。也不用绿色：确认得快不是平台的
  * 成绩，催过之后确认了也不是——那是被催的那个人自己的选择。 */
-.order-deadline-panel { padding: 14px; border: 1px solid #cbd6e0; border-radius: 14px; background: linear-gradient(135deg, #f1f5f9, #fafcfe); color: #3f4f63; }
+.order-deadline-panel { --panel-footnote: #4a5d75; padding: 14px; border: 1px solid #cbd6e0; border-radius: 14px; background: linear-gradient(135deg, #f1f5f9, #fafcfe); color: #3f4f63; }
 .order-deadline-panel p { color: #5c6a7c; }
 .order-deadline-panel .ops-mini-stat { background: #fff; }
 .order-deadline-panel .ops-mini-stat strong { color: #34495e; }
@@ -1586,7 +1586,6 @@ a { color: inherit; text-decoration: none; }
 .order-deadline-panel .table th { color: #46566c; }
 .order-deadline-panel .table td { vertical-align: top; }
 .order-deadline-panel .badge { font-weight: 600; }
-.order-deadline-panel .rewrite-candidate-footnote { color: #4a5d75; }
 .order-deadline-panel .ops-footer-note { color: #5c6a7c; }
 /* 「催过」和「没催过」是两件不同的事，用深浅分开，不用两种颜色——两者都不该被当成
    异常高亮，只是读的时候要能一眼分开：催过仍被释放的那一批，才是要去看的那一批。 */
@@ -3273,7 +3272,7 @@ a { color: inherit; text-decoration: none; }
  * 几次」：改期不是对错判定，一次都没改和改了四次都不是故障，只是这一笔好不好谈。
  * 压一层铜锈感是因为这一栏报的多半是反复：改过两次以上是最难谈的一批，一个时间
  * 对其中一方一直不合适，而另一方一直在迁就。 */
-.meeting-reschedule-panel { padding: 14px; border: 1px solid #c6d2c8; border-radius: 14px; background: linear-gradient(135deg, #f0f5f1, #fafcfb); color: #40584a; }
+.meeting-reschedule-panel { --panel-footnote: #4a6b57; padding: 14px; border: 1px solid #c6d2c8; border-radius: 14px; background: linear-gradient(135deg, #f0f5f1, #fafcfb); color: #40584a; }
 
 .meeting-reschedule-panel p { color: #5d7566; }
 
@@ -3290,7 +3289,6 @@ a { color: inherit; text-decoration: none; }
 
 .meeting-reschedule-panel .badge { font-weight: 600; }
 
-.meeting-reschedule-panel .rewrite-candidate-footnote { color: #4a6b57; }
 
 .meeting-reschedule-panel .ops-footer-note { color: #5d7566; }
 
@@ -3314,7 +3312,7 @@ a { color: inherit; text-decoration: none; }
  * 限流规则。
  * 压一层陶土感是因为被累计口径吃掉的那批商品多半是沉了半个学期以上的：时间对
  * 其中一方早就过去了，而计数器还停在上个学期那个数上。 */
-.refresh-quota-drift-panel { padding: 14px; border: 1px solid #e2d5c2; border-radius: 14px; background: linear-gradient(135deg, #faf5ec, #fdfbf6); color: #6b5333; }
+.refresh-quota-drift-panel { --panel-footnote: #8a6a35; padding: 14px; border: 1px solid #e2d5c2; border-radius: 14px; background: linear-gradient(135deg, #faf5ec, #fdfbf6); color: #6b5333; }
 
 .refresh-quota-drift-panel p { color: #7d6a4d; }
 
@@ -3343,7 +3341,6 @@ a { color: inherit; text-decoration: none; }
 
 .refresh-quota-drift-why { color: #6b5333; font-size: .88rem; line-height: 1.75; }
 
-.refresh-quota-drift-panel .rewrite-candidate-footnote { color: #8a6a35; }
 
 .refresh-quota-drift-panel .ops-footer-note { color: #7d6a4d; }
 
@@ -3420,7 +3417,7 @@ a { color: inherit; text-decoration: none; }
  * 「彻底没有互动」那一行压一线石板色但不涂满——它是分母的一部分，不是
  * 坏行；涂满会让运营以为要把它们从统计里剔掉，而它们恰恰是最该被推动的
  * 那一批。 */
-.relist-freshness-panel { padding: 14px; border: 1px solid #ccd8de; border-radius: 14px; background: linear-gradient(135deg, #f2f7f9, #fbfdfe); color: #3a4f5c; }
+.relist-freshness-panel { --panel-footnote: #44606e; padding: 14px; border: 1px solid #ccd8de; border-radius: 14px; background: linear-gradient(135deg, #f2f7f9, #fbfdfe); color: #3a4f5c; }
 
 .relist-freshness-panel p { color: #4e6572; }
 
@@ -3447,7 +3444,6 @@ a { color: inherit; text-decoration: none; }
 
 .relist-freshness-why { color: #3a4f5c; font-size: .88rem; line-height: 1.75; }
 
-.relist-freshness-panel .rewrite-candidate-footnote { color: #44606e; }
 
 .relist-freshness-panel .ops-footer-note { color: #4e6572; }
 
