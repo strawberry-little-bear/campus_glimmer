@@ -40,6 +40,7 @@ from .bulk_listing_template import build_bulk_listing_import_template
 from .bulk_listing_xlsx import parse_bulk_listing_xlsx
 from .bulk_listing_import_summary import build_bulk_listing_import_error_summary
 from .dashboard_build_performance import build_dashboard_build_performance
+from .operations_nav import OPERATIONS_DASHBOARD_SECTIONS
 from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
 from .search_combo_shift import build_search_combo_shift
 from .search_threshold_feedback import build_search_threshold_feedback
@@ -3470,6 +3471,9 @@ def operations_dashboard(request):
         days=days, statuses=_demand_outcome_status_filter(request),
     )
     dashboard['demand_outcome_status_filter'] = _demand_outcome_status_filter(request)
+    # 分区跳转条的分组数据；模板据此渲某导航，锚点在模板里与各分区的
+    # <section id> 一一对应，由 test_operations_dashboard_section_nav 囊底。
+    dashboard['operations_sections'] = OPERATIONS_DASHBOARD_SECTIONS
     return render(request, 'listings/operations_dashboard.html', dashboard)
 
 

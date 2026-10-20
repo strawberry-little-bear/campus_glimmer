@@ -15,6 +15,26 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // 运营看板分区跳转条：32 个 chip 在窄屏必然横向溢出，
+    // 光靠一条细滚动条很难被发现。这里按 scrollLeft 写入
+    // data-overflow，让 CSS 在被裁掉的一侧做渐隐；没有 JS 时整条
+    // 就是普通横向滚动，功能不受影响。
+    document.querySelectorAll('.ops-jump-scroll').forEach(function (strip) {
+        const syncOverflow = function () {
+            const overflow = strip.scrollWidth - strip.clientWidth;
+            if (overflow <= 1) {
+                strip.removeAttribute('data-overflow');
+                return;
+            }
+            const atStart = strip.scrollLeft <= 1;
+            const atEnd = strip.scrollLeft >= overflow - 1;
+            strip.setAttribute('data-overflow', atStart ? 'right' : atEnd ? 'left' : 'both');
+        };
+        syncOverflow();
+        strip.addEventListener('scroll', syncOverflow, { passive: true });
+        window.addEventListener('resize', syncOverflow);
+    });
+
     const chat = document.querySelector('.chat-messages');
     if (chat) chat.scrollTop = chat.scrollHeight;
 

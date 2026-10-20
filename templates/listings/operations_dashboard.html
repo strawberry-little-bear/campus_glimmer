@@ -29,63 +29,55 @@
     {{ period_start|date:"Y年m月d日" }} — {{ period_end|date:"Y年m月d日" }} · 仅限管理员可见
 </div>
 
-{% include 'listings/operations/_alerts.html' %}
+<div class="operations-panels">
 
-{% include 'listings/operations/_overview_metrics.html' %}
+<nav class="ops-jump" aria-label="运营看板分区导航">
+    <span class="ops-jump-title"><i class="bi bi-signpost-split me-1"></i>分区</span>
+    <div class="ops-jump-scroll">
+        {% for group_label, items in operations_sections %}
+        <span class="ops-jump-group">
+            <span class="ops-jump-group-label">{{ group_label }}</span>
+            {% for anchor, label in items %}
+            <a class="ops-jump-chip" href="#{{ anchor }}">{{ label }}</a>
+            {% endfor %}
+        </span>
+        {% endfor %}
+    </div>
+</nav>
+<section class="ops-section" id="ops-alerts">{% include 'listings/operations/_alerts.html' %}</section>
+<section class="ops-section" id="ops-metrics">{% include 'listings/operations/_overview_metrics.html' %}</section>
+<section class="ops-section" id="ops-funnel">{% include 'listings/operations/_overview.html' %}</section>
+<section class="ops-section" id="ops-charts">{% include 'listings/operations/_overview_charts.html' %}</section>
+<section class="ops-section" id="ops-demand">{% include 'listings/operations/_demand.html' %}</section>
+<section class="ops-section" id="ops-notifications">{% include 'listings/operations/_notifications.html' %}</section>
+<section class="ops-section" id="ops-governance">{% include 'listings/operations/_governance.html' %}</section>
+<section class="ops-section" id="ops-campaigns">{% include 'listings/operations/_campaigns.html' %}</section>
+<section class="ops-section" id="ops-response">{% include 'listings/operations/_response.html' %}</section>
+<section class="ops-section" id="ops-recommendations">{% include 'listings/operations/_recommendations.html' %}</section>
+<section class="ops-section" id="ops-semester-phase">{% include 'listings/operations/_semester_phase.html' %}</section>
+<section class="ops-section" id="ops-order-lifecycle">{% include 'listings/operations/_order_lifecycle.html' %}</section>
+<section class="ops-section" id="ops-reminders">{% include 'listings/operations/_lifecycle_reminders.html' %}</section>
+<section class="ops-section" id="ops-scheduler">{% include 'listings/operations/_scheduler.html' %}</section>
+<section class="ops-section" id="ops-borrow">{% include 'listings/operations/_borrow.html' %}</section>
+<section class="ops-section" id="ops-demand-radar">{% include 'listings/operations/_demand_radar.html' %}</section>
+<section class="ops-section" id="ops-meeting">{% include 'listings/operations/_meeting.html' %}</section>
+<section class="ops-section" id="ops-handover-codes">{% include 'listings/operations/_handover_codes.html' %}</section>
+<section class="ops-section" id="ops-delivery-confirm">{% include 'listings/operations/_delivery_confirm.html' %}</section>
+<section class="ops-section" id="ops-saved-search">{% include 'listings/operations/_saved_search.html' %}</section>
+<section class="ops-section" id="ops-lost-found">{% include 'listings/operations/_lost_found.html' %}</section>
+<section class="ops-section" id="ops-campus-verify">{% include 'listings/operations/_campus_verify.html' %}</section>
+<section class="ops-section" id="ops-queues">{% include 'listings/operations/_ops_queues.html' %}</section>
+<section class="ops-section" id="ops-moderation">{% include 'listings/operations/_moderation_ops.html' %}</section>
+<section class="ops-section" id="ops-trade-quality">{% include 'listings/operations/_trade_quality.html' %}</section>
+<section class="ops-section" id="ops-deal-outcomes">{% include 'listings/operations/_deal_outcomes.html' %}</section>
+<section class="ops-section" id="ops-item-refresh">{% include 'listings/operations/_item_refresh.html' %}</section>
+<section class="ops-section" id="ops-search-exposure">{% include 'listings/operations/_search_exposure.html' %}</section>
+<section class="ops-section" id="ops-price-signal">{% include 'listings/operations/_price_signal.html' %}</section>
+<section class="ops-section" id="ops-contribution">{% include 'listings/operations/_contribution.html' %}</section>
+<section class="ops-section" id="ops-audit-shapes">{% include 'listings/operations/_audit_shapes.html' %}</section>
+<section class="ops-section" id="ops-locations">{% include 'listings/operations/_locations.html' %}</section>
 
-{% include 'listings/operations/_overview.html' %}
-
-{% include 'listings/operations/_overview_charts.html' %}
-
-{% include 'listings/operations/_demand.html' %}
-
-{% include 'listings/operations/_notifications.html' %}
-
-{% include 'listings/operations/_governance.html' %}
-
-{% include 'listings/operations/_campaigns.html' %}
-{% include 'listings/operations/_response.html' %}
-{% include 'listings/operations/_recommendations.html' %}
-{% include 'listings/operations/_semester_phase.html' %}
-{% include 'listings/operations/_order_lifecycle.html' %}
-{% include 'listings/operations/_lifecycle_reminders.html' %}
-{% include 'listings/operations/_scheduler.html' %}
-{% include 'listings/operations/_borrow.html' %}
-
-{% include 'listings/operations/_demand_radar.html' %}
-
-{% include 'listings/operations/_meeting.html' %}
-
-{% include 'listings/operations/_handover_codes.html' %}
-
-{% include 'listings/operations/_delivery_confirm.html' %}
-{% include 'listings/operations/_saved_search.html' %}
-
-{% include 'listings/operations/_lost_found.html' %}
-
-{% include 'listings/operations/_campus_verify.html' %}
-
-
-{% include 'listings/operations/_ops_queues.html' %}
-
-
-{% include 'listings/operations/_moderation_ops.html' %}
-{% include 'listings/operations/_trade_quality.html' %}
-
-{% include 'listings/operations/_deal_outcomes.html' %}
-
-{% include 'listings/operations/_item_refresh.html' %}
-
-{% include 'listings/operations/_search_exposure.html' %}
-
-{% include 'listings/operations/_price_signal.html' %}
-
-{% include 'listings/operations/_contribution.html' %}
-
-{% include 'listings/operations/_audit_shapes.html' %}
-
-
-{% include 'listings/operations/_locations.html' %}
+</div>
 
 <div class="ops-footer-note"><i class="bi bi-shield-check me-1"></i>数据来自结构化业务记录，适合用于迭代观察，不替代人工判断。</div>
 {% endblock %}

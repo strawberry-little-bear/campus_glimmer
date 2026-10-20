@@ -6925,3 +6925,130 @@ a { color: inherit; text-decoration: none; }
    否则右侧只有一枚按钮时，整段文案会被拉成横向长条。 */
 .saved-search-heading > div,
 .thread-intro > div { max-width: 640px; }
+
+/* --------------------------------------------------------------------------
+   运营看板分区导航
+
+   看板有 32 个分区，此前只能一屏一屏滚。这里加一条吸顶跳转条：分组名加扇平
+   chip，横向滚动；点一下直接落到对应分区。落点反馈交给 :target，不引入
+   scroll-spy。
+
+   三个细节：
+   - top 取 88px：.site-nav 在 320~1440px+ 各宽度下实测高度恒为 84px，所以不
+     需要按宽度分档；多留 4px 作为与导航栏下沿的间隙。曾经把窄屏覆盖成
+     76px，结果跳转条被导航栏压住 8px。
+   - .ops-section 必须给 scroll-margin-top，否则锚点会把分区标题顶到吸顶导航
+     底下，用户看不到自己跳到了哪里。取值要大于「top + 跳转条自身高度」。
+   - 跳转条自身不依赖 JS；只有左右两侧的渐隐提示由 main.js 写 data-overflow，
+     没有 JS 时就是一条普通的横向滚动条。
+   -------------------------------------------------------------------------- */
+.ops-jump {
+    position: sticky;
+    top: 88px;
+    z-index: 1015;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 22px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, .93);
+    box-shadow: 0 8px 22px rgba(32, 76, 59, .07);
+    backdrop-filter: blur(10px);
+}
+
+.ops-jump-title {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding-right: 10px;
+    border-right: 1px solid var(--line);
+    color: #315946;
+    font-size: .78rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.ops-jump-scroll {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+}
+
+/* 32 个 chip 在窄屏必然横向溢出，光靠一条细滚动条很难被发现。这里用
+   mask-image 在被裁掉的一侧做渐隐：mask 作用于元素自身的盒模型，不随
+   内容滚动，所以滚到底后渐隐会自己消失。data-overflow 由 main.js 按
+   scrollLeft 写入，无 JS 时整条就是普通横向滚动，功能不受影响。 */
+.ops-jump-scroll[data-overflow="right"] {
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
+}
+
+.ops-jump-scroll[data-overflow="left"] {
+    -webkit-mask-image: linear-gradient(to left, #000 0, #000 22px, transparent 100%);
+    mask-image: linear-gradient(to left, #000 0, #000 22px, transparent 100%);
+}
+
+.ops-jump-scroll[data-overflow="both"] {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 22px, #000 calc(100% - 22px), transparent 100%);
+}
+
+.ops-jump-scroll::-webkit-scrollbar { height: 6px; }
+
+.ops-jump-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: #d7e5dc; }
+
+.ops-jump-group { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 5px; }
+
+.ops-jump-group + .ops-jump-group {
+    margin-left: 6px;
+    padding-left: 10px;
+    border-left: 1px dashed #e3ece6;
+}
+
+.ops-jump-group-label {
+    color: #94a49c;
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    white-space: nowrap;
+}
+
+.ops-jump-chip {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 5px 10px;
+    border: 1px solid #e2ece6;
+    border-radius: 999px;
+    color: #4d6359;
+    background: #fbfdfb;
+    font-size: .74rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: border-color .18s ease, color .18s ease, background .18s ease;
+}
+
+.ops-jump-chip:hover { border-color: #b5ddca; color: var(--primary-dark); background: var(--mint); }
+
+.ops-jump-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* 分区落点：避开吸顶导航，并用 outline 高亮（不影响布局，.row 带负外边距也安全）。 */
+.ops-section { scroll-margin-top: 140px; }
+
+.ops-section:target > :first-child {
+    outline: 2px solid rgba(29, 138, 104, .45);
+    outline-offset: 5px;
+    border-radius: 20px;
+}
+
+@media (max-width: 575.98px) {
+    .ops-jump { gap: 8px; margin-bottom: 16px; padding: 7px 10px; }
+    .ops-jump-title { display: none; }
+    .ops-section { scroll-margin-top: 140px; }
+}
