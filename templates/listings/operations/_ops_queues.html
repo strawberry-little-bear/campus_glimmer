@@ -163,7 +163,7 @@
             <h3>有图 / 无图对照</h3>
             <p class="small text-muted">成交率的分母是订单笔数，不是商品件数。</p>
             <div class="table-responsive">
-                <table class="table table-sm align-middle">
+                <table class="table table-sm align-middle ops-table">
                     <thead><tr><th>分组</th><th>商品数</th><th>订单数</th><th>成交数</th><th>成交率</th><th>取消率</th></tr></thead>
                     <tbody>
                         <tr>
@@ -197,7 +197,7 @@
             <h3>图片数分档</h3>
             <p class="small text-muted">最后一档不叫「传满」，<code>max_num=5</code> 是产品约束而不是运营结论。</p>
             <div class="table-responsive">
-                <table class="table table-sm align-middle">
+                <table class="table table-sm align-middle ops-table">
                     <thead><tr><th>图片数</th><th>商品数</th><th>占比</th><th>订单数</th><th>成交数</th><th>成交率</th></tr></thead>
                     <tbody>
                         {% for row in item_image_coverage.image_counts.rows %}
@@ -220,7 +220,7 @@
         <div class="col-lg-6">
             <h3>按交易方式看无图情况</h3>
             <div class="table-responsive">
-                <table class="table table-sm align-middle">
+                <table class="table table-sm align-middle ops-table">
                     <thead><tr><th>交易方式</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
                     <tbody>
                         {% for row in item_image_coverage.by_trade_mode.rows %}
@@ -240,7 +240,7 @@
         <div class="col-lg-6">
             <h3>按分类看无图情况</h3>
             <div class="table-responsive">
-                <table class="table table-sm align-middle">
+                <table class="table table-sm align-middle ops-table">
                     <thead><tr><th>分类</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
                     <tbody>
                         {% for row in item_image_coverage.by_category.rows %}
@@ -264,7 +264,7 @@
     <h3 class="mt-3">一张图都没配的商品</h3>
     <p class="small text-muted">按上架时间从新到旧排列，<strong>不按商品进行排名</strong>。</p>
     <div class="table-responsive">
-        <table class="table table-sm align-middle">
+        <table class="table table-sm align-middle ops-table">
             <thead><tr><th>商品</th><th>分类</th><th>交易方式</th><th>举报数</th><th>上架时间</th></tr></thead>
             <tbody>
                 {% for row in item_image_coverage.no_image_rows.rows %}
