@@ -6825,3 +6825,69 @@ a { color: inherit; text-decoration: none; }
         flex: 1 1 auto;
     }
 }
+
+
+/* --------------------------------------------------------------------------
+   我的商品页：分段标签与清单表格
+
+   这一页此前直接用 Bootstrap 的 card / card-header / nav-tabs / card-header-tabs，
+   是全站最后一处停留在默认组件外观的页面。标签换成自定义分段控件，表格跟上
+   全站主流的 table-sm + align-middle 写法。这里保留 data-bs-toggle="tab" 和
+   .tab-content / .tab-pane / .fade —— Bootstrap 的 Tab 插件用
+   .list-group, .nav, [role="tablist"] 定位父级，所以带 role="tablist" 的自定义
+   容器同样能驱动切换、方向键与 aria-selected，不需要再引一份 JS。
+   -------------------------------------------------------------------------- */
+.my-items-panel { padding: 0; overflow: hidden; }
+
+.my-items-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 12px 16px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.my-items-tab {
+    appearance: none;
+    border: 0;
+    border-radius: 10px 10px 0 0;
+    padding: 9px 15px;
+    background: transparent;
+    color: var(--muted);
+    font-size: .8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .2s ease, color .2s ease;
+}
+
+.my-items-tab:hover { color: var(--primary-dark); background: #f3faf6; }
+
+.my-items-tab.active {
+    color: var(--primary-dark);
+    background: var(--mint);
+    box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+.my-items-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.my-items-pane { padding: 16px; }
+
+.my-items-table { --bs-table-bg: transparent; font-size: .82rem; }
+.my-items-table th {
+    color: #8b9a92;
+    border-bottom-color: #e6eee9;
+    font-size: .72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.my-items-table td { color: #4a5b53; border-bottom-color: #eef3ef; }
+.my-items-table tr:last-child td { border-bottom: 0; }
+.my-items-table tbody tr:hover td { background: #f6fbf8; }
+.my-items-table a { color: #2f6a4f; font-weight: 700; }
+.my-items-table a:hover { color: var(--primary-dark); text-decoration: underline; }
+
+@media (max-width: 575.98px) {
+    .my-items-tabs { padding: 10px 12px 0; }
+    .my-items-tab { flex: 1 1 auto; padding: 9px 8px; font-size: .76rem; }
+    .my-items-pane { padding: 12px; }
+}

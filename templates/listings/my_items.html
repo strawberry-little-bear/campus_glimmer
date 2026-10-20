@@ -4,8 +4,12 @@
 {% block title %}{{ title }} - 拾光校园{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="h3 mb-0">{{ title }}</h1>
+<div class="page-intro mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">Seller desk</span>
+        <h1 class="mt-2">{{ title }}</h1>
+        <p class="text-muted mb-0">在这里统一管理在售商品：刷新、续期、改状态，或者一次性把一批商品加进校园专题。</p>
+    </div>
     <div class="d-flex flex-wrap gap-2">
         <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
         <a href="{% url 'bulk_create_items' %}" class="btn btn-outline-primary">批量发布</a>
@@ -86,29 +90,18 @@
 </div>
 {% endif %}
 
-<div class="card shadow">
-    <div class="card-header">
-        <ul class="nav nav-tabs card-header-tabs" id="itemsTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="true">全部</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="available-tab" data-bs-toggle="tab" data-bs-target="#available" type="button" role="tab" aria-controls="available" aria-selected="false">可购买</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="reserved-tab" data-bs-toggle="tab" data-bs-target="#reserved" type="button" role="tab" aria-controls="reserved" aria-selected="false">已预定</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="sold-tab" data-bs-toggle="tab" data-bs-target="#sold" type="button" role="tab" aria-controls="sold" aria-selected="false">已售出</button>
-            </li>
-        </ul>
+<section class="content-card my-items-panel">
+    <div class="my-items-tabs" id="itemsTabs" role="tablist">
+        <button class="my-items-tab active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="true">全部</button>
+        <button class="my-items-tab" id="available-tab" data-bs-toggle="tab" data-bs-target="#available" type="button" role="tab" aria-controls="available" aria-selected="false">可购买</button>
+        <button class="my-items-tab" id="reserved-tab" data-bs-toggle="tab" data-bs-target="#reserved" type="button" role="tab" aria-controls="reserved" aria-selected="false">已预定</button>
+        <button class="my-items-tab" id="sold-tab" data-bs-toggle="tab" data-bs-target="#sold" type="button" role="tab" aria-controls="sold" aria-selected="false">已售出</button>
     </div>
-    <div class="card-body">
-        <div class="tab-content" id="itemsTabContent">
+    <div class="tab-content" id="itemsTabContent">
             <!-- 全部商品 -->
-            <div class="tab-pane fade show active" id="all" role="tabpanel" aria-labelledby="all-tab">
+            <div class="tab-pane fade show active my-items-pane" id="all" role="tabpanel" aria-labelledby="all-tab">
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-sm align-middle my-items-table mb-0">
                         <thead>
                             <tr>
                                 <th><input type="checkbox" class="form-check-input" aria-label="选择全部商品" onclick="document.querySelectorAll('.bulk-item-checkbox').forEach((box) => { box.checked = this.checked; });"></th>
@@ -186,9 +179,9 @@
             </div>
             
             <!-- 可购买商品 -->
-            <div class="tab-pane fade" id="available" role="tabpanel" aria-labelledby="available-tab">
+            <div class="tab-pane fade my-items-pane" id="available" role="tabpanel" aria-labelledby="available-tab">
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-sm align-middle my-items-table mb-0">
                         <thead>
                             <tr>
                                 <th>商品</th>
@@ -233,10 +226,10 @@
             </div>
             
             <!-- 已预定商品 -->
-            <div class="tab-pane fade" id="reserved" role="tabpanel" aria-labelledby="reserved-tab">
+            <div class="tab-pane fade my-items-pane" id="reserved" role="tabpanel" aria-labelledby="reserved-tab">
                 <!-- 与可购买商品结构类似，只是筛选status == 'reserved' -->
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-sm align-middle my-items-table mb-0">
                         <thead>
                             <tr>
                                 <th>商品</th>
@@ -281,10 +274,10 @@
             </div>
             
             <!-- 已售出商品 -->
-            <div class="tab-pane fade" id="sold" role="tabpanel" aria-labelledby="sold-tab">
+            <div class="tab-pane fade my-items-pane" id="sold" role="tabpanel" aria-labelledby="sold-tab">
                 <!-- 与可购买商品结构类似，只是筛选status == 'sold' -->
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-sm align-middle my-items-table mb-0">
                         <thead>
                             <tr>
                                 <th>商品</th>
@@ -326,7 +319,6 @@
                     </table>
                 </div>
             </div>
-        </div>
     </div>
-</div>
+</section>
 {% endblock %}
