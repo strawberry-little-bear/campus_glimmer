@@ -452,50 +452,38 @@ def build_search_insights(days=30, query=''):
 
 
 def _build_user_activity_segments(start, end):
-    """Aggregate current-period activity once, then classify users by behavior."""
-    user_model = get_user_model()
-    users = user_model.objects.annotate(
-        listing_count=Count(
-            'listed_items',
-            filter=Q(listed_items__created_at__gte=start, listed_items__created_at__lte=end),
-            distinct=True,
-        ),
-        search_count=Count(
-            'search_queries',
-            filter=Q(search_queries__created_at__gte=start, search_queries__created_at__lte=end),
-            distinct=True,
-        ),
-        browse_count=Count(
-            'browsing_history',
-            filter=Q(browsing_history__last_viewed_at__gte=start, browsing_history__last_viewed_at__lte=end),
-            distinct=True,
-        ),
-        favorite_count=Count(
-            'favorites',
-            filter=Q(favorites__created_at__gte=start, favorites__created_at__lte=end),
-            distinct=True,
-        ),
-        purchase_count=Count(
-            'purchased_orders',
-            filter=Q(purchased_orders__created_at__gte=start, purchased_orders__created_at__lte=end),
-            distinct=True,
-        ),
-        sale_count=Count(
-            'sold_orders',
-            filter=Q(sold_orders__created_at__gte=start, sold_orders__created_at__lte=end),
-            distinct=True,
-        ),
-        sent_message_count=Count(
-            'sent_messages',
-            filter=Q(sent_messages__created_at__gte=start, sent_messages__created_at__lte=end),
-            distinct=True,
-        ),
-        received_message_count=Count(
-            'received_messages',
-            filter=Q(received_messages__created_at__gte=start, received_messages__created_at__lte=end),
-            distinct=True,
-        ),
+    """Aggregate each activity relation once, then classify users by behavior.
+
+    八种行为各自做一次「按用户分组」的聚合，再在内存里合并。这里必须拆开：早期实现把八种
+    行为放进同一条查询的 ``annotate`` 里，数据库要先算出八张表的笛卡尔积再执行
+    ``COUNT(DISTINCT ...)``，行数是各项行为数量的乘积，用户稍有规模就会从亚秒退化到数分钟。
+    拆成八条之后每条查询都只扫自己那张表，代价是 O(行数) 而不是 O(乘积)。
+    """
+    behaviour_specs = (
+        ('listing_count', Item, 'seller', 'created_at'),
+        ('search_count', SearchQuery, 'user', 'created_at'),
+        ('browse_count', BrowsingHistory, 'user', 'last_viewed_at'),
+        ('favorite_count', Favorite, 'user', 'created_at'),
+        ('purchase_count', Order, 'buyer', 'created_at'),
+        ('sale_count', Order, 'seller', 'created_at'),
+        ('sent_message_count', PrivateMessage, 'sender', 'created_at'),
+        ('received_message_count', PrivateMessage, 'receiver', 'created_at'),
     )
+    counts = {field: {} for field, _, _, _ in behaviour_specs}
+    for field, model, owner_field, date_field in behaviour_specs:
+        rows = (
+            model.objects
+            .filter(**{date_field + '__gte': start, date_field + '__lte': end})
+            .values(owner_field)
+            .annotate(total=Count('id'))
+        )
+        for row in rows:
+            owner_id = row[owner_field]
+            # SearchQuery.user 可空，匿名搜索不属于任何用户，不能计入活跃用户。
+            if owner_id is None:
+                continue
+            counts[field][owner_id] = row['total']
+
     segment_definitions = {
         'trader': {'label': '交易参与者', 'note': '周期内发起或承接过交易预约'},
         'supplier': {'label': '供给贡献者', 'note': '周期内发布了多件商品'},
@@ -504,20 +492,32 @@ def _build_user_activity_segments(start, end):
     }
     segment_counts = {key: 0 for key in segment_definitions}
     active_user_count = 0
-    for user in users:
+    # 只在至少一项行为里出现过的用户才需要分类；八项全为 0 的用户原本就会被跳过。
+    user_ids = set()
+    for field_counts in counts.values():
+        user_ids.update(field_counts)
+    for user_id in user_ids:
+        listing_count = counts['listing_count'].get(user_id, 0)
+        search_count = counts['search_count'].get(user_id, 0)
+        browse_count = counts['browse_count'].get(user_id, 0)
+        favorite_count = counts['favorite_count'].get(user_id, 0)
+        purchase_count = counts['purchase_count'].get(user_id, 0)
+        sale_count = counts['sale_count'].get(user_id, 0)
+        sent_message_count = counts['sent_message_count'].get(user_id, 0)
+        received_message_count = counts['received_message_count'].get(user_id, 0)
         behavior_count = (
-            user.listing_count + user.search_count + user.browse_count
-            + user.favorite_count + user.purchase_count + user.sale_count
-            + user.sent_message_count + user.received_message_count
+            listing_count + search_count + browse_count
+            + favorite_count + purchase_count + sale_count
+            + sent_message_count + received_message_count
         )
         if not behavior_count:
             continue
         active_user_count += 1
-        if user.purchase_count or user.sale_count:
+        if purchase_count or sale_count:
             segment_key = 'trader'
-        elif user.listing_count >= 2:
+        elif listing_count >= 2:
             segment_key = 'supplier'
-        elif user.search_count + user.browse_count >= 5:
+        elif search_count + browse_count >= 5:
             segment_key = 'explorer'
         else:
             segment_key = 'light'
@@ -534,7 +534,6 @@ def _build_user_activity_segments(start, end):
             'share': round(count / active_user_count * 100, 1) if active_user_count else 0,
         })
     return active_user_count, segments
-
 
 
 def _build_user_retention(start, previous_start, end):
