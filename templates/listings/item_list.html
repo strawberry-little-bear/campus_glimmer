@@ -125,7 +125,7 @@
         <nav class="mt-5" aria-label="商品分页">
             <ul class="pagination justify-content-center">
                 {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">上一页</a></li>{% endif %}
-                {% for num in page_obj.paginator.page_range %}<li class="page-item {% if page_obj.number == num %}active{% endif %}"><a class="page-link" href="?page={{ num }}{% if filter_query %}&{{ filter_query }}{% endif %}">{{ num }}</a></li>{% endfor %}
+                {% for num in page_numbers %}<li class="page-item {% if page_obj.number == num %}active{% endif %}">{% if num %}<a class="page-link" href="?page={{ num }}{% if filter_query %}&{{ filter_query }}{% endif %}">{{ num }}</a>{% else %}<span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span>{% endif %}</li>{% endfor %}
                 {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filter_query %}&{{ filter_query }}{% endif %}">下一页</a></li>{% endif %}
             </ul>
         </nav>

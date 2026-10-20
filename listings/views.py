@@ -189,6 +189,25 @@ def _favorite_ids(request):
     return set(Favorite.objects.filter(user=request.user).values_list('item_id', flat=True))
 
 
+def _elided_page_numbers(page_obj):
+    """把分页条压成「首页 … 当前页附近 … 末页」。
+
+    商品/求购/失物招领这些列表页的页数很容易上到几十页，若把 page_range
+    全量渲染成按钮，分页条会横向溢出整页。Django 的 get_elided_page_range
+    默认以第 1 页为中心，而模板里调用它拿不到参数，所以在这里显式传入
+    当前页码，由视图统一算好。
+    """
+    numbers = page_obj.paginator.get_elided_page_range(
+        page_obj.number, on_each_side=1, on_ends=1,
+    )
+    # Django 的省略号是字符串常量（Paginator.ELLIPSIS），不是 None。模板里用
+    # {% if num %} 判断，字符串会被当成真值，于是渲染出一个指向 ?page=… 的
+    # 死链接。这里统一换成 None，让模板的真假判断回到预期语义。
+    return [
+        None if number == Paginator.ELLIPSIS else number
+        for number in numbers
+    ]
+
 def home(request):
     active_item_filter = Q(items__status='available') & (
         Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=timezone.now())
@@ -483,6 +502,7 @@ def item_list(request, category_id=None):
         'location': location,
         'items': page_obj,
         'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
         'query': query,
         'search_terms': search_terms,
         'condition': condition,
@@ -12697,6 +12717,7 @@ def demand_list(request, mine=False):
     return render(request, 'listings/demand_list.html', {
         'demands': page,
         'page_obj': page,
+        'page_numbers': _elided_page_numbers(page),
         'categories': Category.objects.all(),
         'locations': CampusLocation.objects.filter(is_active=True),
         'demand_search_query': search_query,
@@ -13106,6 +13127,7 @@ def lost_found_list(request, mine=False):
     return render(request, 'listings/lost_found_list.html', {
         'posts': page_obj.object_list,
         'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
         'categories': Category.objects.all(),
         'locations': CampusLocation.objects.filter(is_active=True),
         'is_mine': is_mine,
