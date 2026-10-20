@@ -70,7 +70,7 @@
 
 {% if recommended_items %}
 <section class="mt-5">
-    <div class="section-heading mb-3"><div><span class="eyebrow">MATCHED LISTINGS</span><h2>可能符合需求的商品</h2></div><a href="{% url 'item_list' %}?category={{ demand.category_id }}{% if demand.location_id %}&location={{ demand.location_id }}{% endif %}" class="section-link">查看更多 <i class="bi bi-arrow-right"></i></a></div>
+    <div class="section-heading mb-3"><div><span class="eyebrow">MATCHED LISTINGS</span><h2>可能符合需求的商品</h2></div><a href="{% url 'item_list' %}?category={{ demand.category_id }}{% if demand.location_id %}&location={{ demand.location_id }}{% endif %}">查看更多 <i class="bi bi-arrow-right"></i></a></div>
     <div class="row g-4">
         {% for item in recommended_items %}
         <div class="col-sm-6 col-xl-4">

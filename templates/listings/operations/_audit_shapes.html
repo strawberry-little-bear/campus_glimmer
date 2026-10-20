@@ -1,12 +1,12 @@
 {% comment %}
 这个分区片段由 operations_dashboard.html 拆分而来，
 只负责此域的面板展示，不包含业务逻辑。
-{% endcomment %}<section class="content-card ops-panel mb-4 borrow-days-shape-panel">
+{% endcomment %}<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Borrow days shape</span><h2>默认借用天数的形状</h2></div>
         <span class="ops-panel-hint">卖家当初允许借多久，第一次被数字读到</span>
     </div>
-    <p class="borrow-days-shape-note mb-3"><i class="bi bi-hourglass-split me-1"></i><code>Item.borrow_days</code> 是借用域里唯一一个由出借方亲手写下的数字，也是 <code>Order.return_due_at</code> 的唯一来源。它是全站唯一一个在业务模块里出现次数为零的字段：<strong>写入路径有，显示路径有，统计路径没有。</strong>借用域已经有四个模块在数东西——<code>borrow_risk</code> 按分类和押金分层，<code>borrow_rhythm</code> 把它和学期阶段交叉，<code>borrow_escalation</code> 管三级催收阶梯，<code>governance_sla</code> 管治理队列时效——四个模块全部从「东西还没回来」切进去，没有一个从「卖家当初允许借多久」切进去。</p>
+    <p class="mb-3"><i class="bi bi-hourglass-split me-1"></i><code>Item.borrow_days</code> 是借用域里唯一一个由出借方亲手写下的数字，也是 <code>Order.return_due_at</code> 的唯一来源。它是全站唯一一个在业务模块里出现次数为零的字段：<strong>写入路径有，显示路径有，统计路径没有。</strong>借用域已经有四个模块在数东西——<code>borrow_risk</code> 按分类和押金分层，<code>borrow_rhythm</code> 把它和学期阶段交叉，<code>borrow_escalation</code> 管三级催收阶梯，<code>governance_sla</code> 管治理队列时效——四个模块全部从「东西还没回来」切进去，没有一个从「卖家当初允许借多久」切进去。</p>
     {% if not borrow_days_shape.has_data %}
     <div class="empty-inline">{{ borrow_days_shape.summary }}</div>
     {% endif %}
@@ -95,12 +95,12 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何东西。</strong>不加迁移、不加字段、不改 <code>borrow_days</code> 的默认值、不改 1 到 90 的校验、不追改任何一笔历史订单、不动催收阶梯。<strong>不报「这个字段被改过几次」</strong>——<code>Item.updated_at</code> 会在任何一次保存上刷新，包括将来的任何字段变更，拿它推断修改次数是拿噪声当信号；库里没有记录字段变更历史的表，这个数不知道，不编。<strong>改商品的 <code>borrow_days</code> 不追溯旧订单</strong>：一笔已经借出去的订单，它的归还截止时刻在下单那一刻就定了，所以第二节只做「配置档 vs 实际档」的对照，不做任何重算。不按用户排名、不输出用户名、不列商品名、不读自由文本。<strong>不把相关性讲成因果</strong>——配 90 天的商品三天就还，可能是期限形同虚设，也可能这类东西本来就不需要借那么久；<strong>也不把长期限读成「更信任别人」</strong>，一个人可能只是因为懒或者照抄了默认值。</div>
 </section>
 
-<section class="content-card ops-panel mb-4 dispute-evidence-shape-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Evidence shape</span><h2>证据文件的形状</h2></div>
         <span class="ops-panel-hint">争议双方实际传了什么格式、有多大，5 MB 上限是不是在挡人</span>
     </div>
-    <p class="borrow-days-shape-note mb-3"><i class="bi bi-paperclip me-1"></i><code>OrderDisputeEvidence.attachment</code> 上挂着 <code>validate_dispute_evidence</code>——<strong>5 MB 上限、四种扩展名</strong>，这是站内唯一一处把「治理侧要能审阅」写成代码的产品规则。而争议域唯一的读者 <code>dispute_resolution_quality</code> 只数附件条数，<code>attachment.name</code> 与 <code>attachment.size</code> 一次都没有被任何一个数字读到。<strong>一套上线运行的格式规则，运营看不到它的形状</strong>：不知道双方实际传的是什么格式、有多大、有没有人在反复撞 5 MB 上限。</p>
+    <p class="mb-3"><i class="bi bi-paperclip me-1"></i><code>OrderDisputeEvidence.attachment</code> 上挂着 <code>validate_dispute_evidence</code>——<strong>5 MB 上限、四种扩展名</strong>，这是站内唯一一处把「治理侧要能审阅」写成代码的产品规则。而争议域唯一的读者 <code>dispute_resolution_quality</code> 只数附件条数，<code>attachment.name</code> 与 <code>attachment.size</code> 一次都没有被任何一个数字读到。<strong>一套上线运行的格式规则，运营看不到它的形状</strong>：不知道双方实际传的是什么格式、有多大、有没有人在反复撞 5 MB 上限。</p>
     {% if not dispute_evidence_shape.has_data %}
     <div class="empty-inline">{{ dispute_evidence_shape.summary }}</div>
     {% endif %}

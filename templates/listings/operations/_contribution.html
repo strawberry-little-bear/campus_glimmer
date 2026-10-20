@@ -1,12 +1,12 @@
 {% comment %}
 这个分区片段由 operations_dashboard.html 拆分而来，
 只负责此域的面板展示，不包含业务逻辑。
-{% endcomment %}<section class="content-card ops-panel mb-4 contribution-tier-shape-panel">
+{% endcomment %}<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Contribution tier shape</span><h2>积分等级与徽章的门槛形状</h2></div>
         <span class="ops-panel-hint">五级等级各自有多少人、七枚徽章各自有多少人拿到，以及哪一类行为在发分</span>
     </div>
-    <p class="contribution-tier-shape-note mb-3"><i class="bi bi-trophy me-1"></i><code>CommunityContribution</code> 是站内唯一一套完整的游戏化体系：六种贡献类型、一份积分权重表、五级积分门槛（<code>CONTRIBUTION_LEVELS</code>）、七枚徽章（<code>CONTRIBUTION_BADGE_RULES</code>），加一条幂等写入（<code>source_key</code> 唯一约束 + <code>get_or_create</code>）。运营侧原本唯一的读者 <code>analytics._build_contribution_insights</code> 只报周期内的积分总量、事件数、人数、按类型分布、每日趋势和前 8 名——<strong>全是流量口径，那三张规则表从来没有被任何一个数字碰过。</strong>于是一套上线运行的等级体系，运营看不到它的形状。</p>
+    <p class="mb-3"><i class="bi bi-trophy me-1"></i><code>CommunityContribution</code> 是站内唯一一套完整的游戏化体系：六种贡献类型、一份积分权重表、五级积分门槛（<code>CONTRIBUTION_LEVELS</code>）、七枚徽章（<code>CONTRIBUTION_BADGE_RULES</code>），加一条幂等写入（<code>source_key</code> 唯一约束 + <code>get_or_create</code>）。运营侧原本唯一的读者 <code>analytics._build_contribution_insights</code> 只报周期内的积分总量、事件数、人数、按类型分布、每日趋势和前 8 名——<strong>全是流量口径，那三张规则表从来没有被任何一个数字碰过。</strong>于是一套上线运行的等级体系，运营看不到它的形状。</p>
     {% if not contribution_tier_shape.has_data %}
     <div class="empty-inline">{{ contribution_tier_shape.summary }}</div>
     {% endif %}
@@ -157,7 +157,7 @@
     {% endif %}
 </section>
 
-<section class="content-card ops-panel mb-4 contribution-milestone-coverage-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Contribution milestone coverage</span><h2>贡献里程碑覆盖审计</h2></div>
         <span class="ops-panel-hint">稳定重放贡献流水，核对首次跨越事实有没有漏记或错记</span>
@@ -240,7 +240,7 @@
     {% endif %}
 </section>
 
-<section class="content-card ops-panel mb-4 contribution-milestone-phase-rhythm-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Contribution milestone phase rhythm</span><h2>贡献里程碑阶段节奏</h2></div>
         <span class="ops-panel-hint">同类学期的同一已结束阶段才互相对照</span>

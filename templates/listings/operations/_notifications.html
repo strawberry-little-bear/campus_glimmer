@@ -266,7 +266,7 @@
     {% endif %}
 </section>
 
-<section class="content-card ops-panel mb-4 notification-preference-bypass-diagnosis-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Preference bypass diagnosis</span><h2>通知偏好关了为什么还看得到</h2></div>
         <span class="ops-panel-hint">把正常残留和偏好写入后仍出现分开</span>
@@ -305,12 +305,12 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读结构化时间戳和布尔开关，不读通知标题、不读正文、不输出用户名、不按用户排名，也不把结果用于自动风控、信誉或排名。异常类型需要回到对应写入路径检查调度和数据导入历史；这里不自动打开开关、不发送提醒、不生成催办。</div>
 </section>
 
-<section class="content-card ops-panel mb-4 notification-quiet-hours-shape-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Quiet hours shape</span><h2>免打扰时段的形状</h2></div>
         <span class="ops-panel-hint">用户把窗口配在什么时候、多长、几点叠出峰值</span>
     </div>
-    <p class="notification-quiet-hours-shape-note mb-3"><i class="bi bi-moon-stars me-1"></i><code>quiet_hours_enabled</code> 已经被上一块面板当成一个开关读过，但 <code>quiet_hours_start</code> 与 <code>quiet_hours_end</code> 此前没有任何数字读者。只报开启率会把一个 1 小时窗口和一个 23 小时窗口读成同一件事，也看不出多个窗口在一天里什么时候叠出峰值。本面板按快照读偏好行，把每个生效窗口映射到 1440 个分钟格子上。</p>
+    <p class="mb-3"><i class="bi bi-moon-stars me-1"></i><code>quiet_hours_enabled</code> 已经被上一块面板当成一个开关读过，但 <code>quiet_hours_start</code> 与 <code>quiet_hours_end</code> 此前没有任何数字读者。只报开启率会把一个 1 小时窗口和一个 23 小时窗口读成同一件事，也看不出多个窗口在一天里什么时候叠出峰值。本面板按快照读偏好行，把每个生效窗口映射到 1440 个分钟格子上。</p>
     {% if not notification_quiet_hours_shape.has_data %}
     <div class="empty-inline">{{ notification_quiet_hours_shape.summary }}</div>
     {% else %}

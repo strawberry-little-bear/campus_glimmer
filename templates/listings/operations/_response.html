@@ -161,7 +161,7 @@
                     <td>{{ row.opened }}</td>
                     <td>{{ row.open_rate }}%</td>
                     <td>{{ row.median_label }}</td>
-                    <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                    <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -185,7 +185,7 @@
                                 <td>{{ row.open_rate }}%</td>
                                 <td>{{ row.median_label }}</td>
                                 <td>{{ row.p90_label }}</td>
-                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -211,7 +211,7 @@
                                 <td>{{ row.open_rate }}%</td>
                                 <td>{{ row.median_label }}</td>
                                 <td>{{ row.p90_label }}</td>
-                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="chat-response-thin">样本不足</span>{% endif %}</td>
+                                <td>{% if row.has_sample %}{{ row.sample_size }}{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -240,7 +240,7 @@
         <div{% if chat_response_trend.drivers %} class="chat-response-trend-warning"{% endif %}><span>有方向的变化</span><strong>{% if chat_response_trend.drivers %}是{% else %}否{% endif %}</strong><small>{% if chat_response_trend.drivers %}{% for row in chat_response_trend.drivers %}{{ row.label }}{% if not forloop.last %}、{% endif %}{% endfor %}{% else %}没有指标越过阈值{% endif %}</small></div>
     </div>
 
-    <div class="chat-response-trend-reading mt-3">
+    <div class="mt-3">
         <div class="chat-response-trend-block-heading"><strong>整体指标的跨周期对比</strong><span>时长按倍数判（{{ chat_response_trend.latency_drift_factor }} 倍），比例按百分点判（{{ chat_response_trend.trend_delta_points }} 个百分点）</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 chat-response-trend-table">

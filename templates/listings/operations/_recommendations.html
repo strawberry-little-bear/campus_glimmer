@@ -15,7 +15,7 @@
         <div><span>反馈率</span><strong>{% if recommendation_quality.feedback_loop.feedback_rate != None %}{{ recommendation_quality.feedback_loop.feedback_rate }}%{% else %}—{% endif %}</strong><small>分母已落库，仍是下界</small></div>
     </div>
 
-    <div class="recommendation-quality-reading mt-3">
+    <div class="mt-3">
         <div class="recommendation-quality-block-heading"><strong>按理由拆</strong><span>一条理由要凑够 {{ recommendation_quality.metrics.min_reason_feedback }} 条反馈才给方向</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-quality-table">
@@ -96,7 +96,7 @@
         <div><span>时间在未来</span><strong>{{ recommendation_impression_quality.summary.future_count }}</strong><small>单列，不进主统计</small></div>
     </div>
 
-    <div class="recommendation-impression-quality-reading mt-3">
+    <div class="mt-3">
         <div class="recommendation-impression-quality-block-heading"><strong>字段与结构</strong><span>匿名、零分和重复都不是错误</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-impression-quality-table">
@@ -163,7 +163,7 @@
         <div><span>同刻重复组</span><strong>{{ opportunity_impression_quality.summary.same_timestamp_pairs }}</strong><small>只提示核对，不自动删除</small></div>
     </div>
 
-    <div class="opportunity-impression-quality-reading mt-3">
+    <div class="mt-3">
         <div class="opportunity-impression-quality-block-heading"><strong>类型分布</strong><span>当前类型固定列出，历史或异常值聚合</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
@@ -255,7 +255,7 @@
         <div><span>重复忽略占比</span><strong>{% if opportunity_dismissal_quality.metrics.repeat_share != None %}{{ opportunity_dismissal_quality.metrics.repeat_share }}%{% else %}—{% endif %}</strong><small>同一条被同一个人再按</small></div>
     </div>
 
-    <div class="opportunity-dismissal-reading mt-3">
+    <div class="mt-3">
         <div class="opportunity-dismissal-block-heading"><strong>按机会类型拆</strong><span>忽略的规模与结构</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
@@ -397,7 +397,7 @@
         <div><span>建过分组的人</span><strong>{% if favorite_collection_quality.penetration.collector_share != None %}{{ favorite_collection_quality.penetration.collector_share }}%{% else %}—{% endif %}</strong><small>分母是有收藏的用户</small></div>
     </div>
 
-    <div class="favorite-collection-reading mt-3">
+    <div class="mt-3">
         <div class="favorite-collection-block-heading"><strong>窗口内新建</strong><span>按 created_at 归期，这一列写进去就不再动</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 favorite-collection-table">

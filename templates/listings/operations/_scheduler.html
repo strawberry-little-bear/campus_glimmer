@@ -344,7 +344,7 @@
     <p class="text-muted mb-0 mt-3">窗口内还没有已记录的定时任务运行。</p>
     {% endif %}
 </section>
-<section class="content-card ops-panel mb-4 task-run-ledger-integrity-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Ledger integrity</span><h2>定时任务台账完整性审计</h2></div>
         <span class="ops-panel-hint">周期 {{ task_run_ledger_integrity.days }} 天·先看台账行能不能支撑后面的调度结论</span>
@@ -361,7 +361,7 @@
     <div class="supply-lifecycle-block mt-3">
         <h3 class="h6 mb-3">二、问题类型</h3>
         <div class="ops-table-wrap">
-            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-integrity-table">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
                 <thead><tr><th>问题类型</th><th>行数</th><th>涉及命令数</th><th>读法</th></tr></thead>
                 <tbody>
                     {% for row in task_run_ledger_integrity.issue_type_rows %}
@@ -381,7 +381,7 @@
     <div class="supply-lifecycle-block mt-3">
         <h3 class="h6 mb-3">三、命令形状</h3>
         <div class="ops-table-wrap">
-            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-integrity-command-table">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
                 <thead><tr><th>命令</th><th>运行</th><th>问题行</th><th>时间问题</th><th>指标问题</th><th>失败备注</th><th>未知键</th><th>名单</th></tr></thead>
                 <tbody>
                     {% for row in task_run_ledger_integrity.command_rows %}
@@ -404,7 +404,7 @@
     <div class="supply-lifecycle-block mt-3">
         <h3 class="h6 mb-3">四、问题行清单</h3>
         <div class="ops-table-wrap">
-            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-integrity-row-table">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
                 <thead><tr><th>台账行</th><th>命令</th><th>开始时间</th><th>问题数</th><th>问题</th></tr></thead>
                 <tbody>
                     {% for row in task_run_ledger_integrity.issue_rows %}

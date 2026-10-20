@@ -1,7 +1,7 @@
 {% comment %}
 这个分区片段由 operations_dashboard.html 拆分而来，
 只负责此域的面板展示，不包含业务逻辑。
-{% endcomment %}<section class="content-card ops-panel mb-4 dashboard-performance-panel">
+{% endcomment %}<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Build observability</span><h2>看板自身构建耗时</h2></div>
         <span class="ops-panel-hint">本次请求 · 不含渲染与下载</span>
@@ -106,7 +106,7 @@
     </div>
 </section>
 
-<section class="content-card ops-panel mb-4 demand-match-quality-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Match quality</span><h2>求购匹配质量</h2></div>
         <span class="ops-panel-hint">平台自己的匹配打分 vs 求购人的真实决定</span>
@@ -149,7 +149,7 @@
         </div>
         <div class="col-lg-5">
             <h3 class="h6 mb-3">可以做什么</h3>
-            {% if demand_match_quality.recommendations %}<div class="ops-mini-summary h-100 demand-match-quality-notes">{% for note in demand_match_quality.recommendations %}<span>建议 {{ forloop.counter }}</span><small>{{ note }}</small>{% endfor %}</div>{% else %}<p class="empty-inline">当前没有需要跟进的匹配质量问题。</p>{% endif %}
+            {% if demand_match_quality.recommendations %}<div class="ops-mini-summary h-100">{% for note in demand_match_quality.recommendations %}<span>建议 {{ forloop.counter }}</span><small>{{ note }}</small>{% endfor %}</div>{% else %}<p class="empty-inline">当前没有需要跟进的匹配质量问题。</p>{% endif %}
             <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>这里只报告，不改匹配权重、不改任何门槛、也不把统计写回响应记录。</p>
         </div>
     </div>
@@ -218,7 +218,7 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>反馈只用于运营观察和公开信誉摘要的聚合统计，不公开反馈原文、互助对象或私信内容。</div>
 </section>
 
-<section class="content-card ops-panel mb-4 mutual-aid-notes-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Feedback notes</span><h2>互助反馈的补充说明</h2></div>
         <span class="ops-panel-hint">四个固定标签旁边那个五百字的文本框，第一次被打开</span>

@@ -78,7 +78,7 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读搜索曝光、搜索点击、收藏和预约的发生时间，<strong>不读 <code>BrowsingHistory.view_count</code></strong>——浏览历史里的浏览次数是累计聚合，不是逐次浏览事件，切开看会像很精确、实际无法核对。输出不包含用户、商品标题、搜索词或订单号，不排名、不建议自动刷新，也不把统计写回推荐或风控；后窗高于前窗只表示共同变化，不解释为因果提升。</div>
 </section>
 
-<section class="content-card ops-panel mb-4 price-response-panel" id="price-response">
+<section class="content-card ops-panel mb-4" id="price-response">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Price response</span><h2>价格调整后的搜索回响</h2></div>
         <span class="ops-panel-hint">只对照调价前后各 72 小时</span>
@@ -188,7 +188,7 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本面板只读 <code>SearchImpression</code>、<code>SearchClick</code>、<code>Favorite</code> 和 <code>Order</code> 的时间；刻意不读累计的 <code>BrowsingHistory.view_count</code>，也不输出用户名、商品标题、描述、搜索词、订单号或通知原文。后窗高于前窗不代表调价带来因果提升，本面板不预测价格、不自动改价、不给卖家定价评分。</div>
 </section>
 
-<section class="content-card ops-panel mb-4 category-price-reference-panel" id="category-price-reference">
+<section class="content-card ops-panel mb-4" id="category-price-reference">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Category price reference</span><h2>分类调价参考</h2></div>
         <span class="ops-panel-hint">当前价格快照，不按看板周期过滤</span>
@@ -206,7 +206,7 @@
     <div class="ops-panel-block">
         <h3 class="h6 mb-3">分类价格参考</h3>
         <div class="table-responsive">
-            <table class="table table-sm align-middle ops-table category-price-reference-table">
+            <table class="table table-sm align-middle ops-table">
                 <thead><tr><th>分类</th><th>样本</th><th>中位数</th><th>常见区间</th><th>当前在售</th><th>低于 / 区间内 / 高于</th><th>区间外</th><th>宽度</th><th>状态与读法</th></tr></thead>
                 <tbody>
                     {% for row in category_price_reference.rows %}
@@ -230,7 +230,7 @@
     {% endif %}
 </section>
 
-<section class="content-card ops-panel mb-4 price-change-quality-panel" id="price-change-quality">
+<section class="content-card ops-panel mb-4" id="price-change-quality">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Price change quality</span><h2>出售价格轨迹质量</h2></div>
         <span class="ops-panel-hint">卖家改价的方向、幅度、重复调价与当前分类视图</span>

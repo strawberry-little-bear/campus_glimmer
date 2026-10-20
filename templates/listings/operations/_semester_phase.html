@@ -14,7 +14,7 @@
         <div class="phase-preparation-warning"><span>节奏偏慢</span><strong>{{ academic_phase_supply_preparation.slow_total }}</strong><small>当前 {{ academic_phase_supply_preparation.preparation_days }} 天新增未到基准 {{ academic_phase_supply_preparation.pace_threshold_percent }}%</small></div>
     </div>
 
-    <div class="phase-preparation-reading mt-3">
+    <div class="mt-3">
         <div class="phase-preparation-block-heading">
             <strong>分类预热表</strong>
             <span>基准：{{ academic_phase_supply_preparation.benchmark_start_date|date:"Y-m-d" }} 至 {{ academic_phase_supply_preparation.benchmark_end_date|date:"Y-m-d" }}；当前窗口：{{ academic_phase_supply_preparation.lead_start_date|date:"Y-m-d" }} 至 {{ academic_phase_supply_preparation.lead_end_date|date:"Y-m-d" }}</span>
@@ -65,7 +65,7 @@
         <div><span>结束过早的阶段</span><strong>{{ academic_term_snapshot_quality.metrics.stale_total }}</strong><small>结束 {{ academic_term_snapshot_quality.metrics.stale_threshold_days }} 天以上</small></div>
     </div>
 
-    <div class="snapshot-quality-reading mt-3">
+    <div class="mt-3">
         <div class="snapshot-quality-block-heading"><strong>这张表本身</strong><span>分子分母见每张表下方</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">

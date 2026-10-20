@@ -131,7 +131,7 @@
     {% endif %}
 </section>
 
-<section class="content-card ops-panel mb-4 meeting-service-window-quality-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Service window audit</span><h2>交付开放时段风险</h2></div>
         <span class="ops-panel-hint">只看未来安排，按登记规则重新解释</span>
@@ -169,7 +169,7 @@
             <td>{{ row.start_at|date:'m-d H:i' }} — {{ row.end_at|date:'H:i' }}</td>
             <td>{{ row.status_label }}</td>
             <td>{{ row.kind_label }}</td>
-            <td class="meeting-service-window-reason">{{ row.reason }}</td>
+            <td>{{ row.reason }}</td>
         </tr>
         {% endfor %}
     </tbody></table></div>
@@ -183,7 +183,7 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>{{ meeting_service_window_quality.boundary_note }}清单只带订单号、地点和时间，不带用户名、商品标题或联系方式；页面与 CSV 共用同一个构建器。</div>
 </section>
 
-<section class="content-card ops-panel mb-4 campus-service-rule-quality-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Service rule audit</span><h2>校园开放规则配置审计</h2></div>
         <span class="ops-panel-hint">先解释规则形状，再交给人工确认</span>
@@ -221,7 +221,7 @@
             <td>{{ row.location_active_label }}</td>
             <td>{{ row.signal_label }}</td>
             <td>{{ row.config }}</td>
-            <td class="meeting-service-window-reason">{{ row.reason }}</td>
+            <td>{{ row.reason }}</td>
         </tr>
         {% endfor %}
     </tbody></table></div>

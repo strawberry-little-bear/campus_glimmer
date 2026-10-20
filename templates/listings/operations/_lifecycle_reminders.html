@@ -62,7 +62,7 @@
                 <div class="supply-lifecycle-block-heading"><strong>按商品分类看行动率</strong><span>按名称排列，不按行动率排名</span></div>
                 {% if lifecycle_reminder_effect.category_rows %}
                 <div class="ops-table-wrap">
-                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-category-table">
+                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
                         <thead><tr><th>分类</th><th>商品</th><th>对应通知</th><th>已读</th><th>刷新</th><th>终态</th><th>有动作</th><th>行动率</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in lifecycle_reminder_effect.category_rows %}
@@ -89,7 +89,7 @@
                 <div class="supply-lifecycle-block-heading"><strong>按本周期被提醒件数看行动率</strong><span>这是提醒负担，不是卖家库存规模</span></div>
                 {% if lifecycle_reminder_effect.seller_load_rows %}
                 <div class="ops-table-wrap">
-                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-seller-load-table">
+                    <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
                         <thead><tr><th>本周期被提醒件数</th><th>卖家</th><th>商品</th><th>已读</th><th>有动作</th><th>行动率</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in lifecycle_reminder_effect.seller_load_rows %}
@@ -213,7 +213,7 @@
         </ul>
     </div>
 </section>
-<section class="content-card ops-panel mb-4 lifecycle-reminder-term-trend-panel">
+<section class="content-card ops-panel mb-4">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Term trend</span><h2>生命周期提醒的跨学期终态转化</h2></div>
         <span class="ops-panel-hint">回看 {{ lifecycle_reminder_term_trend.days }} 天·同一阶段对比相邻学期</span>
@@ -229,7 +229,7 @@
     <div class="supply-lifecycle-block mt-3">
         <div class="supply-lifecycle-block-heading"><strong>同学期阶段的终态转化</strong><span>相差 {{ lifecycle_reminder_term_trend.gap_points }} 个百分点才标记值得回看</span></div>
         <div class="ops-table-wrap">
-            <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-term-trend-table">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
                 <thead><tr><th>阶段</th><th>学期</th><th>事件 / 商品 / 卖家</th><th>重复提醒比</th><th>终态动作</th><th>与上一学期</th><th>读数</th></tr></thead>
                 <tbody>
                     {% for group in lifecycle_reminder_term_trend.phase_groups %}
