@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}商品举报审核 - 拾光校园{% endblock %}
 {% block content %}
-<div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust & safety</span><h1 class="mt-2">商品举报审核</h1><p class="text-muted mb-0">集中核查社区反馈，保留处理依据，让每一次治理都有迹可循。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
+<div class="page-intro operations-heading"><div><span class="eyebrow eyebrow-soft">Trust & safety</span><h1 class="mt-2">商品举报审核</h1><p class="text-muted mb-0">集中核查社区反馈，保留处理依据，让每一次治理都有迹可循。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
 <div class="report-queue-note mb-4"><i class="bi bi-flag me-2"></i>当前有 <strong>{{ pending_report_count }}</strong> 条举报待处理或审核中，其中 <strong>{{ priority_counts.urgent }}</strong> 条建议优先查看。</div>
 <div class="report-priority-summary mb-4">
     <div class="{% if priority_counts.urgent %}is-urgent{% endif %}"><span>{{ priority_labels.urgent }}</span><strong>{{ priority_counts.urgent }}</strong><small>疑似诈骗且商品仍在售</small></div>

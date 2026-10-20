@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}交易争议处理 - 拾光校园{% endblock %}
 {% block content %}
-<div class="page-heading operations-heading"><div><span class="eyebrow eyebrow-soft">Trust & safety</span><h1 class="mt-2">交易争议处理</h1><p class="text-muted mb-0">核实交易双方的反馈，留下可回溯的处理意见。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
+<div class="page-intro operations-heading"><div><span class="eyebrow eyebrow-soft">Trust & safety</span><h1 class="mt-2">交易争议处理</h1><p class="text-muted mb-0">核实交易双方的反馈，留下可回溯的处理意见。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
 <div class="dispute-queue-note mb-4"><i class="bi bi-inbox me-2"></i>当前有 <strong>{{ pending_dispute_count }}</strong> 条争议待处理或处理中</div>
 <section class="dispute-list">
 {% for dispute in disputes %}

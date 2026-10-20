@@ -6083,34 +6083,14 @@ a { color: inherit; text-decoration: none; }
 /* --------------------------------------------------------------------------
    历史标题类名对齐与消息会话页
 
-   .page-heading 是早期模板留下的类名，CSS 里从未定义，18 个页面的标题区
-   因此退回到浏览器默认样式。这里按 .page-intro 的规则补齐别名，让申诉、
-   举报、纠纷、治理等页面与全站标题层级一致。
+   .page-heading 是早期模板留下的类名，现行标准是 .page-intro。曾经给前者补过一套
+   别名规则，但两个类名并存本身就是当初漏掉样式的根源；现在 9 个模板已全部改用
+   .page-intro，别名规则随之删除，全站页头只剩一个类名。
 
    会话页（conversation）此前直接使用 Bootstrap 卡片，且消息气泡类
    （.message-bubble / .chat-messages）在 CSS 中并不存在，聊天流实际处于
    无样式状态。以下补齐会话布局、气泡、回复表单与删除/售出确认页样式。
    -------------------------------------------------------------------------- */
-.page-heading {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: end;
-    justify-content: space-between;
-    gap: 1rem;
-}
-
-.page-heading h1 {
-    margin: 4px 0 0;
-    font-size: clamp(1.45rem, 3vw, 2rem);
-    letter-spacing: -.04em;
-    font-weight: 800;
-}
-
-.page-heading p {
-    margin: 8px 0 0;
-    color: var(--muted);
-    font-size: .85rem;
-}
 
 /* 会话页整体骨架 */
 .thread-page {
