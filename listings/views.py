@@ -505,23 +505,46 @@ def _live_campaigns(now=None):
     )
 
 
+def _campaign_available_item_counts(campaign_ids, now):
+    """按专题分组统计「当前可参加」的商品数。
+
+    只碰 `Item` 一张表，按 `campaign_id` 分组：分组键就是被计数的行本身，
+    不存在跨关系的行复制，可以安全地和下面那次报名计数分开成两条查询。
+    """
+    if not campaign_ids:
+        return {}
+    rows = (
+        Item.objects
+        .filter(campaign_id__in=campaign_ids, status='available')
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .values('campaign_id')
+        .annotate(count=Count('id'))
+    )
+    return {row['campaign_id']: row['count'] for row in rows}
+
+
+def _campaign_active_registration_counts(campaign_ids):
+    """按专题分组统计「仍在生效」的报名数。只碰报名表一张表。"""
+    if not campaign_ids:
+        return {}
+    rows = (
+        CampaignRegistration.objects
+        .filter(campaign_id__in=campaign_ids, is_active=True)
+        .values('campaign_id')
+        .annotate(count=Count('id'))
+    )
+    return {row['campaign_id']: row['count'] for row in rows}
+
+
 def campaign_list(request):
     now = timezone.now()
-    campaigns = _live_campaigns(now).annotate(
-        available_item_count=Count(
-            'items',
-            filter=(
-                Q(items__status='available')
-                & (Q(items__expires_at__isnull=True) | Q(items__expires_at__gt=now))
-            ),
-            distinct=True,
-        ),
-        active_registration_count=Count(
-            'registrations',
-            filter=Q(registrations__is_active=True),
-            distinct=True,
-        ),
-    ).order_by('-starts_at', 'title')
+    campaigns = list(_live_campaigns(now).order_by('-starts_at', 'title'))
+    campaign_ids = [campaign.pk for campaign in campaigns]
+    item_counts = _campaign_available_item_counts(campaign_ids, now)
+    registration_counts = _campaign_active_registration_counts(campaign_ids)
+    for campaign in campaigns:
+        campaign.available_item_count = item_counts.get(campaign.pk, 0)
+        campaign.active_registration_count = registration_counts.get(campaign.pk, 0)
     return render(request, 'listings/campaign_list.html', {
         'campaigns': campaigns,
         'title': '校园专题',
