@@ -6891,3 +6891,35 @@ a { color: inherit; text-decoration: none; }
     .my-items-tab { flex: 1 1 auto; padding: 9px 8px; font-size: .76rem; }
     .my-items-pane { padding: 12px; }
 }
+
+/* --------------------------------------------------------------------------
+   补上模板在用、CSS 从未定义的类名
+
+   这些类名散落在几个页面里，此前一直处于无样式状态：有的只是语义钩子，
+   有的承担了实际布局（impact-page 的子元素、profile-edit-form 的两栏与
+   操作区、demand-radar-main 在 grid 轨道里需要 min-width:0 才不会被长文本
+   撑破）。一并补齐，并保持与各页既有配色一致。
+   -------------------------------------------------------------------------- */
+.section-title { margin: 6px 0 0; color: #29463a; font-size: 1.02rem; font-weight: 800; letter-spacing: -.02em; }
+
+.seller-card { border-color: #dcece1; background: linear-gradient(150deg, #f8fcf9, #fff); }
+
+.lost-found-side-card { border-color: #e2ebe5; background: linear-gradient(160deg, #f8fcf9, #fff); }
+
+.bulk-listing-row { border-color: var(--line); border-radius: 16px; background: #fbfdfb; }
+
+.dispute-form-card { border-color: #f0dfc7; background: linear-gradient(165deg, #fffdf7, #fff); }
+
+.impact-page { display: grid; gap: 18px; }
+.impact-page .impact-stat-grid { margin-top: 0; }
+.impact-page > .row { margin-top: 0; }
+
+.profile-edit-form { display: grid; gap: 18px; }
+.profile-edit-form .profile-edit-actions { margin-top: 0; }
+
+.demand-radar-main { min-width: 0; }
+
+/* 关注搜索与会话页的页头：说明文字限定宽度，
+   否则右侧只有一枚按钮时，整段文案会被拉成横向长条。 */
+.saved-search-heading > div,
+.thread-intro > div { max-width: 640px; }
