@@ -378,3 +378,110 @@ class VendoredStaticAssetTests(SimpleTestCase):
         # 中文优先的系统栈：各平台都有完整字形覆盖，零请求、零 FOUT
         for family in ('PingFang SC', 'Microsoft YaHei', 'system-ui'):
             self.assertIn(family, css)
+
+
+class TemplateStylesheetContractTests(SimpleTestCase):
+    """模板里写上的每个自定义类名，都必须能在样式表里找到对应规则。
+
+    运营看板是逐个分区长出来的，随之长出了一批「只有一个面板在用」的类名：
+    类名写进了模板，样式却始终没有补上。这类类名不产生任何效果，
+    却让人以为面板已经被单独调过；清理时只能靠肉眼逐个比对，成本很高。
+
+    同一套检查还排除过另外两类只在浏览器里才暴露的问题：
+
+    1. 图标类名写错：Bootstrap Icons 没有对应字形时页面不会报错，
+       只会安静地渲染出一个空白占位，首页统计条上尤其显眼。
+    2. 状态修饰类拼写漂移：账户中心的统计卡片靠 is-warm / is-blue / is-gold
+       区分色相，拼错一个就静默掉回默认主色。
+    """
+
+    TEMPLATES_DIR = PROJECT_ROOT / 'templates'
+    VENDOR_DIR = PROJECT_ROOT / 'static' / 'vendor'
+    STYLESHEET = PROJECT_ROOT / 'static' / 'css' / 'style.css'
+
+    # 这些类名不承担样式，是行为钩子：JS 或测试按它们定位元素，
+    # 删掉不会改变观感，却会直接搞坏功能。
+    BEHAVIOUR_HOOKS = frozenset({
+        'bulk-item-checkbox',        # my_items.html 内联 onclick 的批量选择
+        'confirm-delete',            # static/js/main.js 删除确认
+        'message-select',            # inbox.html 内联脚本的消息多选
+        'notification-bulk-submit',  # notifications.html 内联脚本的批量已读
+        'operations-panels',         # main.js 懒加载看板分区
+    })
+    # 测试按这些类名截取页面片段，属于对外契约
+    TEXT_ANCHORS = frozenset({
+        'chat-trade-correlation-panel',
+        'search-exposure-cold-start-panel',
+    })
+    # 设计文档里按这个名字记载过记录，改名会同时让文档失效
+    DOCUMENTED_NAMES = frozenset({
+        'mutual-aid-feedback-panel',
+        'notification-preference-usage-panel',
+    })
+
+    HTML_COMMENT = re.compile(r'<!--.*?-->', re.S)
+    DYNAMIC_CLASS = re.compile(r'\{%[^%]*%\}|\{\{[^}]*\}\}')
+    CLASS_ATTR = re.compile(r'class="([^"]*)"')
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.vendored = set()
+        for css in sorted(cls.VENDOR_DIR.glob('*.css')):
+            cls.vendored.update(
+                re.findall(r'\.([a-zA-Z][\w-]*)', css.read_text(encoding='utf-8'))
+            )
+        cls.ours = set(
+            re.findall(r'\.([a-zA-Z][\w-]*)', cls.STYLESHEET.read_text(encoding='utf-8'))
+        )
+        cls.allowed = cls.BEHAVIOUR_HOOKS | cls.TEXT_ANCHORS | cls.DOCUMENTED_NAMES
+
+    def test_vendored_stylesheets_are_readable(self):
+        # 前置条件：拉不到 vendor 类名表时，下面的断言会把所有
+        # Bootstrap 类名当成未定义，报错信息就会失真。
+        self.assertIn('btn-primary', self.vendored)
+        self.assertIn('row', self.vendored)
+        self.assertIn('bi-search', self.vendored)
+        self.assertIn('account-stat-icon', self.ours)
+
+    def test_every_custom_class_token_has_a_rule(self):
+        missing = []
+        for template in sorted(self.TEMPLATES_DIR.rglob('*.html')):
+            text = self.HTML_COMMENT.sub(' ', template.read_text(encoding='utf-8'))
+            for attr in self.CLASS_ATTR.findall(text):
+                # class 里带模板语法时无法静态判断最终类名，整条跳过
+                if self.DYNAMIC_CLASS.search(attr):
+                    continue
+                for token in attr.split():
+                    if token in self.vendored or token in self.ours:
+                        continue
+                    if token in self.allowed:
+                        continue
+                    missing.append('%s -> %s' % (
+                        template.relative_to(self.TEMPLATES_DIR).as_posix(), token))
+
+        self.assertEqual(
+            missing, [],
+            '以下类名在模板里用了，但 style.css 没有对应规则（不会有任何效果）：\n'
+            + '\n'.join('  ' + item for item in sorted(missing)),
+        )
+
+    def test_icon_classes_exist_in_the_vendored_icon_font(self):
+        icons = (self.VENDOR_DIR / 'bootstrap-icons.min.css').read_text(encoding='utf-8')
+        defined = set(re.findall(r'\.(bi-[\w-]+)', icons))
+        broken = []
+        for template in sorted(self.TEMPLATES_DIR.rglob('*.html')):
+            text = self.HTML_COMMENT.sub(' ', template.read_text(encoding='utf-8'))
+            for token in re.findall(r'\bbi-([\w-]+)', text):
+                name = 'bi-' + token
+                if name in defined:
+                    continue
+                broken.append('%s -> %s' % (
+                    template.relative_to(self.TEMPLATES_DIR).as_posix(), name))
+
+        self.assertEqual(
+            broken, [],
+            '以下图标类名在已引入的 Bootstrap Icons 里没有字形，'
+            '页面会安静地渲染成空白：\n'
+            + '\n'.join('  ' + item for item in sorted(broken)),
+        )
