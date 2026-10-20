@@ -13,3 +13,6 @@ media/
 !.env.example
 !.env.production.example
 backups/
+
+# 仓库根目录下的本机临时脚本、日志与截图（以 _ 开头），不要进版本库
+/_*
