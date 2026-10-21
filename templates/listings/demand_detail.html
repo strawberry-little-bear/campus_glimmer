@@ -34,7 +34,7 @@
     </div>
     <div class="col-lg-4">
         <aside class="content-card demand-side-card">
-            <div class="seller-profile"><img class="avatar-lg" src="{{ demand.requester.profile.avatar.url }}" alt="{{ demand.requester.username }}"><div><h5><a href="{% url 'public_profile' demand.requester.id %}" class="text-decoration-none text-reset">{{ demand.requester.username }}</a></h5><small>求购发布者</small></div></div>
+            <div class="seller-profile"><img class="avatar-lg" src="{{ demand.requester.profile.avatar.url }}" alt="{{ demand.requester.username }}"><div><h2><a href="{% url 'public_profile' demand.requester.id %}" class="text-decoration-none text-reset">{{ demand.requester.username }}</a></h2><small>求购发布者</small></div></div>
             <p class="seller-bio">如果你有符合条件的商品，可以直接响应求购，发布者确认后再进入商品页面完成预约。</p>
             <div class="d-flex gap-2 mt-3"><a class="btn btn-light flex-grow-1" href="{% url 'public_profile' demand.requester.id %}"><i class="bi bi-person-lines-fill me-1"></i>交易档案</a>{% if user.is_authenticated and demand.requester_id != user.id and demand.status == 'active' %}<a class="btn btn-outline-primary flex-grow-1" href="{% url 'send_message' demand.requester.id %}">发起私信</a>{% endif %}</div>
         </aside>
@@ -49,7 +49,7 @@
         <article class="content-card p-3">
             <div class="d-flex justify-content-between gap-3 align-items-start">
                 <div>
-                    <h5 class="mb-1"><a href="{% url 'item_detail' response.item.id %}">{{ response.item.title }}</a></h5>
+                    <h3 class="h5 mb-1"><a href="{% url 'item_detail' response.item.id %}">{{ response.item.title }}</a></h3>
                     <div class="small text-muted">{{ response.responder.username }} · 匹配分 {{ response.match_score }} · {{ response.match_reason }}</div>
                 </div>
                 <span class="badge {% if response.status == 'accepted' %}text-bg-success{% elif response.status == 'rejected' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">{{ response.get_status_display }}</span>
@@ -60,7 +60,7 @@
                 <form method="post" action="{% url 'review_demand_response' response.id 'accept' %}">{% csrf_token %}<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2 me-1"></i>确认匹配</button></form>
                 <form method="post" action="{% url 'review_demand_response' response.id 'reject' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" type="submit">暂不采纳</button></form>
             </div>
-            {% elif response.status == 'accepted' %}<div class="small text-success mt-2">已确认匹配，请进入商品详情继续完成预约或领取申请。</div>{% if response.feedback %}<div class="mutual-aid-feedback-summary mt-3"><strong><i class="bi bi-check2-all me-1"></i>互助结果：{{ response.feedback.get_outcome_display }}</strong>{% if response.feedback.tags %}<div class="small text-muted mt-1">{% for tag in response.feedback.tags %}{% for value, label in response.feedback.TAG_CHOICES %}{% if tag == value %}<span class="badge rounded-pill text-bg-light me-1">{{ label }}</span>{% endif %}{% endfor %}{% endfor %}</div>{% endif %}</div>{% elif is_demand_owner and demand_feedback_form %}<div class="content-card mt-3 p-3 bg-light-subtle"><div class="small fw-semibold mb-2">这次互助后来怎么样了？</div><form method="post" action="{% url 'submit_demand_feedback' response.id %}">{% csrf_token %}{% for field in demand_feedback_form %}<div class="mb-2"><label class="form-label small">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}<button class="btn btn-sm btn-success" type="submit">记录互助结果</button></form></div>{% endif %}{% endif %}
+            {% elif response.status == 'accepted' %}<div class="small text-success mt-2">已确认匹配，请进入商品详情继续完成预约或领取申请。</div>{% if response.feedback %}<div class="mutual-aid-feedback-summary mt-3"><strong><i class="bi bi-check2-all me-1"></i>互助结果：{{ response.feedback.get_outcome_display }}</strong>{% if response.feedback.tags %}<div class="small text-muted mt-1">{% for tag in response.feedback.tags %}{% for value, label in response.feedback.TAG_CHOICES %}{% if tag == value %}<span class="badge rounded-pill text-bg-light me-1">{{ label }}</span>{% endif %}{% endfor %}{% endfor %}</div>{% endif %}</div>{% elif is_demand_owner and demand_feedback_form %}<div class="content-card mt-3 p-3 bg-light-subtle"><div class="small fw-semibold mb-2">这次互助后来怎么样了？</div><form method="post" action="{% url 'submit_demand_feedback' response.id %}">{% csrf_token %}{% for field in demand_feedback_form %}<div class="mb-2"><label for="{{ field.id_for_label }}" class="form-label small">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}<button class="btn btn-sm btn-success" type="submit">记录互助结果</button></form></div>{% endif %}{% endif %}
         </article>
         {% endfor %}
     </div>
@@ -82,7 +82,7 @@
                 {% else %}
                 <form method="post" action="{% url 'respond_to_demand' demand.id item.id %}">
                     {% csrf_token %}
-                    <label class="form-label small mb-1">告诉求购者为什么适合</label>
+                    <label for="id_message" class="form-label small mb-1">告诉求购者为什么适合</label>
                     {{ demand_response_form.message }}
                     <button class="btn btn-sm btn-primary mt-2 w-100" type="submit"><i class="bi bi-send me-1"></i>用这件商品响应</button>
                 </form>

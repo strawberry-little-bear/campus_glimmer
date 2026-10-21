@@ -64,7 +64,7 @@
             </div>
             {% else %}<div class="mod-event-reviewed">复核人：{{ event.reviewed_by.username|default:'—' }} · {{ event.reviewed_at|date:'Y-m-d H:i' }}</div>{% endif %}
         </article>
-        {% empty %}<div class="empty-state py-5"><i class="bi bi-shield-check display-6 d-block mb-3"></i><h3>当前筛选下没有审核记录</h3><p>换个筛选条件，或者去运营看板看看整体拦截趋势。</p></div>{% endfor %}
+        {% empty %}<div class="empty-state py-5"><i class="bi bi-shield-check display-6 d-block mb-3"></i><h2 class="h3">当前筛选下没有审核记录</h2><p>换个筛选条件，或者去运营看板看看整体拦截趋势。</p></div>{% endfor %}
     </div>
 </section>
 {% endblock %}
