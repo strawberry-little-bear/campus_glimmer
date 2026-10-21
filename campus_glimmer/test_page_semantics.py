@@ -12,15 +12,22 @@ h1 之后直接跳了五级；卡片标题用 h3，让整个列表页从 h1 跳�
 这里用 Django test client 渲染同一批页面，再配一个 stdlib 的轻量 DOM 做同样的
 检查。没有新依赖，跑起来是秒级，可以挂在每次提交上。
 
-三类检查各有分工：
+四类检查各有分工：
 
 1. TemplateHeadingOrderTests 只读模板文件，不渲染。它能在没有数据、没有请求的
    情况下发现标题跳级，覆盖浏览器审计够不到的分支（空状态、他人视角）。
 2. RenderedPageSemanticsTests 用一套演示数据把主要页面都渲染一遍，检查表单
-   控件有没有标签、可交互元素有没有可访问名称、图片有没有 alt。这三项只有在
-   真实 DOM 里才查得出来，静态扫描给不出答案。
+   控件有没有标签、可交互元素有没有可访问名称、图片有没有 alt，以及 id 引用
+   是否完整。前两项只有在真实 DOM 里才查得出来，静态扫描给不出答案。
 3. TouchTargetTests 盯导航链接的触控尺寸。鼠标点得中的东西手指不一定点得中，
    而导航是唯一出现在每一页上的交互元素。
+
+第 2 类里的 id 引用完整性是后来补的，起因是一次真实的线上缺陷：Django 的
+BoundField.aria_describedby 会自动拼出 `id_<字段名>_helptext` /
+`id_<字段名>_error`，而模板把 help_text 和错误渲染成了不带 id 的元素，于是
+全站几十个表单的帮助文字和错误提示对读屏软件完全不可见——页面上看不出来，
+DOM 里一抓一个准。重复 id 更隐蔽：HTMLParser 用「不存在才记」的方式收集
+by_id，第二次出现会被静默折叠，上面几类检查对它完全免疫。
 """
 
 import re
@@ -89,20 +96,31 @@ class _TreeBuilder(HTMLParser):
         self.stack = [self.root]
         self.by_id = {}
         self.labelled_ids = set()
+        # 每一次出现都记下来，不折叠。by_id 故意只留第一个，重复 id 会被它
+        # 悄悄吃掉，而重复 id 是真实缺陷：label for / aria-labelledby /
+        # document.getElementById 全都只命中第一个。
+        self.id_occurrences = []
+
+    def _record_id(self, node):
+        node_id = node.attrs.get('id')
+        if node_id:
+            self.id_occurrences.append((node_id, node.tag))
+            if node_id not in self.by_id:
+                self.by_id[node_id] = node
 
     def handle_starttag(self, tag, attrs):
         node = _Node(tag, dict(attrs), self.stack[-1])
         self.stack[-1].children.append(node)
         if tag == 'label' and node.attrs.get('for'):
             self.labelled_ids.add(node.attrs['for'])
-        node_id = node.attrs.get('id')
-        if node_id and node_id not in self.by_id:
-            self.by_id[node_id] = node
+        self._record_id(node)
         if tag not in VOID_TAGS:
             self.stack.append(node)
 
     def handle_startendtag(self, tag, attrs):
-        self.stack[-1].children.append(_Node(tag, dict(attrs), self.stack[-1]))
+        node = _Node(tag, dict(attrs), self.stack[-1])
+        self.stack[-1].children.append(node)
+        self._record_id(node)
 
     def handle_endtag(self, tag):
         for index in range(len(self.stack) - 1, 0, -1):
@@ -193,6 +211,53 @@ def _accessible_name(node, by_id):
         if alt:
             return alt
     return node.attrs.get('value', '').strip()
+
+
+# 这些属性的值是一个或多个 id，指向文档里必须真实存在的元素。
+IDREF_ATTRS = (
+    'for', 'aria-labelledby', 'aria-describedby', 'aria-controls',
+    'aria-owns', 'aria-details', 'aria-errormessage', 'aria-flowto',
+)
+
+
+def _id_reference_problems(html):
+    """返回 (重复 id, 悬空或空的 id 引用) 两组问题。
+
+    两类都是「页面不报错、只有辅助技术受害」的缺陷：
+
+    - 重复 id：第二个同名元素对 label for / aria-labelledby / JS 查询都不存在，
+      用户点标签聚焦到的是另一个控件。
+    - 悬空引用：for / aria-* 指向一个不存在的 id。Django 的
+      BoundField.aria_describedby 会自动拼 `id_<字段名>_helptext` 和
+      `id_<字段名>_error`，模板只要把帮助文字、错误提示渲染成不带 id 的元素，
+      引用就全悬空——帮助文字和错误提示对读屏软件直接消失。
+    - 空引用：for="" 这种。Django 的 RadioSelect.id_for_label 刻意返回空串，
+      模板无条件写 for="{{ field.id_for_label }}" 就会得到 for=""。
+    """
+    builder = _parse(html)
+
+    occurrences = {}
+    for node_id, tag in builder.id_occurrences:
+        occurrences.setdefault(node_id, []).append(tag)
+    duplicates = [
+        'id %s 出现 %d 次（%s）' % (node_id, len(tags), ','.join(tags))
+        for node_id, tags in sorted(occurrences.items()) if len(tags) > 1
+    ]
+
+    dangling = []
+    for node in _iter_nodes(builder.root):
+        for attr in IDREF_ATTRS:
+            if attr not in node.attrs:
+                continue
+            raw = node.attrs.get(attr, '') or ''
+            if not raw.strip():
+                dangling.append('<%s %s=""> 是空引用' % (node.tag, attr))
+                continue
+            for ref in raw.split():
+                if ref and ref not in builder.by_id:
+                    dangling.append('<%s %s=%r> 指向不存在的 id %s' % (
+                        node.tag, attr, raw, ref))
+    return duplicates, dangling
 
 
 def _heading_problems(html):
@@ -418,7 +483,7 @@ class DemoContentMixin:
 
 
 class SemanticsChecksMixin:
-    """四类语义断言，普通用户视角和运营视角共用同一套。"""
+    """六类语义断言，普通用户视角和运营视角共用同一套。"""
 
     # 默认不带参数；需要参数的路由在子类里覆盖。
     ARGS = {}
@@ -470,6 +535,30 @@ class SemanticsChecksMixin:
                 problems.append('%s（%s）：%s 缺少 alt' % (label, name, item))
         self.assertEqual(problems, [], '\n'.join('  ' + item for item in problems))
 
+    def test_ids_are_unique_within_each_page(self):
+        # 重复 id 不会让页面变形，但会让 label for / aria-labelledby /
+        # document.getElementById 全部只命中第一个，用户点标签聚焦到别的控件上。
+        problems = []
+        for label, name, html in self._rendered_pages():
+            duplicates, _ = _id_reference_problems(html)
+            for item in duplicates:
+                problems.append('%s（%s）：%s' % (label, name, item))
+        self.assertEqual(
+            problems, [], '以下页面存在重复 id：\n' + '\n'.join('  ' + item for item in problems))
+
+    def test_id_references_resolve_to_real_elements(self):
+        # for / aria-labelledby / aria-describedby 指向不存在的元素，等于把
+        # 标签、分组名、帮助文字、错误提示全部对读屏软件藏了起来。Django 会按
+        # auto_id 约定自动生成 aria-describedby，模板必须用同一套拼法给帮助
+        # 文字和错误提示补上 id，否则整站表单的辅助信息都是悬空的。
+        problems = []
+        for label, name, html in self._rendered_pages():
+            _, dangling = _id_reference_problems(html)
+            for item in dangling:
+                problems.append('%s（%s）：%s' % (label, name, item))
+        self.assertEqual(
+            problems, [], '以下页面的 id 引用悬空：\n' + '\n'.join('  ' + item for item in problems))
+
     def test_page_list_actually_renders_enough_pages(self):
         # 页面清单是会腐烂的：某个视图改了权限、改了参数，对应条目就会静默
         # 变成 302/403，上面的检查随之少覆盖一个页面，而没有人会注意到。
@@ -485,7 +574,7 @@ class SemanticsChecksMixin:
 class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
     """普通用户视角：登录后能走通的每一类页面。"""
 
-    MIN_RENDERED = 30
+    MIN_RENDERED = 36
 
     PAGES = (
         ('首页', 'home'),
@@ -501,6 +590,14 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         ('求购详情', 'demand_detail'),
         ('失物招领详情（发布者视角）', 'lost_found_detail'),
         ('失物招领详情（访客视角）', 'lost_found_detail'),
+        ('发布商品', 'new_item'),
+        ('发布失物招领', 'new_lost_found'),
+        ('编辑失物招领', 'edit_lost_found'),
+        ('发布求购', 'new_demand'),
+        ('编辑求购', 'edit_demand'),
+        ('批量创建商品', 'bulk_create_items'),
+        ('举报商品', 'report_item'),
+        ('发起交易', 'create_order'),
         ('专题详情', 'campaign_detail'),
         ('我的交易', 'my_orders'),
         ('交易详情', 'order_detail'),
@@ -533,6 +630,10 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         '求购详情': lambda self: [self.demand.id],
         '失物招领详情（发布者视角）': lambda self: [self.owned_lost_found.id],
         '失物招领详情（访客视角）': lambda self: [self.lost_found.id],
+        '编辑失物招领': lambda self: [self.owned_lost_found.id],
+        '编辑求购': lambda self: [self.demand.id],
+        '举报商品': lambda self: [self.item.id],
+        '发起交易': lambda self: [self.item.id],
         '专题详情': lambda self: [self.campaign.slug],
         '交易详情': lambda self: [self.order.id],
         '管理领取申请': lambda self: [self.gift_item.id],
