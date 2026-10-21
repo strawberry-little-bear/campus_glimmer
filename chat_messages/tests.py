@@ -232,6 +232,27 @@ class UnreadSummaryTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(reverse('login'), response.url)
 
+class MessagesRootRouteTests(TestCase):
+    """/messages/ 根路径应该落到收件箱，而不是 404。"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='reader', password='safe-password-123')
+
+    def test_messages_root_renders_inbox_for_authenticated_user(self):
+        self.client.login(username='reader', password='safe-password-123')
+
+        response = self.client.get('/messages/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'chat_messages/inbox.html')
+        self.assertEqual(response.context['received_page'].paginator.count, 0)
+
+    def test_messages_root_redirects_anonymous_visitor_to_login(self):
+        response = self.client.get('/messages/')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response.url)
+
 
 class ModerationFlowTests(TestCase):
     def setUp(self):

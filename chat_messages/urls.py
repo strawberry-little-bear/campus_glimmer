@@ -3,6 +3,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    # /messages/ 不带尾段时直接进收件箱，避免手输根路径吃到 404
+    path('', views.inbox, name='messages_home'),
     path('comment/<int:item_id>/', views.add_comment, name='add_comment'),
     path('inbox/', views.inbox, name='inbox'),
     path('inbox/read-all/', views.mark_all_messages_read, name='mark_all_messages_read'),

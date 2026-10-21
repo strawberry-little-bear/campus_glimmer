@@ -209,3 +209,24 @@ class PublicProfileTests(TestCase):
         self.assertEqual(reputation['rating_count'], 2)
         self.assertEqual(reputation['rating_average'], 4.5)
         self.assertIn('有完成交易记录', reputation['badges'])
+
+
+class AccountsRootRouteTests(TestCase):
+    """/accounts/ 根路径应该落到个人主页，而不是 404。"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='alice', password='strong-password-123')
+
+    def test_accounts_root_renders_profile_for_authenticated_user(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get('/accounts/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'accounts/profile.html')
+
+    def test_accounts_root_redirects_anonymous_visitor_to_login(self):
+        response = self.client.get('/accounts/')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse('login'), response.url)
