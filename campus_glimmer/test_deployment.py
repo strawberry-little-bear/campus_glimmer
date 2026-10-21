@@ -574,3 +574,27 @@ class PanelFootnoteColourTests(SimpleTestCase):
             bases,
             '.rewrite-candidate-footnote 缺少默认颜色，面板外的脚注会掉成继承色',
         )
+
+    def test_footnote_fallback_matches_the_muted_token(self):
+        """面板脚注的回落色必须跟 --muted 一致。
+
+        回落值写成字面色是为了让上一条测试能检查“有确切默认值”，
+        但它同时也是一份可以追溯的副本：改了 --muted 却忘记同步这里，
+        面板外的脚注会安静停留在旧色值上。
+        """
+        match = re.search(r'--muted:\s*(#[0-9a-fA-F]{6})', self.css)
+        self.assertIsNotNone(match, 'style.css 里找不到 --muted 定义')
+
+        fallbacks = [
+            value for _, body in self._footnote_rules()
+            for value in re.findall(
+                r'var\(--panel-footnote,\s*(#[0-9a-fA-F]{6})\)', body)
+        ]
+        self.assertTrue(
+            fallbacks,
+            '没有规则给 var(--panel-footnote) 提供字面回落色')
+        stale = [value for value in fallbacks if value.lower() != match.group(1).lower()]
+        self.assertEqual(
+            stale, [],
+            '以下回落色与 --muted 不一致，面板外的脚注会用到过期色值：\n'
+            + '\n'.join('  ' + item for item in stale))
