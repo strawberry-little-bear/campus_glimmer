@@ -153,8 +153,8 @@ flowchart LR
 只会让一部分人用不了——所以它们需要常驻守卫，而不是上线前人工抽查一遍。
 
 守卫是 [`campus_glimmer/test_page_semantics.py`](../campus_glimmer/test_page_semantics.py)：
-16 个测试，约 15 秒跑完，只依赖标准库（`html.parser` + 正则），不引入新依赖。它走两条路线——
-静态扫全部模板，再用 Django test client 真实渲染约 45 个页面（普通用户视角 + 运营视角）后复核。
+20 个测试，约 20 秒跑完，只依赖标准库（`html.parser` + 正则），不引入新依赖。它走两条路线——
+静态扫全部模板，再用 Django test client 真实渲染 53 个页面（普通用户视角 + 运营视角）后复核。
 
 | 维度 | 规则 | 为什么容易坏 |
 | --- | --- | --- |
@@ -162,6 +162,8 @@ flowchart LR
 | 表单标签 | 每个 `input` / `select` / `textarea` 都要有关联的 `<label for>` 或 `aria-label` | 拆模板时标签和控件被分到不同文件 |
 | 可访问名称 | 每个 `a` / `button` 都要有文字或 `aria-label` | 纯图标按钮（`<i class="bi ...">`）是重灾区 |
 | 图片替代文本 | 信息性图片必须写 `alt`，装饰性图片写 `alt=""` | 占位图常被顺手填成「暂无图片」 |
+| 重复 id | 同一页里同一个 `id` 只能出现一次 | `label for` / `aria-labelledby` / `getElementById` 都只命中第一个，页面毫无异常 |
+| id 引用完整 | `for` 和 `aria-*` 指向的 id 必须真实存在，且不能是空值 | Django 会自动拼 `aria-describedby`，模板不同步补 id 就整片悬空 |
 | 触控目标 | 导航链接至少 24×24（WCAG 2.2 的 2.5.8，AA） | 压内边距时顺手把命中区域压没了 |
 
 几条踩过的坑，写在这里省得重复：
@@ -171,6 +173,9 @@ flowchart LR
 3. **条件渲染的表单最容易漏。** 求购详情页有两套表单，只有「手里有匹配商品、且还没响应过这条求购」的卖家才看得到「用这件商品响应」那一套。测试类统一以求购发布者身份登录时它根本不渲染，标签坏了也测不出来——所以用例里单独用卖家会话登录取证（`SELLER_PAGES`）。新增只在特定身份或状态下出现的表单时，请照样补一条对应视角的渲染。
 4. **`alt=""` 是给装饰性图片用的**，不是「懒得写」。缺图占位图外面套了链接，所以链接本身要补 `aria-label="查看 {{ item.title }} 的详情"`；否则读屏软件会把「暂无图片」四个字当成链接名称读出来，用户听到的不是商品名。
 5. **触控目标看的是命中区域，不是字号。** `.site-nav .navbar-nav .nav-link` 现在带 `min-height` / `min-width: 24px`，压 `padding-inline` 时不要把它删掉。
+6. **表单的帮助文字和错误提示必须自己补 id，Django 不会替你补。** `BoundField.aria_describedby` 会按 `field.auto_id` 拼出 `id_<字段名>_helptext` 和 `id_<字段名>_error`，但渲染帮助文字的是模板——写成 `<div class="form-text">{{ field.help_text }}</div>` 而不带 `id`，引用就悬空，读屏软件一个字都读不到。正确写法是 `id="{{ field.auto_id }}_helptext"`，两边用同一套拼法。全站 19 个模板、43 处踩过这个坑。
+7. **`field.id_for_label` 不保证有值，不能拿来无条件拼属性。** Django 的 `RadioSelect.id_for_label` 刻意返回空串（注释写得很清楚：不给 `<label>` 配 `for`，免得读屏软件把选项组里第一个选项当成唯一标签）。所以 `for="{{ field.id_for_label }}"` 在单选 / 多选组上会渲染出 `for=""`，`id="{{ field.id_for_label }}_helptext"` 会退化成 `id="_helptext"`——多个字段还会撞成重复 id。约定：`id_for_label` 为空即「这是个选项组」，此时用 `role="group"` + `aria-labelledby` 关联标签，拼 id 一律改用 `field.auto_id`。参考 `templates/listings/_mutual_aid_feedback_fields.html`。
+8. **页面清单漏掉表单页，等于那一页的语义检查从来没跑过。** 新增守卫维度后第一次反向验证就发现：`lost_found_form.html` 的缺陷在 264 个页面的开发期审计里能抓到，在守卫测试里抓不到——因为 `PAGES` 里根本没有「发布失物招领」。现在补齐了发布商品、发布/编辑失物招领、发布/编辑求购、批量创建、举报、发起交易。新增表单页时请顺手加进 `PAGES`。
 
 ## 🛠️ 修改检查
 
