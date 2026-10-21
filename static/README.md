@@ -90,6 +90,7 @@ Django 的 `RadioSelect` 与 `CheckboxSelectMultiple` 继承 `ChoiceWidget`，
 - **`.eyebrow` 有两种形态**。基色是 `var(--primary)`，供 `page-intro` 一类浅色页面使用；深色 hero 里的反色标签由 `.hero-panel .eyebrow` 单独给 `#bdebd2`。早前基色直接写成 `#bdebd2`，而 `.eyebrow` 在 88 个模板里共出现 228 次，其中 28 次在 `page-intro` 这类浅色区块里，白底上只有 1.31:1，基本等于看不见。
 - **面板脚注走 `--panel-footnote`**。`[class*="-panel"] .rewrite-candidate-footnote` 取 `var(--panel-footnote, #61726a)`；各面板在自己的规则里覆写这个变量以匹配自身渐变底。回落值故意写成字面色而不是 `var(--muted)`：那样测试才能断言“面板外也有确切默认值”，而不是一个可能被继承色覆盖的引用。它与 `--muted` 同值，改 `--muted` 时要同步（`PanelFootnoteColourTests` 会盯这件事）。
 - **徽章内的图标继承徽章色**。`.campus-verified-badge i { color: inherit }`：金色变体的底色是 `#f9d8a8`，原先写死的绿色图标只有 2.42:1，继承后跟随徽章自身的 `#684a20`（5.95:1）。
+- **模板的 `style` 属性里不写颜色**。行内色值是唯一同时躲过 token 扫描和静态对比度扫描的位置：`test_deployment.py` 的 `InlineStyleColourTests` 会把 `color` / `background` / `border-color` / `box-shadow` 这类属性里的字面值直接判失败，只放行 `var(...)`。几何属性（`width` / `height` / `min-width`）不在此列，按比例增长的条形图必须由视图算好后注入。真实踩过的坑：运营看板一条建议文案在模板里写了 `color:#6a7d73`，盖掉了已有的 token 规则，落在 `#fbfdfb` 上只有 4.29:1。
 - **校验要用浏览器里的真实背景**。同一个色值落在不同面板的渐变底上结果并不相同，指“最深浅底”一刀切的静态扫描会同时漏报和误报：白字落在深色 hero 上会被判失失败，装饰性圆点的 `color` 也会被算进去。可靠的判法是渲染后逐元素取计算色与合成后的祖先背景，并跳过 `background-image` 为渐变的元素。
 
 ## 📦 第三方依赖本地化
