@@ -486,6 +486,59 @@ class TemplateStylesheetContractTests(SimpleTestCase):
             + '\n'.join('  ' + item for item in sorted(broken)),
         )
 
+class InlineStyleColourTests(SimpleTestCase):
+    """模板的 style 属性里不允许出现写死的颜色值。
+
+    颜色全部走 :root token 是这条样式系统的前提：token 改一处，全站跟着走，
+    对比度也能一次性重算。写在 style 属性里的十六进制色值两边都不占——
+    既不会被 token 扫描覆盖，也不会被静态对比度扫描覆盖，只会安静地漂移。
+
+    这个坑真实踩过：运营看板的一条建议文案在模板里写了 color:#6a7d73，
+    盖掉了已有的 token 规则，落在 #fbfdfb 上只有 4.29:1。浏览器审计跑了
+    三轮才发现，因为静态扫描只读 style.css，读不到模板里的行内样式。
+    """
+
+    TEMPLATES_DIR = PROJECT_ROOT / 'templates'
+
+    HTML_COMMENT = re.compile(r'<!--.*?-->', re.S)
+    TEMPLATE_SYNTAX = re.compile(r'\{%[^%]*%\}|\{\{[^}]*\}\}')
+    STYLE_ATTR = re.compile(r'style="([^"]*)"')
+    # 只盯承担配色的属性；width / height / min-width 这类几何值不在此列，
+    # 它们常常必须由视图算出来后注入（例如按比例增长的条形图）。
+    COLOUR_PROPERTIES = frozenset({
+        'color', 'background', 'background-color',
+        'border-color', 'border-top-color', 'border-right-color',
+        'border-bottom-color', 'border-left-color',
+        'outline-color', 'fill', 'stroke', 'box-shadow',
+    })
+
+    def test_inline_styles_do_not_hardcode_colours(self):
+        offenders = []
+        for template in sorted(self.TEMPLATES_DIR.rglob('*.html')):
+            text = self.HTML_COMMENT.sub(' ', template.read_text(encoding='utf-8'))
+            for body in self.STYLE_ATTR.findall(text):
+                for declaration in body.split(';'):
+                    name, _, value = declaration.partition(':')
+                    name = name.strip().lower()
+                    value = value.strip()
+                    if name not in self.COLOUR_PROPERTIES:
+                        continue
+                    # 带模板语法的值无法静态判断，整条跳过
+                    if self.TEMPLATE_SYNTAX.search(value):
+                        continue
+                    if value.startswith('var('):
+                        continue
+                    offenders.append('%s -> %s:%s' % (
+                        template.relative_to(self.TEMPLATES_DIR).as_posix(),
+                        name, value))
+
+        self.assertEqual(
+            offenders, [],
+            '以下 style 属性写死了颜色值，请改用 :root token：\n'
+            + '\n'.join('  ' + item for item in sorted(offenders)),
+        )
+
+
 class PanelFootnoteColourTests(SimpleTestCase):
     """运营面板脚注的色相由 --panel-footnote 提供，接管它的规则必须压过段落配色。
 

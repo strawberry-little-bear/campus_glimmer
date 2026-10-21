@@ -443,7 +443,7 @@
     {% if position_quality.recommendations %}
     <h3 class="search-trend-subtitle"><i class="bi bi-lightbulb me-1"></i>可以做什么</h3>
     <div class="rewrite-candidate-summary" style="grid-template-columns:1fr;">
-        {% for note in position_quality.recommendations %}<div style="min-height:auto;"><span>建议 {{ forloop.counter }}</span><small style="font-size:.76rem;line-height:1.6;color:#6a7d73;">{{ note }}</small></div>
+        {% for note in position_quality.recommendations %}<div style="min-height:auto;"><span>建议 {{ forloop.counter }}</span><small>{{ note }}</small></div>
         {% endfor %}</div>
     {% endif %}
     {% else %}<div class="empty-inline">当前周期还没有带上结果位置的曝光记录。等更多学生从搜索结果点进详情，这里才开始有读数。</div>{% endif %}
