@@ -11,9 +11,50 @@ from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, 
 
 
 class StyledModelFormMixin:
+    # RadioSelect / CheckboxSelectMultiple 的 class 会同时落到外层容器和每一个选项上
+    # （见下面 ChoiceGroupMixin 的说明），套上 form-control 等于把每个选项画成输入框。
+    # 这类控件由 ChoiceGroupMixin 自己管样式，_style_fields 不要插手。
+    _container_choice_widgets = (forms.RadioSelect, forms.CheckboxSelectMultiple)
+
     def _style_fields(self):
         for field in self.fields.values():
+            if isinstance(field.widget, self._container_choice_widgets):
+                continue
             field.widget.attrs.setdefault('class', 'form-control')
+
+
+class ChoiceGroupMixin:
+    """把选项组的类名只挂到外层容器上，不污染单个选项。
+
+    RadioSelect / CheckboxSelectMultiple 继承 ChoiceWidget，
+    option_inherits_attrs 为 True 时 create_option 会把 self.attrs 合并进每个选项，
+    于是 attrs 里的 class 会同时出现在外层容器和每个 input 上。后果不是「多写了一个
+    类名」：Bootstrap 的 .form-check-input 有 width: 1em，套到容器上会把整个选项组压成
+    一颗 14px 的圆点，选项文字被挤出可视区；.form-control 套上去则会把每个选项变成
+    一个完整输入框。踩过两次，都是页面不报错、只有截图才看得出来的那种。
+
+    这里改为在渲染上下文里单独给容器注入类名，选项本身的样式交给 CSS 后代选择器。
+    """
+
+    container_class = ''
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        if self.container_class:
+            context['widget']['attrs']['class'] = self.container_class
+        return context
+
+
+class RadioCardGroup(ChoiceGroupMixin, forms.RadioSelect):
+    """单选卡片组：失物招领的记录类型、互助结果这类二选一场合。"""
+
+    container_class = 'choice-card-group'
+
+
+class CheckboxCardGroup(ChoiceGroupMixin, forms.CheckboxSelectMultiple):
+    """多选卡片组：互助反馈的标签。"""
+
+    container_class = 'choice-card-group'
 
 
 class FavoriteCollectionForm(forms.Form):
@@ -105,14 +146,14 @@ class MutualAidFeedbackForm(StyledModelFormMixin, forms.Form):
     outcome = forms.ChoiceField(
         label='互助结果',
         choices=MutualAidFeedback.OUTCOME_CHOICES,
-        widget=forms.RadioSelect,
+        widget=RadioCardGroup(),
         help_text='结果只记录互助是否形成闭环，不会替代交易评价。',
     )
     tags = forms.MultipleChoiceField(
         label='可以勾选的反馈标签',
         choices=MutualAidFeedback.TAG_CHOICES,
         required=False,
-        widget=forms.CheckboxSelectMultiple,
+        widget=CheckboxCardGroup(),
         help_text='选择最符合这次互助过程的标签。',
     )
     note = forms.CharField(
@@ -128,7 +169,6 @@ class MutualAidFeedbackForm(StyledModelFormMixin, forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._style_fields()
-        self.fields['tags'].widget.attrs.update({'class': 'feedback-tag-list'})
 
     def clean_tags(self):
         return list(self.cleaned_data.get('tags') or [])
@@ -728,7 +768,7 @@ class LostFoundPostForm(StyledModelFormMixin, forms.ModelForm):
             'occurred_at', 'expires_at', 'identifying_features',
         ]
         widgets = {
-            'post_type': forms.RadioSelect(),
+            'post_type': RadioCardGroup(),
             'title': forms.TextInput(attrs={'placeholder': '例如：在图书馆三楼遗失黑色水杯'}),
             'description': forms.Textarea(attrs={
                 'rows': 6,
@@ -752,7 +792,13 @@ class LostFoundPostForm(StyledModelFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._style_fields()
-        self.fields['post_type'].widget.attrs['class'] = 'form-check-input'
+        # Django 给「必填又没有默认值」的选择字段自动补一个空选项，单选渲染出来
+        # 就是一条孤零零的「---------」，看起来像没选东西；这里已经是必填单选，
+        # 空选项只会添乱。
+        self.fields['post_type'].choices = [
+            choice for choice in self.fields['post_type'].choices
+            if choice[0] != ''
+        ]
         self.fields['category'].queryset = Category.objects.all()
         self.fields['category'].empty_label = '请选择分类（可选）'
         self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)

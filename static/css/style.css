@@ -1782,8 +1782,6 @@ a { color: inherit; text-decoration: none; }
 
 .mutual-aid-feedback-summary { padding: 10px 12px; border: 1px solid rgba(33, 76, 58, .14); border-radius: 12px; background: #f4faf6; color: #2f6049; }
 .mutual-aid-feedback-banner { border-left: 4px solid #4f9d78; background: linear-gradient(135deg, #f3fbf6, #fff); }
-.feedback-tag-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
-.feedback-tag-list li { padding: 8px 10px; border: 1px solid #dcebe1; border-radius: 10px; background: #fff; }
 
 .mutual-aid-profile-stats { margin-top: 16px; }
 
@@ -6484,6 +6482,60 @@ a { color: inherit; text-decoration: none; }
     color: var(--muted);
     font-size: .78rem;
     line-height: 1.6;
+}
+
+
+/* Django 的 RadioSelect / CheckboxSelectMultiple 渲染出来的结构是
+   <div class="choice-card-group"><div><label><input> 文案</label></div>...</div>，
+   没有 .status-choice 那样可以直接挂类的 label，所以按后代选择器画卡片。
+   这一段和上面的 .status-choice-* 是同一套单选卡片语言，只是入口不同。 */
+.choice-card-group {
+    display: grid;
+    gap: 10px;
+}
+
+.choice-card-group > div {
+    margin: 0;
+}
+
+.choice-card-group label {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin: 0;
+    padding: 13px 15px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #fff;
+    color: var(--ink-soft);
+    font-size: .85rem;
+    font-weight: 600;
+    line-height: 1.5;
+    cursor: pointer;
+    transition: border-color .18s ease, background .18s ease;
+}
+
+.choice-card-group label:hover {
+    border-color: var(--line-strong);
+    background: var(--surface-soft);
+}
+
+.choice-card-group input {
+    flex: none;
+    width: 17px;
+    height: 17px;
+    margin: 2px 0 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+}
+
+.choice-card-group label:has(input:checked) {
+    border-color: var(--primary);
+    background: var(--mint);
+}
+
+.choice-card-group label:focus-within {
+    box-shadow: 0 0 0 4px rgba(29, 138, 104, .12);
 }
 
 @media (max-width: 991.98px) {
