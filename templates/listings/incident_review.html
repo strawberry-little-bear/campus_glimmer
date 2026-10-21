@@ -12,7 +12,7 @@
                 <p class="small text-muted mb-0">提交人：{{ incident.reported_by.username }} · 涉及对方：{{ incident.accused.username }}</p>
                 <p class="small text-muted mb-0">提交时间：{{ incident.created_at|date:'Y-m-d H:i' }} · 约定时间：{{ incident.appointment.scheduled_for|date:'Y-m-d H:i' }}</p>
             </div>
-            <form method="post" class="mt-4">{% csrf_token %}{% for field in form %}<div class="mb-3"><label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small mt-1">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}<div class="form-actions"><a href="{% url 'governance_workbench' %}" class="btn btn-light">取消</a><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-2"></i>保存处理结果</button></div></form>
+            <form method="post" class="mt-4">{% csrf_token %}{% for field in form %}<div class="mb-3"><label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}<div class="form-actions"><a href="{% url 'governance_workbench' %}" class="btn btn-light">取消</a><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-2"></i>保存处理结果</button></div></form>
         </section>
     </div>
     <div class="col-lg-5">

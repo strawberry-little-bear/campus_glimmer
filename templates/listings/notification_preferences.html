@@ -30,7 +30,7 @@
             <label class="notification-preference-row" for="{{ field.id_for_label }}">
                 <span class="notification-preference-copy">
                     <strong>{{ field.label }}</strong>
-                    <small>{{ field.help_text }}</small>
+                    <small id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</small>
                     {% for error in field.errors %}<em>{{ error }}</em>{% endfor %}
                 </span>
                 <span class="notification-switch">
@@ -46,7 +46,7 @@
             <div class="notification-quiet-hours-heading">
                 <div>
                     <strong id="quiet-hours-title"><i class="bi bi-moon-stars me-1"></i>{{ form.quiet_hours_enabled.label }}</strong>
-                    <small>{{ form.quiet_hours_enabled.help_text }}</small>
+                    <small id="{{ form.quiet_hours_enabled.id_for_label }}_helptext">{{ form.quiet_hours_enabled.help_text }}</small>
                 </div>
                 <span class="notification-switch">
                     {{ form.quiet_hours_enabled }}

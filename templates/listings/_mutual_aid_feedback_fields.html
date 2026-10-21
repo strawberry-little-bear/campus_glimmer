@@ -1,0 +1,24 @@
+{% comment %}
+互助结果反馈表单的字段循环（求购详情、失物招领详情共用）。
+
+这套表单里「互助结果」是 RadioCardGroup、「反馈标签」是 CheckboxCardGroup，
+而 Django 的 RadioSelect.id_for_label 是刻意返回空串的——见
+django.forms.widgets.RadioSelect.id_for_label 的注释：不给 <label> 配 for，
+是为了避免读屏软件把组内第一个选项当成整个组的唯一标签。
+
+所以这里不能无条件写 for="{{ field.id_for_label }}"：那会渲染出 for=""，
+一个指向不存在元素的空引用。id_for_label 为空本身就是「这是个选项组」的
+信号，此时改用 role="group" + aria-labelledby 把标签关联到整组。
+
+帮助文字与错误提示的 id 一律用 field.auto_id，不用 id_for_label：
+Django 的 BoundField.aria_describedby 是按 auto_id 约定拼的
+（<auto_id>_helptext / <auto_id>_error），两边必须用同一套拼法，否则
+引用悬空，读屏软件读不到帮助文字。auto_id 为空时（表单关了 auto_id）
+整段 id 都不输出，避免多个字段退化成同一个 "_helptext"。
+{% endcomment %}
+{% for field in form %}
+<div class="mb-2"{% if not field.id_for_label and field.auto_id %} role="group" aria-labelledby="{{ field.auto_id }}_label"{% endif %}>
+    <label class="form-label small"{% if not field.id_for_label and field.auto_id %} id="{{ field.auto_id }}_label"{% endif %}{% if field.id_for_label %} for="{{ field.id_for_label }}"{% endif %}>{{ field.label }}</label>
+    {{ field }}{% if field.help_text %}<div class="form-text"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text }}</div>{% endif %}
+</div>
+{% endfor %}
