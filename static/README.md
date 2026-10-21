@@ -58,6 +58,19 @@
 3. `--bs-body-bg` 不要动。`.form-control` / `.form-select` 的背景取自它，改成米白会让输入框在白卡片上发灰，这两处只覆写边框、圆角和文字色；
 4. 模板里不要再写 `bg-light` / `bg-success` 这类会被 `!important` 盖住兼容层的类，`.card-header` 和 `.progress-bar` 已有品牌规则，直接删掉多余类名即可。
 
+### 单选 / 多选卡片组
+
+Django 的 `RadioSelect` 与 `CheckboxSelectMultiple` 继承 `ChoiceWidget`，
+`option_inherits_attrs` 为 `True`，因此 widget `attrs` 里的 `class`
+会同时出现在外层容器和每一个 `<input>` 上。往这两类控件上套 Bootstrap 类不会得到预期效果：
+`.form-check-input` 带 `width: 1em`，套到容器上会把整个选项组压成一颗 14px 的圆点，选项文字被挤出可视区；
+`.form-control` 套上去则会把每个选项变成一个完整输入框。这两类故障页面都不报错，只有截图才看得出来。
+
+`StyledModelFormMixin._style_fields` 因此跳过这两类控件；样式改由
+`ChoiceGroupMixin` 在渲染上下文里单独注到容器上，选项本身由
+`.choice-card-group` 的后代选择器绘制（和 `.status-choice-*` 同一套单选卡片语言，只是入口不同）。
+新增选项组时用 `RadioCardGroup` / `CheckboxCardGroup`，不要直接往 widget attrs 上写 class。
+
 全部模板已经不再使用 `list-group`，相应规则保留在兼容层里上下文防身；申诉列表用 `.mod-event-*`，心愿单侧栏用 `.filter-stack` + `.filter-link`，争议证据用 `.dispute-evidence-row`。
 
 新增页面时优先使用设计系统自有类，只有复用历史结构时才依赖这层兼容。动手前先在 `style.css` 里搜一遍目标类名，确认是否已有更贴合的规则。
@@ -130,6 +143,7 @@ flowchart LR
 - 大段样式要带用途说明，避免无法判断归属的规则继续堆积；
 - 修改未读数轮询时，确认隐藏标签页不会持续请求，且 99+ 显示仍然正确；
 - 交互元素要保留清晰的 `:focus-visible` 状态，并检查键盘操作顺序。
+- 新增单选 / 多选组用 `RadioCardGroup` / `CheckboxCardGroup`，不要往 widget attrs 写 class（类名会漏到每个选项上，见上文）；
 
 ## ✅ 验证
 
