@@ -58,6 +58,7 @@ flowchart TD
 - 复用结构优先抽成下划线前缀片段，例如 `_item_card.html`；
 - 审核队列和用户申诉是同一类内容的两端，改一边时同时看 `moderation_queue.html` 和 `moderation_appeals.html`，保持 `.mod-event-*` 结构一致；
 - 运营看板已按分区拆到 `listings/operations/` 下，新增分区用 `{% include %}` 挂到主模板，不要再往单文件里继续堆；
+- 标题层级、表单标签和可访问名称由 `campus_glimmer/test_page_semantics.py` 常驻看守：每页只有一个 `h1` 且不跳级，每个控件都有关联标签，图标按钮都有 `aria-label`。想要小字号标题时用 `h2` 配 `.h3` / `.h5` 工具类把字号压回去，不要图省事写 `h3`–`h6`——空状态和区块标签跟在列表后面，层级上属于页面主标题的下一级；
 - 图片补齐 `alt`，装饰元素使用空 `alt` 或 `aria-hidden`；
 - 表单必须保留 `{% csrf_token %}`；
 - 不要只靠模板隐藏按钮来保护操作，服务端仍需校验；
