@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
 
 from .models import DemandPost, Item, SearchQuery
@@ -46,20 +46,50 @@ def _new_signal(term='', category_id=None, category_name='', location_id=None, l
     }
 
 
-def _available_supply_count(signal, now):
-    items = Item.objects.filter(status='available').filter(
-        Q(expires_at__isnull=True) | Q(expires_at__gt=now),
+def _supply_filter(signal, now):
+    """一个候选信号的可用供给条件：在售、未过期，再按分类、地点、关键词收窄。
+
+    拆出来单独一个函数，是为了让「一次查完」和「逐个查」两条路用的是同一份条件。
+    批量版和逐次版一旦各写一遍，改条件的时候就总会漏改一边，而漏掉的那一边看板上
+    看不出来——只会静静地少数一批供给。
+    """
+    condition = Q(status='available') & (
+        Q(expires_at__isnull=True) | Q(expires_at__gt=now)
     )
     if signal['category_id']:
-        items = items.filter(category_id=signal['category_id'])
+        condition &= Q(category_id=signal['category_id'])
     if signal['location_id']:
-        items = items.filter(location_id=signal['location_id'])
+        condition &= Q(location_id=signal['location_id'])
     if signal['term']:
-        items = items.filter(
+        condition &= (
             Q(title__icontains=signal['term'])
             | Q(description__icontains=signal['term'])
         )
-    return items.count()
+    return condition
+
+
+def _available_supply_counts(signals, now):
+    """一次 aggregate 按传入顺序算完所有候选的可用供给数。
+
+    这里原先每个候选发一次 COUNT：候选数上限是 ``max(limit * 4, limit)``，默认就是 48，
+    运营看板一开光是这一个地方就几十次往返。而这些 COUNT 查的是同一张表、同一批
+    「在售且未过期」的行，差别只在分类、地点、关键词三个收窄条件。
+
+    改成 `notification_preference_usage` 里同一套写法：把每个候选的条件做成一个
+    ``Count(..., filter=...)``，合成一次 aggregate。条件一个字都没换，所以每个候选的
+    供给数和逐次 COUNT 完全相等，只是数据库只扫一遍表。聚合项个数随候选数线性增长，
+    所以调用方必须先把候选截到 ``limit`` 的量级——这个函数只服务于能上面板的那些行。
+
+    空列表直接返回空列表，不发 SQL：一个候选都没有时还要查一次库纯属浪费。
+    """
+    if not signals:
+        return []
+    aggregates = {
+        'supply_%d' % index: Count('id', filter=_supply_filter(signal, now))
+        for index, signal in enumerate(signals)
+    }
+    counts = Item.objects.aggregate(**aggregates)
+    return [counts['supply_%d' % index] for index in range(len(signals))]
 
 
 def _build_recommendations(signal, available_supply):
@@ -79,8 +109,7 @@ def _build_recommendations(signal, available_supply):
     return recommendations or ['持续观察需求变化']
 
 
-def _build_row(signal, now):
-    available_supply = _available_supply_count(signal, now)
+def _build_row(signal, now, available_supply):
     search_users = len(signal['search_users'])
     demand_users = len(signal['demand_users'])
     signal_count = signal['search_count'] + signal['demand_count']
@@ -193,7 +222,16 @@ def build_demand_radar(days=30, *, now=None, limit=12):
             signal['term'],
         ),
     )
-    rows = [_build_row(signal, now) for signal in candidates[:max(limit * 4, limit)]]
+    # 先按不依赖供给的粗排截住候选，再一次查完这批候选的可用供给数。
+    # 供给数会反过来影响最终排序（`max(0, 3 - available_supply)` 会改动机会分），
+    # 所以不能在算它之前就把候选砍到 limit；但也不必给全部候选算——粗排落在 4 倍
+    # 上限之外的行进不了可见区，算了也是白算。
+    shortlist = candidates[:max(limit * 4, limit)]
+    supply_counts = _available_supply_counts(shortlist, now)
+    rows = [
+        _build_row(signal, now, available_supply)
+        for signal, available_supply in zip(shortlist, supply_counts)
+    ]
     rows.sort(key=lambda row: (-row['opportunity_score'], -row['signal_count'], row['label']))
     max_score = max((row['opportunity_score'] for row in rows), default=0)
     for row in rows:
