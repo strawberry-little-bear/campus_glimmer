@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """运营看板分区延后揭开的契约测试。
 
-看板 36 个分区里只有前 4 个是首屏，其余 32 个先占位、滚到附近再揭开。
+看板 37 个分区里只有前 4 个是首屏，其余 33 个先占位、滚到附近再揭开。
 这是纯前端优化：响应体和不做优化时逐字节一样，服务端一个字节都没少渲染。
 风险也全在前端——一旦选择器少了 ``html.js`` 前缀，关掉 JavaScript 的浏览器
 （以及 Django 测试客户端）就会看到一片白板，而页面里恰好还压着真实内容，
@@ -96,7 +96,7 @@ class OperationsDashboardDeferredSectionTests(TestCase):
     def test_only_the_first_four_sections_render_eagerly(self):
         eager = [anchor for anchor, deferred in self.sections if not deferred]
 
-        self.assertEqual(len(self.sections), 36, '分区数量变了，先确认跳转条和分区仍然对应')
+        self.assertEqual(len(self.sections), 37, '分区数量变了，先确认跳转条和分区仍然对应')
         self.assertEqual(
             eager,
             [anchor for anchor, _ in self.sections[:4]],

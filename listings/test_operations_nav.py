@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """运营看板分区跳转条的契约测试。
 
-看板由 36 个 partial 顺序拼成，一屏滚不到头。``operations_nav.py`` 描述「有哪
+看板由 37 个 partial 顺序拼成，一屏滚不到头。``operations_nav.py`` 描述「有哪
 些分区、怎么分组」，模板负责把每个 include 包进带 id 的 ``<section>``。两边分开
 书写，只改一边就会静默失效——chip 还在，点下去却不动；或者分区还在，却完全
 没有入口。这个文件就是拦住这种漂移的。
@@ -11,7 +11,7 @@ import os
 import re
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
 from .operations_nav import OPERATIONS_DASHBOARD_SECTIONS
@@ -30,6 +30,51 @@ GROUP_LABEL_RE = re.compile(r'ops-jump-group-label[^>]*>([^<]+)<')
 
 def nav_anchors():
     return [anchor for _label, items in OPERATIONS_DASHBOARD_SECTIONS for anchor, _text in items]
+
+
+class OperationsDashboardUmbrellaTests(SimpleTestCase):
+    """umbrella 只能当多主题分区的中转，不许只剩一个孩子。
+
+    按主题拆一个分区有两种结局：真的是多主题，umbrella 留着转发；拆完发现只有
+    一个主题，umbrella 就该退场——孩子提回主模板直接 include，自己删掉，再去
+    ``operations_nav.py`` 补一个锚点。留着一层单转发的代价不只是多一次 include：
+    分区数会和运营看到的跳转条对不上，而两边分开书写，没有任何渲染错误会提醒
+    这件事。``_ops_queues.html`` 就是这么退场的（免费领取申请 + 商品图片覆盖，
+    后者不是队列）。
+    """
+
+    PARTIALS_DIR = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'templates', 'listings', 'operations',
+    )
+    INCLUDE_RE = re.compile(r"{%\s*include\s+'listings/operations/([^']+)'\s*%\}")
+    COMMENT_RE = re.compile(r'{%\s*comment\s*%}.*?{%\s*endcomment\s*%\}', re.DOTALL)
+
+    def _partial_names(self):
+        return sorted(
+            name for name in os.listdir(self.PARTIALS_DIR) if name.endswith('.html')
+        )
+
+    def test_no_umbrella_partial_is_left_with_a_single_child(self):
+        names = self._partial_names()
+        # 目录都找错了还跑什么断言；顺手把「一个 partial 都没有」也拦在外面。
+        self.assertGreaterEqual(len(names), 37, '没读到分区片段目录，先确认路径')
+
+        for name in names:
+            source = io.open(os.path.join(self.PARTIALS_DIR, name), encoding='utf-8').read()
+            children = self.INCLUDE_RE.findall(source)
+            if not children:
+                continue
+            leftover = self.COMMENT_RE.sub('', source)
+            leftover = self.INCLUDE_RE.sub('', leftover).strip()
+            if leftover:
+                continue
+
+            self.assertGreaterEqual(
+                len(children), 2,
+                '%s 只剩 %d 个孩子：把孩子提回主模板直接 include、删掉这一层，'
+                '再去 operations_nav.py 补锚点，两个守卫测试的常量跟着 +1' % (name, len(children)),
+            )
 
 
 class OperationsDashboardSectionNavTests(TestCase):
@@ -74,7 +119,7 @@ class OperationsDashboardSectionNavTests(TestCase):
         groups = OPERATIONS_DASHBOARD_SECTIONS
 
         self.assertEqual(len(groups), 6)
-        self.assertEqual(len(nav_anchors()), 36)
+        self.assertEqual(len(nav_anchors()), 37)
         for label, items in groups:
             self.assertTrue(label, '分组名不能为空')
             self.assertTrue(items, '空分组会渲染出一个孤立的分组标题')
@@ -86,7 +131,7 @@ class OperationsDashboardSectionNavTests(TestCase):
             GROUP_LABEL_RE.findall(self.html),
             [label for label, _items in OPERATIONS_DASHBOARD_SECTIONS],
         )
-        self.assertEqual(len(CHIP_RE.findall(self.html)), 36)
+        self.assertEqual(len(CHIP_RE.findall(self.html)), 37)
 
     def test_the_page_has_no_duplicated_ids(self):
         # 加分区导航时踩过的坑：32 个 include 被包进 <section> 之后，原来那批
@@ -107,7 +152,7 @@ class OperationsDashboardSectionNavTests(TestCase):
         includes = re.findall(r"{% include 'listings/operations/([^']+)' %}", source)
 
         self.assertEqual(len(includes), len(set(includes)), '同一个 partial 被包含了多次')
-        self.assertEqual(len(includes), 36)
+        self.assertEqual(len(includes), 37)
 
     def test_anonymous_visitors_never_see_the_nav(self):
         self.client.logout()
