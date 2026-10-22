@@ -1,4 +1,4 @@
-"""页面语义守卫：标题层级、表单标签、可访问名称、图片替代文本。
+"""页面语义守卫：标题层级、表单标签、可访问名称、表格名称、图片替代文本。
 
 这一层以前靠浏览器审计兜。浏览器审计有两个绕不开的代价：一是要起真实服务、
 装驱动、逐页访问，跑一轮以小时计；二是它只看得到当前数据恰好渲染出来的分支，
@@ -21,6 +21,9 @@ h1 之后直接跳了五级；卡片标题用 h3，让整个列表页从 h1 跳�
    是否完整。前两项只有在真实 DOM 里才查得出来，静态扫描给不出答案。
 3. TouchTargetTests 盯导航链接的触控尺寸。鼠标点得中的东西手指不一定点得中，
    而导航是唯一出现在每一页上的交互元素。
+4. TableAccessibleNameTests 扫模板源，要求每张 <table> 都有可访问名称。三百多
+   张表里运营看板占了大半，且大量挂在 {% if has_data %} 分支上，渲染态检查只能
+   点亮演示数据恰好命中的一百多张，只有静态扫才覆盖得到空状态和他人视角。
 
 第 2 类里的 id 引用完整性是后来补的，起因是一次真实的线上缺陷：Django 的
 BoundField.aria_describedby 会自动拼出 `id_<字段名>_helptext` /
@@ -770,5 +773,97 @@ class TouchTargetTests(SimpleTestCase):
         self.assertEqual(
             offenders, [],
             '导航链接够不到最小触控目标（WCAG 2.5.8）：\n'
+            + '\n'.join('  ' + item for item in offenders),
+        )
+
+class TableAccessibleNameTests(SimpleTestCase):
+    """每张表都要有可访问名称：读屏软件进表之前，先得知道这是哪张表。
+
+    为什么是静态扫而不是渲染：全站三百多张表里运营看板占了大半，而那些表
+    大量挂在 {% if has_data %} / {% for row in ... %} 上。渲染态检查只能点亮
+    演示数据恰好命中的一百多张，剩下的全在空状态、他人视角和没数据的分支里
+    ——偏偏这些分支上线配上数据就是残废页面。只有扫模板源才全覆盖。
+
+    三种命名手段都算过，各有分工：
+
+      * <caption class="visually-hidden">  首选。语义原生，不依赖 ARIA，
+        自包含不需要协调 id，也没有重复 id 的风险。Bootstrap 专门给 caption
+        开了口子（只有 .visually-hidden:not(caption) 才绝对定位），所以视觉
+        隐藏不会把表格布局带崩。
+      * aria-label                         可行，但和 caption 是二选一，
+        两处都要维护，没有必要。
+      * aria-labelledby                    只留给标题本身是模板表达式的循环
+        表格：每组的标题由 {{ group.kind_label }} 之类拼出来，写死的 caption
+        要么和可见标题对不上，要么退化成「第一组 / 第二组」。直接引用可见
+        标题，文案只有一份，不会漂。
+
+    另外守两条容易坏的边界：caption 必须是 table 的第一个子元素（前面混进
+    文本，浏览器会把文本连同 caption 一起丢掉），以及 caption 不能是空的。
+    """
+
+    TABLE = re.compile(r'<table\b[^>]*>', re.I)
+    CAPTION = re.compile(r'^(\s*)<caption\b[^>]*>(.*?)</caption>', re.S | re.I)
+    ARIA_NAME = re.compile(r'''\b(aria-label|aria-labelledby)=["']([^"']*)["']''', re.I)
+    HTML_COMMENT = re.compile(r'<!--.*?-->', re.S)
+    TAGSUB = re.compile(r'<[^>]+>')
+
+    def _sources(self):
+        for template in sorted(TEMPLATES_DIR.rglob('*.html')):
+            relative = template.relative_to(TEMPLATES_DIR).as_posix()
+            text = self.HTML_COMMENT.sub(' ', template.read_text(encoding='utf-8'))
+            yield relative, text
+
+    def test_every_table_has_an_accessible_name(self):
+        offenders = []
+        total = 0
+        for relative, text in self._sources():
+            for match in self.TABLE.finditer(text):
+                total += 1
+                caption = self.CAPTION.match(text[match.end():])
+                if caption:
+                    leading = caption.group(1)
+                    if leading.strip():
+                        # 非空白文本会被浏览器连同 caption 一起从表里丢掉，
+                        # 只有空白（换行缩进）是安全的。
+                        offenders.append('%s：caption 前面有文本 %r'
+                                         % (relative, leading[:40]))
+                        continue
+                    inner = caption.group(2)
+                    visible = re.sub(r'\s+', ' ', self.TAGSUB.sub('', inner)).strip()
+                    if not visible and '{{' not in inner and '{%' not in inner:
+                        offenders.append('%s：caption 是空的' % relative)
+                    continue
+                names = dict(
+                    (name.lower(), value)
+                    for name, value in self.ARIA_NAME.findall(match.group(0))
+                )
+                if not (names.get('aria-label') or '').strip() \
+                        and not (names.get('aria-labelledby') or '').strip():
+                    offenders.append('%s：表格没有可访问名称 %s'
+                                     % (relative, match.group(0)[:80]))
+
+        self.assertGreater(total, 0, '一张表都没扫到，正则大概失效了')
+        self.assertEqual(
+            offenders, [],
+            '以下表格读屏软件读不出是什么表（WCAG 1.3.1 / 4.1.2）：\n'
+            + '\n'.join('  ' + item for item in offenders),
+        )
+
+    def test_captions_are_hidden_without_being_removed(self):
+        """caption 必须挂 visually-hidden，不能把表格顶出可见文字。
+
+        运营看板一屏三十个面板，caption 一旦可见就会在每张表上方多出一行，
+        页面节奏全乱。反过来，用 style="display:none" 之类的土办法隐藏，
+        读屏软件也会一起忽略掉，等于没写。
+        """
+        offenders = []
+        for relative, text in self._sources():
+            for match in re.finditer(r'<caption\b([^>]*)>', text, re.I):
+                if 'visually-hidden' not in match.group(1):
+                    offenders.append('%s：<caption%s>' % (relative, match.group(1)[:60]))
+
+        self.assertEqual(
+            offenders, [],
+            'caption 要加 visually-hidden；display:none 不行，读屏软件会一起忽略：\n'
             + '\n'.join('  ' + item for item in offenders),
         )
