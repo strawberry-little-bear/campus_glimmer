@@ -1,0 +1,122 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 delivery-handshake-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Delivery handshake</span><h2>当面交付的那两下确认</h2></div>
+        <span class="ops-panel-hint">买家点一下、卖家再点一下，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-hand-index-thumb me-1"></i>订单进入「待当面交付」之后，交付这件事被拆成两个各自独立的动作：买家点一下「确认交付」写 <code>buyer_confirmed_at</code>，卖家点一下「确认交付」写 <code>seller_confirmed_at</code>，两个字段都写上，订单才从「待当面交付」走到「已完成」或「借用中」，商品才变成「已售出」。写入路径是完整的——有行锁、有「你已经确认过」的幂等保护、有卖家侧六位确认码的核对，甚至有「对方确认了交付，请你确认」的站内通知。而读取路径只有订单详情页和后台。<strong>同一张表上的确认码有了统计，归还的两次握手有了统计，中间这一对从上线到现在没有任何读者。</strong></p>
+    {% if not delivery_handshake.has_data %}
+    <div class="empty-inline">{{ delivery_handshake.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>买家先点</span><strong>{{ delivery_handshake.sequence_rows.0.count }}</strong><small>卖家先点 {{ delivery_handshake.sequence_rows.1.count }} 笔</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>只点了一半</span><strong>{{ delivery_handshake.hang_stats.total }}</strong><small>买家点了 {{ delivery_handshake.hang_stats.buyer_only }} · 卖家点了 {{ delivery_handshake.hang_stats.seller_only }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>中位挂起</span><strong>{{ delivery_handshake.hang_stats.median_hang_label }}</strong><small>从先点那一刻算到现在</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>还挂在当面交付</span><strong>{{ delivery_handshake.pending_count }}</strong><small>右删失样本，不进分母</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">两下是什么顺序，中间隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 两下是什么顺序，中间隔了多久</caption>
+                    <thead><tr><th>顺序</th><th>笔数</th><th>占比（%）</th><th>中位间隔</th></tr></thead>
+                    <tbody>
+                        {% for row in delivery_handshake.sequence_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                            <td>{{ row.median_gap_label }}</td>
+                        </tr>
+                        {% endfor %}
+                        <tr><td>合计</td><td>{{ delivery_handshake.sequence_rows.0.count|add:delivery_handshake.sequence_rows.1.count|add:delivery_handshake.sequence_rows.2.count|add:delivery_handshake.sequence_rows.3.count }}</td><td>—</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">「双方同一秒」单独一档：它既不是买家先也不是卖家先，硬并进任何一边都会让顺序这一列失真。不足 {{ delivery_handshake.min_measured_orders }} 笔的档位只报数字、不给方向。没有 <code>DeliveryConfirmation</code> 行的订单不进任何一档，但它仍在分母里——订单确实走完了当面交付，只是没有人点过确认。</p>
+            <h3 class="h6 mb-3 mt-4">两下之间隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 两下之间隔了多久</caption>
+                    <thead><tr><th>间隔</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in delivery_handshake.gap_bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">按小时和天切，不按分钟——一次当面交付的时间尺度是分钟到天，报「平均等了 26 分钟」对一个按周看板的运营没有意义。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">只点了一半的订单</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 只点了一半的订单</caption>
+                    <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>买家点了、卖家没点</td><td>{{ delivery_handshake.hang_stats.buyer_only }}</td><td>{% if delivery_handshake.hang_stats.buyer_only_share is None %}—{% else %}{{ delivery_handshake.hang_stats.buyer_only_share }}{% endif %}</td></tr>
+                        <tr><td>卖家点了、买家没点</td><td>{{ delivery_handshake.hang_stats.seller_only }}</td><td>{% if delivery_handshake.hang_stats.seller_only_share is None %}—{% else %}{{ delivery_handshake.hang_stats.seller_only_share }}{% endif %}</td></tr>
+                        <tr><td>合计</td><td>{{ delivery_handshake.hang_stats.total }}</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">这是本模块最硬的一个数。这种订单的 <code>is_complete</code> 是 <code>False</code>，订单永远停在「待当面交付」，商品永远停在「预留中」。双方都还能看到「等待对方确认」的按钮，通知发过了，此后再没有任何动作。<strong>平台既不知道有多少这样的订单，也不知道它们已经挂了多久。</strong></p>
+            <h3 class="h6 mb-3 mt-4">挂了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 挂了多久</caption>
+                    <thead><tr><th>等待</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in delivery_handshake.hang_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td><td class="small text-muted">{{ row.note }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">从先点那一刻算到现在，<strong>不按统计周期切</strong>：一笔跨越周期边界的等待，按周期切开会被算成两段短的，而那正是最不该被切开的样本。</p>
+            <h3 class="h6 mb-3 mt-4">间隔与结局的对照</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 间隔与结局的对照</caption>
+                    <thead><tr><th>两下间隔</th><th>笔数</th><th>做成</th><th>做成率（%）</th></tr></thead>
+                    <tbody>
+                        <tr><td>1 小时以内</td><td>{{ delivery_handshake.outcome_contrast.fast_total }}</td><td>{{ delivery_handshake.outcome_contrast.fast_success }}</td><td>{% if delivery_handshake.outcome_contrast.fast_rate is None %}—{% else %}{{ delivery_handshake.outcome_contrast.fast_rate }}{% endif %}</td></tr>
+                        <tr><td>超过 1 小时</td><td>{{ delivery_handshake.outcome_contrast.slow_total }}</td><td>{{ delivery_handshake.outcome_contrast.slow_success }}</td><td>{% if delivery_handshake.outcome_contrast.slow_rate is None %}—{% else %}{{ delivery_handshake.outcome_contrast.slow_rate }}{% endif %}</td></tr>
+                        <tr><td>差值（百分点）</td><td colspan="3">{% if delivery_handshake.outcome_contrast.gap_points is None %}—{% else %}{{ delivery_handshake.outcome_contrast.gap_points }}{% endif %}{% if not delivery_handshake.outcome_contrast.is_measurable %}（两组各自不足 {{ delivery_handshake.min_measured_orders }} 笔，只报数字、不给方向）{% endif %}</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">只做对照，<strong>不给因果</strong>：两下隔得近的订单更可能完成，很可能只是因为双方本来就都更认真——平台没有能力把这两件事分开，也就不该把对照讲成结论。</p>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-4">只点了一半的订单清单</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">当面交付的那两下确认 · 只点了一半的订单清单</caption>
+            <thead><tr><th>订单号</th><th>商品</th><th>先点的一方</th><th>挂了多久</th></tr></thead>
+            <tbody>
+                {% for row in delivery_handshake.stalled_rows %}
+                <tr>
+                    <td>#{{ row.order_id }}</td>
+                    <td><strong>{{ row.item_title }}</strong></td>
+                    <td>{{ row.first_side_label }}</td>
+                    <td>{{ row.hang_label }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">当前周期没有只点了一半的交付订单。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if delivery_handshake.stalled_rows|length > delivery_handshake.stalled_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ delivery_handshake.stalled_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">等得越久的排在越前面——清单是给「现在去核实」用的，不是给归档用的。只列订单号、商品、先点的一方和挂起时长，<strong>不列用户名</strong>：那是一份考勤表，不是一份看板。</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告交付确认的两下，<strong>不自动补点、不自动推进任何一笔订单</strong>：不写 <code>buyer_confirmed_at</code>、不写 <code>seller_confirmed_at</code>、不改订单状态、不改商品状态、不改贡献记录。卖家没有点确认，可能因为他还没把东西交出去，可能因为买家点错了，可能因为他就是想拖——平台没有能力区分这三者，也就不该替其中任何一种做决定。一个自动补上第二个时间戳的看板，会在卖家真的还没交货时把订单推成已完成，那是比这个缺口严重得多的错。不改 <code>confirm_delivery</code> 的任何逻辑、不加超时、不改确认码的生成与核对、不新增提醒类型，也不把统计写回任何记录。</div>
+    {% endif %}
+</section>
+

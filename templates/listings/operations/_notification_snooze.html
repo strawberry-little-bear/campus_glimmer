@@ -1,0 +1,131 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 notification-snooze-return-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Snooze return</span><h2>延后的通知，延了之后回来了吗</h2></div>
+        <span class="ops-panel-hint">「现在不方便」第一次被运营读到，和处理慢是两件事</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-clock-history me-1"></i>用户点一下「延后 2 小时 / 24 小时 / 3 天」，这条通知就从顶部未读提醒里消失，到期后自己回来。而<code>notification_response</code> 的处理时长从上线到现在都是同一个式子 <code>read_at - created_at</code>——一条当天被延后 3 天、到期当天被读的通知，读出来是「处理了 3 天」。<strong>这 3 天不是平台慢，是用户自己说「现在不方便」。</strong>本面板把它拆出来：延后和未读是两种完全不同的沉默，前者是提醒被看见了、被明确地推到以后，后者是提醒根本没被看见。</p>
+    {% if not notification_snooze_return.has_data %}
+    <div class="empty-inline">{{ notification_snooze_return.summary }}</div>
+    {% else %}
+    {% if not notification_snooze_return.totals.snoozed_total %}
+    <div class="empty-inline">{{ notification_snooze_return.summary }}</div>
+    {% endif %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期发送</span><strong>{{ notification_snooze_return.totals.sent_total }}</strong><small>其中 {{ notification_snooze_return.totals.snoozed_total }} 条被延后过</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>到点之后才被读</span><strong>{{ notification_snooze_return.totals.read_after_return_count }}</strong><small>回来了，而且读了</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>到点之后仍未读</span><strong>{{ notification_snooze_return.totals.unread_after_return_count }}</strong><small>回来了，然后继续沉默</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>还在延后中</span><strong>{{ notification_snooze_return.totals.still_snoozed_count }}</strong><small>还没到回来的时刻</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">被延后过的通知，现在都在哪里</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 被延后过的通知，现在都在哪里</caption>
+                    <thead><tr><th>结局</th><th>条数</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_snooze_return.totals.outcome_rows %}
+                        <tr{% if row.key == 'unread_after_return' and row.count %} class="text-muted"{% endif %}>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{{ row.share }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">用户实际选的是三档：{% for row in notification_snooze_return.totals.duration_rows %}{{ row.label }} {{ row.count }} 条{% if not forloop.last %}、{% endif %}{% endfor %}。</div>
+            <h3 class="h6 mb-3 mt-4">回来之后多久被读</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 回来之后多久被读</caption>
+                    <thead><tr><th>等了多久</th><th>到点之后才被读</th></tr></thead>
+                    <tbody>
+                        {% for row in notification_snooze_return.return_lag.bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">中位数 {% if notification_snooze_return.return_lag.median_days is None %}&mdash;{% else %}{{ notification_snooze_return.return_lag.median_label }}{% endif %}，P90 {% if notification_snooze_return.return_lag.p90_days is None %}&mdash;{% else %}{{ notification_snooze_return.return_lag.p90_label }}{% endif %}。到期未读是右删失样本——它隔多久会被读还没发生，把它记成「0 天」会让回来显得立刻被处理，所以单独数、不丢不混。</div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">把延后期从处理时长里拆出来</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 把延后期从处理时长里拆出来</caption>
+                    <thead><tr><th>三个数</th><th>中位数</th><th>从哪算到哪</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>含延期的处理时长</td>
+                            <td>{{ notification_snooze_return.decomposed.with_snooze_label }}</td>
+                            <td><code>read_at - created_at</code>，notification_response 的口径</td>
+                        </tr>
+                        <tr>
+                            <td>扣掉延期的处理时长</td>
+                            <td>{{ notification_snooze_return.decomposed.without_snooze_label }}</td>
+                            <td><code>read_at - snoozed_until</code>，到期之后隔了多久被读</td>
+                        </tr>
+                        <tr>
+                            <td>用户主动要求的等待</td>
+                            <td>{{ notification_snooze_return.decomposed.requested_label }}</td>
+                            <td><code>snoozed_until - created_at</code>，是下界</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">第三个数是下界：<code>snoozed_until</code> 每次延后都被覆盖，一条被延后三次的通知，库里只留得下第三次的时刻，前两次延掉的等待不在里面。三个数各有各的可信度，摆在一起看，<strong>不相加也不相减</strong>。</div>
+            <h3 class="h6 mb-3 mt-4">延后过 vs 从没延后过</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 延后过 vs 从没延后过</caption>
+                    <thead><tr><th>分组</th><th>条数</th><th>已读</th><th>阅读率</th></tr></thead>
+                    <tbody>
+                        <tr{% if not notification_snooze_return.contrast.is_measurable %} class="text-muted"{% endif %}>
+                            <td>延后过（只收已有结论的）</td>
+                            <td>{{ notification_snooze_return.contrast.snoozed_total }}</td>
+                            <td>{{ notification_snooze_return.contrast.snoozed_read }}</td>
+                            <td>{{ notification_snooze_return.contrast.snoozed_rate }}%</td>
+                        </tr>
+                        <tr{% if not notification_snooze_return.contrast.is_measurable %} class="text-muted"{% endif %}>
+                            <td>从没延后过</td>
+                            <td>{{ notification_snooze_return.contrast.plain_total }}</td>
+                            <td>{{ notification_snooze_return.contrast.plain_read }}</td>
+                            <td>{{ notification_snooze_return.contrast.plain_rate }}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">两组相差 {% if notification_snooze_return.contrast.gap_points is None %}&mdash;{% else %}{{ notification_snooze_return.contrast.gap_points }}{% endif %} 个百分点{% if not notification_snooze_return.contrast.gap_is_meaningful %}，不足 {{ notification_snooze_return.contrast.noise_points }} 个百分点视为噪声{% endif %}。<strong>只做对照不给因果</strong>：愿意延后的用户本来就是更谨慎的那批，这个差值描述的是人，不是通知。还在延后中的不计入分母——一条还没到期的通知说不出它会不会被读。</div>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-2">按通知类型拆</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 按通知类型拆</caption>
+            <thead><tr><th>通知类型</th><th>周期发送</th><th>被延后过</th><th>到点之后仍未读</th><th>还在延后中</th><th>回来之后中位等待</th></tr></thead>
+            <tbody>
+                {% for row in notification_snooze_return.kind_rows %}
+                <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                    <td><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.kind }}</small></td>
+                    <td>{{ row.sent }}</td>
+                    <td>{{ row.snoozed }}</td>
+                    <td>{{ row.unread_after_return }}</td>
+                    <td>{{ row.still_snoozed }}</td>
+                    <td>{% if row.median_days is None %}&mdash;{% else %}{{ row.median_label }}{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="empty-inline">按类型聚合，不列任何一条通知的原文：通知的标题和内容是收发双方的私域内容，把一条搬上看板，等于把两个用户之间的一句话搬到第三方眼前。不足 {{ notification_snooze_return.min_bucket_sample }} 条的类型只报数字。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>「此刻」两块不按统计周期过滤：此刻还有 {{ notification_snooze_return.current.still_snoozed_count }} 条被延后着、{{ notification_snooze_return.current.overdue_count }} 条到期未读（中位等了 {{ notification_snooze_return.current.overdue_median_label }}，最久 {{ notification_snooze_return.current.overdue_max_days }} 天）——一个周期开始之前就到期未读的通知，恰恰是最不该被藏起来的一件。这里只报告：不加迁移、不加字段、不改写入路径、不自动取消延后、不自动标记已读、不按用户排名；空平台报「&mdash;」不报 0 天。</div>
+    {% endif %}
+</section>
+

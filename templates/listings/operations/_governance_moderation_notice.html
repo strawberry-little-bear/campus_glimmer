@@ -1,0 +1,109 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 moderation-notice-preference-panel">
+        <div class="ops-panel-heading">
+            <div><span class="eyebrow eyebrow-soft">Moderation notice preference</span><h2>内容审核结果通知：开关、触达与沉默</h2></div>
+            <span class="ops-panel-hint">按复核结论拆触达与已读率，偏好只报四格人数</span>
+        </div>
+        <p class="search-rhythm-note mb-3"><i class="bi bi-bell-slash me-1"></i><code>moderation_update</code>（内容审核结果）是站内 24 种通知里<strong>唯一一条平台自己说话</strong>的通知：其余 23 种讲的都是人和人之间的事——有人预约了你的商品、有人申请了你的免费商品、有人给你发了私信，只有这一种，判你违规、然后通知你的，是平台自己。它走 <code>chat_messages/views.py:442</code> 的 <code>create_notification</code>，站内信之外<strong>没有第二条路径</strong>。而这个开关的读取路径此前只有两处：<code>forms.py:40</code> 的表单字段和 <code>notifications.py:66</code> 的 <code>getattr(preference, kind, True)</code>。<strong>一个开关被表单收集、被写入路径读取，从来没被统计过。</strong>四个通知模块都在读 <code>Notification</code> 表，没有一个读过 <code>NotificationPreference</code> 的一行值；<code>moderation_rule_quality</code> 的终点是 <code>ModerationEvent.status</code>。<strong>复核结论发出去之后，接收端发生了什么，五个模块一处都没接上。</strong></p>
+        {% if not moderation_notice_preference.has_data %}
+        <div class="empty-inline">当前周期没有被复核完的内容审核记录。复核还没发生，谈不上通知发没发——这些数都不存在，不是零。</div>
+        {% else %}
+        <div class="row g-3 mb-4">
+            <div class="col-md-3"><div class="ops-mini-stat"><span>周期内复核完</span><strong>{{ moderation_notice_preference.outcome.reviewed_count }}</strong><small>只收确认违规与误判放行</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>送到了作者眼前</span><strong>{{ moderation_notice_preference.outcome.delivered_count }}</strong><small>占 {% if moderation_notice_preference.outcome.delivered_rate is None %}&mdash;{% else %}{{ moderation_notice_preference.outcome.delivered_rate }}%{% endif %}</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>作者关掉了这一类</span><strong>{{ moderation_notice_preference.outcome.switch_off_count }}</strong><small>开关处静默返回，连通知行都不建</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>作者已注销</span><strong>{{ moderation_notice_preference.outcome.missing_author_count }}</strong><small>author 是 SET_NULL</small></div></div>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <h3 class="h6 mb-3">这条结论送到作者眼前了没有</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 这条结论送到作者眼前了没有</caption>
+                        <thead><tr><th>复核结论</th><th>记录数</th><th>送到了</th><th>开关关着</th><th>免打扰时段</th><th>复核人是作者本人</th><th>取不到偏好行</th></tr></thead>
+                        <tbody>
+                            {% for row in moderation_notice_preference.reach_rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.total_count }}</td>
+                                <td>{{ row.delivered }}</td>
+                                <td>{{ row.switch_off }}</td>
+                                <td>{{ row.quiet_hours }}</td>
+                                <td>{{ row.self_authored }}</td>
+                                <td>{{ row.no_preference_row }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="empty-inline">四种没送到的成因分开数，<strong>不合成一个未送达率</strong>：合成之后，这个数会随「复核人是不是内容作者」这种人极少的情况抖动，而那和用户有没有关开关毫无关系。中文标签不出现英文原值——<code>dismissed</code> 在站内是相反的意思（这里是「误判放行」，<code>MeetingIncident</code> 上是「驳回」），两个 <code>dismissed</code> 摆在一起，靠字段名分不开。</div>
+                <h3 class="h6 mb-3 mt-4">通知发出去之后，读没读</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 通知发出去之后，读没读</caption>
+                        <thead><tr><th>复核结论</th><th>条数</th><th>已读</th><th>未读</th><th>已读率</th></tr></thead>
+                        <tbody>
+                            {% for row in moderation_notice_preference.read_rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.sent_count }}</td>
+                                <td>{{ row.read_count }}</td>
+                                <td>{{ row.unread_count }}</td>
+                                <td>{% if row.read_rate is None %}&mdash;{% else %}{{ row.read_rate }}%{% endif %}{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ moderation_notice_preference.min_bucket_sample }} 条</small>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                            <tr>
+                                <td><strong>同期全部通知</strong><small class="d-block text-muted">对照分母</small></td>
+                                <td>{{ moderation_notice_preference.baseline_read_rate.sent_count }}</td>
+                                <td>{{ moderation_notice_preference.baseline_read_rate.read_count }}</td>
+                                <td>{{ moderation_notice_preference.baseline_read_rate.sent_count|add:"-"|add:moderation_notice_preference.baseline_read_rate.read_count }}</td>
+                                <td>{% if moderation_notice_preference.baseline_read_rate.read_rate is None %}&mdash;{% else %}{{ moderation_notice_preference.baseline_read_rate.read_rate }}%{% endif %}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="empty-inline">已读率按复核结论拆：确认违规和误判放行是两条情绪上完全不同的消息——一条说你违规了，一条说我们搞错了，<strong>它们的已读率没有理由相同</strong>。最后一行是同期全部通知的整体已读率，作对照分母：少了它，单看一类的已读率读不出「这一类是不是特别没人看」。只报聚合已读率，不报阅读时长分布——<code>notification_response</code> 已经报了全部 24 类的时效。</div>
+                <h3 class="h6 mb-3 mt-4">偏好开关四格</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 偏好开关四格</caption>
+                        <thead><tr><th>偏好开关四格</th><th>人数</th></tr></thead>
+                        <tbody>
+                            <tr><td><strong>有内容被复核 · 开关开着</strong></td><td>{{ moderation_notice_preference.preference_grid.reviewed_switch_on }}</td></tr>
+                            <tr><td><strong>有内容被复核 · 开关关着</strong></td><td>{{ moderation_notice_preference.preference_grid.reviewed_switch_off }}</td></tr>
+                            <tr><td><strong>没内容被复核 · 开关开着</strong></td><td>{{ moderation_notice_preference.preference_grid.unreviewed_switch_on }}</td></tr>
+                            <tr><td><strong>没内容被复核 · 开关关着</strong></td><td>{{ moderation_notice_preference.preference_grid.unreviewed_switch_off }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="empty-inline"><strong>只报四格的人数，不报用户名、不排名，也不报任何两格之间的比值。</strong>关掉一个通知偏好是用户的私事，做成排行榜就是把设置页变成公开表态。而四格的后两格（没被复核过内容的人）关不关这个开关，和「收到过审核结果」没有因果关系——直接拿第二格比第四格，比出来的是两群不同的人，不是同一群人的两种选择。<strong>没有偏好行的用户算「开着」</strong>：偏好行不是注册时建的，是第一次进设置页或第一次收到通知时由 <code>get_or_create</code> 现建的，而 <code>create_notification</code> 对这种人照样发通知。只数库里的行会把这群人整群漏掉，而他们恰恰是全站的大多数。</div>
+                {% if moderation_notice_preference.activity.has_data %}
+                <h3 class="h6 mb-3 mt-4">关掉之后，还在不在社区里说话</h3>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 关掉之后，还在不在社区里说话</caption>
+                        <thead><tr><th>发言行为</th><th>关掉的一组</th><th>开着的一组</th><th>方向</th></tr></thead>
+                        <tbody>
+                            {% for row in moderation_notice_preference.activity.rows %}
+                            <tr>
+                                <td><strong>{{ row.label }}</strong></td>
+                                <td>{{ row.off_count }} / {{ row.off_total }}</td>
+                                <td>{{ row.on_count }} / {{ row.on_total }}</td>
+                                <td>{% if row.direction == 'switch_off_higher' %}关掉的一组更高{% elif row.direction == 'switch_on_higher' %}开着的一组更高{% elif row.direction == 'same' %}两组相同{% else %}<small class="text-muted">样本不足 {{ moderation_notice_preference.min_preference_users }} 人，只报人数</small>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="empty-inline">只报<strong>同期人群的对照形状，不作因果</strong>：关掉通知不会让人不说话，收到一条「你违规了」也不会，两群人在发言率上的差，可能只是「常发言的人更在意审核结果」。方向只给三档，<strong>不给百分比差</strong>——一个 3 个百分点和一个 30 个百分点在看板上长一样，给的指引却完全相反。两群人都过 {{ moderation_notice_preference.min_preference_users }} 人才给方向。没被复核过内容的人不进这一节：他们关不关这个开关，和审核结果通知没有因果关系。</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-lock me-1"></i>这里只报告：不加迁移、不加字段、不改 <code>create_notification</code>、不改复核写入路径、不给任何人自动打开开关。<code>create_notification</code> 那句静默的 <code>return None</code> 正是本模块要观测的对象，改掉它，观测对象就没了。一个字符的自由文本都不读：<code>ModerationEvent.content</code> 是被拦截的原文，<code>Notification.title</code> / <code>message</code> 是发给用户的话，三处都可能写着电话、微信、楼栋号。不重复 <code>notification_kind_coverage</code> 的版图（那个报选择项与表单字段的差集，这个报值本身）、不重复 <code>notification_response</code> 的时效（只报已读率这一项）、不重复 <code>moderation_rule_quality</code> 的规则质量（那个的终点是 <code>status</code>，这个从 <code>status</code> 往后接一步）。</div>
+        {% if not moderation_notice_preference.outcome.reviewed_count %}
+        <div class="empty-inline mt-2">{{ moderation_notice_preference.summary }}</div>
+        {% endif %}
+    </section>

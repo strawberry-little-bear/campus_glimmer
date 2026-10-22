@@ -1,0 +1,115 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 favorite-collection-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Wishlist</span><h2>用户建的心愿单分组</h2></div>
+        <span class="ops-panel-hint">周期 {{ favorite_collection_quality.period_days }} 天·只报告不改任何分组</span>
+    </div>
+    {% if favorite_collection_quality.has_data %}
+    <div class="favorite-collection-summary">
+        <div><span>当前分组</span><strong>{{ favorite_collection_quality.metrics.group_total }}</strong><small>快照，不是窗口</small></div>
+        <div><span>当前收藏</span><strong>{{ favorite_collection_quality.metrics.favorite_total }}</strong><small>其中 {{ favorite_collection_quality.penetration.grouped_favorite_total }} 条已归组</small></div>
+        <div><span>已归组收藏占比</span><strong>{% if favorite_collection_quality.penetration.grouped_favorite_share != None %}{{ favorite_collection_quality.penetration.grouped_favorite_share }}%{% else %}—{% endif %}</strong><small>分母是全部收藏</small></div>
+        <div><span>建过分组的人</span><strong>{% if favorite_collection_quality.penetration.collector_share != None %}{{ favorite_collection_quality.penetration.collector_share }}%{% else %}—{% endif %}</strong><small>分母是有收藏的用户</small></div>
+    </div>
+
+    <div class="mt-3">
+        <div class="favorite-collection-block-heading"><strong>窗口内新建</strong><span>按 created_at 归期，这一列写进去就不再动</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 窗口内新建</caption>
+                <thead><tr><th>对象</th><th>窗口内新建</th><th>当前总量</th></tr></thead>
+                <tbody>
+                    <tr><td><strong>心愿单分组</strong></td><td>{{ favorite_collection_quality.metrics.window_collection_count }}</td><td>{{ favorite_collection_quality.metrics.group_total }}</td></tr>
+                    <tr><td><strong>收藏</strong></td><td>{{ favorite_collection_quality.metrics.window_favorite_count }}</td><td>{{ favorite_collection_quality.metrics.favorite_total }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="favorite-collection-note mb-0 mt-2"><i class="bi bi-info-circle me-1"></i>「窗口内新建」和「当前总量」是两件事，不放进同一列：分组可以被删（删完收藏变未分组），收藏可以被取消（<code>toggle_favorite</code> 的 <code>delete</code> 分支）。所以左边数的是这 {{ favorite_collection_quality.period_days }} 天发生过什么，右边数的是现在有什么。</p>
+
+        <div class="favorite-collection-block-heading mt-3"><strong>分组大小分布</strong><span>分子分母都是分组，问的是往里放了几条</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 分组大小分布</caption>
+                <thead><tr><th>大小档</th><th>分组数</th><th>占全部分组</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in favorite_collection_quality.scale_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.group_count }}</td>
+                        <td>{% if row.share_of_groups != None %}{{ row.share_of_groups }}%{% else %}—{% endif %}</td>
+                        <td>{% if row.is_small_sample %}<span class="text-muted">不足 {{ favorite_collection_quality.metrics.min_band_sample }} 个</span>{% else %}<span class="favorite-collection-ok">够</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="favorite-collection-note mb-0 mt-2">空分组不在任何一档里：0 条没有「几条」可放。当前共有 {{ favorite_collection_quality.metrics.empty_group_total }} 个空分组，其中 {{ favorite_collection_quality.metrics.stale_empty_total }} 个建于 {{ favorite_collection_quality.metrics.empty_grace_days }} 天之前——后者占空分组的 {% if favorite_collection_quality.empty_rows.stale_share != None %}{{ favorite_collection_quality.empty_rows.stale_share }}%{% else %}—{% endif %}，才是「建了不会用」的真信号；刚建的空分组是良性解释。</p>
+
+        <div class="favorite-collection-block-heading mt-3"><strong>分组渗透</strong><span>两个分母不同，必须分开报</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 分组渗透</caption>
+                <thead><tr><th>指标</th><th>数值</th><th>分母是什么</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td><strong>已归组收藏占比</strong></td>
+                        <td>{% if favorite_collection_quality.penetration.grouped_favorite_share != None %}{{ favorite_collection_quality.penetration.grouped_favorite_share }}%{% else %}—{% endif %}</td>
+                        <td>全部收藏（{{ favorite_collection_quality.penetration.favorite_total }} 条）。未分组的收藏就是一条普通收藏，和分组功能无关。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>建过分组的人占比</strong></td>
+                        <td>{% if favorite_collection_quality.penetration.collector_share != None %}{{ favorite_collection_quality.penetration.collector_share }}%{% else %}—{% endif %}</td>
+                        <td>有收藏的用户（{{ favorite_collection_quality.penetration.favoriter_count }} 人）。没收藏的人看不到分组功能，算进分母会把渗透率压低。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>只收藏、从没建分组</strong></td>
+                        <td>{{ favorite_collection_quality.penetration.favoriter_only_count }} 人</td>
+                        <td>绝对量，不是比例。</td>
+                    </tr>
+                    <tr>
+                        <td><strong>建了分组、但没收藏</strong></td>
+                        <td>{{ favorite_collection_quality.penetration.collector_only_count }} 人</td>
+                        <td>绝对量。<code>create_favorite_collection</code> 只要求登录、不要求有收藏，所以这批人存在。他们用了分组功能但分组是空的，不该被渗透率吞掉。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        {% if favorite_collection_quality.name_rows %}
+        <div class="favorite-collection-block-heading mt-3"><strong>分组名收敛</strong><span>只有 {{ favorite_collection_quality.metrics.min_name_sample }} 个以上用户用过的名字才进榜</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 分组名收敛</caption>
+                <thead><tr><th>分组名</th><th>使用用户数</th><th>分组数</th><th>收藏数</th><th>平均大小</th></tr></thead>
+                <tbody>
+                    {% for row in favorite_collection_quality.name_rows %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong></td>
+                        <td>{{ row.user_count }}</td>
+                        <td>{{ row.group_count }}</td>
+                        <td>{{ row.favorite_count }}</td>
+                        <td>{% if row.average_size != None %}{{ row.average_size }}{% else %}—{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="favorite-collection-note mb-0 mt-2">分组名在同一个用户内唯一（<code>UniqueConstraint(fields=['user', 'name'])</code>），所以「使用用户数」天然就是去重过的，不需要另做去重。</p>
+        {% endif %}
+
+        <p class="favorite-collection-note mb-0 mt-3"><i class="bi bi-info-circle me-1"></i>{{ favorite_collection_quality.summary }}</p>
+        {% for note in favorite_collection_quality.recommendations %}
+        <p class="favorite-collection-note mb-0">{{ note }}</p>
+        {% endfor %}
+        {% if favorite_collection_quality.size_shape.has_comparison %}
+        <p class="favorite-collection-note mb-0">{{ favorite_collection_quality.size_shape.summary }}</p>
+        {% endif %}
+        <p class="favorite-collection-note mb-0">本面板<b>不报「先收藏后归类」</b>：<code>Favorite</code> 没有 <code>updated_at</code>，<code>views.update_favorite_collection</code> 走 <code>save(update_fields=['collection'])</code>，模型里也没有任何 <code>auto_now</code> 字段，所以这次保存不刷新任何时间列。一条 60 天前收藏的商品，昨天被移进分组，它在这个库里的全部痕迹就是 <code>created_at = 60 天前</code>、<code>collection = 那个分组</code>——<b>它是什么时候被归类的，不存在。</b>窗口内新建的收藏读出来的 <code>collection</code> 是今天读到的值，不是它创建时的值，报出来会被读成「收藏时就归组率」，而它其实混着大量后来才移进去的收藏。</p>
+        <p class="favorite-collection-note mb-0">同理不报<b>分组改名频率</b>：<code>FavoriteCollection</code> 有 <code>updated_at</code>，但应用内没有改名路由——<code>create_favorite_collection</code> 走 <code>get_or_create</code>，同名时不写；<code>update_favorite_collection</code> 改的是 <code>Favorite.collection</code>，不是分组名。唯一写入路径是 Django admin 的保存，所以 <code>updated_at != created_at</code> 只说明「有人在后台动过这条分组」，数不到改名。同理不报<b>删分组之后收藏去哪了</b>：<code>Favorite.collection</code> 是 <code>on_delete=SET_NULL</code>，删分组不删收藏、只把它们变成未分组，而删分组只走 admin，删完的收藏和从来没归过类的收藏长得一模一样。</p>
+        <p class="favorite-collection-note mb-0">四类分母各自独立，不能混：当前全部收藏、当前全部分组、当前有收藏的用户、窗口内新建。拿「有收藏的用户」当分母去报分组渗透率，会把没收藏过任何东西的人也算进分母，而他们根本看不到分组功能。「当前」是快照不是窗口，所以窗口内的新建规模和当前快照在面板上分开摆。</p>
+    </div>
+    {% else %}<div class="empty-inline mt-3">站内还没有任何心愿单分组。第一个分组建出来之后，这里会开始统计。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>空分组按 <code>FavoriteCollection.created_at</code> 拆「刚建」和「早就建了还空着」，{{ favorite_collection_quality.metrics.empty_grace_days }} 天没有理论依据，取的是「一个真心想用分组的人不会一周都想不起来往里放第一条」这个量级。两条占比相差不满 {{ favorite_collection_quality.metrics.noise_points }} 个百分点视为噪声。本模块只报告，不新建分组、不合并分组、不改任何一条 <code>Favorite.collection</code>、不改任何分组名、不动 <code>FavoriteCollectionForm</code> 的任何校验、不给任何用户排名、不预设任何分组名。</div>
+</section>

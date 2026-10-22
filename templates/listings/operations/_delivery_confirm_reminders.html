@@ -1,0 +1,136 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 order-deadline-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Order deadline</span><h2>承诺的截止时间，和催过之后</h2></div>
+        <span class="ops-panel-hint">确认要多久、催了有没有用，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-alarm me-1"></i>每一笔预约订单都带着两个承诺：<strong>下单后 {{ order_deadline_reminders.confirmation_timeout_hours }} 小时内卖家要确认</strong>，截止前 {{ order_deadline_reminders.reminder_hours_default }} 小时系统会先催一次；借用订单另有一个<strong>预计归还时间</strong>，归还日前 6 小时催一次，逾期之后再催一次。四个时间字段的写入路径是完整的——发前判空、发后落库、幂等，超时未确认的订单会被自动释放。而读取路径只有订单详情页和后台。<strong>催过之后到底有没有用，上线到现在没有任何读者。</strong></p>
+    {% if not order_deadline_reminders.has_data %}
+    <div class="empty-inline">{{ order_deadline_reminders.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>中位确认时长</span><strong>{{ order_deadline_reminders.confirm_stats.median_label }}</strong><small>从下单算到确认那一刻</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>催过之后确认</span><strong>{{ order_deadline_reminders.reminder_stats.confirmed_after }}</strong><small>共 {{ order_deadline_reminders.reminder_stats.total }} 笔收到过提醒</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>催过仍被自动释放</span><strong>{{ order_deadline_reminders.reminder_stats.expired_after }}</strong><small>催了也没用的那一批</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已过截止还挂着</span><strong>{{ order_deadline_reminders.pending_count }}</strong><small>右删失样本，不进分母</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从下单到卖家确认花了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 从下单到卖家确认花了多久</caption>
+                    <thead><tr><th>确认时长</th><th>笔数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in order_deadline_reminders.confirm_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td></tr>
+                        {% endfor %}
+                        <tr><td>合计</td><td>{{ order_deadline_reminders.confirm_stats.total }}</td><td>—</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">确认时刻只认 <code>OrderEvent</code> 里 <code>to_status='confirmed'</code> 的最早一条，<strong>不用 <code>updated_at</code></strong>：那是 <code>auto_now</code>，改任何一个字段它都会跟着走，拿它当确认时刻，一次商品改价就能把一整批订单的确认时长抹成 0。按小时和天切，不按分钟——一次卖家确认的时间尺度是小时到天。</p>
+            <h3 class="h6 mb-3 mt-4">催过之后的四种结局</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 催过之后的四种结局</caption>
+                    <thead><tr><th>结局</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        <tr><td>提醒之后确认了</td><td>{{ order_deadline_reminders.reminder_stats.confirmed_after }}</td><td>{% if order_deadline_reminders.reminder_stats.confirmed_after_share is None %}—{% else %}{{ order_deadline_reminders.reminder_stats.confirmed_after_share }}{% endif %}</td><td class="small text-muted">最有信息量的一列</td></tr>
+                        <tr><td>提醒之后仍被自动释放</td><td>{{ order_deadline_reminders.reminder_stats.expired_after }}</td><td>{% if order_deadline_reminders.reminder_stats.expired_after_share is None %}—{% else %}{{ order_deadline_reminders.reminder_stats.expired_after_share }}{% endif %}</td><td class="small text-muted">催了也没用</td></tr>
+                        <tr><td>提醒之后用户主动取消</td><td>{{ order_deadline_reminders.reminder_stats.cancelled_by_user }}</td><td>—</td><td class="small text-muted">和承诺无关，单独数</td></tr>
+                        <tr><td>确认时刻取不到</td><td>{{ order_deadline_reminders.reminder_stats.unmeasurable }}</td><td>—</td><td class="small text-muted">右删失样本，不进分档</td></tr>
+                        <tr><td>合计（收到过确认提醒）</td><td>{{ order_deadline_reminders.reminder_stats.total }}</td><td>—</td><td class="small text-muted">提醒时刻落在周期内才算</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">四种结局分开报。<strong>合成一个「已提醒 N 笔」会把最有效的提醒和最无效的提醒混成一个平均值</strong>——那正是运营最不该看的一个数。自动释放和用户主动取消都表现为 <code>cancelled</code>，靠事件备注里有没有「自动释放」区分：前者的运营动作是查发布者是不是不上了，后者什么都不该做。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">确认的时候，距截止还剩多少</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 确认的时候，距截止还剩多少</caption>
+                    <thead><tr><th>距截止还剩</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in order_deadline_reminders.reminder_stats.margin_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td><td class="small text-muted">{{ row.note }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">「已过截止才确认」单独一档：<code>process_order_timeouts</code> 的释放判定是 <code>deadline &lt;= now</code>，踩着截止点过去之后才确认的订单确实存在，只是极少。不足 {{ order_deadline_reminders.min_measured_orders }} 笔的档位只报数字、不给方向；两档相差小于 {{ order_deadline_reminders.noise_points }} 个百分点视为噪声。<strong>只做对照、不给因果</strong>：确认得快的订单更可能做成，很可能只是因为发布者本来就一直挂着后台。</p>
+            <h3 class="h6 mb-3 mt-4">借用侧：催过之后提前多久还</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 借用侧：催过之后提前多久还</caption>
+                    <thead><tr><th>距预计归还</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                    <tbody>
+                        {% for row in order_deadline_reminders.borrow_stats.margin_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td><td class="small text-muted">{{ row.note }}</td></tr>
+                        {% endfor %}
+                        <tr><td>取消</td><td>{{ order_deadline_reminders.borrow_stats.cancelled }}</td><td>—</td><td class="small text-muted">它不是「没还」，它是「交易没有继续」</td></tr>
+                        <tr><td>归还登记或预计归还时间缺一个</td><td>{{ order_deadline_reminders.borrow_stats.unmeasurable }}</td><td>—</td><td class="small text-muted">答不了「提前多久还」</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">借用侧单独取数：它有自己的状态终点（已归还）和自己的提醒字段，<strong>混在出售订单里会让两边的「催过之后」互相污染</strong>。逾期通知发过仍未归还的借用订单现有 {{ order_deadline_reminders.overdue_still_borrowed }} 笔——那是催收阶梯的领域，这里只报规模，不动阶梯。</p>
+        </div>
+    </div>
+    <h3 class="h6 mb-3 mt-4">台账加成拆开：调度负载是哪一侧在涨</h3>
+    <div class="row g-3 mb-3">
+        <div class="col-md-4"><div class="ops-mini-stat"><span>预约确认提醒</span><strong>{{ order_deadline_reminders.confirmation_reminded_in_window }}</strong><small>截止前 6 小时发的那一批</small></div></div>
+        <div class="col-md-4"><div class="ops-mini-stat"><span>借用归还提醒</span><strong>{{ order_deadline_reminders.borrow_reminded_in_window }}</strong><small>归还日前 6 小时发的那一批</small></div></div>
+        <div class="col-md-4"><div class="ops-mini-stat"><span>两者之和</span><strong>{{ order_deadline_reminders.confirmation_reminded_in_window|add:order_deadline_reminders.borrow_reminded_in_window }}</strong><small>TaskRun.metrics 里的 reminded 就是这个数</small></div></div>
+    </div>
+    <p class="small text-muted mt-0 mb-4"><code>TaskRun.metrics</code> 把「预约确认即将超时」和「借用即将到期」加成同一个 <code>reminded</code>，把「预约超时自动释放」和「借用逾期提醒」加成同一个 <code>expired</code>。所以六个可观测性模块看到调度负载在涨的时候，<strong>说不清是哪一侧在涨</strong>。这里不改写入口径，只在看板上拆开。</p>
+    <h3 class="h6 mb-3 mt-4">催过之后仍被自动释放的订单</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">承诺的截止时间，和催过之后 · 催过之后仍被自动释放的订单</caption>
+            <thead><tr><th>订单号</th><th>商品</th><th>等足了多久</th><th>催过</th></tr></thead>
+            <tbody>
+                {% for row in order_deadline_reminders.release_rows %}
+                <tr>
+                    <td>#{{ row.order_id }}</td>
+                    <td><strong>{{ row.item_title }}</strong></td>
+                    <td>{{ row.waited_label }}</td>
+                    <td>{% if row.was_reminded %}催过{% else %}没催过{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">当前周期没有催过之后仍被自动释放的订单。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if order_deadline_reminders.release_rows|length > order_deadline_reminders.release_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ order_deadline_reminders.release_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <h3 class="h6 mb-3 mt-4">已过截止时间，还挂在「待卖家确认」</h3>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">承诺的截止时间，和催过之后 · 已过截止时间，还挂在「待卖家确认」</caption>
+            <thead><tr><th>订单号</th><th>商品</th><th>已超时多久</th><th>催过</th></tr></thead>
+            <tbody>
+                {% for row in order_deadline_reminders.pending_rows %}
+                <tr>
+                    <td>#{{ row.order_id }}</td>
+                    <td><strong>{{ row.item_title }}</strong></td>
+                    <td>{{ row.overdue_label }}</td>
+                    <td>{% if row.was_reminded %}催过{% else %}没催过{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4">当前周期没有已经超过截止时间还挂着的订单。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if order_deadline_reminders.pending_rows|length > order_deadline_reminders.pending_row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ order_deadline_reminders.pending_row_limit }} 条，完整的在导出里。</p>
+    {% endif %}
+    <p class="small text-muted mt-2 mb-0">超时时长从截止时刻算到现在，<strong>不按统计周期切</strong>：「现在」不属于任何统计周期，一笔跨越边界的等待按周期切开会被算成两段短的，而那正是最不该被切开的样本。周期只用来筛「哪些订单进入统计」，不用来切等待本身。清单只列订单号、商品、超时时长和催没催过，<strong>不列用户名</strong>：那是一份考勤表，不是一份看板。</p>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告承诺与催收的账，<strong>不调整 6 小时和 24 小时这两个默认值、不自动推进任何一笔订单</strong>：不改 <code>process_order_timeouts</code> 的触发条件、不改催收阶梯的触发条件、不改 <code>close_escalation</code> 的调用点、不新增提醒类型。催过之后订单还是被自动释放，可能因为发布者真的不上了，可能因为提醒发出去没人看见，可能因为这单本来就不该成——平台没有能力区分这三者，也就不该据此把提醒提前、把截止缩短。一个把 6 小时改成 1 小时的看板，会让每一次超时都变成一次打扰，那是比这个缺口严重得多的错。也不把统计写回任何记录。</div>
+    {% endif %}
+</section>

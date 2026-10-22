@@ -1,0 +1,100 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 task-run-health-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Schedule health</span><h2>定时任务运行台账与健康统计</h2></div>
+        <span class="ops-panel-hint">调度命令过去只是跑完就走，现在每次运行都会留下记录</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>周期内运行</span><strong>{{ task_run_health.total_runs }}</strong><small>已排除预演</small></div>
+        <div{% if task_run_health.total_failed %} class="supply-lifecycle-summary-warning"{% endif %}><span>失败</span><strong>{{ task_run_health.total_failed }}</strong><small>成功率 {% if task_run_health.success_rate %}{{ task_run_health.success_rate_percent|floatformat }}%{% else %}—{% endif %}</small></div>
+        <div{% if task_run_health.stale_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>超过 {{ task_run_health.stale_after_days }} 天没成功</span><strong>{{ task_run_health.stale_count }}</strong><small>个命令</small></div>
+        <div{% if task_run_health.failing_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>正在连续失败</span><strong>{{ task_run_health.failing_count }}</strong><small>个命令</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各命令运行情况</strong><span>按最近一次运行排序，静默天数从上次成功算起</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务运行台账与健康统计 · 各命令运行情况</caption>
+                <thead><tr><th>命令</th><th>周期内运行</th><th>失败</th><th>成功率</th><th>最近状态</th><th>最近运行</th><th>最近成功</th><th>静默</th><th>连续失败</th><th>平均耗时</th><th>累计处理</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_health.commands %}
+                    <tr>
+                        <td data-label="命令">{{ row.name }}</td>
+                        <td data-label="周期内运行">{{ row.run_count }}</td>
+                        <td data-label="失败">{{ row.failed_count }}</td>
+                        <td data-label="成功率">{% if row.success_rate != None %}{{ row.success_rate|floatformat:1 }}%{% else %}&mdash;{% endif %}</td>
+                        <td data-label="最近状态">{% if row.last_status == 'failed' %}<span class="supply-lifecycle-flag">失败</span>{% elif row.last_status == 'succeeded' %}成功{% else %}<span class="text-muted">无记录</span>{% endif %}</td>
+                        <td data-label="最近运行">{% if row.last_run_at %}{{ row.last_run_at|date:'m-d H:i' }}{% else %}—{% endif %}</td>
+                        <td data-label="最近成功">{% if row.last_success_at %}{{ row.last_success_at|date:'m-d H:i' }}{% else %}&mdash;{% endif %}</td>
+                        <td data-label="静默">{% if row.is_stale %}<span class="supply-lifecycle-flag">{{ row.silence_label }}</span>{% else %}{{ row.silence_label }}{% endif %}</td>
+                        <td data-label="连续失败">{% if row.consecutive_failures %}<span class="supply-lifecycle-flag">{{ row.consecutive_failures }} 次</span>{% else %}0{% endif %}</td>
+                        <td data-label="平均耗时">{% if row.avg_duration_ms %}{{ row.avg_duration_ms }} 毫秒{% else %}—{% endif %}</td>
+                        <td data-label="累计处理">{% for key, value in row.metrics_total.items %}{{ key }} {{ value }}{% if not forloop.last %}、{% endif %}{% empty %}—{% endfor %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if task_run_health.recommendations %}
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>调度建议</strong><span>仅在越过阈值时给出</span></div>
+        <ul>
+            {% for recommendation in task_run_health.recommendations %}
+            <li><i class="bi bi-lightbulb me-1"></i>{{ recommendation }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>静默天数按最近一次<i>成功</i>运行计算：一直失败的命令同样每天都在跑，若按任意运行计算就会把自己伪装成健康的。--dry-run 只统计发送范围、不写入任何通知，默认不计入成功率。失败记录写在独立短事务里，业务事务回滚也不会带走失败证据，异常仍会原样抛出，不会因为接了台账就被吞掉。</div>
+
+</section>
+
+<section class="content-card ops-panel mb-4 task-run-failure-causes-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Failure causes</span><h2>定时任务失败原因分类</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_failure_causes.days }} 天·按失败长什么样归类</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div{% if task_run_failure_causes.total_failed %} class="supply-lifecycle-summary-warning"{% endif %}><span>失败总数</span><strong>{{ task_run_failure_causes.total_failed }}</strong><small>周期内所有命令</small></div>
+        <div><span>已归类</span><strong>{{ task_run_failure_causes.classified_count }}</strong><small>能识别异常名</small></div>
+        <div{% if task_run_failure_causes.unclassified_count %} class="supply-lifecycle-summary-warning"{% endif %}><span>未归类</span><strong>{{ task_run_failure_causes.unclassified_count }}</strong><small>备注无异常名</small></div>
+        <div><span>涉及类别</span><strong>{{ task_run_failure_causes.causes|length }}</strong><small>最多 {{ task_run_failure_causes.causes|length }} 种形态</small></div>
+    </div>
+
+    {% if task_run_failure_causes.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>各类原因的失败次数</strong><span>按次数从多到少排列</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-failure-causes-table">
+            <caption class="visually-hidden">定时任务失败原因分类 · 各类原因的失败次数</caption>
+                <thead><tr><th>原因类别</th><th>失败次数</th><th>涉及命令</th><th>最近一次失败</th><th>最近一次备注</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_failure_causes.causes %}
+                    <tr>
+                        <td data-label="原因类别"><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.hint }}</small></td>
+                        <td data-label="失败次数">{% if row.count >= 3 %}<span class="supply-lifecycle-flag">{{ row.count }} 次</span>{% else %}{{ row.count }} 次{% endif %}</td>
+                        <td data-label="涉及命令">{{ row.command_count }} 个<small class="d-block text-muted">{% for command in row.command_rows %}{{ command.name }} {{ command.count }} 次{% if not forloop.last %}、{% endif %}{% endfor %}</small></td>
+                        <td data-label="最近一次失败">{% if row.last_failure_at %}{{ row.last_failure_at|date:"m-d H:i" }}{% else %}—{% endif %}</td>
+                        <td data-label="最近一次备注"><code>{% if row.last_note %}{{ row.last_note }}{% else %}—{% endif %}</code></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}<div class="empty-inline mt-3">周期内没有失败的运行记录。</div>{% endif %}
+
+    <div class="supply-lifecycle-recommendations mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>怎么读这张表</strong><span>分类只说明失败长什么样，不代表严重程度</span></div>
+        <ul>
+            <li><i class="bi bi-info-circle me-1"></i>{{ task_run_failure_causes.summary }}</li>
+            <li><i class="bi bi-exclamation-triangle me-1"></i>同一个异常名可能是致命的配置错误，也可能只是“今天没有到期订单”的正常提前返回；分类不能代替判断，具体如何处理请结合原始备注和上方的调度健康面板。</li>
+            <li><i class="bi bi-search me-1"></i>未归类的失败说明备注里没有可识别的异常名，这类行需要回到调度日志里直接看堆栈。</li>
+        </ul>
+    </div>
+</section>

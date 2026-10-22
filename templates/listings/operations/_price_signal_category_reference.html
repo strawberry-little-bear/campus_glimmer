@@ -1,0 +1,46 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4" id="category-price-reference">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Category price reference</span><h2>分类调价参考</h2></div>
+        <span class="ops-panel-hint">当前价格快照，不按看板周期过滤</span>
+    </div>
+    <p class="small text-muted mb-3"><i class="bi bi-tags me-1"></i>{{ category_price_reference.note }}</p>
+    {% if not category_price_reference.has_data %}
+    <div class="empty-inline">{{ category_price_reference.empty_text }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>有参考的分类</span><strong>{{ category_price_reference.summary.category_count }}</strong><small>每个分类最多 {{ category_price_reference.max_sample_count }} 件样本</small></div></div>
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>当前在售</span><strong>{{ category_price_reference.summary.active_item_total }}</strong><small>只数仍可由卖家调整的供给</small></div></div>
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>区间外在售</span><strong>{{ category_price_reference.summary.out_of_range_item_total }}</strong><small>高于 {{ category_price_reference.summary.above_item_total }} / 低于 {{ category_price_reference.summary.below_item_total }}</small></div></div>
+        <div class="col-md-3 col-xl-3"><div class="ops-mini-stat"><span>边界提醒</span><strong>{{ category_price_reference.summary.low_sample_category_count }} / {{ category_price_reference.summary.wide_range_category_count }}</strong><small>样本不足分类 / 区间过宽分类</small></div></div>
+    </div>
+    <div class="ops-panel-block">
+        <h3 class="h6 mb-3">分类价格参考</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">分类调价参考 · 分类价格参考</caption>
+                <thead><tr><th>分类</th><th>样本</th><th>中位数</th><th>常见区间</th><th>当前在售</th><th>低于 / 区间内 / 高于</th><th>区间外</th><th>宽度</th><th>状态与读法</th></tr></thead>
+                <tbody>
+                    {% for row in category_price_reference.rows %}
+                    <tr{% if row.is_attention_needed %} class="ops-row-emphasis"{% endif %}>
+                        <td><strong>{{ row.name }}</strong></td>
+                        <td>{{ row.sample_count }}<small class="d-block text-muted">{{ row.sample_scope }} · {{ row.confidence_label }}</small></td>
+                        <td>¥{{ row.median_price|floatformat:2 }}</td>
+                        <td>¥{{ row.lower_price|floatformat:2 }}–{{ row.upper_price|floatformat:2 }}{% if row.is_widened %}<small class="d-block text-muted">四分位相同，已按中位数 ±10% 放宽</small>{% endif %}</td>
+                        <td>{{ row.active_count }}</td>
+                        <td>{{ row.below_count }} / {{ row.within_count }} / {{ row.above_count }}</td>
+                        <td>{% if row.out_of_range_count %}<span class="supply-lifecycle-flag">{{ row.out_of_range_count }}</span>{% else %}{{ row.out_of_range_count }}{% endif %}{% if row.out_of_range_share is not None %}<small class="d-block text-muted">{{ row.out_of_range_share }}%</small>{% else %}<small class="d-block text-muted">样本不足，不报占比</small>{% endif %}</td>
+                        <td>{{ row.width_percent|floatformat }}%</td>
+                        <td><span class="badge text-bg-secondary">{{ row.status_label }}</span><small class="d-block text-muted">{{ row.hint }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>样本沿用商品详情页价格参考，但不逐件调用详情页函数，避免看板引入逐商品 N+1 查询。已预订与已售出可作为价格证据，不计入当前运营动作；本面板不输出商品或卖家，不自动改价，也不把“高于常见区间”读成卖贵了。</div>
+    {% endif %}
+</section>
+

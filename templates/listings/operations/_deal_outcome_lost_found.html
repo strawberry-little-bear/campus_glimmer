@@ -1,0 +1,187 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 lost-found-lead-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Lost &amp; found leads</span><h2>失物招领的线索，有多少条走到了「已确认」</h2></div>
+        <span class="ops-panel-hint">发布了有没有人理，确认了有没有找回来</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-search-heart me-1"></i><code>LostFoundPost</code> 是站内唯一一条「我丢了 / 我捡到了」的记录，<code>LostFoundLead</code> 是它的线索表：一个人看到一条记录，私下提交一条说明，等发布者确认。这条链路是站内<strong>唯一一条不经过交易就完成的互助</strong>——没有 <code>Order</code>、没有价格、没有交付确认，走的是「发布 → 有人私下提线索 → 发布者确认 → 双方自己联系」四步。<strong>这四步每一步都在写库，却从来没有人把它们连起来看过。</strong></p>
+    {% if not lost_found_lead_quality.has_data %}
+    <div class="empty-inline">{{ lost_found_lead_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内失物招领记录</span><strong>{{ lost_found_lead_quality.lead_count.total }}</strong><small>平均 {{ lost_found_lead_quality.lead_count.leads_per_post }} 条线索/记录</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>收到了线索的记录</span><strong>{{ lost_found_lead_quality.lead_count.posts_with_lead_rate }}%</strong><small>{{ lost_found_lead_quality.lead_count.posts_with_lead_count }} / {{ lost_found_lead_quality.lead_count.total }} 条</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>确认了线索的记录</span><strong>{{ lost_found_lead_quality.confirm.confirm_rate }}%</strong><small>按记录类型拆开看下表</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>东西找回来了</span><strong>{{ lost_found_lead_quality.feedback.completion_rate }}%</strong><small>基于 {{ lost_found_lead_quality.feedback.feedback_count }} 份反馈</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">一条记录收到了几条线索</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 一条记录收到了几条线索</caption>
+                    <thead><tr><th>线索数</th><th>记录数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_lead_quality.lead_count.lead_count_rows %}
+                        <tr>
+                            <td>{{ row.label }}{% if row.count == 0 %} <span class="badge text-bg-secondary">无样本</span>{% endif %}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if lost_found_lead_quality.lead_count.total %}{{ row.share }}{% else %}—{% endif %}</td>
+                            <td>{{ row.note }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>分母是记录数，不是线索数。</strong>一条收到三条线索的记录在这个分布里只出现一次——按线索数走会让「两三条」那一档被同一批记录撑三次，而它其实只是几条记录的真实热度。<strong>发布了但没人提线索，和发布了收到一条线索，在总数上长得一模一样</strong>，所以「没有人提线索」这一档必须单独报。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">确认率按记录类型拆开</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 确认率按记录类型拆开</caption>
+                    <thead><tr><th>记录类型</th><th>记录数</th><th>线索数</th><th>确认了线索</th><th>确认率（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_lead_quality.confirm.rows %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong></td>
+                            <td>{{ row.post_count }}</td>
+                            <td>{{ row.lead_count }}</td>
+                            <td>{{ row.accepted_count }}</td>
+                            <td>{% if lost_found_lead_quality.confirm.is_small_sample %}{{ row.confirm_rate }}{% else %}{{ row.confirm_rate }}{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong><code>lost</code> 和 <code>found</code> 是两个完全不同的处境。</strong>丢东西的人发一条等着捡到的人来，捡到的人发一条等着丢东西的人来，两边的候选池大小和认领意愿完全不同——一条「捡到校园卡」的记录可能收到十几条线索，一条「丢失校园卡」的记录可能一条都没有，因为捡到的人更倾向于直接发帖而不是私信丢卡的人。合并成一个「失物招领整体确认率」，这个数无论往哪边动都无法定位问题。</p>
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">被驳回的线索，是发布者拒绝的还是顺带清掉的</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 被驳回的线索，是发布者拒绝的还是顺带清掉的</caption>
+                    <thead><tr><th>线索结局</th><th>线索数</th><th>占全部线索（%）</th><th>说明</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_lead_quality.rejection.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if lost_found_lead_quality.rejection.lead_count %}{{ row.share }}{% else %}—{% endif %}</td>
+                            <td>{{ row.note }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>这是本面板最要紧的一次拆分。</strong><code>review_lost_found_lead</code> 的 <code>accept</code> 分支在确认一条线索的同时，会把<strong>同一条记录下其余 <code>pending</code> 的线索全部批量改成 <code>rejected</code></strong>。这是正确的产品行为——一条失物确认匹配了，其余候选自然不再需要。但它意味着「被驳回的线索」里有很大一部分<strong>不是发布者一条条看过之后拒绝的</strong>。把两类混在一个「发布者拒绝率」里报，会得出「发布者很不认可大家提供的线索」这个完全错误的结论，而它会直接导致错误的动作：去提醒发布者多看看线索，或者给发布者加确认引导。而真实情况可能只是这个功能运转得很好——确认得很快，其余候选自然就没用了。</p>
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">发布者多久收到第一条线索</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 发布者多久收到第一条线索</caption>
+                    <thead><tr><th>提交间隔</th><th>记录数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_lead_quality.latency.bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if lost_found_lead_quality.latency.measured_count %}{{ row.share }}{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">中位 <strong>{{ lost_found_lead_quality.latency.median_label }}</strong>、P90 {{ lost_found_lead_quality.latency.p90_label }}，<strong>{{ lost_found_lead_quality.latency.same_day_rate }}% 在 24 小时内</strong>。只报<strong>第一条</strong>线索的时刻——那是「这条记录有没有被看见」的第一个信号，后续几条是热度，不是时效。按小时起步分档，不按天：失物招领的时间尺度是小时到天。</p>
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">确认之后，东西找回来了没有</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 确认之后，东西找回来了没有</caption>
+                    <thead><tr><th>互助结果</th><th>记录数</th><th>占已提交反馈（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_lead_quality.feedback.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if lost_found_lead_quality.feedback.feedback_count %}{{ row.share }}{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>只报失物招领自己的，不和求购响应合并。</strong><code>MutualAidFeedback</code> 有两个来源，互助反馈闭环面板把它们并进一个「已确认互助」总数报完成率，那是那个面板的口径。而这两件事的难度天差地别：求购响应是「我手里正好有你要的」，失物招领是「我捡到的东西正好是你丢的」。合并会让两边互相稀释。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">线索说明与辨识特征</h3>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle ops-table">
+                        <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 线索说明与辨识特征</caption>
+                            <thead><tr><th>文字长度</th><th>线索数</th><th>占比（%）</th></tr></thead>
+                            <tbody>
+                                {% for row in lost_found_lead_quality.message.length_rows %}
+                                <tr>
+                                    <td>{{ row.label }}</td>
+                                    <td>{{ row.count }}</td>
+                                    <td>{% if lost_found_lead_quality.message.filled_count %}{{ row.share }}{% else %}—{% endif %}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle ops-table">
+                        <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 线索说明与辨识特征（填写情况）</caption>
+                            <thead><tr><th>填写情况</th><th>数量</th><th>占比（%）</th></tr></thead>
+                            <tbody>
+                                <tr><td>写了线索说明</td><td>{{ lost_found_lead_quality.message.filled_count }}</td><td>{{ lost_found_lead_quality.message.fill_rate }}</td></tr>
+                                <tr><td>空白字符串</td><td>{{ lost_found_lead_quality.message.empty_count }}</td><td>{% if lost_found_lead_quality.message.lead_count %}{% widthratio lost_found_lead_quality.message.empty_count lost_found_lead_quality.message.lead_count 100 %}{% else %}—{% endif %}</td></tr>
+                                <tr><td>填了辨识特征的记录</td><td>{{ lost_found_lead_quality.message.feature_filled_count }}</td><td>{{ lost_found_lead_quality.message.feature_fill_rate }}</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><code>message</code> 是必填自由文本，<code>identifying_features</code> 是颜色品牌贴纸挂件。两个字段都<strong>只报「写了没写」和长度，一个字符的内容都不读</strong>——前者可能写着电话、微信、楼栋号；后者是为了让双方核对的，不是为了被统计的。平均 {{ lost_found_lead_quality.message.average_length }} 字。</p>
+        </div>
+    </div>
+    {% if lost_found_lead_quality.pending_rows.row_total %}
+    <div class="mt-3">
+        <h3 class="h6 mb-3">还挂着没人处理的线索</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 还挂着没人处理的线索</caption>
+                <thead><tr><th>记录</th><th>线索提供者</th><th>提交于</th><th>记录发布于</th></tr></thead>
+                <tbody>
+                    {% for row in lost_found_lead_quality.pending_rows.rows %}
+                    <tr>
+                        <td>{{ row.post.title }}</td>
+                        <td>{{ row.lead.respondent.username }}</td>
+                        <td>{{ row.lead.created_at|date:'Y-m-d H:i' }}</td>
+                        <td>{{ row.post.created_at|date:'Y-m-d H:i' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if lost_found_lead_quality.pending_rows.row_total > lost_found_lead_quality.pending_rows.row_limit %}
+        <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ lost_found_lead_quality.pending_rows.row_limit }} 条，完整的在导出里。</p>
+        {% endif %}
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不改 <code>review_lost_found_lead</code> 的批量清理逻辑、不催反馈、不读 <code>message</code> 和 <code>identifying_features</code> 的任何一个字符、不改 <code>score_lost_found_posts</code> 的权重、不按用户做任何聚合或排名、不做「疑似骗线索」检测</strong>。失物招领是站内信任浓度最高的一条链路，把它做成排行榜会直接毁掉它——「提供线索排行榜」会让帮忙变成刷分，「没人认领的记录排行榜」会让丢东西的人难堪。而催来的反馈不是反馈，是应付。</div>
+    {% endif %}
+</section>
+

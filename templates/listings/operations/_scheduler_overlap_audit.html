@@ -1,0 +1,150 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 task-run-overlap-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Self overlap</span><h2>命令的自我重叠</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_overlap.days }} 天·耗时对照运行间隔</span>
+    </div>
+    <div class="supply-lifecycle-summary">
+        <div><span>自我重叠</span><strong>{% if task_run_overlap.overlapping_count %}{{ task_run_overlap.overlapping_count }} 条命令{% else %}暂无{% endif %}</strong><small>既叠在一起、又真的更慢</small></div>
+        <div><span>正在逼近</span><strong>{% if task_run_overlap.approaching_count %}{{ task_run_overlap.approaching_count }} 条命令{% else %}暂无{% endif %}</strong><small>最长耗时已达间隔的 {{ task_run_overlap.approaching_interval|floatformat }} 成</small></div>
+        <div><span>节奏门槛</span><strong>至少 {{ task_run_overlap.min_runs_for_rhythm }} 次运行</strong><small>样本少的不反推间隔</small></div>
+        <div><span>变慢倍数</span><strong>{{ task_run_overlap.overlap_slowdown }} 倍</strong><small>低于此值只报数字</small></div>
+    </div>
+
+    {% if task_run_overlap.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <div class="supply-lifecycle-block-heading"><strong>每条命令的耗时与它自己的间隔</strong><span>会撞的排前面，其余按重叠对数排</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-overlap-table">
+            <caption class="visually-hidden">命令的自我重叠 · 每条命令的耗时与它自己的间隔</caption>
+                <thead><tr><th>命令</th><th>运行</th><th>运行间隔</th><th>最长耗时</th><th>最长/间隔</th><th>重叠对数</th><th>重叠代价</th><th>状态</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_overlap.rows %}
+                    <tr{% if row.is_self_overlapping %} class="supply-lifecycle-row-warning"{% endif %}>
+                        <td data-label="命令"><strong>{{ row.name }}</strong><small class="d-block text-muted">{{ row.run_count }} 次运行，其中 {{ row.succeeded_count }} 次成功</small></td>
+                        <td data-label="运行间隔">{% if row.interval_ms %}{{ row.interval_ms }} 毫秒<small class="d-block text-muted">{{ row.interval_runs }} 个间隔的中位数</small>{% else %}<span class="text-muted">样本不足</span>{% endif %}</td>
+                        <td data-label="最长耗时">{% if row.longest_run_ms %}{{ row.longest_run_ms }} 毫秒{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+                        <td data-label="最长/间隔">{{ row.longest_run_ratio_display }}</td>
+                        <td data-label="重叠对数">{{ row.overlap_pair_count }}</td>
+                        <td data-label="重叠代价">{{ row.overlap_cost_display }}</td>
+                        <td data-label="状态">
+                            {% if row.is_self_overlapping %}<span class="task-run-trend-direction" data-tone="bad">正在撞自己</span>
+                            {% elif row.is_approaching %}<span class="task-run-trend-direction" data-tone="warn">正在逼近</span>
+                            {% else %}<span class="text-muted">正常</span>{% endif %}
+                            <small class="d-block text-muted">{% if row.last_started_at %}最近 {{ row.last_started_at|date:"m-d H:i" }}{% endif %}</small>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <ul class="ops-panel-notes mt-3">
+            <li><i class="bi bi-info-circle me-1"></i>{{ task_run_overlap.summary }}</li>
+            <li><i class="bi bi-arrow-repeat me-1"></i>运行间隔从台账反推，不读 crontab：crontab 记的是写下来的安排，不是真正跑出来的节奏，一次被拖慢的运行会让实际间隔长于配置。</li>
+            <li><i class="bi bi-hourglass-bottom me-1"></i>重叠按台账里真实发生过的成对运行数：前一次的开始加它自己的耗时晚于后一次的开始，才算一对。比值报在旁边，从不代替对数。</li>
+            <li><i class="bi bi-speedometer2 me-1"></i>逼近用观测到的最长一次耗时当基数，不用分位：决定会不会撞上下一次的是真正跑过最长的那次，分位会把它抹掉。</li>
+            <li><i class="bi bi-shield-check me-1"></i>此处只报告，不改调度配置、不自动挪任务、不把统计写回台账。</li>
+        </ul>
+    </div>
+    {% else %}
+    <p class="text-muted mb-0 mt-3">窗口内还没有已记录的定时任务运行。</p>
+    {% endif %}
+</section>
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Ledger integrity</span><h2>定时任务台账完整性审计</h2></div>
+        <span class="ops-panel-hint">周期 {{ task_run_ledger_integrity.days }} 天·先看台账行能不能支撑后面的调度结论</span>
+    </div>
+
+    <h3 class="h6 mt-3">一、台账形状</h3>
+    <div class="supply-lifecycle-summary">
+        <div><span>台账行</span><strong>{{ task_run_ledger_integrity.summary.run_total }}</strong><small>成功 {{ task_run_ledger_integrity.summary.succeeded_total }} · 失败 {{ task_run_ledger_integrity.summary.failed_total }} · dry-run {{ task_run_ledger_integrity.summary.dry_run_total }}</small></div>
+        <div{% if task_run_ledger_integrity.summary.issue_row_total %} class="supply-lifecycle-summary-warning"{% endif %}><span>问题行</span><strong>{{ task_run_ledger_integrity.summary.issue_row_total }}</strong><small>占比 {% if task_run_ledger_integrity.summary.issue_row_share != None %}{{ task_run_ledger_integrity.summary.issue_row_share|floatformat }}%{% else %}—{% endif %}</small></div>
+        <div><span>指标可读</span><strong>{% if task_run_ledger_integrity.summary.metric_readable_share != None %}{{ task_run_ledger_integrity.summary.metric_readable_share|floatformat }}%{% else %}—{% endif %}</strong><small>分母是成功且非 dry-run 的 {{ task_run_ledger_integrity.summary.metric_required_total }} 行</small></div>
+        <div><span>未知命令</span><strong>{{ task_run_ledger_integrity.summary.unknown_command_total }}</strong><small>单列提醒，不判错</small></div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <h3 class="h6 mb-3">二、问题类型</h3>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务台账完整性审计 · 二、问题类型</caption>
+                <thead><tr><th>问题类型</th><th>行数</th><th>涉及命令数</th><th>读法</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_ledger_integrity.issue_type_rows %}
+                    <tr{% if row.row_count %} class="supply-lifecycle-row-warning"{% endif %}>
+                        <td data-label="问题类型"><strong>{{ row.label }}</strong></td>
+                        <td data-label="行数">{{ row.row_count }}</td>
+                        <td data-label="涉及命令数">{{ row.command_count }}</td>
+                        <td data-label="读法"><small class="text-muted">固定类型；这里只看行自身，不判调度责任</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if task_run_ledger_integrity.has_data %}
+    <div class="supply-lifecycle-block mt-3">
+        <h3 class="h6 mb-3">三、命令形状</h3>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务台账完整性审计 · 三、命令形状</caption>
+                <thead><tr><th>命令</th><th>运行</th><th>问题行</th><th>时间问题</th><th>指标问题</th><th>失败备注</th><th>未知键</th><th>名单</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_ledger_integrity.command_rows %}
+                    <tr{% if row.issue_row_count %} class="supply-lifecycle-row-warning"{% endif %}>
+                        <td data-label="命令"><strong>{{ row.name }}</strong></td>
+                        <td data-label="运行">{{ row.run_count }}</td>
+                        <td data-label="问题行">{{ row.issue_row_count }}</td>
+                        <td data-label="时间问题">{{ row.time_issue_row_count }}</td>
+                        <td data-label="指标问题">{{ row.metric_issue_row_count }}</td>
+                        <td data-label="失败备注">{{ row.missing_failure_note_row_count }}</td>
+                        <td data-label="未知键">{{ row.unknown_metric_key_count }}</td>
+                        <td data-label="名单">{% if row.is_known %}已知命令{% else %}<span class="text-muted">未知命令，单列不判错</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="supply-lifecycle-block mt-3">
+        <h3 class="h6 mb-3">四、问题行清单</h3>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务台账完整性审计 · 四、问题行清单</caption>
+                <thead><tr><th>台账行</th><th>命令</th><th>开始时间</th><th>问题数</th><th>问题</th></tr></thead>
+                <tbody>
+                    {% for row in task_run_ledger_integrity.issue_rows %}
+                    <tr class="supply-lifecycle-row-warning">
+                        <td data-label="台账行">#{{ row.id }}</td>
+                        <td data-label="命令"><strong>{{ row.name }}</strong></td>
+                        <td data-label="开始时间">{{ row.started_at|date:"Y-m-d H:i" }}</td>
+                        <td data-label="问题数">{{ row.issue_count }}</td>
+                        <td data-label="问题">{{ row.issue_labels|join:"、" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5"><span class="text-muted">暂无问题行。</span></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if task_run_ledger_integrity.issue_row_hidden_total %}
+        <p class="small text-muted mt-2 mb-0">还有 {{ task_run_ledger_integrity.issue_row_hidden_total }} 条问题行未展示；截断只影响清单，不影响汇总。</p>
+        {% endif %}
+    </div>
+    {% else %}
+    <p class="text-muted mb-0 mt-3">窗口内还没有已记录的定时任务运行。</p>
+    {% endif %}
+
+    <ul class="ops-panel-notes mt-3">
+        <li><i class="bi bi-shield-check me-1"></i>这一面板先审台账行自身：时间、状态、失败备注和指标形状；它不重复健康度面板的“任务是否按时跑”。</li>
+        <li><i class="bi bi-clock-history me-1"></i><code>duration_ms</code> 来自单调时钟，开始 / 结束时间来自墙钟；差异超过 {{ task_run_ledger_integrity.duration_mismatch_base_ms }} 毫秒或时间戳间隔的 {{ task_run_ledger_integrity.duration_mismatch_share_percent }}% 才算严重不一致。</li>
+        <li><i class="bi bi-braces me-1"></i>指标可读率的分母只有成功且非 dry-run 的行；失败行不要求指标，dry-run 不承诺发送。</li>
+        <li><i class="bi bi-tags me-1"></i>未知命令和未知指标键只单列，不计为问题行；它们提醒名单或字段清单需要扩展。</li>
+        <li><i class="bi bi-eye-slash me-1"></i>不输出原始失败备注，不修复台账、不回填指标、不改调度配置。</li>
+    </ul>
+</section>

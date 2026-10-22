@@ -1,0 +1,120 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 saved-search-quiet-window-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Saved search quiet window</span><h2>关注搜索的临时静默：被用户主动推迟的那批命中</h2></div>
+        <span class="ops-panel-hint">静默是用户自己按下的暂停键，第一次被运营读到</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-moon-stars-fill me-1"></i><code>quiet_until</code> 是站内唯一一个「用户亲手给一条自动通知按下暂停键」的字段：考试周不想被刷屏、假期不想被提醒，填一个时间，这条关注的提醒就停到那个时刻为止。写入路径有三处老老实实读它——汇总发送在 <code>is_quiet</code> 为真时把这条关注整个跳过、即时节奏在静默期内一次都不发、设置页让用户随时改也随时清空。<strong>三处都在显示它，没有一处统计过它。</strong>静默是用户对这条通知流的一次主动评价，而关掉它的代价又极低——取消关注要点删除，静默只是填一个时间。一个低成本的暂停键，恰好是最该被看见的反馈信号。
+    {% if not saved_search_quiet_window.has_data %}
+    <div class="empty-inline">{{ saved_search_quiet_window.summary }}</div>
+    {% endif %}
+    {% if saved_search_quiet_window.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>正在静默</span><strong>{{ saved_search_quiet_window.quiet_now_count }}</strong><small>缓冲区 {{ saved_search_quiet_window.buffered_now_count }} 条</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>静默已过期</span><strong>{{ saved_search_quiet_window.quiet_expired_count }}</strong><small>缓冲区仍压 {{ saved_search_quiet_window.buffered_expired_count }} 条</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>暂停后至今没有新命中</span><strong>{{ saved_search_quiet_window.delivered.silent_count }}</strong><small>共 {{ saved_search_quiet_window.delivered.total }} 条过期关注</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>最早一条缓冲命中</span><strong>{{ saved_search_quiet_window.buffer_now.oldest_label }}</strong><small>按天说话</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>这条关注此刻停在哪一档</h3>
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">关注搜索的临时静默：被用户主动推迟的那批命中 · 这条关注此刻停在哪一档</caption>
+            <thead><tr><th>状态</th><th>关注数</th><th>占比（%）</th><th>缓冲区命中</th><th>其中商品已不可交易</th></tr></thead>
+            <tbody>
+                {% for row in saved_search_quiet_window.state_rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td>{{ row.search_count }}</td>
+                    <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                    <td>{{ row.buffered_count }}</td>
+                    <td>{{ row.stale_buffered_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <p class="small text-muted mt-2 mb-0">占比的分母是<strong>全部关注</strong>，不是这一档自己——拿一档除一档永远得到 100%。「正在静默」攒命中是暂停键的本意；<strong>「早已过期」还压着一批没发才是问题</strong>，那是静默结束之后发送路径没接上。两列分开报，不相加。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>静默期攒下的命中有多旧</h3>
+        {% for stats in saved_search_quiet_window.buffer_blocks %}
+        <div class="ops-subblock">
+            <div class="ops-subblock-title">{{ stats.label }} · 平均 {{ stats.mean_label }} · 最早 {{ stats.oldest_label }}</div>
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">关注搜索的临时静默：被用户主动推迟的那批命中 · 静默期攒下的命中有多旧</caption>
+                <thead><tr><th>档位</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
+                <tbody>
+                    {% for row in stats.rows %}
+                    <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td><td class="ops-hint">{{ row.hint }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if stats.is_small_sample %}<p class="small text-muted mt-2 mb-0">缓冲命中不足 {{ saved_search_quiet_window.min_buffered_matches }} 条，年龄结构只作参考，不给方向。</p>{% endif %}
+        </div>
+        {% endfor %}
+        <p class="small text-muted mt-2 mb-0">静默造成的等待和平台造成的等待<strong>必须分开</strong>：<code>saved_search_latency</code> 报的是汇总任务排在半夜、漏跑一天造成的等待，这里报的是用户自己说「现在不方便」。混进同一个分布，运营会把「用户主动暂停」读成「我们的任务又慢了」。商品状态按当前状态回看，送达之后才卖掉的也会算进来，所以「已不可交易」系统性偏高——宁可高估，运营看到高估的数字会去核实。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>静默结束之后，这条关注还活着吗</h3>
+        <div class="row g-3 mb-2">
+            <div class="col-md-4"><div class="ops-mini-stat"><span>之后还有新命中</span><strong>{{ saved_search_quiet_window.delivered.alive_count }}</strong><small>{% if saved_search_quiet_window.delivered.alive_rate is None %}—{% else %}占 {{ saved_search_quiet_window.delivered.alive_rate }}%{% endif %}</small></div></div>
+            <div class="col-md-4"><div class="ops-mini-stat"><span>至今一条都没有</span><strong>{{ saved_search_quiet_window.delivered.silent_count }}</strong><small>单独数出来，不读成因果</small></div></div>
+            <div class="col-md-4"><div class="ops-mini-stat"><span>静默已过期的关注</span><strong>{{ saved_search_quiet_window.delivered.total }}</strong></div></div>
+        </div>
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">关注搜索的临时静默：被用户主动推迟的那批命中 · 静默结束之后，这条关注还活着吗</caption>
+            <thead><tr><th>关注条件</th><th>节奏</th><th>静默结束于</th><th>暂停至今</th><th>之后新命中</th><th>缓冲区还剩</th></tr></thead>
+            <tbody>
+                {% for row in saved_search_quiet_window.delivered.rows %}
+                <tr>
+                    <td>{{ row.saved_search_name }}</td>
+                    <td>{{ row.cadence_label }}</td>
+                    <td>{{ row.quiet_until|date:'Y-m-d H:i' }}</td>
+                    <td>{{ row.expired_for_days|floatformat:1 }} 天</td>
+                    <td>{{ row.later_hit_count }}</td>
+                    <td>{{ row.buffered_count }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6">当前没有静默已过期的关注。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if saved_search_quiet_window.delivered.row_total > saved_search_quiet_window.delivered.row_limit %}
+        <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ saved_search_quiet_window.delivered.row_limit }} 条，完整的在导出里。</p>
+        {% endif %}
+        <p class="small text-muted mt-2 mb-0"><strong>不报取消率，也不把这一节读成因果。</strong>一个人暂停了关注、之后不再回来看，可能只是他已经找到了想找的东西。<strong>不按用户排名，不报任何用户名、不列任何商品名</strong>——谁在什么时候暂停了哪条关注是用户的私事，做成一份清单，设置页就变成了公开表态。关注名称可以报，那是用户给自己条件起的名字，不是身份。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>正在静默的关注，缓冲区的年龄结构</h3>
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">关注搜索的临时静默：被用户主动推迟的那批命中 · 正在静默的关注，缓冲区的年龄结构</caption>
+            <thead><tr><th>关注条件</th><th>节奏</th><th>缓冲命中</th><th>最早一条</th><th>静默至</th></tr></thead>
+            <tbody>
+                {% for stats in saved_search_quiet_window.buffer_blocks %}
+                {% for row in stats.search_rows %}
+                <tr>
+                    <td>{{ stats.label }} · {{ row.saved_search_name }}</td>
+                    <td>{{ row.cadence_label }}</td>
+                    <td>{{ row.buffered_count }}</td>
+                    <td>{{ row.oldest_label }}</td>
+                    <td>{{ row.quiet_until|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+                {% if not saved_search_quiet_window.buffered_now_count and not saved_search_quiet_window.buffered_expired_count %}
+                <tr><td colspan="5">两档静默关注此刻都没有压在缓冲区里的命中。</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+        <p class="small text-muted mt-2 mb-0">这一节只对<strong>「正在静默」和「早已过期」</strong>两档有意义：「从没静默过」的关注压在缓冲区里的命中，成因是汇总节奏，那是 <code>saved_search_latency</code> 的题目。两档的阈值不合成一个平均数。</p>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-moon-stars me-1"></i><strong>静默时长这一项报不了，如实不报。</strong><code>quiet_until</code> 只存结束时刻，站内没有任何字段记下用户是什么时候按下暂停键的——<code>updated_at</code> 每次保存都被覆盖，而节奏表单每次都写这个字段，改频率、改条数、清空静默都会刷新它，所以它连「最后一次改动」都不是一个可靠的信号。为「正在静默」和「早已过期」两档反推一个时长，等于编一个数据出来。本模块也不改 <code>send_saved_search_digest</code> 的跳过逻辑、不自动替任何人结束静默。
+    {% endif %}
+</section>
+

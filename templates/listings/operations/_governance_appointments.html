@@ -1,0 +1,125 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 meeting-incident-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Meeting incident quality</span><h2>交付预约异常处理得公不公平</h2></div>
+        <span class="ops-panel-hint">按异常类型拆驳回率，按结局拆意见填写率</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-person-exclamation me-1"></i><code>MeetingIncident</code> 是站内唯一一条「约好了见面，其中一方在现场出了状况」的记录，也是站内<strong>唯一一条直指线下人身安全</strong>的申诉。而它此前被读到的程度比 <code>Report</code> 还浅：<code>governance_sla</code> 报了时效，<code>analytics</code> 报了新增计数，<code>meeting_attendance</code> 只对照 <code>reason == "no_show"</code> 一类、列的是具体工单。<strong>而 <code>resolution_note</code> 此前只有两处读者：后台的搜索框和写入它的那行代码——一个字段被写、被搜，从来没被统计过。</strong></p>
+    {% if not meeting_incident_quality.has_data %}
+    <div class="empty-inline">当前周期还没有交付预约异常。异常是站内唯一一条直指线下安全的申诉，它此刻没有发生——这些数都不存在，不是零。</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内异常</span><strong>{{ meeting_incident_quality.outcome.total_count }}</strong><small>已完结 {{ meeting_incident_quality.outcome.closed_count }} 条</small></div></div>
+        <div class="col-6 col-lg-2"><div class="ops-mini-stat"><span>还在流程里</span><strong>{{ meeting_incident_quality.outcome.open_count }}</strong><small>open 与 reviewing</small></div></div>
+        <div class="col-6 col-lg-2"><div class="ops-mini-stat"><span>整体驳回率</span><strong>{% if meeting_incident_quality.outcome.rejection_rate is None %}&mdash;{% else %}{{ meeting_incident_quality.outcome.rejection_rate }}%{% endif %}</strong><small>分母是已完结的 {{ meeting_incident_quality.outcome.closed_count }} 条</small></div></div>
+        <div class="col-6 col-lg-2"><div class="ops-mini-stat"><span>意见填写率</span><strong>{% if meeting_incident_quality.note.fill_rate is None %}&mdash;{% else %}{{ meeting_incident_quality.note.fill_rate }}%{% endif %}</strong><small>只数字节与空否，不读内容</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">驳回率按异常类型拆</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 驳回率按异常类型拆</caption>
+                    <thead><tr><th>异常类型</th><th>异常数</th><th>已完结</th><th>驳回数</th><th>驳回率</th><th>还在流程里</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_incident_quality.reason_rows %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong>{% if row.is_empty %}<small class="d-block text-muted">这一类没人用</small>{% endif %}</td>
+                            <td>{{ row.total_count }}</td>
+                            <td>{{ row.closed_count }}</td>
+                            <td>{{ row.rejected_count }}</td>
+                            <td>{% if row.rejection_rate is None %}&mdash;{% else %}{{ row.rejection_rate }}%{% endif %}{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ meeting_incident_quality.min_bucket_sample }} 条</small>{% endif %}</td>
+                            <td>{{ row.open_count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">四种异常类型的举证难度完全不是一回事：「对方未到场」有系统里的到场登记可以对照，是四种里唯一有客观证据的；「现场安全问题」几乎不可能有系统证据，全凭提交人陈述。行取自 <code>REASON_CHOICES</code> 与库里的并集：周期内一条都没有的类型也列出来——漏掉它，读者会以为这一类也是齐的。</div>
+            <h3 class="h6 mb-3 mt-4">是谁在报谁</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 是谁在报谁</caption>
+                    <thead><tr><th>提交方向</th><th>异常数</th><th>已完结</th><th>驳回数</th><th>驳回率</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_incident_quality.direction.rows %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong></td>
+                            <td>{{ row.total_count }}</td>
+                            <td>{{ row.closed_count }}</td>
+                            <td>{{ row.rejected_count }}</td>
+                            <td>{% if row.rejection_rate is None %}&mdash;{% else %}{{ row.rejection_rate }}%{% endif %}{% if row.is_small_sample %}<small class="d-block text-muted">样本不足 {{ meeting_incident_quality.min_bucket_sample }} 条</small>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">方向按 <code>Order</code> 的买家 / 卖家推出来，取不到订单一侧身份时不猜，单独归到「未知」。两侧驳回率相差 <strong>{% if meeting_incident_quality.direction.gap_points is None %}&mdash;{% else %}{{ meeting_incident_quality.direction.gap_points }}{% endif %}</strong> 个百分点。{% if meeting_incident_quality.direction.comparable %}两侧都过样本门槛时才允许把它读成一个信号，且必须同时把两侧的总量一起报——一个 100% 对 100% 的差值，如果两侧各只有 1 条，是没有信息量的。{% else %}至少一侧不足样本下限，只报数字、不给方向。{% endif %}<strong>不判「哪一方更常被驳」</strong>——买家报卖家和卖家报买家，各自的总量、各自面对的异常类型构成都可能完全不同。</div>
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">处理意见写了没写</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 处理意见写了没写</caption>
+                    <thead><tr><th>意见长度</th><th>条数</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_incident_quality.note.bucket_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="table-responsive mt-3">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 处理意见写了没写（按结局拆）</caption>
+                    <thead><tr><th>按结局拆</th><th>已完结</th><th>写过意见</th><th>填写率</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_incident_quality.note.by_outcome %}
+                        <tr>
+                            <td><strong>{{ row.label }}</strong></td>
+                            <td>{{ row.closed_count }}</td>
+                            <td>{{ row.with_note_count }}</td>
+                            <td>{% if row.fill_rate is None %}&mdash;{% else %}{{ row.fill_rate }}%{% endif %}{% if row.closed_count < meeting_incident_quality.min_bucket_sample %}<small class="d-block text-muted">不足样本下限</small>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">两档填写率相差 <strong>{% if meeting_incident_quality.note.outcome_gap_points is None %}&mdash;{% else %}{{ meeting_incident_quality.note.outcome_gap_points }}{% endif %}</strong> 个百分点。{% if meeting_incident_quality.note.outcome_comparable %}被驳回的异常如果普遍不写意见，提交人收到的是一个<strong>没有理由的驳回</strong>——而这一条比举报更重：异常的另一半是<strong>指控对方</strong>，一条没有理由的驳回，会让提交人觉得自己被反过来罚了一次。{% else %}至少一侧不足样本下限，只报数字、不给方向。{% endif %}</div>
+            <h3 class="h6 mb-3 mt-4">提交人分布</h3>
+            {% if meeting_incident_quality.reporters.is_empty %}
+            <div class="empty-inline">当前周期没有提交人，分布形状需要先有异常发生。</div>
+            {% else %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 提交人分布</caption>
+                    <thead><tr><th>提交次数</th><th>人数</th><th>占比</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_incident_quality.reporters.band_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.count }}</td>
+                            <td>{% if row.share is None %}&mdash;{% else %}{{ row.share }}%{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="empty-inline">{{ meeting_incident_quality.reporters.reporter_count }} 位提交人里 <strong>{{ meeting_incident_quality.reporters.once_only_rate }}%</strong> 只报过一次。绝大多数人只报过一次，说明这条通道是<strong>应急</strong>性质的；有一批人反复在用，说明它是某些用户的<strong>常规</strong>手段。<strong>不排名、不报用户名</strong>——把「谁最爱报异常」做成一张排行榜，平台就从仲裁者变成了一个记录谁难相处的小本子。</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-person-check me-1"></i>这里只报告：不加迁移、不改 <code>MeetingIncident</code> 的任何字段、不改写入路径、不自动驳回或自动关单。不读 <code>detail</code> 与 <code>resolution_note</code> 的自由文本，只读长度与空否。空分母报「—」不报 0：0 会被读成「写了，占比很小」，而事实是「没有样本」。不排名、不报任何人的用户名，那不是看板，是公开处刑清单。不把驳回率和处理人挂钩——按 <code>reviewer</code> 拆驳回率是一份考官成绩单。不重复 <code>meeting_attendance</code> 的到场对照：那个模块对照的是具体工单，本模块只读聚合数字。受 <code>OneToOneField(appointment)</code> 限制，不报「同一场约会里双方各报一次」——那个数结构上恒为 0，报出来是一个永远为 0 的常数。</div>
+    {% if not meeting_incident_quality.outcome.total_count %}
+    <div class="empty-inline mt-2">{{ meeting_incident_quality.summary }}</div>
+    {% endif %}
+</section>
+
+    
