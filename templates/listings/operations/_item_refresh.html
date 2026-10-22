@@ -20,6 +20,7 @@
             <h3 class="h6 mb-3">逐日事件形状</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品刷新事件台账 · 逐日事件形状</caption>
                     <thead><tr><th>日期</th><th>事件</th><th>商品</th><th>卖家</th><th>形状</th></tr></thead>
                     <tbody>
                         {% for row in item_refresh_event_ledger.daily_rows %}
@@ -42,6 +43,7 @@
             <h3 class="h6 mb-3">台账覆盖与一致性</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品刷新事件台账 · 台账覆盖与一致性</caption>
                     <thead><tr><th>口径</th><th>商品数 / 次数</th><th>读数</th></tr></thead>
                     <tbody>
                         <tr><td>累计刷新商品</td><td>{{ item_refresh_event_ledger.coverage.counted_item_count }}</td><td>分母，只统计 refresh_count &gt; 0</td></tr>
@@ -85,6 +87,7 @@
             <h3 class="h6 mb-3">在售商品里，额度卡在哪一档</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">刷新额度为什么是一次性的 · 在售商品里，额度卡在哪一档</caption>
                     <thead><tr><th>分组</th><th>商品数</th><th>占在售（%）</th></tr></thead>
                     <tbody>
                         <tr><td>在售商品（分母）</td><td>{{ refresh_quota_drift.quota.live_count }}</td><td>—</td></tr>
@@ -101,6 +104,7 @@
             <h3 class="h6 mb-3">额度用尽的商品，距上次刷新多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">刷新额度为什么是一次性的 · 额度用尽的商品，距上次刷新多久</caption>
                     <thead><tr><th>距上次刷新</th><th>商品数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in refresh_quota_drift.since_refresh.bucket_rows %}
@@ -123,6 +127,7 @@
             <h3 class="h6 mb-3">卡在 24 小时间隔上的商品</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">刷新额度为什么是一次性的 · 卡在 24 小时间隔上的商品</caption>
                     <thead><tr><th>指标</th><th>数值</th></tr></thead>
                     <tbody>
                         <tr><td>在售商品（分母）</td><td>{{ refresh_quota_drift.cooldown.live_count }}</td></tr>
@@ -137,6 +142,7 @@
             <h3 class="h6 mb-3">被累计口径吃掉的商品，现在什么状态</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">刷新额度为什么是一次性的 · 被累计口径吃掉的商品，现在什么状态</caption>
                     <thead><tr><th>生命周期等级</th><th>商品数</th><th>占被吃掉（%）</th></tr></thead>
                     <tbody>
                         {% for row in refresh_quota_drift.drifted_state.rows %}
@@ -158,6 +164,7 @@
         <h3 class="h6 mb-3">被累计口径吃掉的商品清单</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">刷新额度为什么是一次性的 · 被累计口径吃掉的商品清单</caption>
                 <thead><tr><th>商品</th><th>刷新次数</th><th>距上次刷新（天）</th><th>沉底天数</th><th>生命周期等级</th><th>状态</th></tr></thead>
                 <tbody>
                     {% for row in refresh_quota_drift.drift_list.rows %}
@@ -185,6 +192,7 @@
             <h3 class="h6 mb-3">本周期撞上额度墙的商品</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">刷新额度为什么是一次性的 · 本周期撞上额度墙的商品</caption>
                     <thead><tr><th>指标</th><th>数值</th></tr></thead>
                     <tbody>
                         <tr><td>本周期刷新过的商品（分母）</td><td>{{ refresh_quota_drift.wall.refreshed_in_period }}</td></tr>

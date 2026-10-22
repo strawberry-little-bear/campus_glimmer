@@ -24,6 +24,7 @@
             <h3 class="h6 mb-3">被延后过的通知，现在都在哪里</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 被延后过的通知，现在都在哪里</caption>
                     <thead><tr><th>结局</th><th>条数</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in notification_snooze_return.totals.outcome_rows %}
@@ -40,6 +41,7 @@
             <h3 class="h6 mb-3 mt-4">回来之后多久被读</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 回来之后多久被读</caption>
                     <thead><tr><th>等了多久</th><th>到点之后才被读</th></tr></thead>
                     <tbody>
                         {% for row in notification_snooze_return.return_lag.bucket_rows %}
@@ -57,6 +59,7 @@
             <h3 class="h6 mb-3">把延后期从处理时长里拆出来</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 把延后期从处理时长里拆出来</caption>
                     <thead><tr><th>三个数</th><th>中位数</th><th>从哪算到哪</th></tr></thead>
                     <tbody>
                         <tr>
@@ -81,6 +84,7 @@
             <h3 class="h6 mb-3 mt-4">延后过 vs 从没延后过</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 延后过 vs 从没延后过</caption>
                     <thead><tr><th>分组</th><th>条数</th><th>已读</th><th>阅读率</th></tr></thead>
                     <tbody>
                         <tr{% if not notification_snooze_return.contrast.is_measurable %} class="text-muted"{% endif %}>
@@ -104,6 +108,7 @@
     <h3 class="h6 mb-3 mt-2">按通知类型拆</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">延后的通知，延了之后回来了吗 · 按通知类型拆</caption>
             <thead><tr><th>通知类型</th><th>周期发送</th><th>被延后过</th><th>到点之后仍未读</th><th>还在延后中</th><th>回来之后中位等待</th></tr></thead>
             <tbody>
                 {% for row in notification_snooze_return.kind_rows %}
@@ -141,6 +146,7 @@
             <h3 class="h6 mb-3">没有名字的类型</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">通知类型、偏好开关与用户手上的那一栏 · 没有名字的类型</caption>
                     <thead><tr><th>类型</th><th>周期发送</th><th>被读</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in notification_kind_coverage.unnamed_rows %}
@@ -162,6 +168,7 @@
             <h3 class="h6 mb-3">用户关不掉的开关</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">通知类型、偏好开关与用户手上的那一栏 · 用户关不掉的开关</caption>
                     <thead><tr><th>类型</th><th>周期发送</th><th>被读</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in notification_kind_coverage.unreachable_rows %}
@@ -183,6 +190,7 @@
     <h3 class="h6 mb-3 mt-2">周期内真的发过的类型，偏好的实际状态</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">通知类型、偏好开关与用户手上的那一栏 · 周期内真的发过的类型，偏好的实际状态</caption>
             <thead><tr><th>类型</th><th>接收人数</th><th>周期发送</th><th>关掉了</th><th>关闭率</th></tr></thead>
             <tbody>
                 {% for row in notification_kind_coverage.preference_rows %}
@@ -221,6 +229,7 @@
     <h3 class="h6 mb-3">按「关掉它有没有交易后果」分组</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">通知偏好开关的形状 · 按「关掉它有没有交易后果」分组</caption>
             <thead><tr><th>分组</th><th>开着</th><th>关掉</th><th>合计</th><th>关闭占比</th></tr></thead>
             <tbody>
                 {% for row in notification_preference_usage.by_group %}
@@ -241,6 +250,7 @@
     <h3 class="h6 mb-3 mt-2">{{ notification_preference_usage.rows|length }} 个开关逐个看</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">通知偏好开关的形状 · 逐个开关明细</caption>
             <thead><tr><th>开关</th><th>分组</th><th>开着</th><th>关掉</th><th>近期收到过的用户</th><th>关着却仍收到过</th><th>开着却没收到过</th></tr></thead>
             <tbody>
                 {% for row in notification_preference_usage.rows %}
@@ -284,6 +294,7 @@
     <h3 class="h6 mb-3">逐类型拆开时间顺序</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">通知偏好关了为什么还看得到 · 逐类型拆开时间顺序</caption>
             <thead><tr><th>开关</th><th>已知路径</th><th>当前关着</th><th>本期出现</th><th>与后关一致</th><th>偏好写入后仍出现</th><th>可疑行数下界</th></tr></thead>
             <tbody>
                 {% for row in notification_preference_bypass_diagnosis.rows %}
@@ -325,6 +336,7 @@
         <h3>总闸与配置</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">免打扰时段的形状 · 总闸与配置</caption>
                 <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
                 <tbody>
                     <tr><td>偏好行</td><td>{{ notification_quiet_hours_shape.preference_count }}</td><td>分母是偏好行，不是全体用户；没有偏好行的用户单列</td></tr>
@@ -341,6 +353,7 @@
         <h3>窗口方向与时长</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">免打扰时段的形状 · 窗口方向与时长</caption>
                 <thead><tr><th>观察项</th><th>数量</th><th>占比</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in notification_quiet_hours_shape.direction_rows %}
@@ -372,6 +385,7 @@
                 <h4 class="h6 mb-2">开始小时</h4>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">免打扰时段的形状 · 开始小时</caption>
                         <thead><tr><th>开始小时</th><th>数量</th><th>占比</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in notification_quiet_hours_shape.start_hour_rows %}
@@ -390,6 +404,7 @@
                 <h4 class="h6 mb-2">结束小时</h4>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">免打扰时段的形状 · 结束小时</caption>
                         <thead><tr><th>结束小时</th><th>数量</th><th>占比</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in notification_quiet_hours_shape.end_hour_rows %}
@@ -416,6 +431,7 @@
         </div>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">免打扰时段的形状 · 逐小时叠加与全天峰值</caption>
                 <thead><tr><th>小时</th><th>平均压着人数</th><th>小时峰值人数</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in notification_quiet_hours_shape.hour_rows %}
@@ -456,6 +472,7 @@
             <h3 class="h6 mb-3">聚合过的行 vs 从没被聚合过的行</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">通知聚合的质量：合并掉的是打扰，还是信息 · 聚合过的行 vs 从没被聚合过的行</caption>
                     <thead><tr><th>分组</th><th>行数</th><th>事件数</th><th>已读</th><th>未读</th><th>阅读率</th><th>平均处理时长</th><th>P90</th></tr></thead>
                     <tbody>
                         {% for row in notification_aggregation_quality.comparison.groups %}
@@ -477,6 +494,7 @@
             <h3 class="h6 mb-3 mt-4">聚合次数分档</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">通知聚合的质量：合并掉的是打扰，还是信息 · 聚合次数分档</caption>
                     <thead><tr><th>聚合次数</th><th>条数</th><th>已读</th><th>阅读率</th><th>平均跨度</th></tr></thead>
                     <tbody>
                         {% for row in notification_aggregation_quality.occurrence_bands %}
@@ -497,6 +515,7 @@
             <h3 class="h6 mb-3">聚合跨度：第一条到最后一条隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">通知聚合的质量：合并掉的是打扰，还是信息 · 聚合跨度：第一条到最后一条隔了多久</caption>
                     <thead><tr><th>跨度</th><th>条数</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in notification_aggregation_quality.span_rows %}
@@ -513,6 +532,7 @@
             <h3 class="h6 mb-3 mt-4">周期内真的发过的类型，按类型拆聚合</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">通知聚合的质量：合并掉的是打扰，还是信息 · 周期内真的发过的类型，按类型拆聚合</caption>
                     <thead><tr><th>通知类型</th><th>行数</th><th>事件数</th><th>聚合率</th><th>平均每行</th><th>最大次数</th><th>阅读率</th></tr></thead>
                     <tbody>
                         {% for row in notification_aggregation_quality.kind_rows %}

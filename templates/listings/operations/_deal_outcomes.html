@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">一条记录收到了几条线索</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 一条记录收到了几条线索</caption>
                     <thead><tr><th>线索数</th><th>记录数</th><th>占比（%）</th><th>说明</th></tr></thead>
                     <tbody>
                         {% for row in lost_found_lead_quality.lead_count.lead_count_rows %}
@@ -40,6 +41,7 @@
             <h3 class="h6 mb-3">确认率按记录类型拆开</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 确认率按记录类型拆开</caption>
                     <thead><tr><th>记录类型</th><th>记录数</th><th>线索数</th><th>确认了线索</th><th>确认率（%）</th></tr></thead>
                     <tbody>
                         {% for row in lost_found_lead_quality.confirm.rows %}
@@ -62,6 +64,7 @@
             <h3 class="h6 mb-3">被驳回的线索，是发布者拒绝的还是顺带清掉的</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 被驳回的线索，是发布者拒绝的还是顺带清掉的</caption>
                     <thead><tr><th>线索结局</th><th>线索数</th><th>占全部线索（%）</th><th>说明</th></tr></thead>
                     <tbody>
                         {% for row in lost_found_lead_quality.rejection.rows %}
@@ -81,6 +84,7 @@
             <h3 class="h6 mb-3">发布者多久收到第一条线索</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 发布者多久收到第一条线索</caption>
                     <thead><tr><th>提交间隔</th><th>记录数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in lost_found_lead_quality.latency.bucket_rows %}
@@ -101,6 +105,7 @@
             <h3 class="h6 mb-3">确认之后，东西找回来了没有</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 确认之后，东西找回来了没有</caption>
                     <thead><tr><th>互助结果</th><th>记录数</th><th>占已提交反馈（%）</th></tr></thead>
                     <tbody>
                         {% for row in lost_found_lead_quality.feedback.rows %}
@@ -121,6 +126,7 @@
                 <div class="col-md-6">
                     <div class="table-responsive">
                         <table class="table table-sm align-middle ops-table">
+                        <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 线索说明与辨识特征</caption>
                             <thead><tr><th>文字长度</th><th>线索数</th><th>占比（%）</th></tr></thead>
                             <tbody>
                                 {% for row in lost_found_lead_quality.message.length_rows %}
@@ -137,6 +143,7 @@
                 <div class="col-md-6">
                     <div class="table-responsive">
                         <table class="table table-sm align-middle ops-table">
+                        <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 线索说明与辨识特征（填写情况）</caption>
                             <thead><tr><th>填写情况</th><th>数量</th><th>占比（%）</th></tr></thead>
                             <tbody>
                                 <tr><td>写了线索说明</td><td>{{ lost_found_lead_quality.message.filled_count }}</td><td>{{ lost_found_lead_quality.message.fill_rate }}</td></tr>
@@ -155,6 +162,7 @@
         <h3 class="h6 mb-3">还挂着没人处理的线索</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">失物招领的线索，有多少条走到了「已确认」 · 还挂着没人处理的线索</caption>
                 <thead><tr><th>记录</th><th>线索提供者</th><th>提交于</th><th>记录发布于</th></tr></thead>
                 <tbody>
                     {% for row in lost_found_lead_quality.pending_rows.rows %}
@@ -200,6 +208,7 @@
             <h3 class="h6 mb-3">确认之后，订单最后怎么样了</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 确认之后，订单最后怎么样了</caption>
                     <thead><tr><th>订单结局</th><th>笔数</th><th>占转化订单（%）</th></tr></thead>
                     <tbody>
                         <tr><td>已成交</td><td>{{ demand_response_conversion.dealt.dealt_count }}</td><td>{{ demand_response_conversion.dealt.dealt_rate }}</td></tr>
@@ -214,6 +223,7 @@
             <h3 class="h6 mb-3">从确认到下单，隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 从确认到下单，隔了多久</caption>
                     <thead><tr><th>间隔</th><th>订单数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in demand_response_conversion.latency.bucket_rows %}
@@ -232,6 +242,7 @@
             <h3 class="h6 mb-3">转化率按交易方式拆开</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 转化率按交易方式拆开</caption>
                     <thead><tr><th>交易方式</th><th>已确认响应</th><th>变成了订单</th><th>转化率（%）</th></tr></thead>
                     <tbody>
                         {% for row in demand_response_conversion.trade_modes.rows %}
@@ -251,6 +262,7 @@
             <h3 class="h6 mb-3">确认之后没有订单的，卡在哪</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 确认之后没有订单的，卡在哪</caption>
                     <thead><tr><th>卡点</th><th>响应数</th><th>占未转化（%）</th></tr></thead>
                     <tbody>
                         {% for row in demand_response_conversion.blocked.rows %}
@@ -271,6 +283,7 @@
                 <div class="col-md-6">
                     <div class="table-responsive">
                         <table class="table table-sm align-middle ops-table">
+                        <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 响应说明写了没写</caption>
                             <thead><tr><th>文字长度</th><th>响应数</th><th>占比（%）</th></tr></thead>
                             <tbody>
                                 {% for row in demand_response_conversion.message.length_rows %}
@@ -283,6 +296,7 @@
                 <div class="col-md-6">
                     <div class="table-responsive">
                         <table class="table table-sm align-middle ops-table">
+                        <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 响应说明写了没写（组）</caption>
                             <thead><tr><th>组</th><th>响应数</th><th>转化率（%）</th></tr></thead>
                             <tbody>
                                 <tr><td>写了说明</td><td>{{ demand_response_conversion.message.with_message_count }}</td><td>{{ demand_response_conversion.message.with_message_rate }}</td></tr>
@@ -300,6 +314,7 @@
         <h3 class="h6 mb-3">确认之后悬着没下单的清单</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 确认之后悬着没下单的清单</caption>
                 <thead><tr><th>响应商品</th><th>求购</th><th>确认于</th><th>卡点</th><th>说明字数</th></tr></thead>
                 <tbody>
                     {% for row in demand_response_conversion.stuck_rows.rows %}
@@ -344,6 +359,7 @@
             <h3 class="h6 mb-3">改了几次才定下来</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">一次交付安排被改了几次才定下来</caption>
                     <thead><tr><th>改期次数</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in meeting_reschedule.reschedule_stats.bucket_rows %}
@@ -362,6 +378,7 @@
             <h3 class="h6 mb-3">改过的 vs 一次谈成的：对方多久回应</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">一次交付安排被改了几次才定下来 · 改过的 vs 一次谈成的：对方多久回应</caption>
                     <thead><tr><th>分组</th><th>中位耗时</th><th>已回应条数</th></tr></thead>
                     <tbody>
                         {% for row in meeting_reschedule.response_contrast.rows %}
@@ -386,6 +403,7 @@
             <h3 class="h6 mb-3">改期时地点换没换</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">一次交付安排被改了几次才定下来 · 改期时地点换没换</caption>
                     <thead><tr><th>地点</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         <tr><td>可比对的订单</td><td>{{ meeting_reschedule.location_stats.measurable_count }}</td><td>—</td></tr>
@@ -400,6 +418,7 @@
             <h3 class="h6 mb-3">最后一版是谁提的</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">一次交付安排被改了几次才定下来 · 最后一版是谁提的</caption>
                     <thead><tr><th>角色</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         <tr><td>买家提的</td><td>{{ meeting_reschedule.role_stats.buyer_count }}</td><td>{% if meeting_reschedule.role_stats.buyer_share is None %}—{% else %}{{ meeting_reschedule.role_stats.buyer_share }}{% endif %}</td></tr>
@@ -416,6 +435,7 @@
         <h3 class="h6 mb-3">改过两次以上的订单</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">一次交付安排被改了几次才定下来 · 改过两次以上的订单</caption>
                 <thead><tr><th>订单号</th><th>商品</th><th>改过几次</th><th>最后一版归谁</th><th>当前安排</th></tr></thead>
                 <tbody>
                     {% for row in meeting_reschedule.reschedule_rows %}

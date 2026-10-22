@@ -21,6 +21,7 @@
         </div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 phase-preparation-table">
+            <caption class="visually-hidden">学期阶段供给预热 · 分类预热表</caption>
                 <thead><tr><th>分类</th><th>基准搜索 / 无结果</th><th>无结果占比</th><th>基准求购 / 新增</th><th>7 天供给基准</th><th>当前求购 / 新增</th><th>当前现货</th><th>提示</th><th>节奏</th></tr></thead>
                 <tbody>
                     {% for row in academic_phase_supply_preparation.page_rows %}
@@ -69,6 +70,7 @@
         <div class="snapshot-quality-block-heading"><strong>这张表本身</strong><span>分子分母见每张表下方</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+            <caption class="visually-hidden">学期阶段统计快照 · 这张表本身</caption>
                 <thead><tr><th>指标</th><th>数值</th><th>分母是什么</th></tr></thead>
                 <tbody>
                     <tr><td><strong>快照行数</strong></td><td>{{ academic_term_snapshot_quality.metrics.row_total }}</td><td>全表，含历史残留</td></tr>
@@ -85,6 +87,7 @@
         <div class="snapshot-quality-block-heading mt-3"><strong>匹配键失效与停用残留</strong><span>两件事分开报，不混在一个数里</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+            <caption class="visually-hidden">学期阶段统计快照 · 匹配键失效与停用残留</caption>
                 <thead><tr><th>类别</th><th>行数</th><th>为什么单独报</th></tr></thead>
                 <tbody>
                     <tr>
@@ -105,6 +108,7 @@
         {% if academic_term_snapshot_quality.orphan_rows.orphan_rows %}
         <div class="ops-table-wrap mt-2">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+            <caption class="visually-hidden">学期阶段统计快照 · 匹配键失效与停用残留（学期）</caption>
                 <thead><tr><th>学期</th><th>阶段</th><th>开始</th><th>结束</th></tr></thead>
                 <tbody>
                     {% for row in academic_term_snapshot_quality.orphan_rows.orphan_rows %}
@@ -123,6 +127,7 @@
         <div class="snapshot-quality-block-heading mt-3"><strong>结束过早的阶段</strong><span>按 end_date 判，不按 refreshed_at</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+            <caption class="visually-hidden">学期阶段统计快照 · 结束过早的阶段</caption>
                 <thead><tr><th>指标</th><th>数值</th><th>分母是什么</th></tr></thead>
                 <tbody>
                     <tr><td><strong>结束过早的阶段</strong></td><td>{{ academic_term_snapshot_quality.metrics.stale_total }}</td><td>结束于 {{ academic_term_snapshot_quality.metrics.stale_threshold_days }} 天之前</td></tr>
@@ -133,6 +138,7 @@
         {% if academic_term_snapshot_quality.stale_rows.stale_rows %}
         <div class="ops-table-wrap mt-2">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+            <caption class="visually-hidden">学期阶段统计快照 · 结束过早的阶段（学期）</caption>
                 <thead><tr><th>学期</th><th>阶段</th><th>结束</th><th>已过去</th></tr></thead>
                 <tbody>
                     {% for row in academic_term_snapshot_quality.stale_rows.stale_rows %}
@@ -151,6 +157,7 @@
         <div class="snapshot-quality-block-heading mt-3"><strong>命令与刷新中断</strong><span>只看这一条命令，不重复运行台账的结论</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+            <caption class="visually-hidden">学期阶段统计快照 · 命令与刷新中断</caption>
                 <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
                 <tbody>
                     <tr><td><strong>周期内运行次数</strong></td><td>{{ academic_term_snapshot_quality.metrics.command_run_total }}</td><td>台账里 <code>sync_academic_calendar</code> 的行</td></tr>
@@ -162,6 +169,7 @@
         {% if academic_term_snapshot_quality.gap_rows.gap_rows %}
         <div class="ops-table-wrap mt-2">
             <table class="table ops-table align-middle mb-0 snapshot-quality-table">
+            <caption class="visually-hidden">学期阶段统计快照 · 命令与刷新中断（学期）</caption>
                 <thead><tr><th>学期</th><th>阶段</th><th>上次刷新</th><th>距今年数</th></tr></thead>
                 <tbody>
                     {% for row in academic_term_snapshot_quality.gap_rows.gap_rows %}

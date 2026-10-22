@@ -24,6 +24,7 @@
                 {% if lifecycle_reminder_effect.kind_rows %}
                 <div class="ops-table-wrap">
                     <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                    <caption class="visually-hidden">生命周期提醒触达与行动 · 按提醒类型看行动率</caption>
                         <thead><tr><th>提醒类型</th><th>商品数</th><th>被打开</th><th>打开率</th><th>有动作</th><th>行动率</th></tr></thead>
                         <tbody>
                             {% for row in lifecycle_reminder_effect.kind_rows %}
@@ -63,6 +64,7 @@
                 {% if lifecycle_reminder_effect.category_rows %}
                 <div class="ops-table-wrap">
                     <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                    <caption class="visually-hidden">生命周期提醒触达与行动 · 按商品分类看行动率</caption>
                         <thead><tr><th>分类</th><th>商品</th><th>对应通知</th><th>已读</th><th>刷新</th><th>终态</th><th>有动作</th><th>行动率</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in lifecycle_reminder_effect.category_rows %}
@@ -90,6 +92,7 @@
                 {% if lifecycle_reminder_effect.seller_load_rows %}
                 <div class="ops-table-wrap">
                     <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                    <caption class="visually-hidden">生命周期提醒触达与行动 · 按本周期被提醒件数看行动率</caption>
                         <thead><tr><th>本周期被提醒件数</th><th>卖家</th><th>商品</th><th>已读</th><th>有动作</th><th>行动率</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in lifecycle_reminder_effect.seller_load_rows %}
@@ -116,6 +119,7 @@
         <div class="supply-lifecycle-block-heading"><strong>提醒之后仍无动作的商品</strong><span>展示前 {{ lifecycle_reminder_effect.untouched_rows|length }} 条，共 {{ lifecycle_reminder_effect.untouched_total }} 件</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">生命周期提醒触达与行动 · 提醒之后仍无动作的商品</caption>
                 <thead><tr><th>商品</th><th>卖家</th><th>提醒类型</th><th>等级</th><th>发布/刷新天数</th><th>距提醒</th><th>是否看过</th></tr></thead>
                 <tbody>
                     {% for row in lifecycle_reminder_effect.untouched_rows %}
@@ -164,6 +168,7 @@
         <div class="supply-lifecycle-block-heading"><strong>整体指标的跨周期对比</strong><span>超过 {{ lifecycle_reminder_action_trend.trend_delta_points }} 个百分点才算上升或下降</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-action-trend-metric-table">
+            <caption class="visually-hidden">生命周期提醒的跨周期行动率 · 整体指标的跨周期对比</caption>
                 <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>差值</th><th>方向</th></tr></thead>
                 <tbody>
                     {% for row in lifecycle_reminder_action_trend.metric_rows %}
@@ -185,6 +190,7 @@
         <div class="supply-lifecycle-block-heading"><strong>按提醒类型看的行动率变化</strong><span>两类同时触达的桶只报数字，无法归因给任何一类</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table lifecycle-reminder-action-trend-kind-table">
+            <caption class="visually-hidden">生命周期提醒的跨周期行动率 · 按提醒类型看的行动率变化</caption>
                 <thead><tr><th>提醒类型</th><th>本周期商品</th><th>本周期行动率</th><th>上一周期行动率</th><th>方向</th></tr></thead>
                 <tbody>
                     {% for row in lifecycle_reminder_action_trend.kind_rows %}
@@ -230,6 +236,7 @@
         <div class="supply-lifecycle-block-heading"><strong>同学期阶段的终态转化</strong><span>相差 {{ lifecycle_reminder_term_trend.gap_points }} 个百分点才标记值得回看</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">生命周期提醒的跨学期终态转化 · 同学期阶段的终态转化</caption>
                 <thead><tr><th>阶段</th><th>学期</th><th>事件 / 商品 / 卖家</th><th>重复提醒比</th><th>终态动作</th><th>与上一学期</th><th>读数</th></tr></thead>
                 <tbody>
                     {% for group in lifecycle_reminder_term_trend.phase_groups %}

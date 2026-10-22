@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">四条规则，各自判得准不准</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容审核规则的误判与漏判，第一次被运营读到 · 四条规则，各自判得准不准</caption>
                     <thead><tr><th>规则</th><th>权重</th><th>命中</th><th>确认</th><th>误判</th><th>误判率（%）</th><th>漏判率（%）</th></tr></thead>
                     <tbody>
                         {% for row in moderation_rule_quality.rule_rows %}
@@ -43,6 +44,7 @@
             <h3 class="h6 mb-3">从拦截到复核，隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容审核规则的误判与漏判，第一次被运营读到 · 从拦截到复核，隔了多久</caption>
                     <thead><tr><th>复核时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         {% for row in moderation_rule_quality.stats.rows %}
@@ -59,6 +61,7 @@
             <h3 class="h6 mb-3">分数段：高分的档是不是真的更容易确认违规</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容审核规则的误判与漏判，第一次被运营读到 · 分数段：高分的档是不是真的更容易确认违规</caption>
                     <thead><tr><th>分数段</th><th>条数</th><th>确认违规</th><th>确认率（%）</th><th>这一档是什么</th></tr></thead>
                     <tbody>
                         {% for row in moderation_rule_quality.score_rows %}
@@ -73,6 +76,7 @@
             <h3 class="h6 mb-3">按渠道分开报：留言和私信</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容审核规则的误判与漏判，第一次被运营读到 · 按渠道分开报：留言和私信</caption>
                     <thead><tr><th>渠道</th><th>条数</th><th>确认违规</th><th>误判放行</th><th>误判率（%）</th></tr></thead>
                     <tbody>
                         {% for row in moderation_rule_quality.channel_rows %}
@@ -87,6 +91,7 @@
     <h3 class="h6 mb-3 mt-4">疑似漏判：确认违规，却只命中了轻规则</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">内容审核规则的误判与漏判，第一次被运营读到 · 疑似漏判：确认违规，却只命中了轻规则</caption>
             <thead><tr><th>记录</th><th>渠道</th><th>风险等级</th><th>分数</th><th>命中的规则</th><th>复核耗时</th><th>拦截于</th><th>复核于</th></tr></thead>
             <tbody>
                 {% for row in moderation_rule_quality.missed_rows %}
@@ -136,6 +141,7 @@
             <h3 class="h6 mb-3">确认违规之后，有多少人提出申诉</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容申诉处理质量，第一次被运营读到 · 确认违规之后，有多少人提出申诉</caption>
                     <thead><tr><th>口径</th><th>数值</th><th>说明</th></tr></thead>
                     <tbody>
                         <tr><td>周期内提交</td><td>{{ moderation_appeal_quality.submission.submitted_count }}</td><td class="small text-muted">按 submitted_at 归期</td></tr>
@@ -152,6 +158,7 @@
             <h3 class="h6 mb-3">申诉人为什么提交</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容申诉处理质量，第一次被运营读到 · 申诉人为什么提交</caption>
                     <thead><tr><th>原因</th><th>申诉</th><th>申诉人</th><th>提交占比（%）</th><th>样本</th></tr></thead>
                     <tbody>
                         {% for row in moderation_appeal_quality.reason_rows %}
@@ -166,6 +173,7 @@
             <h3 class="h6 mb-3">处理结论与恢复缺口</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容申诉处理质量，第一次被运营读到 · 处理结论与恢复缺口</caption>
                     <thead><tr><th>结论</th><th>数量</th><th>已处理占比（%）</th><th>口径</th></tr></thead>
                     <tbody>
                         {% for row in moderation_appeal_quality.outcome.rows %}
@@ -183,6 +191,7 @@
             <h3 class="h6 mb-3">从提交到处理完成，隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容申诉处理质量，第一次被运营读到 · 从提交到处理完成，隔了多久</caption>
                     <thead><tr><th>处理时长</th><th>条数</th><th>占比（%）</th><th>说明</th></tr></thead>
                     <tbody>
                         {% for row in moderation_appeal_quality.resolution.duration.rows %}
@@ -199,6 +208,7 @@
             <h3 class="h6 mb-3">换人复核了吗</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容申诉处理质量，第一次被运营读到 · 换人复核了吗</caption>
                     <thead><tr><th>复核人关系</th><th>条数</th><th>占比（%）</th><th>口径</th></tr></thead>
                     <tbody>
                         <tr><td>同一人</td><td>{{ moderation_appeal_quality.resolution.reviewer.same_count }}</td><td>{{ moderation_appeal_quality.resolution.reviewer.same_rate }}</td><td class="small text-muted">另列换人比例；缺失任一人时不算</td></tr>
@@ -212,6 +222,7 @@
             <h3 class="h6 mb-3">当前待处理申诉与等待年龄</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">内容申诉处理质量，第一次被运营读到 · 当前待处理申诉与等待年龄</caption>
                     <thead><tr><th>申诉</th><th>渠道</th><th>原因</th><th>提交于</th><th>等待</th><th>说明字数</th><th>原复核留痕</th></tr></thead>
                     <tbody>
                         {% for row in moderation_appeal_quality.pending.rows|slice:":20" %}
@@ -248,6 +259,7 @@
         <div class="supply-lifecycle-block-heading"><strong>各队列处理情况</strong><span>时限不同：预约异常阻塞一次线下交付，举报只是离线复核</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">治理队列处理时效 · 各队列处理情况</caption>
                 <thead><tr><th>队列</th><th>周期内</th><th>已处理</th><th>待处理</th><th>超期</th><th>中位耗时</th><th>P90 耗时</th><th>处理时限</th></tr></thead>
                 <tbody>
                     {% for queue in governance_sla.queues %}

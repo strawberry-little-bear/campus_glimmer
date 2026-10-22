@@ -27,6 +27,7 @@
 
     <div class="ops-table-wrap mt-3">
         <table class="table ops-table align-middle mb-0 order-stage-table">
+        <caption class="visually-hidden">订单全链路阶段时长 · 各阶段耗时</caption>
             <thead><tr><th>阶段</th><th>中位耗时</th><th>耗时占比</th><th>P90</th><th>平均</th><th>最快 / 最慢</th><th>样本</th><th>进行中</th></tr></thead>
             <tbody>
                 {% for row in order_stage_flow.stage_rows %}
@@ -53,9 +54,9 @@
         {% for facet in order_stage_flow.facet_rows %}
         <div class="col-lg-6">
             <div class="order-stage-block">
-                <div class="order-stage-block-heading"><strong>按{{ facet.label }}拆分</strong><span>仅显示有可测量阶段的{{ facet.label }}</span></div>
+                <div class="order-stage-block-heading"><strong id="order-stage-facet-{{ forloop.counter }}">按{{ facet.label }}拆分</strong><span>仅显示有可测量阶段的{{ facet.label }}</span></div>
                 {% if facet.rows %}
-                <table class="table ops-table align-middle mb-0 order-stage-facet-table">
+                <table class="table ops-table align-middle mb-0 order-stage-facet-table" aria-labelledby="order-stage-facet-{{ forloop.counter }}">
                     <thead><tr><th>{{ facet.label }}</th><th>订单</th><th>最慢阶段</th><th>该阶段中位</th><th>端到端中位</th></tr></thead>
                     <tbody>
                         {% for row in facet.rows %}
@@ -123,6 +124,7 @@
                 {% if supply_lifecycle.seller_load_rows %}
                 <div class="ops-table-wrap">
                     <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+                    <caption class="visually-hidden">供给侧生命周期健康 · 按卖家在管商品数分组</caption>
                         <thead><tr><th>在管规模</th><th>卖家数</th><th>在售商品</th><th>待处理商品</th><th>无互动商品</th><th>额度用尽</th></tr></thead>
                         <tbody>
                             {% for row in supply_lifecycle.seller_load_rows %}

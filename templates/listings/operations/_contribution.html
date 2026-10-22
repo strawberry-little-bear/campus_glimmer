@@ -23,6 +23,7 @@
         <h3>五级等级各自有多少人</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">积分等级与徽章的门槛形状 · 五级等级各自有多少人</caption>
                 <thead><tr><th>等级</th><th>门槛（分）</th><th>用户数</th><th>占比（%）</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in contribution_tier_shape.level_rows %}
@@ -44,6 +45,7 @@
         <h3>每一级到下一级，这批人还差多少</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">积分等级与徽章的门槛形状 · 每一级到下一级，这批人还差多少</caption>
                 <thead><tr><th>跨度</th><th>停在这一级的人数</th><th>中位距离</th><th>最大距离</th></tr></thead>
                 <tbody>
                     {% for row in contribution_tier_shape.gap_rows %}
@@ -64,6 +66,7 @@
         <h3>七枚徽章，各自有多少人拿到</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">积分等级与徽章的门槛形状 · 七枚徽章，各自有多少人拿到</caption>
                 <thead><tr><th>徽章</th><th>看什么</th><th>门槛</th><th>拿到的人数</th><th>占比（%）</th></tr></thead>
                 <tbody>
                     {% for row in contribution_tier_shape.badge_rows %}
@@ -85,6 +88,7 @@
         <h3>哪一类行为在发分</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">积分等级与徽章的门槛形状 · 哪一类行为在发分</caption>
                 <thead><tr><th>贡献类型</th><th>事件数</th><th>积分</th><th>单次平均分</th><th>积分占比（%）</th><th>样本</th></tr></thead>
                 <tbody>
                     {% for row in contribution_tier_shape.type_rows %}
@@ -110,6 +114,7 @@
                 <h4 class="h6 mb-2">业务域（幂等键前缀）</h4>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">积分等级与徽章的门槛形状 · 业务域（幂等键前缀）</caption>
                         <thead><tr><th>前缀</th><th>事件数</th><th>用户数</th><th>占比（%）</th></tr></thead>
                         <tbody>
                             {% for row in contribution_tier_shape.key_prefix_rows %}
@@ -132,6 +137,7 @@
                 <h4 class="h6 mb-2">同一用户同一类型的记录数</h4>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">积分等级与徽章的门槛形状 · 同一用户同一类型的记录数</caption>
                         <thead><tr><th>出现次数</th><th>组合数</th><th>占比（%）</th><th>读数</th></tr></thead>
                         <tbody>
                             {% for row in contribution_tier_shape.repeat_rows %}
@@ -177,6 +183,7 @@
         <h3>一、按里程碑类型看覆盖</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">贡献里程碑覆盖审计 · 一、按里程碑类型看覆盖</caption>
                 <thead><tr><th>类型</th><th>应有</th><th>已覆盖</th><th>缺失</th><th>多余</th><th>覆盖率</th><th>回填 / 在线</th></tr></thead>
                 <tbody>
                     {% for row in contribution_milestone_coverage.type_rows %}
@@ -199,6 +206,7 @@
         <h3>二、按里程碑代码看差异</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">贡献里程碑覆盖审计 · 二、按里程碑代码看差异</caption>
                 <thead><tr><th>类型</th><th>代码</th><th>名称 / 快照</th><th>应有</th><th>已有</th><th>缺失</th><th>多余</th><th>快照差异</th></tr></thead>
                 <tbody>
                     {% for row in contribution_milestone_coverage.code_rows %}
@@ -223,6 +231,7 @@
         <h3>三、事实一致性信号</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">贡献里程碑覆盖审计 · 三、事实一致性信号</caption>
                 <thead><tr><th>信号</th><th>行数</th><th>读法</th></tr></thead>
                 <tbody>
                     <tr><td>触发贡献用户不一致</td><td>{{ contribution_milestone_coverage.audit.owner_mismatch_count }}</td><td class="ops-hint">事件用户与触发贡献用户不是同一人</td></tr>
@@ -271,10 +280,10 @@
         <h3>一、最新两个同类学期</h3>
         {% for group in contribution_milestone_phase_rhythm.groups %}
         <div class="mb-3">
-            <h4 class="small fw-semibold">{{ group.kind_label }} · {{ group.phase_label }}</h4>
+            <h4 class="small fw-semibold" id="milestone-phase-{{ forloop.counter }}">{{ group.kind_label }} · {{ group.phase_label }}</h4>
             <p class="small text-muted">{{ group.latest_term.name }}（{{ group.latest_term.starts_on|date:"Y-m-d" }} 开学）{% if group.previous_term %} 对照 {{ group.previous_term.name }}（{{ group.previous_term.starts_on|date:"Y-m-d" }} 开学）{% else %}还找不到同类上一学期{% endif %}</p>
             <div class="table-responsive">
-                <table class="table table-sm align-middle ops-table">
+                <table class="table table-sm align-middle ops-table" aria-labelledby="milestone-phase-{{ forloop.counter }}">
                     <thead><tr><th>里程碑</th><th>最新事件</th><th>最新天数</th><th>最新每百天</th><th>上一事件</th><th>上一天数</th><th>上一每百天</th><th>事件差</th><th>强度差</th><th>方向</th><th>状态</th></tr></thead>
                     <tbody>
                         {% for row in group.rows %}

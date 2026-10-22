@@ -102,6 +102,7 @@
             <div class="tab-pane fade show active my-items-pane" id="all" role="tabpanel" aria-labelledby="all-tab">
                 <div class="table-responsive">
                     <table class="table table-sm align-middle seller-desk-table mb-0">
+                    <caption class="visually-hidden">我的商品 · 全部</caption>
                         <thead>
                             <tr>
                                 <th><input type="checkbox" class="form-check-input" aria-label="选择全部商品" onclick="document.querySelectorAll('.bulk-item-checkbox').forEach((box) => { box.checked = this.checked; });"></th>
@@ -182,6 +183,7 @@
             <div class="tab-pane fade my-items-pane" id="available" role="tabpanel" aria-labelledby="available-tab">
                 <div class="table-responsive">
                     <table class="table table-sm align-middle seller-desk-table mb-0">
+                    <caption class="visually-hidden">我的商品 · 可购买</caption>
                         <thead>
                             <tr>
                                 <th>商品</th>
@@ -230,6 +232,7 @@
                 <!-- 与可购买商品结构类似，只是筛选status == 'reserved' -->
                 <div class="table-responsive">
                     <table class="table table-sm align-middle seller-desk-table mb-0">
+                    <caption class="visually-hidden">我的商品 · 已预定</caption>
                         <thead>
                             <tr>
                                 <th>商品</th>
@@ -278,6 +281,7 @@
                 <!-- 与可购买商品结构类似，只是筛选status == 'sold' -->
                 <div class="table-responsive">
                     <table class="table table-sm align-middle seller-desk-table mb-0">
+                    <caption class="visually-hidden">我的商品 · 已售出</caption>
                         <thead>
                             <tr>
                                 <th>商品</th>

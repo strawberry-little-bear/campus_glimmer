@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">两下是什么顺序，中间隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 两下是什么顺序，中间隔了多久</caption>
                     <thead><tr><th>顺序</th><th>笔数</th><th>占比（%）</th><th>中位间隔</th></tr></thead>
                     <tbody>
                         {% for row in delivery_handshake.sequence_rows %}
@@ -39,6 +40,7 @@
             <h3 class="h6 mb-3 mt-4">两下之间隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 两下之间隔了多久</caption>
                     <thead><tr><th>间隔</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in delivery_handshake.gap_bucket_rows %}
@@ -53,6 +55,7 @@
             <h3 class="h6 mb-3">只点了一半的订单</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 只点了一半的订单</caption>
                     <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         <tr><td>买家点了、卖家没点</td><td>{{ delivery_handshake.hang_stats.buyer_only }}</td><td>{% if delivery_handshake.hang_stats.buyer_only_share is None %}—{% else %}{{ delivery_handshake.hang_stats.buyer_only_share }}{% endif %}</td></tr>
@@ -65,6 +68,7 @@
             <h3 class="h6 mb-3 mt-4">挂了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 挂了多久</caption>
                     <thead><tr><th>等待</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         {% for row in delivery_handshake.hang_stats.bucket_rows %}
@@ -77,6 +81,7 @@
             <h3 class="h6 mb-3 mt-4">间隔与结局的对照</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">当面交付的那两下确认 · 间隔与结局的对照</caption>
                     <thead><tr><th>两下间隔</th><th>笔数</th><th>做成</th><th>做成率（%）</th></tr></thead>
                     <tbody>
                         <tr><td>1 小时以内</td><td>{{ delivery_handshake.outcome_contrast.fast_total }}</td><td>{{ delivery_handshake.outcome_contrast.fast_success }}</td><td>{% if delivery_handshake.outcome_contrast.fast_rate is None %}—{% else %}{{ delivery_handshake.outcome_contrast.fast_rate }}{% endif %}</td></tr>
@@ -91,6 +96,7 @@
     <h3 class="h6 mb-3 mt-4">只点了一半的订单清单</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">当面交付的那两下确认 · 只点了一半的订单清单</caption>
             <thead><tr><th>订单号</th><th>商品</th><th>先点的一方</th><th>挂了多久</th></tr></thead>
             <tbody>
                 {% for row in delivery_handshake.stalled_rows %}
@@ -135,6 +141,7 @@
             <h3 class="h6 mb-3">当前版本的四档覆盖</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易安全卡确认到哪一步了 · 当前版本的四档覆盖</caption>
                     <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in transaction_safety_acknowledgement_quality.coverage.rows %}
@@ -152,6 +159,7 @@
             <h3 class="h6 mb-3">双方补齐用了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易安全卡确认到哪一步了 · 双方补齐用了多久</caption>
                     <thead><tr><th>间隔</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in transaction_safety_acknowledgement_quality.latency.complete_bucket_rows %}
@@ -169,6 +177,7 @@
     <h3 class="h6 mb-3 mt-4">曾被确认过的安全卡版本（观察下界）</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">交易安全卡确认到哪一步了 · 曾被确认过的安全卡版本（观察下界）</caption>
             <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th><th>说明</th></tr></thead>
             <tbody>
                 {% for row in transaction_safety_acknowledgement_quality.versions.rows %}
@@ -183,6 +192,7 @@
     <h3 class="h6 mb-3 mt-4">全站待确认清单</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">交易安全卡确认到哪一步了 · 全站待确认清单</caption>
             <thead><tr><th>订单号</th><th>商品</th><th>状态</th><th>缺少的角色</th><th>订单年龄</th></tr></thead>
             <tbody>
                 {% for row in transaction_safety_acknowledgement_quality.pending.rows %}
@@ -227,6 +237,7 @@
             <h3 class="h6 mb-3">从下单到卖家确认花了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 从下单到卖家确认花了多久</caption>
                     <thead><tr><th>确认时长</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in order_deadline_reminders.confirm_stats.bucket_rows %}
@@ -240,6 +251,7 @@
             <h3 class="h6 mb-3 mt-4">催过之后的四种结局</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 催过之后的四种结局</caption>
                     <thead><tr><th>结局</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         <tr><td>提醒之后确认了</td><td>{{ order_deadline_reminders.reminder_stats.confirmed_after }}</td><td>{% if order_deadline_reminders.reminder_stats.confirmed_after_share is None %}—{% else %}{{ order_deadline_reminders.reminder_stats.confirmed_after_share }}{% endif %}</td><td class="small text-muted">最有信息量的一列</td></tr>
@@ -256,6 +268,7 @@
             <h3 class="h6 mb-3">确认的时候，距截止还剩多少</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 确认的时候，距截止还剩多少</caption>
                     <thead><tr><th>距截止还剩</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         {% for row in order_deadline_reminders.reminder_stats.margin_rows %}
@@ -268,6 +281,7 @@
             <h3 class="h6 mb-3 mt-4">借用侧：催过之后提前多久还</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">承诺的截止时间，和催过之后 · 借用侧：催过之后提前多久还</caption>
                     <thead><tr><th>距预计归还</th><th>笔数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         {% for row in order_deadline_reminders.borrow_stats.margin_rows %}
@@ -291,6 +305,7 @@
     <h3 class="h6 mb-3 mt-4">催过之后仍被自动释放的订单</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">承诺的截止时间，和催过之后 · 催过之后仍被自动释放的订单</caption>
             <thead><tr><th>订单号</th><th>商品</th><th>等足了多久</th><th>催过</th></tr></thead>
             <tbody>
                 {% for row in order_deadline_reminders.release_rows %}
@@ -312,6 +327,7 @@
     <h3 class="h6 mb-3 mt-4">已过截止时间，还挂在「待卖家确认」</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">承诺的截止时间，和催过之后 · 已过截止时间，还挂在「待卖家确认」</caption>
             <thead><tr><th>订单号</th><th>商品</th><th>已超时多久</th><th>催过</th></tr></thead>
             <tbody>
                 {% for row in order_deadline_reminders.pending_rows %}

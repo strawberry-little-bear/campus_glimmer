@@ -13,7 +13,7 @@
         <div class="campus-pulse-warning"><span>需求紧张地点</span><strong>{{ campus_pulse.summary.high_pressure_count }}</strong></div>
     </div>
     {% if campus_pulse.rows %}
-    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0"><thead><tr><th>校园地点</th><th>供给</th><th>需求</th><th>预约</th><th>供需状态</th><th>活跃度</th></tr></thead><tbody>
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">校园供需热力</caption><thead><tr><th>校园地点</th><th>供给</th><th>需求</th><th>预约</th><th>供需状态</th><th>活跃度</th></tr></thead><tbody>
         {% for row in campus_pulse.rows %}
         <tr>
             <td><strong>{{ row.name }}</strong>{% if row.building %}<small class="d-block text-muted">{{ row.building }}</small>{% endif %}</td>
@@ -89,7 +89,7 @@
         <div><span>闭环命中率</span><strong>{% if demand_radar_outcomes.summary.hit_rate != None %}{{ demand_radar_outcomes.summary.hit_rate|floatformat }}%{% else %}—{% endif %}</strong><small>仅统计有完整证据的任务</small></div>
     </div>
     {% if demand_radar_outcomes.rows %}
-    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 demand-outcome-table"><thead><tr><th>跟进主题</th><th>任务状态</th><th>基线无结果率</th><th>观察期无结果率</th><th>变化</th><th>可用供给</th><th>判定</th></tr></thead><tbody>
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 demand-outcome-table"><caption class="visually-hidden">需求跟进闭环效果</caption><thead><tr><th>跟进主题</th><th>任务状态</th><th>基线无结果率</th><th>观察期无结果率</th><th>变化</th><th>可用供给</th><th>判定</th></tr></thead><tbody>
         {% for row in demand_radar_outcomes.rows %}
         <tr>
             <td><strong>{{ row.title }}</strong><small class="d-block text-muted">{{ row.created_at|date:"Y-m-d" }} 建立 · 信号 {{ row.signal_total }} 次</small></td>
@@ -126,6 +126,7 @@
             <h3 class="h6 mb-3">设了期限的，真的更容易做完吗</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 设了期限的，真的更容易做完吗</caption>
                     <thead><tr><th>分组</th><th>任务数</th><th>已闭环</th><th>已完成</th><th>完成率（%）</th></tr></thead>
                     <tbody>
                         {% for row in demand_opportunity_followups.due_contrast.rows %}
@@ -148,6 +149,7 @@
             <h3 class="h6 mb-3 mt-4">逾期分档</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 逾期分档</caption>
                     <thead><tr><th>超期多久</th><th>任务数</th></tr></thead>
                     <tbody>
                         {% for row in demand_opportunity_followups.overdue_stats.bucket_rows %}
@@ -162,6 +164,7 @@
             {% if demand_opportunity_followups.overdue_stats.overdue_rows %}
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 待处理的逾期任务</caption>
                     <thead><tr><th>主题</th><th>状态</th><th>负责人</th><th>截止</th><th>已超（天）</th><th>备注（字）</th></tr></thead>
                     <tbody>
                         {% for row in demand_opportunity_followups.overdue_stats.overdue_rows %}
@@ -186,6 +189,7 @@
             <h3 class="h6 mb-3 mt-4">任务状态分布</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 任务状态分布</caption>
                     <thead><tr><th>状态</th><th>任务数</th><th>设了截止时间</th><th>写过备注</th></tr></thead>
                     <tbody>
                         {% for row in demand_opportunity_followups.status_rows %}
@@ -220,6 +224,7 @@
             <h3 class="h6 mb-3">接手等待怎么分布的</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的接手等待与停留 · 接手等待怎么分布的</caption>
                     <thead><tr><th>等了多久</th><th>没人接手过</th><th>已经有人接手</th></tr></thead>
                     <tbody>
                         {% for row in demand_task_aging.handover.waiting_bucket_rows %}
@@ -236,6 +241,7 @@
             <h3 class="h6 mb-3 mt-4">每个状态现在停了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的接手等待与停留 · 每个状态现在停了多久</caption>
                     <thead><tr><th>状态</th><th>任务数</th><th>中位停留（天）</th><th>最久（天）</th></tr></thead>
                     <tbody>
                         {% for row in demand_task_aging.residency.rows %}
@@ -256,6 +262,7 @@
             {% if demand_task_aging.stale_rows.rows %}
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的接手等待与停留 · 最久没有活动的未闭环任务</caption>
                     <thead><tr><th>主题</th><th>状态</th><th>负责人</th><th>多久没动（天）</th><th>有期限</th><th>备注（字）</th></tr></thead>
                     <tbody>
                         {% for row in demand_task_aging.stale_rows.rows %}

@@ -23,6 +23,7 @@
             <h3 class="h6 mb-3">驳回率按举报原因拆</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品举报处理得公不公平 · 驳回率按举报原因拆</caption>
                     <thead><tr><th>举报原因</th><th>举报数</th><th>已完结</th><th>驳回数</th><th>驳回率</th><th>还在流程里</th></tr></thead>
                     <tbody>
                         {% for row in report_resolution_quality.reason_rows %}
@@ -56,6 +57,7 @@
             <h3 class="h6 mb-3">审核意见写了没写</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品举报处理得公不公平 · 审核意见写了没写</caption>
                     <thead><tr><th>意见长度</th><th>条数</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in report_resolution_quality.note.bucket_rows %}
@@ -70,6 +72,7 @@
             </div>
             <div class="table-responsive mt-3">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品举报处理得公不公平 · 审核意见写了没写（按结局拆）</caption>
                     <thead><tr><th>按结局拆</th><th>已完结</th><th>写过意见</th><th>填写率</th></tr></thead>
                     <tbody>
                         {% for row in report_resolution_quality.note.by_outcome %}
@@ -87,6 +90,7 @@
             <h3 class="h6 mb-3 mt-4">结果回访说了什么</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品举报处理得公不公平 · 结果回访说了什么</caption>
                     <thead><tr><th>回访反馈</th><th>条数</th><th>占比</th><th>已处理结局</th><th>已驳回结局</th></tr></thead>
                     <tbody>
                         {% for row in report_resolution_quality.outcome_feedback.choice_rows %}
@@ -103,6 +107,7 @@
             </div>
             <div class="table-responsive mt-3">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品举报处理得公不公平 · 结果回访说了什么（按完结结局拆）</caption>
                     <thead><tr><th>按完结结局拆</th><th>已完结</th><th>已回访</th><th>回访率</th></tr></thead>
                     <tbody>
                         {% for row in report_resolution_quality.outcome_feedback.by_outcome %}
@@ -120,6 +125,7 @@
             <h3 class="h6 mb-3 mt-4">结果回访隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品举报处理得公不公平 · 结果回访隔了多久</caption>
                     <thead><tr><th>完结到回访</th><th>条数</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in report_resolution_quality.outcome_feedback.latency_rows %}
@@ -139,6 +145,7 @@
             {% else %}
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品举报处理得公不公平 · 举报人分布</caption>
                     <thead><tr><th>举报次数</th><th>人数</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in report_resolution_quality.reporters.band_rows %}
@@ -182,6 +189,7 @@
             <h3 class="h6 mb-3">驳回率按异常类型拆</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 驳回率按异常类型拆</caption>
                     <thead><tr><th>异常类型</th><th>异常数</th><th>已完结</th><th>驳回数</th><th>驳回率</th><th>还在流程里</th></tr></thead>
                     <tbody>
                         {% for row in meeting_incident_quality.reason_rows %}
@@ -201,6 +209,7 @@
             <h3 class="h6 mb-3 mt-4">是谁在报谁</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 是谁在报谁</caption>
                     <thead><tr><th>提交方向</th><th>异常数</th><th>已完结</th><th>驳回数</th><th>驳回率</th></tr></thead>
                     <tbody>
                         {% for row in meeting_incident_quality.direction.rows %}
@@ -221,6 +230,7 @@
             <h3 class="h6 mb-3">处理意见写了没写</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 处理意见写了没写</caption>
                     <thead><tr><th>意见长度</th><th>条数</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in meeting_incident_quality.note.bucket_rows %}
@@ -235,6 +245,7 @@
             </div>
             <div class="table-responsive mt-3">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 处理意见写了没写（按结局拆）</caption>
                     <thead><tr><th>按结局拆</th><th>已完结</th><th>写过意见</th><th>填写率</th></tr></thead>
                     <tbody>
                         {% for row in meeting_incident_quality.note.by_outcome %}
@@ -255,6 +266,7 @@
             {% else %}
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交付预约异常处理得公不公平 · 提交人分布</caption>
                     <thead><tr><th>提交次数</th><th>人数</th><th>占比</th></tr></thead>
                     <tbody>
                         {% for row in meeting_incident_quality.reporters.band_rows %}
@@ -298,6 +310,7 @@
                 <h3 class="h6 mb-3">这条结论送到作者眼前了没有</h3>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 这条结论送到作者眼前了没有</caption>
                         <thead><tr><th>复核结论</th><th>记录数</th><th>送到了</th><th>开关关着</th><th>免打扰时段</th><th>复核人是作者本人</th><th>取不到偏好行</th></tr></thead>
                         <tbody>
                             {% for row in moderation_notice_preference.reach_rows %}
@@ -318,6 +331,7 @@
                 <h3 class="h6 mb-3 mt-4">通知发出去之后，读没读</h3>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 通知发出去之后，读没读</caption>
                         <thead><tr><th>复核结论</th><th>条数</th><th>已读</th><th>未读</th><th>已读率</th></tr></thead>
                         <tbody>
                             {% for row in moderation_notice_preference.read_rows %}
@@ -343,6 +357,7 @@
                 <h3 class="h6 mb-3 mt-4">偏好开关四格</h3>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 偏好开关四格</caption>
                         <thead><tr><th>偏好开关四格</th><th>人数</th></tr></thead>
                         <tbody>
                             <tr><td><strong>有内容被复核 · 开关开着</strong></td><td>{{ moderation_notice_preference.preference_grid.reviewed_switch_on }}</td></tr>
@@ -357,6 +372,7 @@
                 <h3 class="h6 mb-3 mt-4">关掉之后，还在不在社区里说话</h3>
                 <div class="table-responsive">
                     <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">内容审核结果通知：开关、触达与沉默 · 关掉之后，还在不在社区里说话</caption>
                         <thead><tr><th>发言行为</th><th>关掉的一组</th><th>开着的一组</th><th>方向</th></tr></thead>
                         <tbody>
                             {% for row in moderation_notice_preference.activity.rows %}

@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">生成之后，现场发生了什么</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">在现场念出来的那六位数字 · 生成之后，现场发生了什么</caption>
                     <thead><tr><th>情况</th><th>笔数</th><th>占生成过（%）</th></tr></thead>
                     <tbody>
                         {% for row in handoff_code_usage.attempt_stats.bucket_rows %}
@@ -33,6 +34,7 @@
             <h3 class="h6 mb-3 mt-4">生成到现场核对隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">在现场念出来的那六位数字 · 生成到现场核对隔了多久</caption>
                     <thead><tr><th>间隔</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in handoff_code_usage.issue_gap_stats.bucket_rows %}
@@ -42,6 +44,7 @@
                 </table>
             </div>
             <table class="table table-sm align-middle ops-table mt-3 handoff-code-mini-table">
+            <caption class="visually-hidden">在现场念出来的那六位数字 · 生成到现场核对隔了多久（中位间隔）</caption>
                 <tbody>
                     <tr><th scope="row">中位间隔</th><td>{{ handoff_code_usage.issue_gap_stats.median_label }}</td><td>{{ handoff_code_usage.issue_gap_stats.measured_count }} 笔可测量</td></tr>
                     <tr><th scope="row">P90 间隔</th><td>{{ handoff_code_usage.issue_gap_stats.p90_label }}</td><td>&mdash;</td></tr>
@@ -53,6 +56,7 @@
             <h3 class="h6 mb-3">用过确认码的订单更可能做成吗</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">在现场念出来的那六位数字 · 用过确认码的订单更可能做成吗</caption>
                     <thead><tr><th>分组</th><th>笔数</th><th>做成数</th><th>完成率（%）</th></tr></thead>
                     <tbody>
                         <tr><td>用过确认码</td><td>{{ handoff_code_usage.outcome_contrast.used_count }}</td><td>{{ handoff_code_usage.outcome_contrast.used_success_count }}</td><td>{{ handoff_code_usage.outcome_contrast.used_success_rate }}</td></tr>
@@ -73,6 +77,7 @@
             <h3 class="h6 mb-3 mt-4">撞到锁定的订单</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">在现场念出来的那六位数字 · 撞到锁定的订单</caption>
                     <thead><tr><th>商品</th><th>买家</th><th>卖家</th><th>错误次数</th><th>重新生成过</th><th>最终状态</th></tr></thead>
                     <tbody>
                         {% for row in handoff_code_usage.locked_rows %}
@@ -120,6 +125,7 @@
             <h3 class="h6 mb-3">借用出去之后，有多少走完了归还握手</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">归还登记的那两次握手 · 借用出去之后，有多少走完了归还握手</caption>
                     <thead><tr><th>情况</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         <tr><td>周期内走完借用的订单</td><td>{{ return_handshake.completion_stats.concluded_total }}</td><td>—</td></tr>
@@ -138,6 +144,7 @@
             <h3 class="h6 mb-3 mt-4">谁先登记</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">归还登记的那两次握手 · 谁先登记</caption>
                     <thead><tr><th>先登记的一方</th><th>笔数</th><th>占登记过（%）</th></tr></thead>
                     <tbody>
                         {% for row in return_handshake.first_registered_stats.rows %}
@@ -153,6 +160,7 @@
             <h3 class="h6 mb-3">双方都登记的，等了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">归还登记的那两次握手 · 双方都登记的，等了多久</caption>
                     <thead><tr><th>等待时长</th><th>笔数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in return_handshake.wait_stats.bucket_rows %}
@@ -165,6 +173,7 @@
             <h3 class="h6 mb-3 mt-4">仍挂在借用中的订单：两类，动作相反</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">归还登记的那两次握手 · 仍挂在借用中的订单：两类，动作相反</caption>
                     <thead><tr><th>情况</th><th>笔数</th><th>等待多久</th></tr></thead>
                     <tbody>
                         <tr><td>逾期未归还：双方都没登记，而预计归还时间已过</td><td>{{ return_handshake.stalled_stats.overdue_count }}</td><td>—</td></tr>
@@ -180,6 +189,7 @@
     <h3 class="h6 mb-3 mt-4">已登记未确认的订单</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">归还登记的那两次握手 · 已登记未确认的订单</caption>
             <thead><tr><th>商品</th><th>买家</th><th>卖家</th><th>先登记的一方</th><th>在等谁</th><th>已等多久</th><th>预计归还</th><th>登记之后还有没有动静</th></tr></thead>
             <tbody>
                 {% for row in return_handshake.stalled_rows %}

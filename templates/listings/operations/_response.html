@@ -60,6 +60,7 @@
 
     <div class="ops-table-wrap mt-3">
         <table class="table ops-table align-middle mb-0">
+        <caption class="visually-hidden">通知处理时效与触达质量 · 发送与处理时段</caption>
             <thead><tr><th>通知类型</th><th>发送</th><th>已读</th><th>已读率</th><th>平均处理时长</th><th>最快 / 最慢</th><th>状态</th></tr></thead>
             <tbody>
                 {% for row in notification_response.kind_rows %}
@@ -152,6 +153,7 @@
 
     <div class="ops-table-wrap mt-3">
         <table class="table ops-table align-middle mb-0">
+        <caption class="visually-hidden">私信响应时效 · 发出与打开时段</caption>
             <thead><tr><th>角色</th><th>发出</th><th>打开</th><th>打开率</th><th>中位时长</th><th>样本</th></tr></thead>
             <tbody>
                 {% for row in chat_response.role_rows %}
@@ -175,6 +177,7 @@
                 {% if chat_response.category_rows %}
                 <div class="ops-table-wrap chat-response-category-table">
                     <table class="table ops-table align-middle mb-0">
+                    <caption class="visually-hidden">私信响应时效 · 按商品分类看私信响应</caption>
                         <thead><tr><th>场景</th><th>私信</th><th>已打开</th><th>打开率</th><th>中位打开</th><th>P90</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in chat_response.category_rows %}
@@ -201,6 +204,7 @@
                 {% if chat_response.trade_mode_rows %}
                 <div class="ops-table-wrap chat-response-trade-mode-table">
                     <table class="table ops-table align-middle mb-0">
+                    <caption class="visually-hidden">私信响应时效 · 按交易方式看私信响应</caption>
                         <thead><tr><th>场景</th><th>私信</th><th>已打开</th><th>打开率</th><th>中位打开</th><th>P90</th><th>样本</th></tr></thead>
                         <tbody>
                             {% for row in chat_response.trade_mode_rows %}
@@ -244,6 +248,7 @@
         <div class="chat-response-trend-block-heading"><strong>整体指标的跨周期对比</strong><span>时长按倍数判（{{ chat_response_trend.latency_drift_factor }} 倍），比例按百分点判（{{ chat_response_trend.trend_delta_points }} 个百分点）</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 chat-response-trend-table">
+            <caption class="visually-hidden">私信响应时效跨周期对比 · 整体指标的跨周期对比</caption>
                 <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>变化</th><th>方向</th></tr></thead>
                 <tbody>
                     {% for row in chat_response_trend.metric_rows %}
@@ -282,6 +287,7 @@
     </div>
     <div class="ops-table-wrap mt-3">
         <table class="table ops-table align-middle mb-0 chat-trade-correlation-table">
+        <caption class="visually-hidden">私信响应与成交的共同变化</caption>
             <thead><tr><th>响应档</th><th>会话</th><th>带时戳询问</th><th>中位打开</th><th>有订单</th><th>7天内成交</th><th>成交率</th><th>样本</th></tr></thead>
             <tbody>
                 {% for row in chat_trade_correlation.rows %}

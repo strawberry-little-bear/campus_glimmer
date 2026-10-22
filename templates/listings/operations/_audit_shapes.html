@@ -22,6 +22,7 @@
         <h3>一、借用商品配了多长的期限</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">默认借用天数的形状 · 一、借用商品配了多长的期限</caption>
                 <thead><tr><th>期限档</th><th>商品数</th><th>其中在架</th><th>占比（%）</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in borrow_days_shape.item_rows %}
@@ -43,6 +44,7 @@
         <h3>二、配的天数 vs 实际借了多久</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">默认借用天数的形状 · 二、配的天数 vs 实际借了多久</caption>
                 <thead><tr><th>期限档</th><th>配置的借用</th><th>配置占比（%）</th><th>实际归还的借用</th><th>实际占比（%）</th><th>平均实际天数</th><th>最长实际天数</th></tr></thead>
                 <tbody>
                     {% for row in borrow_days_shape.configured_rows %}
@@ -66,6 +68,7 @@
         <h3>三、借用天数 × 催收</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">默认借用天数的形状 · 三、借用天数 × 催收</caption>
                 <thead><tr><th>期限档</th><th>借用</th><th>升级</th><th>第三级</th><th>已闭环</th><th>跟进中</th><th>升级率（%）</th><th>第三级率（%）</th><th>逾期笔数</th><th>平均超期天数</th><th>平均超期占配置（%）</th><th>平均闭环（天）</th></tr></thead>
                 <tbody>
                     {% for row in borrow_days_shape.band_rows %}
@@ -116,6 +119,7 @@
         <h3>一、双方实际传的是什么格式</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">证据文件的形状 · 一、双方实际传的是什么格式</caption>
                 <thead><tr><th>格式</th><th>份数</th><th>占比（%）</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in dispute_evidence_shape.extension_rows %}
@@ -136,6 +140,7 @@
         <h3>二、文件有多大</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">证据文件的形状 · 二、文件有多大</caption>
                 <thead><tr><th>大小档</th><th>份数</th><th>占比（%）</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in dispute_evidence_shape.size_rows %}
@@ -156,6 +161,7 @@
         <h3>三、有没有人在撞 5 MB 上限</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">证据文件的形状 · 三、有没有人在撞 5 MB 上限</caption>
                 <thead><tr><th>观察</th><th>份数</th><th>占比（%）</th><th>说明</th></tr></thead>
                 <tbody>
                     <tr>
@@ -185,6 +191,7 @@
         </div>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">证据文件的形状 · 四、一笔争议带几份、总大小多少</caption>
                 <thead><tr><th>附件份数</th><th>争议数</th><th>占比（%）</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in dispute_evidence_shape.per_dispute.count_rows %}
@@ -200,6 +207,7 @@
         </div>
         <div class="table-responsive mt-3">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">证据文件的形状 · 四、一笔争议带几份、总大小多少（争议现在处于什么状态）</caption>
                 <thead><tr><th>争议现在处于什么状态</th><th>争议数</th><th>附件数</th><th>平均份数</th><th>总大小中位</th><th>单笔最大</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in dispute_evidence_shape.status_cross_rows %}

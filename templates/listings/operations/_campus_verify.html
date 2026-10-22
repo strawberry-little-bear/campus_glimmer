@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">从收到邮件到点开链接，等了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">一封验证邮件，用户隔了多久才点开 · 从收到邮件到点开链接，等了多久</caption>
                     <thead><tr><th>等待时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         {% for row in campus_verification_friction.stats.rows %}
@@ -35,6 +36,7 @@
             <h3 class="h6 mb-3">按域名看，是哪一类邮箱在慢</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">一封验证邮件，用户隔了多久才点开 · 按域名看，是哪一类邮箱在慢</caption>
                     <thead><tr><th>学校 / 域名</th><th>认证成功</th><th>中位耗时</th><th>隔超过一天</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in campus_verification_friction.domain_rows %}
@@ -60,6 +62,7 @@
     <h3 class="h6 mb-3 mt-4">隔了超过一天才点开链接的记录</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">一封验证邮件，用户隔了多久才点开 · 隔了超过一天才点开链接的记录</caption>
             <thead><tr><th>用户</th><th>校园邮箱</th><th>学校 / 域名</th><th>等了</th><th>邮件发出</th><th>认证成功</th></tr></thead>
             <tbody>
                 {% for row in campus_verification_friction.slow_rows %}

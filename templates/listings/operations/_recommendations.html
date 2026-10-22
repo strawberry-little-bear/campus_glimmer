@@ -19,6 +19,7 @@
         <div class="recommendation-quality-block-heading"><strong>按理由拆</strong><span>一条理由要凑够 {{ recommendation_quality.metrics.min_reason_feedback }} 条反馈才给方向</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+            <caption class="visually-hidden">首页推荐卡挑得准不准 · 按理由拆</caption>
                 <thead><tr><th>理由</th><th>反馈数</th><th>想看看</th><th>不感兴趣</th><th>正反馈比例</th><th>改口数</th><th>样本</th></tr></thead>
                 <tbody>
                     {% for row in recommendation_quality.reason_rows %}
@@ -41,6 +42,7 @@
         <p class="recommendation-quality-note mb-0">这一层读的是<strong>推荐那一刻</strong>挂在那张卡上的理由：`Recommendation` 在渲染时就把理由和分数算好了，`views.home` 把它们跟着卡一起写进 `RecommendationImpression`，落库是零成本的。上面「按理由拆」那一层读的是<strong>反馈时刻重算</strong>的理由——两句回答的不是同一个问题：这一层问「当时挂这句话的卡，用户点了吗」，那一层问「这句理由今天还成立吗」。用户点完按钮又去收藏、又去浏览，会让后一句滑走，前一句不会。</p>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+            <caption class="visually-hidden">首页推荐卡挑得准不准 · 按推荐当时的理由</caption>
                 <thead><tr><th>当时的理由</th><th>被看见</th><th>被点开</th><th>反馈率</th><th>样本</th></tr></thead>
                 <tbody>
                     {% for row in recommendation_quality.reason_impression_rows %}
@@ -61,6 +63,7 @@
         <p class="recommendation-quality-note mb-0">档位边界照三个可解释的加分取（+10 反馈匹配、+8 分类匹配、+5 地点匹配），不按分数等分——运营能动手改的就是这三个常数。只报规模不报反馈率：分数是五部分相加的结果，两个同分的商品可能一个靠新鲜度一个靠分类，「这一档的反馈率更高」说明不了任何可改的东西。</p>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-quality-table">
+            <caption class="visually-hidden">首页推荐卡挑得准不准 · 按推荐当时的分数档</caption>
                 <thead><tr><th>分数档</th><th>被看见</th></tr></thead>
                 <tbody>
                     {% for row in recommendation_quality.score_bands %}
@@ -100,6 +103,7 @@
         <div class="recommendation-impression-quality-block-heading"><strong>字段与结构</strong><span>匿名、零分和重复都不是错误</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-impression-quality-table">
+            <caption class="visually-hidden">推荐曝光日志质量 · 字段与结构</caption>
                 <thead><tr><th>检查对象</th><th>行数</th><th>状态</th><th>怎么读</th></tr></thead>
                 <tbody>
                     {% for row in recommendation_impression_quality.field_rows %}
@@ -117,6 +121,7 @@
         <div class="recommendation-impression-quality-block-heading mt-3"><strong>理由分布</strong><span>一条理由要凑够 {{ recommendation_impression_quality.metrics.min_reason_impressions }} 次被看见才标记样本够</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-impression-quality-table">
+            <caption class="visually-hidden">推荐曝光日志质量 · 理由分布</caption>
                 <thead><tr><th>理由</th><th>曝光</th><th>占比（%）</th><th>样本</th></tr></thead>
                 <tbody>
                     {% for row in recommendation_impression_quality.reason_rows %}
@@ -134,6 +139,7 @@
         <div class="recommendation-impression-quality-block-heading mt-3"><strong>重复与覆盖</strong><span>重复不是错误；间隙不能判失败</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 recommendation-impression-quality-table">
+            <caption class="visually-hidden">推荐曝光日志质量 · 重复与覆盖</caption>
                 <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
                 <tbody>
                     <tr><td><strong>登录用户曝光</strong></td><td>{{ recommendation_impression_quality.summary.logged_in_impressions }}</td><td>匿名行不进入重复分母</td></tr>
@@ -167,6 +173,7 @@
         <div class="opportunity-impression-quality-block-heading"><strong>类型分布</strong><span>当前类型固定列出，历史或异常值聚合</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+            <caption class="visually-hidden">机会流曝光日志质量 · 类型分布</caption>
                 <thead><tr><th>类型</th><th>展示行</th><th>占比（%）</th><th>状态</th><th>怎么读</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_impression_quality.kind_rows %}
@@ -185,6 +192,7 @@
         <div class="opportunity-impression-quality-block-heading mt-3"><strong>目标一致性</strong><span>四类互斥，异常行不从总数扣除</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+            <caption class="visually-hidden">机会流曝光日志质量 · 目标一致性</caption>
                 <thead><tr><th>口径</th><th>展示行</th><th>占比（%）</th><th>状态</th><th>说明</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_impression_quality.target_rows %}
@@ -203,6 +211,7 @@
         <div class="opportunity-impression-quality-block-heading mt-3"><strong>重复与覆盖</strong><span>重复不是错误；间隙不能判失败</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+            <caption class="visually-hidden">机会流曝光日志质量 · 重复与覆盖</caption>
                 <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
                 <tbody>
                     <tr><td><strong>窗口内第一次被看见</strong></td><td>{{ opportunity_impression_quality.summary.first_seen_pairs }}</td><td>忽略率分母按（用户, 机会）去重</td></tr>
@@ -218,6 +227,7 @@
         <div class="opportunity-impression-quality-block-heading mt-3"><strong>逐日展示</strong><span>页面与 CSV 都只保留最近 {{ opportunity_impression_quality.daily_row_limit }} 天</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-impression-quality-table">
+            <caption class="visually-hidden">机会流曝光日志质量 · 逐日展示</caption>
                 <thead><tr><th>自然日</th><th>展示行</th><th>用户数</th><th>目标数</th><th>重复行</th><th>状态</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_impression_quality.daily_rows %}
@@ -259,6 +269,7 @@
         <div class="opportunity-dismissal-block-heading"><strong>按机会类型拆</strong><span>忽略的规模与结构</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+            <caption class="visually-hidden">机会流上被按「不再显示」的机会 · 按机会类型拆</caption>
                 <thead><tr><th>类型</th><th>忽略数</th><th>涉及用户数</th><th>人均忽略</th><th>其中重复忽略</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_dismissal_quality.kind_rows %}
@@ -277,6 +288,7 @@
         <div class="opportunity-dismissal-block-heading mt-3"><strong>按分数档拆</strong><span>一档要凑够 {{ opportunity_dismissal_quality.metrics.min_band_sample }} 条忽略才给方向</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+            <caption class="visually-hidden">机会流上被按「不再显示」的机会 · 按分数档拆</caption>
                 <thead><tr><th>类型</th><th>分数档</th><th>忽略数</th><th>占本类型可打分忽略</th><th>档内平均分</th><th>样本</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_dismissal_quality.band_rows %}
@@ -298,6 +310,7 @@
         <div class="opportunity-dismissal-block-heading mt-3"><strong>按理由拆</strong><span>理由在忽略时刻重算，走两个匹配器自己</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+            <caption class="visually-hidden">机会流上被按「不再显示」的机会 · 按理由拆</caption>
                 <thead><tr><th>类型</th><th>理由</th><th>忽略数</th><th>占本类型可打分忽略</th><th>平均分</th><th>样本</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_dismissal_quality.reason_rows %}
@@ -325,6 +338,7 @@
         </div>
         <div class="ops-table-wrap mt-2">
             <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+            <caption class="visually-hidden">机会流上被按「不再显示」的机会 · 忽略率</caption>
                 <thead><tr><th>类型</th><th>分数档</th><th>被看见次数</th><th>其中被忽略</th><th>忽略率</th><th>渲染过不止一次</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_dismissal_quality.rate_rows %}
@@ -351,6 +365,7 @@
         </div>
         <div class="ops-table-wrap mt-2">
             <table class="table ops-table align-middle mb-0 opportunity-dismissal-table">
+            <caption class="visually-hidden">机会流上被按「不再显示」的机会 · 忽略率（类型）</caption>
                 <thead><tr><th>类型</th><th>分数档</th><th>被看见次数</th><th>其中被忽略</th><th>忽略率</th><th>渲染过不止一次</th></tr></thead>
                 <tbody>
                     {% for row in opportunity_dismissal_quality.rate_rows %}
@@ -401,6 +416,7 @@
         <div class="favorite-collection-block-heading"><strong>窗口内新建</strong><span>按 created_at 归期，这一列写进去就不再动</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 窗口内新建</caption>
                 <thead><tr><th>对象</th><th>窗口内新建</th><th>当前总量</th></tr></thead>
                 <tbody>
                     <tr><td><strong>心愿单分组</strong></td><td>{{ favorite_collection_quality.metrics.window_collection_count }}</td><td>{{ favorite_collection_quality.metrics.group_total }}</td></tr>
@@ -413,6 +429,7 @@
         <div class="favorite-collection-block-heading mt-3"><strong>分组大小分布</strong><span>分子分母都是分组，问的是往里放了几条</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 分组大小分布</caption>
                 <thead><tr><th>大小档</th><th>分组数</th><th>占全部分组</th><th>样本</th></tr></thead>
                 <tbody>
                     {% for row in favorite_collection_quality.scale_rows %}
@@ -431,6 +448,7 @@
         <div class="favorite-collection-block-heading mt-3"><strong>分组渗透</strong><span>两个分母不同，必须分开报</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 分组渗透</caption>
                 <thead><tr><th>指标</th><th>数值</th><th>分母是什么</th></tr></thead>
                 <tbody>
                     <tr>
@@ -461,6 +479,7 @@
         <div class="favorite-collection-block-heading mt-3"><strong>分组名收敛</strong><span>只有 {{ favorite_collection_quality.metrics.min_name_sample }} 个以上用户用过的名字才进榜</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 favorite-collection-table">
+            <caption class="visually-hidden">用户建的心愿单分组 · 分组名收敛</caption>
                 <thead><tr><th>分组名</th><th>使用用户数</th><th>分组数</th><th>收藏数</th><th>平均大小</th></tr></thead>
                 <tbody>
                     {% for row in favorite_collection_quality.name_rows %}

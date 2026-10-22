@@ -25,6 +25,7 @@
                 <h3>一、档案形状与字段覆盖</h3>
                 <div class="ops-table-wrap">
                     <table class="table table-sm ops-table align-middle mb-0">
+                    <caption class="visually-hidden">校园地点档案质量 · 一、档案形状与字段覆盖</caption>
                         <thead><tr><th>字段 / 形状</th><th>范围</th><th>已填 / 数量</th><th>缺失</th><th>填写率</th></tr></thead>
                         <tbody>
                             {% for row in location_registry_quality.field_rows %}
@@ -83,6 +84,7 @@
         <h3>三、启用地点档案清单</h3>
         <div class="ops-table-wrap">
             <table class="table table-sm ops-table align-middle mb-0">
+            <caption class="visually-hidden">校园地点档案质量 · 三、启用地点档案清单</caption>
                 <thead><tr><th>地点</th><th>安全语义</th><th>楼栋 / 校区</th><th>详细位置</th><th>说明</th><th>安全提示</th><th>当前引用</th></tr></thead>
                 <tbody>
                     {% for row in location_registry_quality.location_rows %}
@@ -110,6 +112,7 @@
         <h3>四、归一化后的近似重名</h3>
         <div class="ops-table-wrap">
             <table class="table table-sm ops-table align-middle mb-0">
+            <caption class="visually-hidden">校园地点档案质量 · 四、归一化后的近似重名</caption>
                 <thead><tr><th>归一化名称</th><th>地点数</th><th>原文名称</th><th>楼栋 / 详细位置</th><th>当前在售</th></tr></thead>
                 <tbody>
                     {% for group in location_registry_quality.duplicate_name_groups %}
@@ -133,6 +136,7 @@
         <h3>五、停用地点仍被当前记录引用</h3>
         <div class="ops-table-wrap">
             <table class="table table-sm ops-table align-middle mb-0">
+            <caption class="visually-hidden">校园地点档案质量 · 五、停用地点仍被当前记录引用</caption>
                 <thead><tr><th>停用地点</th><th>在售商品</th><th>活跃求购</th><th>启用关注搜索</th><th>合计引用</th></tr></thead>
                 <tbody>
                     {% for row in location_registry_quality.stale_reference_rows %}
@@ -180,6 +184,7 @@
                 <h3>一、主优先级与命中信号</h3>
                 <div class="table-responsive">
                     <table class="table table-sm ops-table align-middle mb-3">
+                    <caption class="visually-hidden">校园地点维护队列 · 一、主优先级与命中信号</caption>
                         <thead><tr><th>主优先级</th><th>地点数</th><th>读法</th></tr></thead>
                         <tbody>
                             {% for row in location_maintenance_queue.priority_rows %}
@@ -190,6 +195,7 @@
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm ops-table align-middle mb-0">
+                    <caption class="visually-hidden">校园地点维护队列 · 一、主优先级与命中信号（命中信号）</caption>
                         <thead><tr><th>命中信号</th><th>地点数</th></tr></thead>
                         <tbody>
                             {% for row in location_maintenance_queue.reason_rows %}
@@ -207,6 +213,7 @@
                 <h3>二、维护清单</h3>
                 <div class="ops-table-wrap">
                     <table class="table table-sm ops-table align-middle mb-0">
+                    <caption class="visually-hidden">校园地点维护队列 · 二、维护清单</caption>
                         <thead><tr><th>地点</th><th>主优先级</th><th>命中信号</th><th>缺失字段</th><th>当前引用</th><th>复核</th><th>行动提示</th></tr></thead>
                         <tbody>
                             {% for row in location_maintenance_queue.location_rows %}
@@ -259,6 +266,7 @@
                 <h3>一、首次决策沉淀</h3>
                 <div class="table-responsive">
                     <table class="table table-sm ops-table align-middle mb-0">
+                    <caption class="visually-hidden">校园地点维护决策回看 · 一、首次决策沉淀</caption>
                         <thead><tr><th>首次决策时间</th><th>决策数</th><th>当前队列占比</th><th>结果分布</th></tr></thead>
                         <tbody>
                             {% for row in location_maintenance_decision_review.first_decision_rows %}
@@ -281,6 +289,7 @@
                 <h3>二、暂缓停留清单</h3>
                 <div class="ops-table-wrap">
                     <table class="table table-sm ops-table align-middle mb-0">
+                    <caption class="visually-hidden">校园地点维护决策回看 · 二、暂缓停留清单</caption>
                         <thead><tr><th>地点</th><th>主优先级</th><th>全部信号</th><th>首次决策</th><th>最后更新</th><th>停留</th></tr></thead>
                         <tbody>
                             {% for row in location_maintenance_decision_review.deferred_rows %}

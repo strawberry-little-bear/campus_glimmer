@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">等得越久，是不是越可能是白等</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">等一个有货的人等了多久，第一次被运营读到 · 等得越久，是不是越可能是白等</caption>
                     <thead><tr><th>等了多久</th><th>关注数</th><th>占比（%）</th><th>商品已不可交易</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in availability_watch_quality.stats.status_rows %}
@@ -41,6 +42,7 @@
             <h3 class="h6 mb-3">一件商品上有多少人在等</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">等一个有货的人等了多久，第一次被运营读到 · 一件商品上有多少人在等</caption>
                     <thead><tr><th>关注数</th><th>商品数</th><th>占比（%）</th><th>说明</th></tr></thead>
                     <tbody>
                         {% for row in availability_watch_quality.item_watch_rows %}
@@ -55,6 +57,7 @@
     <h3 class="h6 mb-3 mt-4">死信：商品已经恢复在售，人却永远不会被通知</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">等一个有货的人等了多久，第一次被运营读到 · 死信：商品已经恢复在售，人却永远不会被通知</caption>
             <thead><tr><th>商品</th><th>等了多久</th><th>点下关注于</th></tr></thead>
             <tbody>
                 {% for row in availability_watch_quality.dead_letter_rows %}
@@ -76,6 +79,7 @@
     <h3 class="h6 mb-3 mt-4">白等：商品已经不可交易，人还在等</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">等一个有货的人等了多久，第一次被运营读到 · 白等：商品已经不可交易，人还在等</caption>
             <thead><tr><th>商品</th><th>分类</th><th>交易方式</th><th>等了多久</th><th>点下关注于</th></tr></thead>
             <tbody>
                 {% for row in availability_watch_quality.long_wait_rows %}
@@ -119,6 +123,7 @@
             <h3 class="h6 mb-3">这笔交易有几个人被评价</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 这笔交易有几个人被评价</caption>
                     <thead><tr><th>评价人数</th><th>交易数</th><th>占比（%）</th><th>说明</th></tr></thead>
                     <tbody>
                         {% for row in rating_quality.coverage.rating_count_rows %}
@@ -138,6 +143,7 @@
             <h3 class="h6 mb-3">这一方评没评，不能只看总数</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 这一方评没评，不能只看总数</caption>
                     <thead><tr><th>方向</th><th>交易数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         <tr><td>买家评了卖家</td><td>{{ rating_quality.coverage.buyer_rated_count }}</td><td>{% if rating_quality.coverage.total %}{{ rating_quality.coverage.buyer_rated_rate }}{% else %}—{% endif %}</td></tr>
@@ -156,6 +162,7 @@
             <h3 class="h6 mb-3">分打出来之后多久才提交</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 分打出来之后多久才提交</caption>
                     <thead><tr><th>提交间隔</th><th>评价数</th><th>占比（%）</th><th>说明</th></tr></thead>
                     <tbody>
                         {% for row in rating_quality.latency.bucket_rows %}
@@ -175,6 +182,7 @@
             <h3 class="h6 mb-3">五星分布</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 五星分布</caption>
                     <thead><tr><th>分数</th><th>评价数</th><th>占比（%）</th><th>口径说明</th></tr></thead>
                     <tbody>
                         {% for row in rating_quality.score.bucket_rows %}
@@ -194,6 +202,7 @@
     <h3 class="h6 mb-3 mt-4">有交付异常的交易，打分是不是不一样</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 有交付异常的交易，打分是不是不一样</caption>
             <thead><tr><th>分组</th><th>交易数</th><th>评价数</th><th>均分</th><th>两星及以下占比（%）</th><th>五星占比（%）</th></tr></thead>
             <tbody>
                 {% for row in rating_quality.incident_contrast.rows %}
@@ -215,6 +224,7 @@
             <h3 class="h6 mb-3">评价里写了文字的有多少</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 评价里写了文字的有多少</caption>
                     <thead><tr><th>文字长度</th><th>评价数</th><th>占比（%）</th><th>口径说明</th></tr></thead>
                     <tbody>
                         {% for row in rating_quality.comment.length_rows %}
@@ -234,6 +244,7 @@
             <h3 class="h6 mb-3">按交易方式拆开</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 按交易方式拆开</caption>
                     <thead><tr><th>交易方式</th><th>交易数</th><th>评价数</th><th>收到评价的交易</th><th>占比（%）</th><th>均分</th></tr></thead>
                     <tbody>
                         {% for row in rating_quality.trade_mode.rows %}
@@ -257,6 +268,7 @@
     <h3 class="h6 mb-3 mt-4">补得最晚的几笔评价</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">交易评价打了多少分，第一次被运营读到 · 补得最晚的几笔评价</caption>
             <thead><tr><th>订单</th><th>商品</th><th>评价人</th><th>分数</th><th>提交间隔</th><th>提交于</th></tr></thead>
             <tbody>
                 {% for row in rating_quality.latency.slowest_rows %}
@@ -301,6 +313,7 @@
             <h3 class="h6 mb-3">哪一类争议更容易被驳回</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易争议处理得公不公平，第一次被运营读到 · 哪一类争议更容易被驳回</caption>
                     <thead><tr><th>争议类型</th><th>已结案</th><th>解决</th><th>驳回</th><th>驳回率（%）</th><th>其中没带附件</th></tr></thead>
                     <tbody>
                         {% for row in dispute_resolution_quality.outcome.rows %}
@@ -322,6 +335,7 @@
             <h3 class="h6 mb-3">证据什么时候才到手上</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易争议处理得公不公平，第一次被运营读到 · 证据什么时候才到手上</caption>
                     <thead><tr><th>提交间隔</th><th>争议数</th><th>占比（%）</th><th>说明</th></tr></thead>
                     <tbody>
                         {% for row in dispute_resolution_quality.evidence.bucket_rows %}
@@ -343,6 +357,7 @@
             <h3 class="h6 mb-3">带了附件的争议，是不是更不容易被驳回</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易争议处理得公不公平，第一次被运营读到 · 带了附件的争议，是不是更不容易被驳回</caption>
                     <thead><tr><th>分组</th><th>已结案</th><th>驳回</th><th>驳回率（%）</th></tr></thead>
                     <tbody>
                         {% for row in dispute_resolution_quality.evidence_contrast.rows %}
@@ -363,6 +378,7 @@
             <h3 class="h6 mb-3">争议是谁发起的</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">交易争议处理得公不公平，第一次被运营读到 · 争议是谁发起的</caption>
                     <thead><tr><th>发起方</th><th>发起数</th><th>占比（%）</th><th>已结案</th><th>驳回</th><th>驳回率（%）</th></tr></thead>
                     <tbody>
                         {% for row in dispute_resolution_quality.opener.rows %}
@@ -384,6 +400,7 @@
     <h3 class="h6 mb-3 mt-4">处理意见写了没有</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">交易争议处理得公不公平，第一次被运营读到 · 处理意见写了没有</caption>
             <thead><tr><th>处理意见</th><th>结案数</th><th>占比（%）</th><th>说明</th></tr></thead>
             <tbody>
                 {% for row in dispute_resolution_quality.note.rows %}
@@ -401,6 +418,7 @@
     <h3 class="h6 mb-3 mt-4">从发起到结案隔了多久</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">交易争议处理得公不公平，第一次被运营读到 · 从发起到结案隔了多久</caption>
             <thead><tr><th>结案耗时</th><th>争议数</th><th>占比（%）</th></tr></thead>
             <tbody>
                 {% for row in dispute_resolution_quality.resolution_latency.bucket_rows %}
@@ -418,6 +436,7 @@
     <h3 class="h6 mb-3 mt-4">结案最慢的几条争议</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">交易争议处理得公不公平，第一次被运营读到 · 结案最慢的几条争议</caption>
             <thead><tr><th>订单</th><th>争议类型</th><th>发起方</th><th>结案耗时</th><th>提交于</th></tr></thead>
             <tbody>
                 {% for row in dispute_resolution_quality.slowest_rows.rows %}

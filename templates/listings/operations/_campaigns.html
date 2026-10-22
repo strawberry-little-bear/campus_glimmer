@@ -46,7 +46,7 @@
         <a href="{% url 'admin:listings_campaigngoal_changelist' %}" class="btn btn-sm btn-outline-success"><i class="bi bi-sliders me-1"></i>配置专题目标</a>
     </div>
     {% if campaign_analytics.goal_rows %}
-    <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-goal-table"><thead><tr><th>专题 / 目标</th><th>完成进度</th><th>目标窗口</th><th>节奏偏差</th><th>状态</th><th>说明</th></tr></thead><tbody>
+    <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-goal-table"><caption class="visually-hidden">校园专题表现 · 专题目标与节奏</caption><thead><tr><th>专题 / 目标</th><th>完成进度</th><th>目标窗口</th><th>节奏偏差</th><th>状态</th><th>说明</th></tr></thead><tbody>
         {% for goal in campaign_analytics.goal_rows %}
         <tr>
             <td><strong>{{ goal.campaign_title }}</strong><small class="d-block text-muted">{{ goal.metric_label }} · 目标 {{ goal.target_value }}</small></td>
@@ -61,7 +61,7 @@
     {% if campaign_analytics.goal_rows_truncated %}<div class="empty-inline mt-2">当前只展示前 12 个启用目标，完整目标列表可在后台继续查看。</div>{% endif %}
     {% else %}<div class="empty-inline mt-2">当前统计范围内还没有启用的专题目标。运营可在后台为专题设置新增商品、浏览用户、收藏用户、报名用户、预约用户或完成交易用户目标。</div>{% endif %}
     {% if campaign_analytics.rows %}
-    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 campaign-analytics-table"><thead><tr><th>专题</th><th>供给</th><th>报名</th><th>摘要订阅</th><th>待发送</th><th>周期摘要</th><th>曝光</th><th>收藏</th><th>预约</th><th>完成</th><th>转化</th><th>判断</th></tr></thead><tbody>
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 campaign-analytics-table"><caption class="visually-hidden">校园专题表现 · 专题目标与节奏（专题）</caption><thead><tr><th>专题</th><th>供给</th><th>报名</th><th>摘要订阅</th><th>待发送</th><th>周期摘要</th><th>曝光</th><th>收藏</th><th>预约</th><th>完成</th><th>转化</th><th>判断</th></tr></thead><tbody>
         {% for campaign in campaign_analytics.rows %}
         <tr>
             <td><strong>{{ campaign.title }}</strong><small class="d-block text-muted">卖家 {{ campaign.seller_count }} · 当前在售 {{ campaign.current_items }}</small></td>
@@ -80,7 +80,7 @@
         {% endfor %}
     </tbody></table></div>
     <div class="campaign-subheading mt-4"><div><h3>各专题用户漏斗</h3><p>预约用户必须同时出现在本报告窗口的浏览记录中；完成交易按订单当前状态统计。</p></div></div>
-    <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-funnel-table"><thead><tr><th>专题</th><th>浏览用户</th><th>预约用户</th><th>浏览 → 预约</th><th>完成交易用户</th><th>预约 → 完成</th><th>收藏 / 报名意向分支</th><th>意向分支率</th></tr></thead><tbody>
+    <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-funnel-table"><caption class="visually-hidden">校园专题表现 · 各专题用户漏斗</caption><thead><tr><th>专题</th><th>浏览用户</th><th>预约用户</th><th>浏览 → 预约</th><th>完成交易用户</th><th>预约 → 完成</th><th>收藏 / 报名意向分支</th><th>意向分支率</th></tr></thead><tbody>
         {% for campaign in campaign_analytics.rows %}
         <tr>
             <td><strong>{{ campaign.title }}</strong><small class="d-block text-muted">分支不进入连续漏斗分母</small></td>
@@ -111,6 +111,7 @@
     {% if campaign_phase_review.rows %}
     <div class="ops-table-wrap mt-3">
         <table class="table ops-table align-middle mb-0 campaign-phase-review-table">
+        <caption class="visually-hidden">校园专题分阶段复盘</caption>
             <thead><tr><th>专题</th><th>阶段</th><th>区间</th><th>新增</th><th>浏览</th><th>收藏</th><th>预约</th><th>完成</th><th>浏览→预约</th><th>预约完成</th><th>预约/百天</th><th>判断</th></tr></thead>
             <tbody>
                 {% for row in campaign_phase_review.rows %}
@@ -170,7 +171,7 @@
             <span>{{ term.kind_label }} · {{ term.starts_on|date:'Y-m-d' }} 至 {{ term.ends_on|date:'Y-m-d' }}</span>
             {% if term.is_current %}<span class="academic-term-badge">当前学期</span>{% endif %}
         </div>
-        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 academic-calendar-table"><thead><tr><th>阶段</th><th>区间</th><th>新增商品</th><th>新增求购</th><th>完成交易</th><th>搜索质量</th><th>供给趋势</th></tr></thead><tbody>
+        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 academic-calendar-table"><caption class="visually-hidden">学期节律与交易高峰</caption><thead><tr><th>阶段</th><th>区间</th><th>新增商品</th><th>新增求购</th><th>完成交易</th><th>搜索质量</th><th>供给趋势</th></tr></thead><tbody>
             {% for row in term.phases %}
             <tr class="{% if row.is_current %}academic-calendar-current{% endif %}">
                 <td><strong>{{ row.phase_label }}</strong>{% if row.is_current %}<small class="d-block text-muted">进行中 · 进度 {{ academic_calendar.context.progress_percent }}%</small>{% else %}<small class="d-block text-muted">{{ row.day_count }} 天</small>{% endif %}<span class="academic-source academic-source-{{ row.source }}">{{ row.source_label }}</span>{% if row.source_reason == 'missing_snapshot' or row.source_reason == 'range_mismatch' %}<small class="d-block text-danger">{{ row.source_note }}</small>{% endif %}</td>

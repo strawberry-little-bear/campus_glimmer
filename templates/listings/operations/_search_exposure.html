@@ -19,6 +19,7 @@
     <h3 class="h6 mb-3">字段与结构</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table search-pairing-table">
+        <caption class="visually-hidden">搜索曝光与点击配对质量 · 字段与结构</caption>
             <thead><tr><th>检查对象</th><th>行数</th><th>状态</th><th>怎么读</th></tr></thead>
             <tbody>
                 {% for row in search_impression_pairing_quality.field_rows %}
@@ -36,6 +37,7 @@
     <h3 class="h6 mb-3 mt-4">配对与延迟</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table search-pairing-table">
+        <caption class="visually-hidden">搜索曝光与点击配对质量 · 配对与延迟</caption>
             <thead><tr><th>延迟档</th><th>点击数</th><th>占比（%）</th></tr></thead>
             <tbody>
                 {% for row in search_impression_pairing_quality.latency_rows %}
@@ -52,6 +54,7 @@
     <h3 class="h6 mb-3 mt-4">覆盖</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table search-pairing-table">
+        <caption class="visually-hidden">搜索曝光与点击配对质量 · 覆盖</caption>
             <thead><tr><th>指标</th><th>数值</th><th>说明</th></tr></thead>
             <tbody>
                 <tr><td>覆盖自然日</td><td>{{ search_impression_pairing_quality.summary.calendar_days }}</td><td>从周期开始到当前时刻</td></tr>
@@ -87,6 +90,7 @@
     <h3 class="h6 mb-3">首曝延迟分桶</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">新商品搜索曝光冷启动 · 首曝延迟分桶</caption>
             <thead><tr><th>首曝延迟分桶</th><th>商品数</th><th>占比</th></tr></thead>
             <tbody>
                 {% for row in search_exposure_cold_start.latency_rows %}
@@ -103,6 +107,7 @@
     <h3 class="h6 mb-3 mt-4">分类冷启动</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">新商品搜索曝光冷启动 · 分类冷启动</caption>
             <thead><tr><th>分类冷启动</th><th>队列商品</th><th>已首曝</th><th>未首曝</th><th>首曝后点击</th><th>中位等待</th><th>P90 等待</th><th>未首曝占比</th></tr></thead>
             <tbody>
                 {% for row in search_exposure_cold_start.category_rows %}
@@ -126,6 +131,7 @@
     <h3 class="h6 mb-3 mt-4">新商品清单</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">新商品搜索曝光冷启动 · 新商品清单</caption>
             <thead><tr><th>新商品清单</th><th>分类</th><th>交易方式</th><th>状态</th><th>发布时间</th><th>首曝时间</th><th>首曝延迟</th><th>点击</th><th>信号</th></tr></thead>
             <tbody>
                 {% for row in search_exposure_cold_start.item_page_rows %}

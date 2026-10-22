@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">一件免费商品，收到了多少份申请</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">免费领取的申请队列，第一次被运营读到 · 一件免费商品，收到了多少份申请</caption>
                     <thead><tr><th>队列长度</th><th>商品数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         {% for row in gift_application_queue.queue_rows %}
@@ -35,6 +36,7 @@
             <h3 class="h6 mb-3">从提交申请到卖家处理，隔了多久</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">免费领取的申请队列，第一次被运营读到 · 从提交申请到卖家处理，隔了多久</caption>
                     <thead><tr><th>处理时长</th><th>条数</th><th>占比（%）</th><th>这一档说明什么</th></tr></thead>
                     <tbody>
                         {% for row in gift_application_queue.stats.rows %}
@@ -51,6 +53,7 @@
             <h3 class="h6 mb-3">申请说明：填了的人是不是更容易被选中</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">免费领取的申请队列，第一次被运营读到 · 申请说明：填了的人是不是更容易被选中</caption>
                     <thead><tr><th>申请说明</th><th>申请数</th><th>占比（%）</th><th>被选中</th><th>选中率（%）</th></tr></thead>
                     <tbody>
                         {% for row in gift_application_queue.note.rows %}
@@ -75,6 +78,7 @@
             <h3 class="h6 mb-3">按商品分类看，哪一类免费商品问的人多</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">免费领取的申请队列，第一次被运营读到 · 按商品分类看，哪一类免费商品问的人多</caption>
                     <thead><tr><th>分类</th><th>申请数</th><th>被选中</th><th>选中率（%）</th></tr></thead>
                     <tbody>
                         {% for row in gift_application_queue.category_rows %}
@@ -94,6 +98,7 @@
     <h3 class="h6 mb-3 mt-4">队最长的那些免费商品</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">免费领取的申请队列，第一次被运营读到 · 队最长的那些免费商品</caption>
             <thead><tr><th>商品</th><th>分类</th><th>队列长度</th><th>被选中</th><th>已撤回</th><th>队列档位</th></tr></thead>
             <tbody>
                 {% for row in gift_application_queue.item_rows %}
@@ -117,6 +122,7 @@
     <h3 class="h6 mb-3 mt-4">被申请人自己撤回的申请</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">免费领取的申请队列，第一次被运营读到 · 被申请人自己撤回的申请</caption>
             <thead><tr><th>商品</th><th>申请人</th><th>申请说明</th><th>等了</th><th>提交申请</th><th>撤回</th></tr></thead>
             <tbody>
                 {% for row in gift_application_queue.withdrawn_rows %}
@@ -164,6 +170,7 @@
             <p class="small text-muted">成交率的分母是订单笔数，不是商品件数。</p>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 有图 / 无图对照</caption>
                     <thead><tr><th>分组</th><th>商品数</th><th>订单数</th><th>成交数</th><th>成交率</th><th>取消率</th></tr></thead>
                     <tbody>
                         <tr>
@@ -198,6 +205,7 @@
             <p class="small text-muted">最后一档不叫「传满」，<code>max_num=5</code> 是产品约束而不是运营结论。</p>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 图片数分档</caption>
                     <thead><tr><th>图片数</th><th>商品数</th><th>占比</th><th>订单数</th><th>成交数</th><th>成交率</th></tr></thead>
                     <tbody>
                         {% for row in item_image_coverage.image_counts.rows %}
@@ -221,6 +229,7 @@
             <h3>按交易方式看无图情况</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 按交易方式看无图情况</caption>
                     <thead><tr><th>交易方式</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
                     <tbody>
                         {% for row in item_image_coverage.by_trade_mode.rows %}
@@ -241,6 +250,7 @@
             <h3>按分类看无图情况</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 按分类看无图情况</caption>
                     <thead><tr><th>分类</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
                     <tbody>
                         {% for row in item_image_coverage.by_category.rows %}
@@ -265,6 +275,7 @@
     <p class="small text-muted">按上架时间从新到旧排列，<strong>不按商品进行排名</strong>。</p>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 一张图都没配的商品</caption>
             <thead><tr><th>商品</th><th>分类</th><th>交易方式</th><th>举报数</th><th>上架时间</th></tr></thead>
             <tbody>
                 {% for row in item_image_coverage.no_image_rows.rows %}

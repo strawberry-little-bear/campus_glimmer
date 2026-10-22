@@ -17,6 +17,7 @@
         <h3 class="h6 mb-3">刷新次序对照（前 72 小时 / 后 72 小时）</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table refresh-response-grid">
+            <caption class="visually-hidden">商品刷新后的搜索回响 · 刷新次序对照（前 72 小时 / 后 72 小时）</caption>
                 <thead>
                     <tr>
                         <th>刷新次序</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
@@ -63,6 +64,7 @@
         <h3 class="h6 mb-3">哪些刷新没有进入对照</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table refresh-response-status">
+            <caption class="visually-hidden">商品刷新后的搜索回响 · 哪些刷新没有进入对照</caption>
                 <thead><tr><th>状态</th><th>数量</th><th>处理方式</th></tr></thead>
                 <tbody>
                     <tr><td>周期内观察到的刷新</td><td>{{ refresh_response.summary.observed_refreshes }}</td><td>先全部登记，再看观察条件</td></tr>
@@ -95,6 +97,7 @@
         <h3 class="h6 mb-3">方向对照（前 72 小时 / 后 72 小时）</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table refresh-response-grid">
+            <caption class="visually-hidden">价格调整后的搜索回响 · 方向对照（前 72 小时 / 后 72 小时）</caption>
                 <thead>
                     <tr>
                         <th>方向</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
@@ -143,6 +146,7 @@
         <h3 class="h6 mb-3">幅度档对照（前 72 小时 / 后 72 小时）</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table refresh-response-grid">
+            <caption class="visually-hidden">价格调整后的搜索回响 · 幅度档对照（前 72 小时 / 后 72 小时）</caption>
                 <thead>
                     <tr>
                         <th>方向</th><th>幅度档</th><th>成熟样本</th><th>前窗曝光</th><th>后窗曝光</th><th>后窗中位曝光</th><th>前窗点击率（%）</th><th>后窗点击率（%）</th><th>前窗收藏</th><th>后窗收藏</th><th>前窗预约</th><th>后窗预约</th><th>样本状态</th>
@@ -176,6 +180,7 @@
         <h3 class="h6 mb-3">哪些调价没有进入对照</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">价格调整后的搜索回响 · 哪些调价没有进入对照</caption>
                 <thead><tr><th>状态</th><th>数量</th><th>处理方式</th></tr></thead>
                 <tbody>
                     {% for row in price_response.exclusion_rows %}
@@ -207,6 +212,7 @@
         <h3 class="h6 mb-3">分类价格参考</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">分类调价参考 · 分类价格参考</caption>
                 <thead><tr><th>分类</th><th>样本</th><th>中位数</th><th>常见区间</th><th>当前在售</th><th>低于 / 区间内 / 高于</th><th>区间外</th><th>宽度</th><th>状态与读法</th></tr></thead>
                 <tbody>
                     {% for row in category_price_reference.rows %}
@@ -255,6 +261,7 @@
         <h3 class="h6 mb-3">方向与幅度</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">出售价格轨迹质量 · 方向与幅度</caption>
                 <thead><tr><th>方向</th><th>条数</th><th>占全部轨迹（%）</th><th>中位幅度（%）</th><th>P90 幅度（%）</th></tr></thead>
                 <tbody>
                     {% for direction in price_change_quality.directions.values %}
@@ -276,6 +283,7 @@
         <h3 class="h6 mb-3">幅度分档</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">出售价格轨迹质量 · 幅度分档</caption>
                 <thead><tr><th>方向</th><th>档位</th><th>条数</th><th>占同方向（%）</th></tr></thead>
                 <tbody>
                     {% for row in price_change_quality.magnitude_rows %}
@@ -296,6 +304,7 @@
             <h3 class="h6 mb-3">同一件商品改了几次</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">出售价格轨迹质量 · 同一件商品改了几次</caption>
                     <thead><tr><th>重复调价</th><th>商品数</th></tr></thead>
                     <tbody>
                         {% for row in price_change_quality.repeat_rows %}
@@ -310,6 +319,7 @@
             <h3 class="h6 mb-3">出售价格轨迹 · 当前分类视图</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">出售价格轨迹质量 · 当前分类视图</caption>
                     <thead><tr><th>当前分类</th><th>轨迹数</th><th>降价</th><th>上涨</th><th>零元基线</th><th>降价占比（%）</th><th>小样本</th></tr></thead>
                     <tbody>
                         {% for row in price_change_quality.category_rows %}
@@ -357,6 +367,7 @@
             <h3 class="h6 mb-3">欠账商品欠了多少天</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">重新上架的那件商品，为什么一回来就沉底 · 欠账商品欠了多少天</caption>
                     <thead><tr><th>距发布</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
                     <tbody>
                         {% for row in relist_freshness.arrears.bucket_rows %}
@@ -371,6 +382,7 @@
             <h3 class="h6 mb-3">刷新额度对这批商品是不是空的</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">重新上架的那件商品，为什么一回来就沉底 · 刷新额度对这批商品是不是空的</caption>
                     <thead><tr><th>已刷新次数</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
                     <tbody>
                         {% for row in relist_freshness.quota.bucket_rows %}
@@ -388,6 +400,7 @@
             <h3 class="h6 mb-3">欠账商品现在的生命周期等级</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">重新上架的那件商品，为什么一回来就沉底 · 欠账商品现在的生命周期等级</caption>
                     <thead><tr><th>生命周期等级</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
                     <tbody>
                         {% for row in relist_freshness.levels.rows %}
@@ -402,6 +415,7 @@
             <h3 class="h6 mb-3">欠账商品里还有没有互动</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">重新上架的那件商品，为什么一回来就沉底 · 欠账商品里还有没有互动</caption>
                     <thead><tr><th>分组</th><th>商品数</th><th>占欠账（%）</th></tr></thead>
                     <tbody>
                         <tr><td>仍有浏览、收藏或成交</td><td>{{ relist_freshness.engagement.engaged_count }}</td><td>{% if relist_freshness.engagement.engaged_share is None %}—{% else %}{{ relist_freshness.engagement.engaged_share }}{% endif %}</td></tr>
@@ -416,6 +430,7 @@
     <h3 class="h6 mb-3 mt-2">带着新鲜度欠账的商品清单</h3>
     <div class="table-responsive">
         <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">重新上架的那件商品，为什么一回来就沉底 · 带着新鲜度欠账的商品清单</caption>
             <thead><tr><th>商品</th><th>分类</th><th>距发布（天）</th><th>刷新次数</th><th>生命周期等级</th></tr></thead>
             <tbody>
                 {% for row in relist_freshness.drift_list.rows %}

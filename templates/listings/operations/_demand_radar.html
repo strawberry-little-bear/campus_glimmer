@@ -18,6 +18,7 @@
         {% if demand_radar_hit_trend.has_data %}
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">需求雷达命中率的跨周期趋势 · 周期对比</caption>
                 <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>变化</th><th>方向</th></tr></thead>
                 <tbody>
                     {% for row in demand_radar_hit_trend.metric_rows %}
@@ -56,6 +57,7 @@
         {% if demand_radar_hit_layers.has_data %}
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">需求雷达闭环的分类与地点分层</caption>
                 <thead><tr><th>层</th><th>任务数</th><th>有证据</th><th>命中率</th><th>与整体差值</th><th>中位收敛幅度</th></tr></thead>
                 <tbody>
                     {% for layer in group.layers %}
@@ -96,6 +98,7 @@
         <div class="supply-lifecycle-block-heading"><strong>{{ group.label }}</strong><span>{% if group.is_synthetic %}学期历的覆盖范围以外的任务，只计数、不参与跳学期对比{% else %}组内新学期在前，命中率只跟同一个阶段的其他学期比{% endif %}</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">需求雷达命中率的学期纵向对比</caption>
                 <thead><tr><th>学期</th><th>任务数</th><th>有证据</th><th>命中率</th><th>中位收敛幅度</th></tr></thead>
                 <tbody>
                     {% for cell in group.cells %}
@@ -117,6 +120,7 @@
         <div class="supply-lifecycle-block-heading"><strong>同一阶段，相邻两个学期</strong><span>只拿最新的两个学期相减；只在一个学期出现过的阶段不给方向</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">需求雷达命中率的学期纵向对比 · 同一阶段，相邻两个学期</caption>
                 <thead><tr><th>阶段</th><th>本学期命中率</th><th>上一学期命中率</th><th>差值</th></tr></thead>
                 <tbody>
                     {% for item in demand_radar_phase_trend.comparisons %}

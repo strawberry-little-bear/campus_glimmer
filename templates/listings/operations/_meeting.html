@@ -21,6 +21,7 @@
             <h3 class="h6 mb-3">对方多久回应一个提议</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">约好的那一次见面 · 对方多久回应一个提议</caption>
                     <thead><tr><th>回应耗时</th><th>安排数</th><th>占比（%）</th></tr></thead>
                     <tbody>
                         {% for row in meeting_attendance.response_stats.bucket_rows %}
@@ -30,6 +31,7 @@
                 </table>
             </div>
             <table class="table table-sm align-middle ops-table mt-3 meeting-attendance-mini-table">
+            <caption class="visually-hidden">约好的那一次见面 · 对方多久回应一个提议（回应后确认）</caption>
                 <tbody>
                     <tr><th scope="row">回应后确认</th><td>{{ meeting_attendance.response_stats.accepted_count }}</td><td>{{ meeting_attendance.response_stats.accept_rate }}%</td></tr>
                     <tr><th scope="row">回应后未接受</th><td>{{ meeting_attendance.response_stats.declined_count }}</td><td>&mdash;</td></tr>
@@ -39,6 +41,7 @@
             <h3 class="h6 mb-3 mt-4">到场与迟到</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">约好的那一次见面 · 到场与迟到</caption>
                     <thead><tr><th>角色</th><th>签到人数</th><th>到场率（%）</th><th>平均偏移</th><th>最晚一次</th></tr></thead>
                     <tbody>
                         {% for row in meeting_attendance.attendance_stats.lateness_rows %}
@@ -54,6 +57,7 @@
                 </table>
             </div>
             <table class="table table-sm align-middle ops-table mt-3 meeting-attendance-mini-table">
+            <caption class="visually-hidden">约好的那一次见面 · 到场与迟到（双方都到场）</caption>
                 <tbody>
                     <tr><th scope="row">双方都到场</th><td>{{ meeting_attendance.attendance_stats.both_arrived_count }}</td><td>{{ meeting_attendance.attendance_stats.both_arrival_rate }}%</td></tr>
                     <tr><th scope="row">只有一方到场</th><td>{{ meeting_attendance.attendance_stats.one_sided_count }}</td><td>{{ meeting_attendance.attendance_stats.one_sided_rate }}%</td></tr>
@@ -63,6 +67,7 @@
             <h3 class="h6 mb-3 mt-4">迟到分档</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">约好的那一次见面 · 迟到分档</caption>
                     <thead><tr><th>相对约定开始</th><th>买家</th><th>卖家</th></tr></thead>
                     <tbody>
                         {% for row in meeting_attendance.attendance_stats.lateness_bucket_rows %}
@@ -81,6 +86,7 @@
             <p class="small text-muted">提交人说的是一句主观陈述，而签到记录是系统里另一方亲手留下的动作。两者对不上的那一条，不是要判定谁在说谎——平台没有能力也不该去判定——而是要被运营看见。</p>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">约好的那一次见面 · 「对方未到场」说得准吗</caption>
                     <thead><tr><th>对照结果</th><th>条数</th><th>占该类异常（%）</th></tr></thead>
                     <tbody>
                         <tr><td><span class="meeting-attendance-verdict meeting-attendance-verdict-contradicted">有到场登记</span></td><td>{{ meeting_attendance.incident_crosscheck.contradicted_count }}</td><td>{{ meeting_attendance.incident_crosscheck.contradicted_rate }}</td></tr>
@@ -93,6 +99,7 @@
             <h3 class="h6 mb-3 mt-4">待核实的矛盾</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">约好的那一次见面 · 待核实的矛盾</caption>
                     <thead><tr><th>商品</th><th>提交人</th><th>被指控方</th><th>被指控方到场登记</th><th>约定开始</th></tr></thead>
                     <tbody>
                         {% for row in meeting_attendance.incident_crosscheck.contradicted_rows %}
@@ -114,6 +121,7 @@
             <h3 class="h6 mb-3 mt-4">未接受原因的取值</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">约好的那一次见面 · 未接受原因的取值</caption>
                     <thead><tr><th>取值</th><th>次数</th></tr></thead>
                     <tbody>
                         {% for row in meeting_attendance.decline_stats.reason_rows %}
@@ -148,7 +156,7 @@
     </div>
     {% if meeting_service_window_quality.location_rows %}
     <h3 class="h6 mb-3">按地点核对</h3>
-    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>未来安排</th><th>登记规则外</th><th>例外相关</th><th>未登记时段</th><th>需人工核对</th></tr></thead><tbody>
+    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">交付开放时段风险 · 按地点核对</caption><thead><tr><th>地点</th><th>未来安排</th><th>登记规则外</th><th>例外相关</th><th>未登记时段</th><th>需人工核对</th></tr></thead><tbody>
         {% for row in meeting_service_window_quality.location_rows %}<tr{% if row.attention_count %} class="is-below-threshold"{% endif %}>
             <td><strong>{{ row.location_name }}</strong></td>
             <td>{{ row.total_count }}</td>
@@ -161,7 +169,7 @@
     {% endif %}
     {% if meeting_service_window_quality.risk_page_rows %}
     <h3 class="h6 mb-3">即将发生的核对清单</h3>
-    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>订单</th><th>地点</th><th>安排时间</th><th>状态</th><th>分类</th><th>原因</th></tr></thead><tbody>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">交付开放时段风险 · 即将发生的核对清单</caption><thead><tr><th>订单</th><th>地点</th><th>安排时间</th><th>状态</th><th>分类</th><th>原因</th></tr></thead><tbody>
         {% for row in meeting_service_window_quality.risk_page_rows %}
         <tr>
             <td><strong>#{{ row.order_id }}</strong></td>
@@ -200,7 +208,7 @@
     </div>
     {% if campus_location_service_rule_quality.location_rows %}
     <h3 class="h6 mb-3">按地点聚合</h3>
-    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>状态</th><th>启用每周时段</th><th>停用每周时段</th><th>启用例外</th><th>配置信号</th></tr></thead><tbody>
+    <div class="ops-table-wrap mb-4"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">校园开放规则配置审计 · 按地点聚合</caption><thead><tr><th>地点</th><th>状态</th><th>启用每周时段</th><th>停用每周时段</th><th>启用例外</th><th>配置信号</th></tr></thead><tbody>
         {% for row in campus_location_service_rule_quality.location_rows %}<tr{% if row.signal_count %} class="is-below-threshold"{% endif %}>
             <td><strong>{{ row.location_name }}</strong></td>
             <td>{{ row.location_active_label }}</td>
@@ -213,7 +221,7 @@
     {% endif %}
     {% if campus_location_service_rule_quality.rule_page_rows %}
     <h3 class="h6 mb-3">配置核对清单</h3>
-    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>地点</th><th>生效日期</th><th>状态</th><th>信号</th><th>配置</th><th>解释</th></tr></thead><tbody>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">校园开放规则配置审计 · 配置核对清单</caption><thead><tr><th>地点</th><th>生效日期</th><th>状态</th><th>信号</th><th>配置</th><th>解释</th></tr></thead><tbody>
         {% for row in campus_location_service_rule_quality.rule_page_rows %}
         <tr>
             <td><strong>{{ row.location_name }}</strong></td>

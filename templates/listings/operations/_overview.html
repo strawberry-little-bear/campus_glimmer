@@ -15,7 +15,8 @@
     </div>
     <div class="ops-table-wrap mb-3">
         <table class="table ops-table align-middle mb-0">
-            <thead>
+
+                <caption class="visually-hidden">看板自身构建耗时</caption>            <thead>
                 <tr><th>共享构建器</th><th>耗时（ms）</th><th>占比（%）</th><th>累计占比（%）</th><th>读数</th></tr>
             </thead>
             <tbody>
@@ -52,7 +53,7 @@
     </div>
     <div class="row g-4">
         <div class="col-lg-7">
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>通知类型</th><th>触达事件</th><th>记录</th><th>未读</th><th>压缩率</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">通知触达与聚合</caption><thead><tr><th>通知类型</th><th>触达事件</th><th>记录</th><th>未读</th><th>压缩率</th></tr></thead><tbody>
                 {% for row in notification_insights.kind_rows %}<tr><td><strong>{{ row.label }}</strong></td><td>{{ row.event_count }}</td><td>{{ row.row_count }}</td><td>{% if row.unread_count %}<span class="ops-warning">{{ row.unread_count }}</span>{% else %}—{% endif %}</td><td>{{ row.compression_rate }}%</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">当前周期还没有通知记录。</td></tr>{% endfor %}
             </tbody></table></div>
         </div>
@@ -88,7 +89,7 @@
         </div>
         <div class="col-lg-6">
             <h3 class="h6 mb-3">分类表现</h3>
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>分类</th><th>求购</th><th>响应</th><th>确认</th><th>确认率</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">求购匹配转化 · 分类表现</caption><thead><tr><th>分类</th><th>求购</th><th>响应</th><th>确认</th><th>确认率</th></tr></thead><tbody>
                 {% for row in demand_match_insights.category_rows %}<tr><td><strong>{{ row.name }}</strong></td><td>{{ row.demand_count }}</td><td>{{ row.response_count }}</td><td>{{ row.accepted_count }}</td><td>{{ row.acceptance_rate }}%</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">当前周期还没有分类响应数据。</td></tr>{% endfor %}
             </tbody></table></div>
         </div>
@@ -96,7 +97,7 @@
     <div class="row g-4 mt-1">
         <div class="col-lg-6">
             <h3 class="h6 mb-3">地点表现</h3>
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>期望地点</th><th>求购</th><th>响应</th><th>确认</th><th>确认率</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">求购匹配转化 · 地点表现</caption><thead><tr><th>期望地点</th><th>求购</th><th>响应</th><th>确认</th><th>确认率</th></tr></thead><tbody>
                 {% for row in demand_match_insights.location_rows %}<tr><td><strong>{{ row.name }}</strong></td><td>{{ row.demand_count }}</td><td>{{ row.response_count }}</td><td>{{ row.accepted_count }}</td><td>{{ row.acceptance_rate }}%</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">当前周期还没有地点响应数据。</td></tr>{% endfor %}
             </tbody></table></div>
         </div>
@@ -121,7 +122,7 @@
     <p class="search-rhythm-note mb-3"><i class="bi bi-lightbulb me-1"></i>{{ demand_match_quality.summary }}</p>
     {% if demand_match_quality.has_data %}
     <h3 class="h6 mb-3">按匹配分的采纳率</h3>
-    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>匹配分区间</th><th>响应数</th><th>采纳</th><th>未采纳</th><th>采纳率</th><th>平均分</th><th>读数</th></tr></thead><tbody>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">求购匹配质量 · 按匹配分的采纳率</caption><thead><tr><th>匹配分区间</th><th>响应数</th><th>采纳</th><th>未采纳</th><th>采纳率</th><th>平均分</th><th>读数</th></tr></thead><tbody>
         {% for band in demand_match_quality.score_bands %}<tr{% if band.is_small_sample %} class="is-below-threshold"{% endif %}>
             <td><strong>{{ band.label }}</strong></td>
             <td>{{ band.response_count }}</td>
@@ -135,7 +136,7 @@
     <div class="row g-4 mt-3">
         <div class="col-lg-7">
             <h3 class="h6 mb-3">打分里的每个维度，各自拉开了采纳率吗</h3>
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>匹配依据</th><th>带此依据</th><th>采纳率</th><th>不带此依据</th><th>采纳率</th><th>差值（百分点）</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">求购匹配质量 · 打分里的每个维度，各自拉开了采纳率吗</caption><thead><tr><th>匹配依据</th><th>带此依据</th><th>采纳率</th><th>不带此依据</th><th>采纳率</th><th>差值（百分点）</th></tr></thead><tbody>
                 {% for row in demand_match_quality.dimension_effect %}<tr{% if row.is_small_sample %} class="is-below-threshold"{% endif %}>
                     <td><strong>{{ row.label }}</strong></td>
                     <td>{{ row.with_count }}</td>
@@ -192,7 +193,7 @@
         </div>
         <div class="col-lg-5">
             <h3 class="h6 mb-3">反馈来源</h3>
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>来源</th><th>反馈</th><th>完成</th><th>暂未解决</th><th>完成率</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">互助反馈闭环 · 反馈来源</caption><thead><tr><th>来源</th><th>反馈</th><th>完成</th><th>暂未解决</th><th>完成率</th></tr></thead><tbody>
                 {% for row in mutual_aid_feedback_insights.source_rows %}<tr><td><strong>{{ row.label }}</strong></td><td>{{ row.feedback_count }}</td><td>{{ row.completed_count }}</td><td>{{ row.unresolved_count }}</td><td>{{ row.completion_rate }}%</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">当前周期还没有互助反馈。</td></tr>{% endfor %}
             </tbody></table></div>
         </div>
@@ -209,7 +210,7 @@
         <div class="col-lg-5">
             <h3 class="h6 mb-3">每日反馈趋势</h3>
             {% if mutual_aid_feedback_insights.feedback_count %}
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>日期</th><th>反馈</th><th>完成</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">互助反馈闭环 · 每日反馈趋势</caption><thead><tr><th>日期</th><th>反馈</th><th>完成</th></tr></thead><tbody>
                 {% for point in mutual_aid_feedback_insights.trend %}{% if point.feedback_count %}<tr><td>{{ point.date|date:'m-d' }}</td><td>{{ point.feedback_count }}</td><td>{{ point.completed_count }}</td></tr>{% endif %}{% endfor %}
             </tbody></table></div>
             {% else %}<div class="empty-inline">当前周期还没有反馈趋势数据。</div>{% endif %}
@@ -238,6 +239,7 @@
             <h3 class="h6 mb-3">写与不写，是按结果分的吗</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">互助反馈的补充说明 · 写与不写，是按结果分的吗</caption>
                     <thead><tr><th>结果</th><th>反馈数</th><th>写过说明</th><th>填写率（%）</th><th>平均长度（字）</th></tr></thead>
                     <tbody>
                         {% for row in mutual_aid_feedback_notes.outcome_contrast.rows %}
@@ -258,6 +260,7 @@
             <h3 class="h6 mb-3 mt-4">长度分布</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">互助反馈的补充说明 · 长度分布</caption>
                     <thead><tr><th>长度</th><th>条数</th></tr></thead>
                     <tbody>
                         {% for row in mutual_aid_feedback_notes.fill_stats.length_rows %}
@@ -272,6 +275,7 @@
             {% if mutual_aid_feedback_notes.term_rows %}
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">互助反馈的补充说明 · 出现得最多的词</caption>
                     <thead><tr><th>词</th><th>被多少条反馈提到</th><th>占写了说明的反馈（%）</th></tr></thead>
                     <tbody>
                         {% for row in mutual_aid_feedback_notes.term_rows %}
@@ -318,7 +322,7 @@
         </div>
         <div class="col-lg-5">
             <h3 class="h6 mb-3">贡献类型</h3>
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>类型</th><th>积分</th><th>事件</th><th>参与者</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">校园互助影响 · 贡献类型</caption><thead><tr><th>类型</th><th>积分</th><th>事件</th><th>参与者</th></tr></thead><tbody>
                 {% for row in contribution_insights.kind_rows %}<tr><td><strong>{{ row.label }}</strong><small class="d-block text-muted">占积分 {{ row.point_share }}%</small></td><td>{{ row.points }}</td><td>{{ row.event_count }}</td><td>{{ row.user_count }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">当前周期还没有贡献类型数据。</td></tr>{% endfor %}
             </tbody></table></div>
         </div>
@@ -326,7 +330,7 @@
     {% if contribution_insights.top_users %}
     <div class="mt-4">
         <h3 class="h6 mb-3">周期贡献排行</h3>
-        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 contribution-ranking-table"><thead><tr><th>排名</th><th>用户</th><th>贡献事件</th><th>贡献积分</th></tr></thead><tbody>
+        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 contribution-ranking-table"><caption class="visually-hidden">校园互助影响 · 周期贡献排行</caption><thead><tr><th>排名</th><th>用户</th><th>贡献事件</th><th>贡献积分</th></tr></thead><tbody>
             {% for row in contribution_insights.top_users %}<tr><td><span class="contribution-rank">{{ forloop.counter }}</span></td><td><strong>{{ row.username }}</strong></td><td>{{ row.event_count }}</td><td><strong>{{ row.points }}</strong></td></tr>{% endfor %}
         </tbody></table></div>
     </div>
@@ -347,6 +351,7 @@
     </div>
     <div class="ops-table-wrap">
         <table class="table ops-table ops-comparison-table align-middle mb-0">
+        <caption class="visually-hidden">周期对比</caption>
             <thead><tr><th>指标</th><th>当前周期</th><th>上一周期</th><th>变化</th></tr></thead>
             <tbody>
                 {% for comparison in period_comparisons %}
@@ -369,6 +374,7 @@
     </div>
     <div class="ops-table-wrap">
         <table class="table ops-table ops-segment-table align-middle mb-0">
+        <caption class="visually-hidden">活跃用户分层</caption>
             <thead><tr><th>用户层级</th><th>人数</th><th>占活跃用户</th><th>识别口径</th></tr></thead>
             <tbody>
                 {% for segment in activity_segments %}

@@ -50,7 +50,7 @@
         <section class="content-card ops-panel h-100">
             <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Search demand</span><h2>热门搜索</h2></div><a class="ops-panel-hint ops-inline-link" href="{% url 'search_insights' %}">查看完整洞察 <i class="bi bi-arrow-up-right"></i></a></div>
             {% if top_searches %}
-            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><thead><tr><th>搜索词</th><th>次数</th><th>无结果</th><th>平均结果</th></tr></thead><tbody>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">热门搜索</caption><thead><tr><th>搜索词</th><th>次数</th><th>无结果</th><th>平均结果</th></tr></thead><tbody>
                 {% for search in top_searches %}<tr><td><strong>{{ search.query }}</strong></td><td>{{ search.search_count }}</td><td>{% if search.zero_result_count %}<span class="ops-warning">{{ search.zero_result_count }}</span>{% else %}—{% endif %}</td><td>{{ search.average_results|floatformat:1 }}</td></tr>{% endfor %}
             </tbody></table></div>
             {% else %}<div class="empty-inline">当前周期还没有搜索记录。</div>{% endif %}

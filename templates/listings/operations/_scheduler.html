@@ -17,6 +17,7 @@
         <div class="supply-lifecycle-block-heading"><strong>各命令运行情况</strong><span>按最近一次运行排序，静默天数从上次成功算起</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务运行台账与健康统计 · 各命令运行情况</caption>
                 <thead><tr><th>命令</th><th>周期内运行</th><th>失败</th><th>成功率</th><th>最近状态</th><th>最近运行</th><th>最近成功</th><th>静默</th><th>连续失败</th><th>平均耗时</th><th>累计处理</th></tr></thead>
                 <tbody>
                     {% for row in task_run_health.commands %}
@@ -70,6 +71,7 @@
         <div class="supply-lifecycle-block-heading"><strong>各类原因的失败次数</strong><span>按次数从多到少排列</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-failure-causes-table">
+            <caption class="visually-hidden">定时任务失败原因分类 · 各类原因的失败次数</caption>
                 <thead><tr><th>原因类别</th><th>失败次数</th><th>涉及命令</th><th>最近一次失败</th><th>最近一次备注</th></tr></thead>
                 <tbody>
                     {% for row in task_run_failure_causes.causes %}
@@ -112,6 +114,7 @@
         <div class="supply-lifecycle-block-heading"><strong>整体指标的跨周期对比</strong><span>超过 {{ task_run_trend.trend_delta_points }} 个百分点才算上升或下降</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-trend-metric-table">
+            <caption class="visually-hidden">定时任务健康度的跨周期趋势 · 整体指标的跨周期对比</caption>
                 <thead><tr><th>指标</th><th>本周期</th><th>上一周期</th><th>差值</th><th>方向</th></tr></thead>
                 <tbody>
                     {% for row in task_run_trend.metric_rows %}
@@ -133,6 +136,7 @@
         <div class="supply-lifecycle-block-heading"><strong>各命令的跨周期对比</strong><span>按命令名字典序，运行次数不足 {{ task_run_trend.min_period_runs }} 次的窗口只报数不判方向</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-trend-command-table">
+            <caption class="visually-hidden">定时任务健康度的跨周期趋势 · 各命令的跨周期对比</caption>
                 <thead><tr><th>命令</th><th>本周期运行</th><th>上一周期运行</th><th>成功率</th><th>耗时中位数</th><th>异常慢</th><th>方向</th></tr></thead>
                 <tbody>
                     {% for row in task_run_trend.commands %}
@@ -179,6 +183,7 @@
         <div class="supply-lifecycle-block-heading"><strong>各类原因的跨周期对比</strong><span>按方向从坏到好排列，份额取占本周期失败总数的比例</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-cause-trend-table">
+            <caption class="visually-hidden">失败原因的跨周期变化 · 各类原因的跨周期对比</caption>
                 <thead><tr><th>原因类别</th><th>本周期</th><th>上一周期</th><th>差值</th><th>份额</th><th>方向</th><th>涉及命令</th><th>最近一次失败</th></tr></thead>
                 <tbody>
                     {% for row in task_run_failure_cause_trend.causes %}
@@ -225,6 +230,7 @@
         <div class="supply-lifecycle-block-heading"><strong>各命令的耗时分位</strong><span>取最近秩，即某次真实发生过的运行；样本不足的分位留空</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-percentile-table">
+            <caption class="visually-hidden">命令耗时的分位分布 · 各命令的耗时分位</caption>
                 <thead><tr><th>命令</th><th>运行</th><th>P50</th><th>P90</th><th>P99</th><th>尾部倍数</th></tr></thead>
                 <tbody>
                     {% for row in task_run_duration_percentiles.rows %}
@@ -268,6 +274,7 @@
         {% if task_run_hour_load.has_data %}
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-hour-table">
+            <caption class="visually-hidden">运行时长的按小时分布 · 各本地小时的运行与耗时</caption>
                 <thead><tr><th>本地小时</th><th>运行</th><th>命令</th><th>本周期中位数</th><th>上一周期同一小时</th><th>这一小时比自身平时慢的命令</th></tr></thead>
                 <tbody>
                     {% for row in task_run_hour_load.hours %}
@@ -311,6 +318,7 @@
         <div class="supply-lifecycle-block-heading"><strong>每条命令的耗时与它自己的间隔</strong><span>会撞的排前面，其余按重叠对数排</span></div>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table task-run-overlap-table">
+            <caption class="visually-hidden">命令的自我重叠 · 每条命令的耗时与它自己的间隔</caption>
                 <thead><tr><th>命令</th><th>运行</th><th>运行间隔</th><th>最长耗时</th><th>最长/间隔</th><th>重叠对数</th><th>重叠代价</th><th>状态</th></tr></thead>
                 <tbody>
                     {% for row in task_run_overlap.rows %}
@@ -362,6 +370,7 @@
         <h3 class="h6 mb-3">二、问题类型</h3>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务台账完整性审计 · 二、问题类型</caption>
                 <thead><tr><th>问题类型</th><th>行数</th><th>涉及命令数</th><th>读法</th></tr></thead>
                 <tbody>
                     {% for row in task_run_ledger_integrity.issue_type_rows %}
@@ -382,6 +391,7 @@
         <h3 class="h6 mb-3">三、命令形状</h3>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务台账完整性审计 · 三、命令形状</caption>
                 <thead><tr><th>命令</th><th>运行</th><th>问题行</th><th>时间问题</th><th>指标问题</th><th>失败备注</th><th>未知键</th><th>名单</th></tr></thead>
                 <tbody>
                     {% for row in task_run_ledger_integrity.command_rows %}
@@ -405,6 +415,7 @@
         <h3 class="h6 mb-3">四、问题行清单</h3>
         <div class="ops-table-wrap">
             <table class="table ops-table align-middle mb-0 supply-lifecycle-table">
+            <caption class="visually-hidden">定时任务台账完整性审计 · 四、问题行清单</caption>
                 <thead><tr><th>台账行</th><th>命令</th><th>开始时间</th><th>问题数</th><th>问题</th></tr></thead>
                 <tbody>
                     {% for row in task_run_ledger_integrity.issue_rows %}
