@@ -1,0 +1,159 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 item-image-coverage-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Item image coverage</span><h2>商品图片配了多少张，第一次被运营读到</h2></div>
+        <span class="ops-panel-hint">在架商品的图片覆盖度，以及无图商品的交易表现</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-images me-1"></i><code>ItemImage</code> 是全站唯一一个「产品侧已经用上、运营侧却从未量化」的字段。交易安全卡早就在判 <code>if not item.images.exists()</code> 挂警告，各个建议模块也在不做依据地喂「引导卖家补充图片」，但没有任何地方数过商品到底配了几张图。这个面板把它数出来，但<strong>只报告，不改写</strong>。</p>
+
+    {% if item_image_coverage.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>在架商品</span><strong>{{ item_image_coverage.coverage.total }}</strong><small>分母只含在架商品</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>一张图都没配</span><strong>{{ item_image_coverage.coverage.no_image_count }}</strong><small>详情页直接露出空图位</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>无图占比</span><strong>{{ item_image_coverage.coverage.no_image_rate }}%</strong><small>无图数 / 在架总数</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>无图且被举报</span><strong>{{ item_image_coverage.coverage.no_image_reported_count }}</strong><small>只统计更新前已存在的举报</small></div></div>
+    </div>
+    <p class="small text-muted mb-3"><i class="bi bi-info-circle me-1"></i>{{ item_image_coverage.summary }}</p>
+
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <h3>有图 / 无图对照</h3>
+            <p class="small text-muted">成交率的分母是订单笔数，不是商品件数。</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 有图 / 无图对照</caption>
+                    <thead><tr><th>分组</th><th>商品数</th><th>订单数</th><th>成交数</th><th>成交率</th><th>取消率</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td>有图商品</td>
+                            <td>{{ item_image_coverage.contrast.with_image.item_count }}</td>
+                            <td>{{ item_image_coverage.contrast.with_image.order_count }}</td>
+                            <td>{{ item_image_coverage.contrast.with_image.dealt_count }}</td>
+                            <td>{{ item_image_coverage.contrast.with_image.dealt_rate }}%</td>
+                            <td>{{ item_image_coverage.contrast.with_image.cancelled_rate }}%</td>
+                        </tr>
+                        <tr>
+                            <td>无图商品</td>
+                            <td>{{ item_image_coverage.contrast.no_image.item_count }}</td>
+                            <td>{{ item_image_coverage.contrast.no_image.order_count }}</td>
+                            <td>{{ item_image_coverage.contrast.no_image.dealt_count }}</td>
+                            <td>{{ item_image_coverage.contrast.no_image.dealt_rate }}%</td>
+                            <td>{{ item_image_coverage.contrast.no_image.cancelled_rate }}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% if not item_image_coverage.contrast.is_measurable %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-exclamation-triangle me-1"></i>两组商品数均小于 {{ item_image_coverage.min_measured_items }}，不展示差距结论。</p>
+            {% elif item_image_coverage.contrast.gap_is_meaningful %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-arrow-left-right me-1"></i>差距 {{ item_image_coverage.contrast.gap_points }} 个百分点，超过 {{ item_image_coverage.noise_points }} 个百分点的噪声线。<strong>但这只是对照，不是因果</strong>。</p>
+            {% else %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-dash-circle me-1"></i>差距 {{ item_image_coverage.contrast.gap_points }} 个百分点，未超过 {{ item_image_coverage.noise_points }} 个百分点的噪声线，不视为真实差异。</p>
+            {% endif %}
+        </div>
+        <div class="col-lg-6">
+            <h3>图片数分档</h3>
+            <p class="small text-muted">最后一档不叫「传满」，<code>max_num=5</code> 是产品约束而不是运营结论。</p>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 图片数分档</caption>
+                    <thead><tr><th>图片数</th><th>商品数</th><th>占比</th><th>订单数</th><th>成交数</th><th>成交率</th></tr></thead>
+                    <tbody>
+                        {% for row in item_image_coverage.image_counts.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.item_count }}</td>
+                            <td>{{ row.item_share }}%</td>
+                            <td>{{ row.order_count }}</td>
+                            <td>{{ row.dealt_count }}</td>
+                            <td>{{ row.dealt_rate }}%{% if row.is_small_sample %} <span class="badge text-bg-warning">样本少</span>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+        <div class="col-lg-6">
+            <h3>按交易方式看无图情况</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 按交易方式看无图情况</caption>
+                    <thead><tr><th>交易方式</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
+                    <tbody>
+                        {% for row in item_image_coverage.by_trade_mode.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.item_count }}</td>
+                            <td>{{ row.no_image_count }}</td>
+                            <td>{{ row.no_image_rate }}%</td>
+                            <td>{{ row.order_count }}</td>
+                            <td>{{ row.dealt_rate }}%{% if row.is_small_sample %} <span class="badge text-bg-warning">样本少</span>{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3>按分类看无图情况</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 按分类看无图情况</caption>
+                    <thead><tr><th>分类</th><th>商品数</th><th>无图数</th><th>无图占比</th><th>订单数</th><th>成交率</th></tr></thead>
+                    <tbody>
+                        {% for row in item_image_coverage.by_category.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.item_count }}</td>
+                            <td>{{ row.no_image_count }}</td>
+                            <td>{{ row.no_image_rate }}%</td>
+                            <td>{{ row.order_count }}</td>
+                            <td>{{ row.dealt_rate }}%{% if row.is_small_sample %} <span class="badge text-bg-warning">样本少</span>{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6">当前没有带分类的在架商品。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <h3 class="mt-3">一张图都没配的商品</h3>
+    <p class="small text-muted">按上架时间从新到旧排列，<strong>不按商品进行排名</strong>。</p>
+    <div class="table-responsive">
+        <table class="table table-sm align-middle ops-table">
+        <caption class="visually-hidden">商品图片配了多少张，第一次被运营读到 · 一张图都没配的商品</caption>
+            <thead><tr><th>商品</th><th>分类</th><th>交易方式</th><th>举报数</th><th>上架时间</th></tr></thead>
+            <tbody>
+                {% for row in item_image_coverage.no_image_rows.rows %}
+                <tr>
+                    <td>{{ row.item.title }}</td>
+                    <td>{{ row.category_label }}</td>
+                    <td>{{ row.trade_mode_label }}</td>
+                    <td>{% if row.report_count %}{{ row.report_count }}{% else %}&mdash;{% endif %}</td>
+                    <td>{{ row.item.created_at|date:'Y-m-d H:i' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5">当前在架商品都至少配了一张图。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if item_image_coverage.no_image_rows.row_total > item_image_coverage.no_image_rows.row_limit %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>无图商品共 {{ item_image_coverage.no_image_rows.row_total }} 件，以上只列 {{ item_image_coverage.no_image_rows.row_limit }} 件。</p>
+    {% endif %}
+
+    {% if item_image_coverage.coverage.is_small_sample %}
+    <p class="rewrite-candidate-footnote"><i class="bi bi-exclamation-triangle me-1"></i>当前在架商品只有 {{ item_image_coverage.coverage.total }} 件，低于 {{ item_image_coverage.coverage.min_measured_items }} 的视测门槛，占比仅供参考。</p>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-images me-1"></i>本面板只报告，<strong>不改写商品、不要求卖家补图、不按卖家联系</strong>。上传后又删图不留历史，这里只能读到剩下几张；<code>ItemImage</code> 没有 <code>is_primary</code>、没有 <code>order</code>、没有 <code>created_at</code>，所以“哪张是封面”、“先传了哪张”这两件事都答不了，本面板也就不装作能答。</div>
+    {% else %}
+    <p class="text-muted mb-0"><i class="bi bi-inbox me-1"></i>当前没有在架商品，图片覆盖度也就无从谈起。</p>
+    {% endif %}
+</section>

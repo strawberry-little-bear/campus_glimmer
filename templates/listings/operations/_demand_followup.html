@@ -1,0 +1,141 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Demand follow-up</span><h2>需求跟进闭环效果</h2></div>
+        <span class="ops-panel-hint">按任务创建时间前后 {{ demand_radar_outcomes.window_days }} 天对比无结果搜索率</span>
+    </div>
+    <form class="ops-inline-filter" method="get">
+        <input type="hidden" name="days" value="{{ period_days }}">
+        <label for="outcome-task-status">任务状态</label>
+        <select id="outcome-task-status" name="task_status" class="form-select form-select-sm" onchange="this.form.submit()">
+            <option value="all"{% if not demand_outcome_status_filter %} selected{% endif %}>全部状态</option>
+            <option value="todo"{% if demand_outcome_status_filter == 'todo' %} selected{% endif %}>待跟进</option>
+            <option value="in_progress"{% if demand_outcome_status_filter == 'in_progress' %} selected{% endif %}>跟进中</option>
+            <option value="completed"{% if demand_outcome_status_filter == 'completed' %} selected{% endif %}>已完成</option>
+            <option value="ignored"{% if demand_outcome_status_filter == 'ignored' %} selected{% endif %}>已忽略</option>
+        </select>
+    </form>
+    <div class="demand-radar-summary">
+        <div><span>纳入统计任务</span><strong>{{ demand_radar_outcomes.summary.task_count }}</strong><small>当前周期创建</small></div>
+        <div class="demand-radar-warning"><span>缺口收敛</span><strong>{{ demand_radar_outcomes.summary.converged_count }}</strong><small>无结果搜索下降</small></div>
+        <div{% if demand_radar_outcomes.summary.diverged_count %} class="demand-radar-warning"{% endif %}><span>缺口扩大</span><strong>{{ demand_radar_outcomes.summary.diverged_count }}</strong><small>需要复核动作</small></div>
+        <div><span>闭环命中率</span><strong>{% if demand_radar_outcomes.summary.hit_rate != None %}{{ demand_radar_outcomes.summary.hit_rate|floatformat }}%{% else %}—{% endif %}</strong><small>仅统计有完整证据的任务</small></div>
+    </div>
+    {% if demand_radar_outcomes.rows %}
+    <div class="ops-table-wrap mt-3"><table class="table ops-table align-middle mb-0 demand-outcome-table"><caption class="visually-hidden">需求跟进闭环效果</caption><thead><tr><th>跟进主题</th><th>任务状态</th><th>基线无结果率</th><th>观察期无结果率</th><th>变化</th><th>可用供给</th><th>判定</th></tr></thead><tbody>
+        {% for row in demand_radar_outcomes.rows %}
+        <tr>
+            <td><strong>{{ row.title }}</strong><small class="d-block text-muted">{{ row.created_at|date:"Y-m-d" }} 建立 · 信号 {{ row.signal_total }} 次</small></td>
+            <td>{{ row.status_label }}</td>
+            <td>{% if row.baseline_zero_rate != None %}{{ row.baseline_zero_rate|floatformat }}%<small class="d-block text-muted">{{ row.baseline_searches }} 次搜索</small>{% else %}—{% endif %}</td>
+            <td>{% if row.observation_zero_rate != None %}{{ row.observation_zero_rate|floatformat }}%<small class="d-block text-muted">{{ row.observation_searches }} 次搜索</small>{% else %}—{% endif %}</td>
+            <td>{% if row.delta_points != None %}<strong class="{% if row.delta_points >= 10 %}text-success{% elif row.delta_points <= -10 %}text-danger{% endif %}">{% if row.delta_points > 0 %}+{% endif %}{{ row.delta_points|floatformat }}</strong><small class="d-block text-muted">百分点</small>{% else %}—{% endif %}</td>
+            <td>{{ row.supply_now }}<small class="d-block text-muted">建任务时 {{ row.supply_at_creation }}</small></td>
+            <td><span class="demand-outcome-tag demand-outcome-{{ row.outcome }}">{{ row.outcome_label }}</span><small class="d-block text-muted mt-1">{{ row.verdict }}</small></td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="empty-inline mt-3">当前周期还没有建立需求跟进任务，可先从上方需求雷达创建。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>以任务创建时间为分界，对比同一主题在前后两个窗口的无结果搜索率；搜索量不足或观察期未结束的任务单独标注，不计入命中率，避免用偶然数据评价供给动作。</div>
+</section>
+
+<section class="content-card ops-panel mb-4 demand-followup-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Follow-up tasks</span><h2>跟进任务的截止时间与备注</h2></div>
+        <span class="ops-panel-hint">雷达旁边那三个按钮从来不碰的两个字段，第一次被读</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-calendar-check me-1"></i>建立跟进任务、开始跟进、标记完成这三个动作只改状态和负责人，从不写 <code>due_at</code> 和 <code>note</code>。先报填写率再报逾期：一个没人填的字段不该被分析，该被撤掉。</p>
+    {% if not demand_opportunity_followups.has_data %}
+    <div class="empty-inline">{{ demand_opportunity_followups.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>设了截止时间</span><strong>{{ demand_opportunity_followups.fill_stats.with_due_count }}</strong><small>填写率 {{ demand_opportunity_followups.fill_stats.due_fill_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>写过备注</span><strong>{{ demand_opportunity_followups.fill_stats.with_note_count }}</strong><small>填写率 {{ demand_opportunity_followups.fill_stats.note_fill_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已过期限未闭环</span><strong>{{ demand_opportunity_followups.overdue_stats.overdue_count }}</strong><small>未闭环且设了期限的 {{ demand_opportunity_followups.overdue_stats.with_due_open_count }} 个里</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>有期限减无期限</span><strong>{% if demand_opportunity_followups.due_contrast.gap_points is None %}&mdash;{% else %}{% if demand_opportunity_followups.due_contrast.gap_points > 0 %}+{% endif %}{{ demand_opportunity_followups.due_contrast.gap_points }}{% endif %}</strong><small>百分点 · 不满 {{ demand_opportunity_followups.due_contrast.noise_points }} 视为噪声</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">设了期限的，真的更容易做完吗</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 设了期限的，真的更容易做完吗</caption>
+                    <thead><tr><th>分组</th><th>任务数</th><th>已闭环</th><th>已完成</th><th>完成率（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_opportunity_followups.due_contrast.rows %}
+                        <tr{% if row.is_small_sample %} class="text-muted"{% endif %}>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.task_count }}</td>
+                            <td>{{ row.closed_count }}</td>
+                            <td>{{ row.completed_count }}</td>
+                            <td>{{ row.completion_rate }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if not demand_opportunity_followups.due_contrast.is_measurable %}
+            <div class="empty-inline">两组各自不足 {{ demand_opportunity_followups.due_contrast.min_comparison_tasks }} 条已闭环任务，只报数字、不给方向。</div>
+            {% elif not demand_opportunity_followups.due_contrast.gap_is_meaningful %}
+            <div class="empty-inline">两组的完成率相差在噪声范围内，读不出方向。</div>
+            {% endif %}
+            <h3 class="h6 mb-3 mt-4">逾期分档</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 逾期分档</caption>
+                    <thead><tr><th>超期多久</th><th>任务数</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_opportunity_followups.overdue_stats.bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">待处理的逾期任务</h3>
+            {% if demand_opportunity_followups.overdue_stats.overdue_rows %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 待处理的逾期任务</caption>
+                    <thead><tr><th>主题</th><th>状态</th><th>负责人</th><th>截止</th><th>已超（天）</th><th>备注（字）</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_opportunity_followups.overdue_stats.overdue_rows %}
+                        <tr>
+                            <td><strong>{{ row.title }}</strong></td>
+                            <td>{{ row.status_label }}</td>
+                            <td>{% if row.assigned_to %}{{ row.assigned_to }}{% else %}未指派{% endif %}</td>
+                            <td>{{ row.due_at|date:'Y-m-d H:i' }}</td>
+                            <td>{{ row.overdue_days }}</td>
+                            <td>{{ row.note_length }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if demand_opportunity_followups.overdue_stats.overdue_rows|length > demand_opportunity_followups.overdue_stats.open_task_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>清单最多列 {{ demand_opportunity_followups.overdue_stats.open_task_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            {% else %}
+            <div class="empty-inline">{% if demand_opportunity_followups.overdue_stats.with_due_open_count %}未闭环且设了期限的任务都还在期限内。{% else %}未闭环的任务都没有设期限，逾期也就无从谈起。{% endif %}</div>
+            {% endif %}
+            <h3 class="h6 mb-3 mt-4">任务状态分布</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">跟进任务的截止时间与备注 · 任务状态分布</caption>
+                    <thead><tr><th>状态</th><th>任务数</th><th>设了截止时间</th><th>写过备注</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_opportunity_followups.status_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.task_count }}</td><td>{{ row.with_due_count }}</td><td>{{ row.with_note_count }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>待处理清单不按统计周期过滤：周期开始之前就超期的那个任务，恰恰是最不该被藏起来的一件。这里只报告，不自动派单、不改任务状态、不改截止时间、不新增任何提醒；备注是跟进人写给自己的内部备忘，只数字数，不做切词、不聚类、不推断语义，也不公开任何一条原文。</div>
+    {% endif %}
+</section>
+
