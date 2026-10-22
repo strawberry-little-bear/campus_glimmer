@@ -153,7 +153,7 @@ flowchart LR
 只会让一部分人用不了——所以它们需要常驻守卫，而不是上线前人工抽查一遍。
 
 守卫是 [`campus_glimmer/test_page_semantics.py`](../campus_glimmer/test_page_semantics.py)：
-20 个测试，约 20 秒跑完，只依赖标准库（`html.parser` + 正则），不引入新依赖。它走两条路线——
+22 个测试，约 20 秒跑完，只依赖标准库（`html.parser` + 正则），不引入新依赖。它走两条路线——
 静态扫全部模板，再用 Django test client 真实渲染 53 个页面（普通用户视角 + 运营视角）后复核。
 
 | 维度 | 规则 | 为什么容易坏 |
@@ -165,6 +165,7 @@ flowchart LR
 | 重复 id | 同一页里同一个 `id` 只能出现一次 | `label for` / `aria-labelledby` / `getElementById` 都只命中第一个，页面毫无异常 |
 | id 引用完整 | `for` 和 `aria-*` 指向的 id 必须真实存在，且不能是空值 | Django 会自动拼 `aria-describedby`，模板不同步补 id 就整片悬空 |
 | 触控目标 | 导航链接至少 24×24（WCAG 2.2 的 2.5.8，AA） | 压内边距时顺手把命中区域压没了 |
+| 表格可访问名称 | 每张 `<table>` 都要有 `<caption class="visually-hidden">` 或 `aria-label` / `aria-labelledby` | 运营看板一屏三十张表，肉眼分不出谁是谁，读屏软件更是只能念列头 |
 
 几条踩过的坑，写在这里省得重复：
 
@@ -175,7 +176,10 @@ flowchart LR
 5. **触控目标看的是命中区域，不是字号。** `.site-nav .navbar-nav .nav-link` 现在带 `min-height` / `min-width: 24px`，压 `padding-inline` 时不要把它删掉。
 6. **表单的帮助文字和错误提示必须自己补 id，Django 不会替你补。** `BoundField.aria_describedby` 会按 `field.auto_id` 拼出 `id_<字段名>_helptext` 和 `id_<字段名>_error`，但渲染帮助文字的是模板——写成 `<div class="form-text">{{ field.help_text }}</div>` 而不带 `id`，引用就悬空，读屏软件一个字都读不到。正确写法是 `id="{{ field.auto_id }}_helptext"`，两边用同一套拼法。全站 19 个模板、43 处踩过这个坑。
 7. **`field.id_for_label` 不保证有值，不能拿来无条件拼属性。** Django 的 `RadioSelect.id_for_label` 刻意返回空串（注释写得很清楚：不给 `<label>` 配 `for`，免得读屏软件把选项组里第一个选项当成唯一标签）。所以 `for="{{ field.id_for_label }}"` 在单选 / 多选组上会渲染出 `for=""`，`id="{{ field.id_for_label }}_helptext"` 会退化成 `id="_helptext"`——多个字段还会撞成重复 id。约定：`id_for_label` 为空即「这是个选项组」，此时用 `role="group"` + `aria-labelledby` 关联标签，拼 id 一律改用 `field.auto_id`。参考 `templates/listings/_mutual_aid_feedback_fields.html`。
-8. **页面清单漏掉表单页，等于那一页的语义检查从来没跑过。** 新增守卫维度后第一次反向验证就发现：`lost_found_form.html` 的缺陷在 264 个页面的开发期审计里能抓到，在守卫测试里抓不到——因为 `PAGES` 里根本没有「发布失物招领」。现在补齐了发布商品、发布/编辑失物招领、发布/编辑求购、批量创建、举报、发起交易。新增表单页时请顺手加进 `PAGES`。
+8. **`<caption>` 要写成 `<table>` 的第一个子元素，前面不能混文本。** 浏览器会把 caption 之前的所有节点连同 caption 一起从表格里丢掉——所以 `<div>` 里换行再开 `<table>` 没问题，`<table>` 标签后面紧跟的只能是一个 caption 和空白。
+9. **caption 上的 `.visually-hidden` 不会把表格布局带崩。** Bootstrap 专门给 caption 开了口子：只有 `.visually-hidden:not(caption)` 才绝对定位。所以可以放心用视觉隐藏把 caption 藏起来；换成 `display:none` 反而连读屏软件一起屏蔽，等于没写。项目里 `.visually-hidden` 由 `static/vendor/bootstrap.min.css` 提供，`style.css` 里没有定义。
+10. **caption 文本要带面板前缀。** 运营看板 31 个分区挤一页，只写子标题（比如「字段与结构」）读屏软件念出来不知道属于哪一块。约定是「面板 · 子标题」，同一面板下无子标题时只写面板名。标题本身是模板表达式（`{{ group.kind_label }}`）的循环表格，改用 `aria-labelledby` 直接引用可见标题，文案只有一份、不会漂。
+11. **页面清单漏掉表单页，等于那一页的语义检查从来没跑过。** 新增守卫维度后第一次反向验证就发现：`lost_found_form.html` 的缺陷在 264 个页面的开发期审计里能抓到，在守卫测试里抓不到——因为 `PAGES` 里根本没有「发布失物招领」。现在补齐了发布商品、发布/编辑失物招领、发布/编辑求购、批量创建、举报、发起交易。新增表单页时请顺手加进 `PAGES`。
 
 ## 🛠️ 修改检查
 
@@ -189,7 +193,7 @@ flowchart LR
   `clamp(90px, 10vw, 124px)` 的账户头像位出现，导航栏里更是只有 30px，因此固定输出 256×256（覆盖 2x 视网膜）；
   它挂在每个登录页的导航栏上，之前用 749×750 的 200KB 原图，压到 256×256 后是 37KB。
   `static/img/no-image.png` 是简单占位图形，转 64 色自适应调色板后从 34KB 降到 11KB，观感无损；
-- 标题层级、表单标签、可访问名称、`alt` 和触控目标按上面「语义与可访问性」一节的规则先自查，再跑 `python manage.py test campus_glimmer.test_page_semantics`；
+- 标题层级、表单标签、可访问名称、表格名称、`alt` 和触控目标按上面「语义与可访问性」一节的规则先自查，再跑 `python manage.py test campus_glimmer.test_page_semantics`；
 - 大段样式要带用途说明，避免无法判断归属的规则继续堆积；
 - 修改未读数轮询时，确认隐藏标签页不会持续请求，且 99+ 显示仍然正确；
 - 交互元素要保留清晰的 `:focus-visible` 状态，并检查键盘操作顺序。

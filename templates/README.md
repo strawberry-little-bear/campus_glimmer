@@ -59,7 +59,8 @@ flowchart TD
 - 复用结构优先抽成下划线前缀片段，例如 `_item_card.html`；
 - 审核队列和用户申诉是同一类内容的两端，改一边时同时看 `moderation_queue.html` 和 `moderation_appeals.html`，保持 `.mod-event-*` 结构一致；
 - 运营看板已按分区拆到 `listings/operations/` 下，新增分区用 `{% include %}` 挂到主模板，不要再往单文件里继续堆；
-- 标题层级、表单标签、可访问名称、`alt`、重复 id 和 id 引用完整性由 `campus_glimmer/test_page_semantics.py` 常驻看守：每页只有一个 `h1` 且不跳级，每个控件都有关联标签，图标按钮都有 `aria-label`，`for` / `aria-*` 指向的 id 都真实存在。想要小字号标题时用 `h2` 配 `.h3` / `.h5` 工具类把字号压回去，不要图省事写 `h3`–`h6`——空状态和区块标签跟在列表后面，层级上属于页面主标题的下一级；
+- **新增表格必须带 `<caption class="visually-hidden">面板 · 子标题</caption>`，循环表格里标题本身是模板表达式的用 `aria-labelledby` 引用可见标题。** caption 只能是 `<table>` 的第一个子元素，前面混文本会被浏览器连同 caption 一起丢掉；`campus_glimmer/test_page_semantics.py` 的 `TableAccessibleNameTests` 常驻看守；
+- 标题层级、表单标签、可访问名称、`alt`、重复 id、id 引用完整性和表格名称由 `campus_glimmer/test_page_semantics.py` 常驻看守：每页只有一个 `h1` 且不跳级，每个控件都有关联标签，图标按钮都有 `aria-label`，`for` / `aria-*` 指向的 id 都真实存在。想要小字号标题时用 `h2` 配 `.h3` / `.h5` 工具类把字号压回去，不要图省事写 `h3`–`h6`——空状态和区块标签跟在列表后面，层级上属于页面主标题的下一级；
 - **表单字段循环不要直接写 `for="{{ field.id_for_label }}"`。** `RadioSelect.id_for_label` 对选项组刻意返回空串，那样写会渲染出 `for=""`；帮助文字和错误提示的 id 也要用 `field.auto_id` 拼（`<auto_id>_helptext` / `<auto_id>_error`），因为 Django 的 `aria_describedby` 就是按这个约定拼的，两边不一致引用就悬空。直接复用 `listings/_mutual_aid_feedback_fields.html`，或照它的写法写；
 - 新增页面时同步把它加进 `test_page_semantics.py` 的 `PAGES`。清单漏一页，那一页的语义检查就静默失效——测试照样绿，只是从此没人管；
 - 图片补齐 `alt`，装饰元素使用空 `alt` 或 `aria-hidden`；
