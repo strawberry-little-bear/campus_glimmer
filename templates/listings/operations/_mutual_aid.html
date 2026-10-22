@@ -1,0 +1,184 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4 mutual-aid-feedback-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Mutual-aid loop</span><h2>互助反馈闭环</h2></div>
+        <span class="ops-panel-hint">从确认响应到结果反馈的可解释转化</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-check2-square me-1"></i>只统计互助发布者提交的结果反馈；响应 / 线索按确认时间统计，反馈按提交时间统计，用于观察校园互助的履约和跟进质量。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>结果反馈</span><strong>{{ mutual_aid_feedback_insights.feedback_count }}</strong><small>最近 {{ period_days }} 天提交</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>确认完成</span><strong>{{ mutual_aid_feedback_insights.completed_count }}</strong><small>暂未解决 {{ mutual_aid_feedback_insights.unresolved_count }} 次</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>互助完成率</span><strong>{{ mutual_aid_feedback_insights.completion_rate }}%</strong><small>基于已提交反馈</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已确认互助</span><strong>{{ mutual_aid_feedback_insights.accepted_interaction_count }}</strong><small>求购响应 + 失物线索</small></div></div>
+    </div>
+    <div class="contribution-change-row mb-4">
+        <span>与上一周期相比</span>
+        <span class="ops-change ops-change-{{ mutual_aid_feedback_insights.period_changes.feedbacks.direction }}">反馈 {{ mutual_aid_feedback_insights.period_changes.feedbacks.display }}</span>
+        <span class="ops-change ops-change-{{ mutual_aid_feedback_insights.period_changes.completed.direction }}">完成 {{ mutual_aid_feedback_insights.period_changes.completed.display }}</span>
+        <span class="ops-change ops-change-{{ mutual_aid_feedback_insights.period_changes.completion_rate.direction }}">完成率 {{ mutual_aid_feedback_insights.period_changes.completion_rate.display }}</span>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">互助闭环漏斗</h3>
+            <div class="conversion-funnel" aria-label="已确认互助到完成反馈的转化漏斗">
+                {% for stage in mutual_aid_feedback_insights.funnel %}
+                <div class="conversion-stage conversion-stage-{{ stage.key }}">
+                    <div class="conversion-stage-head">
+                        <div class="conversion-stage-title"><span class="conversion-stage-index">0{{ forloop.counter }}</span><span><strong>{{ stage.label }}</strong><small>{{ stage.note }}</small></span></div>
+                        <strong class="conversion-stage-count">{{ stage.count }}</strong>
+                    </div>
+                    <div class="conversion-track"><span style="width: {% widthratio stage.count mutual_aid_feedback_insights.funnel_max 100 %}%"></span></div>
+                    <small class="conversion-stage-rate">{% if forloop.first %}起始样本{% else %}较上一步 {{ stage.rate }}%{% endif %}</small>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">反馈来源</h3>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">互助反馈闭环 · 反馈来源</caption><thead><tr><th>来源</th><th>反馈</th><th>完成</th><th>暂未解决</th><th>完成率</th></tr></thead><tbody>
+                {% for row in mutual_aid_feedback_insights.source_rows %}<tr><td><strong>{{ row.label }}</strong></td><td>{{ row.feedback_count }}</td><td>{{ row.completed_count }}</td><td>{{ row.unresolved_count }}</td><td>{{ row.completion_rate }}%</td></tr>{% empty %}<tr><td colspan="5" class="text-muted">当前周期还没有互助反馈。</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">反馈标签分布</h3>
+            {% if mutual_aid_feedback_insights.tag_rows %}
+            <div class="activity-chart">
+                {% for row in mutual_aid_feedback_insights.tag_rows %}<div class="activity-row"><span class="text-muted" style="min-width: 7rem">{{ row.label }}</span><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio row.count mutual_aid_feedback_insights.feedback_count 100 %}%" title="{{ row.count }} 次"></span></div><strong>{{ row.count }}</strong><small class="text-muted">{{ row.share }}%</small></div>{% endfor %}
+            </div>
+            {% else %}<div class="empty-inline">反馈标签会在结果提交后显示。</div>{% endif %}
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">每日反馈趋势</h3>
+            {% if mutual_aid_feedback_insights.feedback_count %}
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">互助反馈闭环 · 每日反馈趋势</caption><thead><tr><th>日期</th><th>反馈</th><th>完成</th></tr></thead><tbody>
+                {% for point in mutual_aid_feedback_insights.trend %}{% if point.feedback_count %}<tr><td>{{ point.date|date:'m-d' }}</td><td>{{ point.feedback_count }}</td><td>{{ point.completed_count }}</td></tr>{% endif %}{% endfor %}
+            </tbody></table></div>
+            {% else %}<div class="empty-inline">当前周期还没有反馈趋势数据。</div>{% endif %}
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>反馈只用于运营观察和公开信誉摘要的聚合统计，不公开反馈原文、互助对象或私信内容。</div>
+</section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Feedback notes</span><h2>互助反馈的补充说明</h2></div>
+        <span class="ops-panel-hint">四个固定标签旁边那个五百字的文本框，第一次被打开</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-chat-square-text me-1"></i>标签表达的是「勾了哪个框」，自由文本表达的是固定选项没覆盖到的那部分。这里只读 <code>note</code> 字段，不公开任何一条原文。</p>
+    {% if not mutual_aid_feedback_notes.has_data %}
+    <div class="empty-inline">{{ mutual_aid_feedback_notes.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>写过说明</span><strong>{{ mutual_aid_feedback_notes.fill_stats.filled_count }}</strong><small>共 {{ mutual_aid_feedback_notes.fill_stats.total }} 条反馈</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>填写率</span><strong>{{ mutual_aid_feedback_notes.fill_stats.fill_rate }}%</strong><small>先问这个字段还活着没有</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>平均长度</span><strong>{{ mutual_aid_feedback_notes.fill_stats.average_length }}</strong><small>字 · 最长 {{ mutual_aid_feedback_notes.fill_stats.max_length }} 字</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未完成减已完成</span><strong>{% if mutual_aid_feedback_notes.outcome_contrast.gap_points is None %}—{% else %}{{ mutual_aid_feedback_notes.outcome_contrast.gap_points }}{% endif %}</strong><small>百分点 · 不满 8 视为噪声</small></div></div>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">写与不写，是按结果分的吗</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">互助反馈的补充说明 · 写与不写，是按结果分的吗</caption>
+                    <thead><tr><th>结果</th><th>反馈数</th><th>写过说明</th><th>填写率（%）</th><th>平均长度（字）</th></tr></thead>
+                    <tbody>
+                        {% for row in mutual_aid_feedback_notes.outcome_contrast.rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.feedback_count }}</td>
+                            <td>{{ row.filled_count }}</td>
+                            <td>{{ row.fill_rate }}</td>
+                            <td>{{ row.average_length }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if not mutual_aid_feedback_notes.outcome_contrast.gap_is_meaningful %}
+            <div class="empty-inline">未完成与已完成的填写率没有明显差别，读不出方向。</div>
+            {% endif %}
+            <h3 class="h6 mb-3 mt-4">长度分布</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">互助反馈的补充说明 · 长度分布</caption>
+                    <thead><tr><th>长度</th><th>条数</th></tr></thead>
+                    <tbody>
+                        {% for row in mutual_aid_feedback_notes.fill_stats.length_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">出现得最多的词</h3>
+            {% if mutual_aid_feedback_notes.term_rows %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">互助反馈的补充说明 · 出现得最多的词</caption>
+                    <thead><tr><th>词</th><th>被多少条反馈提到</th><th>占写了说明的反馈（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in mutual_aid_feedback_notes.term_rows %}
+                        <tr><td>{{ row.term }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-inline">当前周期的补充说明都短于 {{ mutual_aid_feedback_notes.min_note_length }} 字，切不出可计数的词。</div>
+            {% endif %}
+            <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>高频词仅供参考，不做语义判断：不引入分词库，不聚类、不推断主题，一个词要出现在至少 {{ mutual_aid_feedback_notes.min_term_count }} 条不同的补充说明里才进榜单，最多列 {{ mutual_aid_feedback_notes.top_terms }} 个。这里只报告，不公开反馈原文、不新增标签、不把任何词回写成结构化字段。</div>
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+<section class="content-card ops-panel mb-4 contribution-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Community impact</span><h2>校园互助影响</h2></div>
+        <span class="ops-panel-hint">把贡献记录转化为可观察的社区信号</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-heart-pulse me-1"></i>贡献积分来自可追溯的交易完成与借用归还等业务事件；同一事件使用幂等键只计一次，便于评估校园互助的真实参与度。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期贡献积分</span><strong>{{ contribution_insights.period_points }}</strong><small>最近 {{ period_days }} 天累计</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>贡献事件</span><strong>{{ contribution_insights.period_events }}</strong><small>可审计的互助记录</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>参与用户</span><strong>{{ contribution_insights.period_users }}</strong><small>至少完成一次贡献</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>人均积分</span><strong>{{ contribution_insights.average_points_per_user }}</strong><small>累计积分 {{ contribution_insights.lifetime_points }}</small></div></div>
+    </div>
+    <div class="contribution-change-row mb-4">
+        <span>与上一周期相比</span>
+        <span class="ops-change ops-change-{{ contribution_insights.period_changes.points.direction }}">积分 {{ contribution_insights.period_changes.points.display }}</span>
+        <span class="ops-change ops-change-{{ contribution_insights.period_changes.events.direction }}">事件 {{ contribution_insights.period_changes.events.display }}</span>
+        <span class="ops-change ops-change-{{ contribution_insights.period_changes.users.direction }}">参与者 {{ contribution_insights.period_changes.users.display }}</span>
+    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <h3 class="h6 mb-3">每日贡献趋势</h3>
+            {% if contribution_insights.has_data %}
+            <div class="activity-chart contribution-trend-chart" aria-label="每日校园互助贡献积分趋势">
+                {% for point in contribution_insights.trend %}{% if point.points %}<div class="activity-row"><time datetime="{{ point.date|date:'Y-m-d' }}">{{ point.date|date:'m-d' }}</time><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio point.points contribution_insights.trend_max 100 %}%" title="{{ point.points }} 分"></span></div><strong>{{ point.points }}</strong><small class="text-muted">{{ point.event_count }} 次</small></div>{% endif %}{% endfor %}
+            </div>
+            {% else %}<div class="empty-inline">当前周期还没有可统计的互助贡献。</div>{% endif %}
+        </div>
+        <div class="col-lg-5">
+            <h3 class="h6 mb-3">贡献类型</h3>
+            <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0"><caption class="visually-hidden">校园互助影响 · 贡献类型</caption><thead><tr><th>类型</th><th>积分</th><th>事件</th><th>参与者</th></tr></thead><tbody>
+                {% for row in contribution_insights.kind_rows %}<tr><td><strong>{{ row.label }}</strong><small class="d-block text-muted">占积分 {{ row.point_share }}%</small></td><td>{{ row.points }}</td><td>{{ row.event_count }}</td><td>{{ row.user_count }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted">当前周期还没有贡献类型数据。</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    </div>
+    {% if contribution_insights.top_users %}
+    <div class="mt-4">
+        <h3 class="h6 mb-3">周期贡献排行</h3>
+        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 contribution-ranking-table"><caption class="visually-hidden">校园互助影响 · 周期贡献排行</caption><thead><tr><th>排名</th><th>用户</th><th>贡献事件</th><th>贡献积分</th></tr></thead><tbody>
+            {% for row in contribution_insights.top_users %}<tr><td><span class="contribution-rank">{{ forloop.counter }}</span></td><td><strong>{{ row.username }}</strong></td><td>{{ row.event_count }}</td><td><strong>{{ row.points }}</strong></td></tr>{% endfor %}
+        </tbody></table></div>
+    </div>
+    {% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>排行仅对管理员可见；积分用于观察社区参与，不等同于信用评级，也不替代交易安全审核。</div>
+</section>
+

@@ -1,0 +1,41 @@
+{% comment %}
+这个分区片段由 operations_dashboard.html 拆分而来，
+只负责此域的面板展示，不包含业务逻辑。
+{% endcomment %}<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Build observability</span><h2>看板自身构建耗时</h2></div>
+        <span class="ops-panel-hint">本次请求 · 不含渲染与下载</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-stopwatch me-1"></i>这里量的是运营看板自己：核心统计和当前注册的共享面板各花了多久。数字只属于当前请求，不落库、不做跨请求平均，也不自动优化任何查询。</p>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>共享构建器</span><strong>{{ dashboard_build_performance.metrics.builder_total }}</strong><small>核心统计 + 共享面板</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>计入耗时</span><strong>{{ dashboard_build_performance.metrics.total_elapsed_ms }} ms</strong><small>只含共享构建函数</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>P50</span><strong>{% if dashboard_build_performance.metrics.p50_ms is None %}—{% else %}{{ dashboard_build_performance.metrics.p50_ms }} ms{% endif %}</strong><small>最近秩 · 不插值</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>重复 key</span><strong>{{ dashboard_build_performance.metrics.duplicate_key_total }}</strong><small>共享注册表的自检</small></div></div>
+    </div>
+    <div class="ops-table-wrap mb-3">
+        <table class="table ops-table align-middle mb-0">
+
+                <caption class="visually-hidden">看板自身构建耗时</caption>            <thead>
+                <tr><th>共享构建器</th><th>耗时（ms）</th><th>占比（%）</th><th>累计占比（%）</th><th>读数</th></tr>
+            </thead>
+            <tbody>
+                {% for row in dashboard_build_performance.rows|slice:":12" %}
+                <tr>
+                    <td><strong>{{ row.label }}</strong></td>
+                    <td>{{ row.elapsed_ms }}</td>
+                    <td>{% if row.share_percent is None %}—{% else %}{{ row.share_percent }}{% endif %}</td>
+                    <td>{% if row.cumulative_percent is None %}—{% else %}{{ row.cumulative_percent }}{% endif %}</td>
+                    <td>{% if row.is_slowest %}<span class="ops-warning">最慢</span>{% endif %}{% if row.is_duplicate %}{% if row.is_slowest %} · {% endif %}<span class="ops-warning">重复 key</span>{% endif %}{% if not row.is_slowest and not row.is_duplicate %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-muted">当前请求没有可读的共享构建器耗时。</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="ops-footer-note text-start">
+        <i class="bi bi-info-circle me-1"></i>页面先显示最慢的 12 个构建器；CSV 导出同一份报告的全量行。{{ dashboard_build_performance.note }}
+    </div>
+</section>
+
