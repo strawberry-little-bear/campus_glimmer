@@ -921,6 +921,29 @@ def build_operational_alerts(
 
 
 
+def _build_order_status_breakdown(order_period):
+    """按状态分组的订单数，一次 GROUP BY 取回。
+
+    运营看板要展示每一种订单状态各有多少笔。原来是按 ``Order.STATUS_CHOICES``
+    逐个 ``filter(status=...).count()``，七个状态就是七次 COUNT；运营看板是全站数据量最大的页面，
+    每开一次就多扫七遍订单表。现在一次聚合拿回全部状态，再按 choices 的顺序在内存里
+    补齐缺失的状态——新增的状态还没订单时也要显示 0，不能就此不显示。
+    """
+    status_labels = dict(Order.STATUS_CHOICES)
+    status_totals = {
+        row['status']: row['total']
+        for row in order_period.values('status').annotate(total=Count('id'))
+    }
+    return [
+        {
+            'key': status,
+            'label': status_labels[status],
+            'count': status_totals.get(status, 0),
+        }
+        for status, _ in Order.STATUS_CHOICES
+    ]
+
+
 def _build_order_health(order_period, now):
     """Summarize order friction signals that are easy to miss in a status count."""
     total_orders = order_period.count()
@@ -1555,15 +1578,7 @@ def build_operations_dashboard(days=30):
 
     location_stats = _dashboard_location_stats(start, now, limit=8)
 
-    status_labels = dict(Order.STATUS_CHOICES)
-    order_statuses = [
-        {
-            'key': status,
-            'label': status_labels[status],
-            'count': order_period.filter(status=status).count(),
-        }
-        for status, _ in Order.STATUS_CHOICES
-    ]
+    order_statuses = _build_order_status_breakdown(order_period)
 
     active_user_count, activity_segments = _build_user_activity_segments(start, now)
     user_retention = _build_user_retention(start, previous_start, now)
