@@ -1,0 +1,56 @@
+{% comment %}
+学期节律分区，从 _campaigns.html 拆出来。
+
+拆的原因：这一块的内容全部来自 academic_calendar，和「校园专题」不是同一个主题。
+专题面板回答「这一期专题办得怎么样」，这里回答「这个学期现在走到哪个阶段、每个
+阶段的供给和交易是什么形状」。原先它挂在 ops-campaigns 下面，运营从「校园专题」
+chip 跳下来会看到一段学期历，而真正想找的「学期阶段」又没有直达入口。现在它和
+ops-semester-phase 的两个视角并列，chip 文案和内容终于对得上。
+只做数据展示，不含业务逻辑。
+{% endcomment %}
+<section class="content-card ops-panel mb-4 academic-calendar-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Academic rhythm</span><h2>学期节律与交易高峰</h2></div>
+        <span class="ops-panel-hint">把统计口径从「平均值」换成「当前处于学期的哪个阶段」</span>
+    </div>
+    {% if academic_calendar.has_terms %}
+    <div class="academic-calendar-summary">
+        <div><span>当前学期</span><strong>{{ academic_calendar.context.term_name|default:'未配置' }}</strong><small>{% if academic_calendar.context.phase_label %}{{ academic_calendar.context.phase_label }}{% else %}未划分阶段{% endif %}</small></div>
+        <div><span>阶段进度</span><strong>{{ academic_calendar.context.progress_percent }}%</strong><small>{% if academic_calendar.context.days_left is not None %}剩余 {{ academic_calendar.context.days_left }} 天{% else %}学期未配置{% endif %}</small></div>
+        <div><span>当前阶段商品</span><strong>{% for term in academic_calendar.terms %}{% if term.is_current %}{% for row in term.phases %}{% if row.is_current %}{{ row.new_items }}{% endif %}{% endfor %}{% endif %}{% endfor %}</strong><small>阶段内新增</small></div>
+        <div class="academic-calendar-warning"><span>当前阶段完成交易</span><strong>{% for term in academic_calendar.terms %}{% if term.is_current %}{% for row in term.phases %}{% if row.is_current %}{{ row.completed_orders }}{% endif %}{% endfor %}{% endif %}{% endfor %}</strong><small>阶段内累计</small></div>
+    </div>
+    {% if academic_calendar.context.phase_note %}
+    <div class="academic-calendar-note mt-3"><i class="bi bi-calendar3 me-1"></i>{{ academic_calendar.context.term_name }}{{ academic_calendar.context.phase_label }}：{{ academic_calendar.context.phase_note }}。</div>
+    {% endif %}
+    <div class="academic-source-summary mt-3{% if academic_calendar.source.has_snapshot_miss %} academic-source-miss{% endif %}">
+        <i class="bi bi-database me-1"></i>本页 {{ academic_calendar.source.row_total }} 个阶段行里，<strong>{{ academic_calendar.source.snapshot_row_total }}</strong> 行读的是每周刷新的阶段快照，<strong>{{ academic_calendar.source.live_row_total }}</strong> 行是实时算的（其中 {{ academic_calendar.source.running_live_row_total }} 行是阶段未结束，{{ academic_calendar.source.fallback_live_row_total }} 行是已结束后的兜底）{% if academic_calendar.source.snapshot_share is not None %}，快照占 {{ academic_calendar.source.snapshot_share }}%{% endif %}{% if academic_calendar.source.closed_snapshot_share is not None %}，已结束阶段里快照占 {{ academic_calendar.source.closed_snapshot_share }}%{% endif %}。已结束阶段的计数早就封闭（四张业务表的 <code>created_at</code> 全是 <code>auto_now_add</code>，没有写入路径回头改它们），读快照与实时算在数值上一致；<strong>进行中的阶段一律实时算</strong>——快照最多是上周的，而当前阶段恰好是这块看板上唯一有人盯着的一行。
+        {% if academic_calendar.source.has_snapshot_miss %}
+        <div class="academic-source-miss-alert"><i class="bi bi-exclamation-triangle me-1"></i><strong>{{ academic_calendar.source.fallback_live_row_total }} 个已结束阶段没有读到匹配快照</strong>，当前用实时计算兜底：缺行 {{ academic_calendar.source.missing_snapshot_total }} 个，区间不匹配 {{ academic_calendar.source.range_mismatch_total }} 个。请核对 <code>sync_academic_calendar</code> 的运行记录和阶段边界；这里只报告，不自动补刷。</div>
+        {% endif %}
+    </div>
+    {% for term in academic_calendar.terms %}
+    <div class="academic-term-block mt-3">
+        <div class="academic-term-heading">
+            <strong>{{ term.term_name }}</strong>
+            <span>{{ term.kind_label }} · {{ term.starts_on|date:'Y-m-d' }} 至 {{ term.ends_on|date:'Y-m-d' }}</span>
+            {% if term.is_current %}<span class="academic-term-badge">当前学期</span>{% endif %}
+        </div>
+        <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 academic-calendar-table"><caption class="visually-hidden">学期节律与交易高峰</caption><thead><tr><th>阶段</th><th>区间</th><th>新增商品</th><th>新增求购</th><th>完成交易</th><th>搜索质量</th><th>供给趋势</th></tr></thead><tbody>
+            {% for row in term.phases %}
+            <tr class="{% if row.is_current %}academic-calendar-current{% endif %}">
+                <td><strong>{{ row.phase_label }}</strong>{% if row.is_current %}<small class="d-block text-muted">进行中 · 进度 {{ academic_calendar.context.progress_percent }}%</small>{% else %}<small class="d-block text-muted">{{ row.day_count }} 天</small>{% endif %}<span class="academic-source academic-source-{{ row.source }}">{{ row.source_label }}</span>{% if row.source_reason == 'missing_snapshot' or row.source_reason == 'range_mismatch' %}<small class="d-block text-danger">{{ row.source_note }}</small>{% endif %}</td>
+                <td>{{ row.start_date|date:'m-d' }} 至 {{ row.end_date|date:'m-d' }}</td>
+                <td><strong>{{ row.new_items }}</strong>{% if row.previous_phase_label %}<small class="d-block text-muted">较{{ row.previous_phase_label }} {% if row.delta_new_items > 0 %}+{% endif %}{{ row.delta_new_items }}</small>{% else %}<small class="d-block text-muted">学期首阶段</small>{% endif %}</td>
+                <td>{{ row.new_demands }}<small class="d-block text-muted">{% if row.previous_phase_label %}{% if row.delta_new_demands > 0 %}+{% endif %}{{ row.delta_new_demands }}{% else %}—{% endif %}</small></td>
+                <td>{{ row.completed_orders }}<small class="d-block text-muted">共 {{ row.new_orders }} 次预约</small></td>
+                <td>{{ row.new_searches }} 次<small class="d-block text-muted">无结果 {{ row.zero_result_searches }} · {{ row.zero_result_rate }}%</small></td>
+                <td><span class="academic-trend academic-trend-{{ row.supply_trend }}">{{ row.supply_trend_label }}</span></td>
+            </tr>
+            {% endfor %}
+        </tbody></table></div>
+    </div>
+    {% endfor %}
+    {% else %}<div class="empty-inline mt-3">还没有配置学期日历。在后台「学期日历」中录入起止日期后，这里会按阶段展示交易高峰。</div>{% endif %}
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>阶段按「开学两周 / 常规教学 / 考试周 / 毕业季」等偏移天数划分，偏移量可在后台调整；阶段之间的对比说明的是供给节律，不代表单个用户的因果结论。</div>
+</section>

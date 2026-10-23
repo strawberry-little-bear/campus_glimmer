@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """运营看板分区跳转条的契约测试。
 
-看板由 37 个 partial 顺序拼成，一屏滚不到头。``operations_nav.py`` 描述「有哪
+看板由 38 个 partial 顺序拼成，一屏滚不到头。``operations_nav.py`` 描述「有哪
 些分区、怎么分组」，模板负责把每个 include 包进带 id 的 ``<section>``。两边分开
 书写，只改一边就会静默失效——chip 还在，点下去却不动；或者分区还在，却完全
 没有入口。这个文件就是拦住这种漂移的。
@@ -58,7 +58,7 @@ class OperationsDashboardUmbrellaTests(SimpleTestCase):
     def test_no_umbrella_partial_is_left_with_a_single_child(self):
         names = self._partial_names()
         # 目录都找错了还跑什么断言；顺手把「一个 partial 都没有」也拦在外面。
-        self.assertGreaterEqual(len(names), 37, '没读到分区片段目录，先确认路径')
+        self.assertGreaterEqual(len(names), 38, '没读到分区片段目录，先确认路径')
 
         for name in names:
             source = io.open(os.path.join(self.PARTIALS_DIR, name), encoding='utf-8').read()
@@ -119,7 +119,7 @@ class OperationsDashboardSectionNavTests(TestCase):
         groups = OPERATIONS_DASHBOARD_SECTIONS
 
         self.assertEqual(len(groups), 6)
-        self.assertEqual(len(nav_anchors()), 37)
+        self.assertEqual(len(nav_anchors()), 38)
         for label, items in groups:
             self.assertTrue(label, '分组名不能为空')
             self.assertTrue(items, '空分组会渲染出一个孤立的分组标题')
@@ -131,7 +131,7 @@ class OperationsDashboardSectionNavTests(TestCase):
             GROUP_LABEL_RE.findall(self.html),
             [label for label, _items in OPERATIONS_DASHBOARD_SECTIONS],
         )
-        self.assertEqual(len(CHIP_RE.findall(self.html)), 37)
+        self.assertEqual(len(CHIP_RE.findall(self.html)), 38)
 
     def test_the_page_has_no_duplicated_ids(self):
         # 加分区导航时踩过的坑：32 个 include 被包进 <section> 之后，原来那批
@@ -152,10 +152,60 @@ class OperationsDashboardSectionNavTests(TestCase):
         includes = re.findall(r"{% include 'listings/operations/([^']+)' %}", source)
 
         self.assertEqual(len(includes), len(set(includes)), '同一个 partial 被包含了多次')
-        self.assertEqual(len(includes), 37)
+        self.assertEqual(len(includes), 38)
 
     def test_anonymous_visitors_never_see_the_nav(self):
         self.client.logout()
         response = self.client.get(reverse('operations_dashboard'), {'days': 30})
 
         self.assertEqual(response.status_code, 302)
+
+
+class OperationsDashboardThemePurityTests(TestCase):
+    """「校园专题」分区里不能再混进学期节律的面板。
+
+    umbrella 规则只管「一个文件里多个主题」，还有一种更隐蔽的情况：分区本身是
+    单主题，却有一块面板讲的是别的事。``_campaigns.html`` 三块面板里两块讲专题，
+    第三块「学期节律与交易高峰」整块来自 ``academic_calendar``——没有 umbrella
+    可删，两个守卫测试也看不出来，只能靠读。运营点「校园专题」chip 跳下来看到
+    一段学期历，而真正想找的「学期阶段」又没有直达入口。
+
+    现在它独立成 ``ops-academic-calendar``，和 ``ops-semester-phase`` 的两个视角
+    并列。这条测试把决定钉住：面板的归属看它讲什么，不看它原来写在哪个文件里。
+    """
+
+    def setUp(self):
+        staff = User.objects.create_user(
+            username='ops-theme-staff', password='safe-password-123', is_staff=True,
+        )
+        self.client.force_login(staff)
+        self.html = self.client.get(
+            reverse('operations_dashboard'), {'days': 30},
+        ).content.decode('utf-8')
+
+    def _section_html(self, anchor):
+        match = re.search(
+            r'<section class="ops-section" id="%s"[^>]*>.*?(?=<section class="ops-section"|\Z)'
+            % anchor, self.html, re.DOTALL,
+        )
+        self.assertIsNotNone(match, '页面上找不到 %s 分区' % anchor)
+        return match.group(0)
+
+    def test_the_campaigns_section_holds_only_campaign_panels(self):
+        campaigns = self._section_html('ops-campaigns')
+
+        self.assertIn('campaign-analytics-panel', campaigns)
+        self.assertIn('campaign-phase-review-panel', campaigns)
+        self.assertNotIn(
+            'academic-calendar-panel', campaigns,
+            '「校园专题」分区里出现了学期节律面板，chip 文案和内容又对不上了',
+        )
+
+    def test_the_academic_calendar_section_holds_the_rhythm_panel(self):
+        calendar = self._section_html('ops-academic-calendar')
+
+        self.assertIn('academic-calendar-panel', calendar)
+        self.assertNotIn(
+            'campaign-analytics-panel', calendar,
+            '学期节律分区里出现了专题面板，两个分区互相串了',
+        )
