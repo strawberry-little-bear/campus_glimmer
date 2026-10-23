@@ -25,7 +25,7 @@ flowchart TD
     Base --> Listings["listings/*.html"]
     Listings --> Card["_item_card.html<br/>可复用商品卡片"]
     Base --> Blocks["title / extra_css / content / extra_js"]
-    Blocks --> Scripts["static/js/main.js<br/>搜索建议、未读轮询"]
+    Blocks --> Scripts["static/js/main.js<br/>搜索建议、未读轮询、分区懒加载"]
     Bases["static/css/style.css"] --> Base
 ```
 
@@ -60,6 +60,7 @@ flowchart TD
 - 审核队列和用户申诉是同一类内容的两端，改一边时同时看 `moderation_queue.html` 和 `moderation_appeals.html`，保持 `.mod-event-*` 结构一致；
 - 运营看板已按分区拆到 `listings/operations/` 下，新增分区用 `{% include %}` 挂到主模板，不要再往单文件里继续堆。一个分区要改三处才算是真的加上了：`listings/operations/_xxx.html` 写内容、`operations_dashboard.html` 里用 `<section class="ops-section" id="ops-xxx">` 包住 include、`listings/operations_nav.py` 的 `OPERATIONS_DASHBOARD_SECTIONS` 登记锚点和 chip 文案。三处少任何一处， `listings/test_operations_nav.py` 与 `listings/test_operations_deferred_sections.py` 会当场报错；
 - 运营看板里单个分区**混了多个主题**才按主题再拆一层：原文件退化成只写 `{% include %}` 的 umbrella，内容搬到 `_<主题>_<子主题>.html`。这样分区数、跳转条和两个守卫测试的常量都不用动；拆完拿 `git show HEAD:<文件>` 和子 partial 拼回来逐字节比对，确认一个字节都没动。判据是主题聚合度、不是体积——单一主题的分区（贡献体系、借用催收、地点档案）哪怕 28KB 也保持整块，`_demand.html` 这种一块讲供需、三块讲跟进闭环的才拆。当前最大 `_contribution.html`（约 28KB，三块同属贡献体系故未拆）；
+- **新增分区还要在 `listings/operations_fragments.py` 的 `OPERATIONS_SECTION_FRAGMENTS` 里登记一行**：`(锚点, partial 文件名, 是否需要核心统计, 需要的共享面板键)`，顺序就是页面顺序。这张表是「渲染这个分区需要哪些上下文」的唯一权威，懒加载的取回端点靠它裁剪——漏登记一个键，症状是取回回来的那一块静默变成空态，而页面其它部分看起来完全正常。`listings/test_operations_fragments.py` 会拿一次真实渲染反查模板到底读了哪些顶层键，表里少写、多写都会红。`needs_core=True` 要慎重：核心统计整座看板只跑一次，是最贵的一部分；
 - **umbrella 是过渡形态，不是归宿。** 按主题拆完如果 umbrella 只剩一个孩子，说明当初的「多主题」判断判错了——把那一个孩子提回主模板直接 include，删掉 umbrella，`operations_nav.py` 补一个锚点，两个守卫测试的分区常量跟着 +1。判据始终是主题聚合度：`_ops_queues.html` 当初拆成免费领取申请 + 商品图片覆盖，但后者根本不是队列，错挂在「运营队列」下；现在它独立成 `ops-item-images`，umbrella 随之退场。分区数是给运营看的跳转条长度，不是技术指标，别为了少改一个常量把不相干的主题塞在同一块；
 - **分区里混进了别主题的面板，同样要摘出来。** umbrella 规则只管「一个文件里多个主题」，还有一种更隐蔽的情况：分区本身是单主题，却有一块面板讲的是别的事——`_campaigns.html` 三块面板里有两块讲专题，第三块「学期节律与交易高峰」整块来自 `academic_calendar`。这种没有 umbrella 可删，两个守卫测试也看不出来，只能靠读。处理方式：把面板连同它独占的 CSS 类一起搬进新 partial、新开一个锚点、`operations_nav.py` 登记，分区常量跟着 +1。判据仍然是 chip 文案和内容要对得上——运营点「校园专题」却看到一段学期历，就是这个分区装错了东西；
 - **新增表格必须带 `<caption class="visually-hidden">面板 · 子标题</caption>`，循环表格里标题本身是模板表达式的用 `aria-labelledby` 引用可见标题。** caption 只能是 `<table>` 的第一个子元素，前面混文本会被浏览器连同 caption 一起丢掉；`campus_glimmer/test_page_semantics.py` 的 `TableAccessibleNameTests` 常驻看守；

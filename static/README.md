@@ -126,21 +126,40 @@ flowchart LR
     Compare -->|是| Toast["显示新私信 / 新通知提示"]
     Compare -->|否| Update["只更新角标"]
     Poll -->|请求失败| Initial["保留服务端初始状态"]
+    Section["运营看板延后分区"] --> HasSrc{"带 data-ops-src？"}
+    HasSrc -->|否| Reveal["只加 is-revealed<br/>不发请求、不碰 DOM"]
+    HasSrc -->|是| Fetch["fetch 取回分区"]
+    Fetch --> Inject["整段写入 section<br/>再加 is-revealed"]
+    Fetch -->|失败| Retry["摘掉 is-revealed<br/>点亮 data-ops-failed<br/>点击重试"]
 ```
 
-`js/main.js` 当前承担两类增强：
+`js/main.js` 当前承担三类增强：
 
 1. 搜索建议的防抖、请求取消、键盘导航和失焦关闭；
-2. 每 30 秒刷新私信与通知未读数，并在数量增加时显示提示。
+2. 每 30 秒刷新私信与通知未读数，并在数量增加时显示提示；
+3. 运营看板 34 个延后分区的按需取回。
 
 脚本失败时，页面仍应保留服务端渲染的初始状态。新增逻辑优先限定在对应 `data-*` 容器中，不要在全局选择器上执行破坏性操作。
+
+### 运营看板分区懒加载
+
+看板 38 个分区一屏滚不到头，整页 HTML 有 600KB 以上。`data-ops-deferred` 最早只是「CSS 藏起来、滚到再揭开」，服务端一个字节都没少渲染；现在把服务端也切开了。同一个 class 下有两种分区，必须分开看：
+
+- **不带 `data-ops-src`**：不带 `ops_lazy` cookie 的全量渲染。内容本来就在响应体里，滚近时只加 `is-revealed`，不发请求、不碰 DOM。
+- **带 `data-ops-src`**：`<head>` 里那段内联脚本只在 `window.fetch` 存在时种下 `ops_lazy` cookie，服务端据此只渲染首屏 4 个分区，其余 34 个只留一个空 `<section>` 加一条取回地址，滚到附近（`rootMargin` 提前 320px）再由前端去拿。
+
+关掉脚本的浏览器连 cookie 都种不下，于是永远走全量渲染——「没有 JS 就没有数据」这个分支不存在。取回端点是 `listings/operations_dashboard_fragment`，门槛与整页一致（登录 + staff），渲染结果和不做懒加载时逐字节相同，由 `listings/test_operations_fragments.py` 钉住。「渲染这个分区需要哪些上下文」的那张表在 `listings/operations_fragments.py`，同样由反查测试盯着，不会悄悄漏键。
+
+同一分区只取一次：`section._opsLoad` 记住那个 Promise，观察器和跳转条两条路同时指向它时不会发出两个请求。跳转 chip 和带 `#hash` 直接打开会先把目标及其之前的分区一并取回再定位——分区没到手之前高度还是骨架的，按那个高度算出来的落点一定偏。
+
+取回失败不能留在「假装加载完」的状态：摘掉 `is-revealed` 让骨架回来，点亮 `data-ops-failed`，点一下分区重试。静默的空分区没人会深究，用户只会以为这个看板本来就没数据。
 
 ## 📁 目录内容
 
 | 路径 | 作用 |
 | --- | --- |
 | [`css/style.css`](css/style.css) | 全站主题、布局、账户中心、消息工作台、运营页和响应式样式 |
-| [`js/main.js`](js/main.js) | 搜索建议、未读角标轮询和轻量页面增强 |
+| [`js/main.js`](js/main.js) | 搜索建议、未读角标轮询、运营看板分区懒加载等轻量页面增强 |
 
 | [`img/no-image.png`](img/no-image.png) | 商品缺图占位 |
 | [`vendor/`](vendor/) | Bootstrap 5.3.3 与 Bootstrap Icons 1.11.3 的本地副本，版本与升级方式见 [`vendor/README.md`](vendor/README.md) |
@@ -198,6 +217,7 @@ flowchart LR
 - 修改未读数轮询时，确认隐藏标签页不会持续请求，且 99+ 显示仍然正确；
 - 交互元素要保留清晰的 `:focus-visible` 状态，并检查键盘操作顺序。
 - 新增单选 / 多选组用 `RadioCardGroup` / `CheckboxCardGroup`，不要往 widget attrs 写 class（类名会漏到每个选项上，见上文）；
+- 动运营看板的懒加载时，记住「没有 `data-ops-src` 的分区只换类、绝不碰 DOM」这条线。改 `loadSection` 之前先跑 `python manage.py test listings.test_operations_deferred_sections listings.test_operations_fragments`——前者盯着这条边界，后者盯着取回结果与全量渲染逐字节一致；
 
 ## ✅ 验证
 
