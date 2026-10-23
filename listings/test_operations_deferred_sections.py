@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
 """运营看板分区延后揭开的契约测试。
 
-看板 38 个分区里只有前 4 个是首屏，其余 34 个先占位、滚到附近再揭开。
-这是纯前端优化：响应体和不做优化时逐字节一样，服务端一个字节都没少渲染。
-风险也全在前端——一旦选择器少了 ``html.js`` 前缀，关掉 JavaScript 的浏览器
+看板 38 个分区里只有前 4 个是首屏，其余 34 个延后。延后分两层，两层都要有人盯：
+
+* CSS 那层是兜底。``html.js`` 下面把分区内容藏起来，滚近时由 main.js 加
+  ``is-revealed`` 揭开。关掉脚本的浏览器没有 ``html.js``，整页照常全量可见。
+* JS 那层是懒加载。带着 ``ops_lazy`` cookie 来的请求，服务端只渲染首屏四个
+  分区，其余 34 个只留一个空 ``<section>`` 加一条 ``data-ops-src`` 取回地址。
+  cookie 由 base.html 里一段内联脚本种下，所以关掉脚本的浏览器永远种不下它，
+  也就永远拿到全量页面——「没有 JS 就没有数据」这个分支不存在。
+
+风险也全在前端：一旦选择器少了 ``html.js`` 前缀，关掉 JavaScript 的浏览器
 （以及 Django 测试客户端）就会看到一片白板，而页面里恰好还压着真实内容，
 翻源码很难发现。
 
-这个文件把三条约定钉死：
+这个文件把四条约定钉死：
 * 只有前 4 个分区不加 ``data-ops-deferred``，一个不多一个不少；
-* 分区内容照常渲染，没有为了省字节把东西裁掉；
+* 不带 cookie 时 34 个延后分区照常全量渲染，没有为了省字节把东西裁掉；
+* 带 cookie 时那 34 个分区是空的，且每个都带一条指向取回端点的地址；
 * 所有隐藏规则都挂在 ``html.js`` 下面，无脚本环境必须全量可见。
 """
 import io
@@ -166,18 +174,28 @@ class OperationsDashboardDeferredSectionTests(TestCase):
             )
 
     def test_the_reveal_logic_only_toggles_a_class(self):
-        # 前端只负责换类。真把节点删了，无脚本和搜索引擎就什么都看不到，
-        # 而日常浏览器里照样正常——这种问题只能在这里提前拦住。
+        # 内容本来就在响应体里的分区（不带 cookie 的全量渲染），前端只负责换类。
+        # 取回分区当然要写 innerHTML——那是它唯一的职责，禁不掉。真正要拦住的
+        # 是「无脚本用户也能看到的页面被 JS 拆掉」：那种改动会让没有 JS 的浏览器
+        # 和搜索引擎什么都看不到，而日常浏览器里照样正常。
         js = read_text(MAIN_JS_PATH)
         start = js.index("const opsPanels = document.querySelector('.operations-panels');")
         end = js.index("const chat = document.querySelector('.chat-messages');")
         block = js[start:end]
 
         self.assertIn('data-ops-deferred', block, 'main.js 里找不到延后分区的逻辑')
+        self.assertIn('data-ops-src', block, 'main.js 里没有按需取回的入口')
         self.assertIn('is-revealed', block)
         self.assertIn('IntersectionObserver', block, '应该用 IntersectionObserver 判断滚动位置')
-        for forbidden in ('.remove(', '.innerHTML', '.outerHTML', '.removeChild(', '.replaceChildren('):
-            self.assertNotIn(forbidden, block, '揭开分区只能换类，不能动 DOM：' + forbidden)
+        # 拆节点才能造成的破坏，逐个禁掉。innerHTML 不在此列：懒加载分区的内容
+        # 只能整段取回、整段塞入，禁掉它这个功能就不存在了。它只允许出现在唯一
+        # 一处——取回成功那一跳，多写一处就说明有人顺手改了别的地方的 DOM。
+        for forbidden in ('.removeChild(', '.replaceChildren(', '.replaceWith(', '.outerHTML', '.insertAdjacentHTML('):
+            self.assertNotIn(forbidden, block, '分区内容不能拆节点：' + forbidden)
+        self.assertEqual(
+            block.count('.innerHTML ='), 1,
+            'innerHTML 只该出现在取回成功那一处，现在有 %d 处' % block.count('.innerHTML ='),
+        )
 
     def test_pages_outside_the_dashboard_never_carry_the_attribute(self):
         # 这个属性只属于看板。别的页面上出现它，说明有人把规则复制到了不该用的地方。
@@ -186,11 +204,99 @@ class OperationsDashboardDeferredSectionTests(TestCase):
 
             self.assertNotIn('data-ops-deferred', body, '%s 上出现了只属于看板的属性' % path)
 
+class OperationsDashboardLazyLoadingTests(TestCase):
+    """带着 ops_lazy cookie 打开看板时，服务端只渲染首屏四个分区。
+
+    这是把延后从「CSS 藏起来」升级成「服务端也不渲染」的那一半。风险全在
+    「内容消失」上：cookie 种下了、地址没给，或者地址给了但内容没裁干净，
+    用户在浏览器里看到的就是 34 个永远转圈的骨架，而 Django 测试客户端
+    （不带 cookie）一切正常——所以这里必须用带 cookie 的客户端跑一遍。
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='ops-lazy-staff', password='safe-password-123', is_staff=True,
+        )
+        self.client.force_login(self.user)
+        # cookie 由 base.html 的内联脚本种，这里直接模拟「第二次打开」。
+        self.client.cookies['ops_lazy'] = '1'
+        self.html = self.client.get(
+            reverse('operations_dashboard'), {'days': 30},
+        ).content.decode('utf-8')
+        self.sections = parse_sections(self.html)
+
+    def test_only_the_first_four_sections_carry_content(self):
+        blocks = section_blocks(self.html)
+        rendered = [
+            anchor for anchor, _deferred in self.sections
+            if CONTENT_MARK_RE.search(blocks[anchor])
+        ]
+
+        self.assertEqual(
+            rendered, [anchor for anchor, _ in self.sections[:4]],
+            '懒加载时应该只有首屏四个分区有内容，现在多渲染了：%s' % (
+                sorted(set(rendered) - set(OPERATIONS_DASHBOARD_FIRST_SCREEN)),
+            ),
+        )
+
+    def test_every_deferred_section_points_at_its_fragment_endpoint(self):
+        # 空壳必须带取回地址，否则就是一块永远转圈的骨架。属性与内容同进同退：
+        # 有 data-ops-src 就必须有 {% if ops_lazy %} 包着的那段，反之亦然。
+        blocks = section_blocks(self.html)
+        missing = []
+        wrong = []
+        for anchor, _deferred in self.sections[4:]:
+            block = blocks[anchor]
+            match = re.search(r'data-ops-src="([^"]+)"', block)
+            if not match:
+                missing.append(anchor)
+                continue
+            expected = reverse(
+                'operations_dashboard_fragment', kwargs={'anchor': anchor},
+            ) + '?days=30'
+            if match.group(1) != expected:
+                wrong.append((anchor, match.group(1), expected))
+
+        self.assertEqual(missing, [], '这些分区是空的却没有取回地址')
+        self.assertEqual(wrong, [], '这些分区的取回地址不对')
+
+    def test_lazy_page_is_much_smaller_than_the_full_one(self):
+        # 懒加载的意义就在字节数上。这条不是性能基准，只拦住「裁了但没裁多少」
+        # 和「干脆没裁」两种回归。
+        # cookie 挂在客户端上，不在响应对象上：先摘掉再发一次请求，才是「第一次
+        # 打开看板」那条全量渲染的路径。
+        del self.client.cookies['ops_lazy']
+        full_html = self.client.get(
+            reverse('operations_dashboard'), {'days': 30},
+        ).content.decode('utf-8')
+
+        self.assertLess(
+            len(self.html) * 100, len(full_html) * 45,
+            '懒加载页面只比全量页面小了 %.1f%%，分区内容大概没真裁掉' % (
+                100 - len(self.html) * 100.0 / len(full_html),
+            ),
+        )
+
+    def test_the_fragment_endpoint_ignores_the_cookie(self):
+        # 取回端点永远渲染自己那一个分区，和 cookie 无关：cookie 只决定首屏，
+        # 不决定单个分区怎么渲染。少了这条，带着 cookie 打开 fragment 会拿到
+        # 一个空壳，页面就再也填不上了。
+        response = self.client.get(
+            reverse('operations_dashboard_fragment', kwargs={'anchor': 'ops-demand'}),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            CONTENT_MARK_RE.search(response.content.decode('utf-8')),
+            '取回 ops-demand 拿到了一段没有面板、空态或表格的内容',
+        )
+
+
 # 揭开帮手的行为探针。上面的测试都在读源码文本，读不出「揭开方向写反了」这种
 # bug：把 target 之后的分区一起揭开，和只揭开 target 之前的分区，源码看起来同样
 # 合理，只有真跑一遍才知道谁对。所以这里把 main.js 里的帮手原样抽出来，用一堆假
 # 分区在 node 里执行，断言它到底揭开了哪些。
-NODE_HARNESS = r"""
+NODE_HARNESS = r'''
 'use strict';
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
@@ -227,49 +333,81 @@ if (opsStart < 0 || opsEnd < opsStart) {
     process.exit(2);
 }
 const region = src.slice(opsStart, opsEnd);
-const helpers = constFunctions(region).filter(function (item) {
-    return item.body.indexOf('is-revealed') >= 0 && item.body.indexOf('deferred') >= 0;
-});
-if (helpers.length !== 1) {
-    process.stdout.write(JSON.stringify({
-        error: '揭开分区的帮手不唯一，先人工确认再改这个测试',
-        names: helpers.map(function (item) { return item.name; }),
-    }));
-    process.exit(3);
-}
-const helper = helpers[0];
 
-// 帮手必须被两处共用：观察器负责「滚到附近就揭开」，跳转条负责「一步跳到很远」。
+// 懒加载之后是三个函数：isDeferredSection 判断分区在不在延后名单里，
+// loadSection 负责单个分区（取回或只换类），revealThrough 负责「连它上面的
+// 一起」。探针把三个都原样抽出来，拼进同一个 Function 再跑——只抽一个的话，
+// 另外两个会变成未定义引用，测到的是 ReferenceError 而不是真实行为。
+const wanted = ['isDeferredSection', 'loadSection', 'revealThrough'];
+const picked = {};
+for (const name of wanted) {
+    const found = constFunctions(region).filter(function (item) { return item.name === name; });
+    if (found.length !== 1) {
+        process.stdout.write(JSON.stringify({
+            error: '运营看板 JS 里 ' + name + ' 不是恰好一个，先人工确认再改这个测试',
+            names: found.map(function (item) { return item.name; }),
+        }));
+        process.exit(3);
+    }
+    picked[name] = found[0].body;
+}
+
+// 揭开必须被两处共用：观察器负责「滚到附近就揭开」，跳转条负责「一步跳到很远」。
 // 任何一处自己加类，另一处就会漏，而且日常滚动看不出异常。
 const ioStart = region.indexOf('new IntersectionObserver');
 const ioEnd = ioStart < 0 ? -1 : balancedFrom(region, ioStart);
 const jump = constFunctions(region).filter(function (item) { return item.name === 'jumpTo'; })[0];
 const callers = {
     observer: ioStart >= 0 && ioEnd > ioStart &&
-        region.slice(ioStart, ioEnd).indexOf(helper.name + '(') >= 0,
-    jumpTo: !!jump && jump.body.indexOf(helper.name + '(') >= 0,
+        region.slice(ioStart, ioEnd).indexOf('revealThrough(') >= 0,
+    jumpTo: !!jump && jump.body.indexOf('revealThrough(') >= 0,
 };
 
-// 假分区只记录自己被加了哪个类，不掺任何真实逻辑。
+// 假分区只记录自己身上发生的每一次调用，不掺任何真实逻辑。
+// getAttribute 一律返回 null：这正是不带 cookie 的全量渲染，内容已在响应体里，
+// 于是 loadSection 应该只换类、别的什么都不做。调用流水就是这条契约的证据。
 const revealed = [];
+const logs = [];
 const deferred = [];
 for (let i = 0; i < 6; i += 1) {
     const index = i;
+    const calls = [];
+    logs.push(calls);
     deferred.push({
         id: 's' + index,
-        classList: { add: function (cls) { if (cls === 'is-revealed') revealed.push(index); } },
+        getAttribute: function (name) { calls.push('getAttribute:' + name); return null; },
+        hasAttribute: function (name) { calls.push('hasAttribute:' + name); return false; },
+        removeAttribute: function (name) { calls.push('removeAttribute:' + name); },
+        setAttribute: function (name, value) { calls.push('setAttribute:' + name); },
+        addEventListener: function (type) { calls.push('addEventListener:' + type); },
+        classList: {
+            add: function (cls) {
+                calls.push('classList.add:' + cls);
+                if (cls === 'is-revealed') revealed.push(index);
+            },
+            remove: function (cls) { calls.push('classList.remove:' + cls); },
+            contains: function (cls) { calls.push('classList.contains:' + cls); return false; },
+        },
     });
 }
-const revealThrough = new Function('deferred', helper.body + '\nreturn ' + helper.name + ';')(deferred);
+const revealThrough = new Function(
+    'deferred',
+    picked.isDeferredSection + '\n' + picked.loadSection + '\n' + picked.revealThrough + '\nreturn revealThrough;',
+)(deferred);
 
 const scenarios = [];
 [['first', 0], ['middle', 2], ['last', 5], ['none', null]].forEach(function (pair) {
     revealed.length = 0;
+    logs.forEach(function (calls) { calls.length = 0; });
     revealThrough(pair[1] === null ? null : deferred[pair[1]]);
-    scenarios.push({ label: pair[0], revealed: revealed.slice() });
+    scenarios.push({
+        label: pair[0],
+        revealed: revealed.slice(),
+        calls: logs.map(function (calls) { return calls.slice(); }),
+    });
 });
-process.stdout.write(JSON.stringify({ name: helper.name, callers: callers, scenarios: scenarios }));
-"""
+process.stdout.write(JSON.stringify({ callers: callers, scenarios: scenarios }));
+'''
 
 
 class OperationsDeferredRevealDirectionTests(TestCase):
@@ -295,7 +433,7 @@ class OperationsDeferredRevealDirectionTests(TestCase):
             self.skipTest('环境里没有 node，跑不了 main.js 的行为探针')
         completed = subprocess.run(
             ['node', '-e', NODE_HARNESS, MAIN_JS_PATH],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True, text=True, encoding='utf-8', timeout=120,
         )
         self.assertEqual(
             completed.returncode, 0,
@@ -318,6 +456,21 @@ class OperationsDeferredRevealDirectionTests(TestCase):
         )
         self.assertEqual(by_label['last'], everything, '最后一个分区应该把整页揭完')
         self.assertEqual(by_label['none'], everything, '没有观察器的旧浏览器要一次揭完')
+
+    def test_sections_without_a_source_are_left_completely_alone(self):
+        # 不带 cookie 的全量渲染里，34 个延后分区的内容就在响应体里，JS 唯一的
+        # 职责是换类。这条用探针盯行为而不是读源码：假分区上没有 data-ops-src，
+        # 于是除了 getAttribute 和 classList.add，不该再出现任何一次调用。
+        result = self._probe()
+        untouched = ['getAttribute:data-ops-src', 'classList.add:is-revealed']
+
+        for scenario in result['scenarios']:
+            for index, calls in enumerate(scenario['calls']):
+                expected = untouched if index in scenario['revealed'] else []
+                self.assertEqual(
+                    calls, expected,
+                    '场景 %s 的第 %d 个分区被多动了一次：%s' % (scenario['label'], index, calls),
+                )
 
     def test_both_the_observer_and_the_jump_bar_go_through_the_same_helper(self):
         # 只有一处调用帮手的话，另一处就会留下永远不揭开的骨架分区。
