@@ -40,7 +40,8 @@ from .bulk_listing_template import build_bulk_listing_import_template
 from .bulk_listing_xlsx import parse_bulk_listing_xlsx
 from .bulk_listing_import_summary import build_bulk_listing_import_error_summary
 from .dashboard_build_performance import build_dashboard_build_performance
-from .operations_nav import OPERATIONS_DASHBOARD_SECTIONS
+from .operations_fragments import section_needs_core, section_panel_keys, section_partial
+from .operations_nav import OPERATIONS_DASHBOARD_FIRST_SCREEN, OPERATIONS_DASHBOARD_SECTIONS
 from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
 from .search_combo_shift import build_search_combo_shift
 from .search_threshold_feedback import build_search_threshold_feedback
@@ -3421,25 +3422,41 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
 
 def _build_shared_operations_dashboard(
     *, days, base_builder=build_operations_dashboard,
-    panel_builders=None,
+    panel_builders=None, anchors=None,
 ):
     """构建页面与 CSV 共用的运营看板，并附上本次请求的耗时报告。
 
     测试可以注入很小的 ``base_builder`` 与 ``panel_builders``，不必为了验证
     注册表和计时契约而把几十个真实面板各跑一遍。
+
+    ``anchors`` 是懒加载的口子：给了分区列表，就只构建这些分区渲染所需的部分，
+    其余面板一个都不跑。``None``（默认）表示整座看板——CSV 导出和不带 cookie 的
+    页面走这条，行为和加这个参数之前逐字节一致。分区与上下文的对应关系在
+    ``operations_fragments.py``，那份表由 ``test_operations_fragments`` 反查盯
+    着，不会悄悄漏键。
+
+    耗时报告只记「本次请求真的跑了什么」：懒加载那次请求里没跑的面板，报告里
+    也没有它的行，不会拿一个假的零耗时冒充「很快」。
     """
     runs = []
-    started = perf_counter()
-    dashboard = base_builder(days=days)
-    runs.append({
-        'key': 'operations_core',
-        'label': '运营看板核心统计',
-        'elapsed_ms': (perf_counter() - started) * 1000,
-    })
+    dashboard = {}
+    if anchors is None or section_needs_core(anchors):
+        started = perf_counter()
+        dashboard = base_builder(days=days)
+        runs.append({
+            'key': 'operations_core',
+            'label': '运营看板核心统计',
+            'elapsed_ms': (perf_counter() - started) * 1000,
+        })
 
     builders = panel_builders
     if builders is None:
         builders = OPERATIONS_DASHBOARD_SHARED_BUILDERS
+    if anchors is not None:
+        wanted = section_panel_keys(anchors)
+        # None 表示某个分区点名要整座看板（看板构建耗时分区就是），此时不筛。
+        if wanted is not None:
+            builders = [row for row in builders if row[0] in wanted]
     for key, label, builder in builders:
         started = perf_counter()
         dashboard[key] = builder(days=days)
@@ -3467,12 +3484,54 @@ def _demand_outcome_status_filter(request):
     return None if status_filter == 'all' or status_filter not in allowed else status_filter
 
 
+# 懒加载开关。cookie 由 <head> 里一行内联脚本种下，见 base.html。
+OPERATIONS_LAZY_COOKIE = 'ops_lazy'
+
+
+def _wants_lazy_operations(request):
+    """这次请求要不要只渲染首屏。
+
+    只看 cookie，不猜能力：关掉脚本的浏览器永远种不下这个 cookie，于是永远走
+    全量渲染——无脚本用户和 Django 测试客户端看到的一直是完整看板。反过来，
+    带着 cookie 来的请求一定跑过那段内联脚本，取回分区才有人执行。
+    """
+    return request.COOKIES.get(OPERATIONS_LAZY_COOKIE) == '1'
+
+
+def _operations_dashboard_extras(request, days, dashboard):
+    """需求雷达那一段：待办归属、结果统计和筛选状态。
+
+    页面和分区取回共用。取回单个分区也要跑这里，是因为 ``_demand.html`` 要用
+    ``demand_radar_outcomes`` 和 ``demand_outcome_status_filter``——漏了它们，
+    那一块会静默变成空态，而页面其它部分看起来完全正常。
+    """
+    active_tasks = DemandOpportunityTask.objects.filter(
+        status__in=['todo', 'in_progress'],
+    ).select_related('assigned_to')
+    tasks_by_key = {task.radar_key: task for task in active_tasks}
+    for row in dashboard.get('demand_radar', {}).get('rows', ()):
+        row['active_task'] = tasks_by_key.get(row['radar_key'])
+    dashboard['demand_radar_tasks'] = active_tasks[:20]
+    status_filter = _demand_outcome_status_filter(request)
+    dashboard['demand_radar_outcomes'] = build_demand_radar_outcomes(
+        days=days, statuses=status_filter,
+    )
+    dashboard['demand_outcome_status_filter'] = status_filter
+    return dashboard
+
+
 @login_required
 def operations_dashboard(request):
     if not request.user.is_staff:
         raise PermissionDenied
     days = _operations_period_days(request)
-    dashboard = _build_shared_operations_dashboard(days=days)
+    lazy = _wants_lazy_operations(request)
+    # 懒加载时只构建首屏四个分区用得到的部分；其余分区等前端来取。
+    dashboard = _build_shared_operations_dashboard(
+        days=days,
+        anchors=OPERATIONS_DASHBOARD_FIRST_SCREEN if lazy else None,
+    )
+    dashboard = _operations_dashboard_extras(request, days, dashboard)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
         status__in={'open', 'reviewing'},
     ).count()
@@ -3480,21 +3539,32 @@ def operations_dashboard(request):
     dashboard['pending_high_moderation_count'] = ModerationEvent.objects.filter(
         status='pending', risk_level='high',
     ).count()
-    active_tasks = DemandOpportunityTask.objects.filter(
-        status__in=['todo', 'in_progress'],
-    ).select_related('assigned_to')
-    tasks_by_key = {task.radar_key: task for task in active_tasks}
-    for row in dashboard['demand_radar']['rows']:
-        row['active_task'] = tasks_by_key.get(row['radar_key'])
-    dashboard['demand_radar_tasks'] = active_tasks[:20]
-    dashboard['demand_radar_outcomes'] = build_demand_radar_outcomes(
-        days=days, statuses=_demand_outcome_status_filter(request),
-    )
-    dashboard['demand_outcome_status_filter'] = _demand_outcome_status_filter(request)
-    # 分区跳转条的分组数据；模板据此渲某导航，锚点在模板里与各分区的
-    # <section id> 一一对应，由 test_operations_dashboard_section_nav 囊底。
+    # 分区跳转条的分组数据；模板据此渲染导航，锚点在模板里与各分区的
+    # <section id> 一一对应，由 test_operations_nav 囊底。
     dashboard['operations_sections'] = OPERATIONS_DASHBOARD_SECTIONS
+    dashboard['ops_lazy'] = lazy
     return render(request, 'listings/operations_dashboard.html', dashboard)
+
+
+@login_required
+def operations_dashboard_fragment(request, anchor):
+    """按需取回一个运营看板分区，返回该分区的 HTML 片段。
+
+    只渲染 ``anchor`` 那一个分区，上下文按 ``operations_fragments`` 的表裁剪，
+    所以取回「失物匹配结果」不会顺带把 64 个共享面板全跑一遍。
+
+    权限和整页一致：登录 + staff。匿名访问 302 到登录页，非 staff 403——这里
+    不做「悄悄返回空片段」，那种失败在浏览器里只是一个空分区，没人会深究。
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+    partial = section_partial(anchor)
+    if partial is None:
+        raise Http404('运营看板没有这个分区：%s' % anchor)
+    days = _operations_period_days(request)
+    dashboard = _build_shared_operations_dashboard(days=days, anchors=(anchor,))
+    dashboard = _operations_dashboard_extras(request, days, dashboard)
+    return render(request, 'listings/operations/' + partial, dashboard)
 
 
 # 跟进备注的长度上限。表单上是同一个数字，两处各写一份就会各自漂移，

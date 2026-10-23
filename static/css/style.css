@@ -7078,9 +7078,10 @@ a { color: inherit; text-decoration: none; }
 /* --------------------------------------------------------------------------
    分区延后渲染 + 跳转条当前位置高亮
 
-   看板 38 个分区一屏滚不到头，整页 600KB 以上的 HTML 里九成在首屏之外。这里
-   只把「总览」四个分区留在服务端渲染，其余 34 个先占位，滚到附近再由 main.js
-   揭开。
+   带着 ``ops_lazy`` cookie 来的请求，服务端只渲染「总览」四个分区，其余 34 个
+   只留一个空 ``<section>`` 加一条 ``data-ops-src`` 取回地址，滚到附近再由
+   main.js 去 fetch；不带 cookie 的请求（无脚本浏览器、Django 测试客户端）
+   照旧全量渲染，响应体和加这个开关之前逐字节一致。
 
    两条硬约束，改的时候别破：
 
@@ -7088,7 +7089,11 @@ a { color: inherit; text-decoration: none; }
      添加，关掉 JavaScript 的浏览器拿不到它，于是整页照常全量渲染——运营用
      noscript 也看得全 38 个分区，测试客户端同样不受影响。
    * 占位只画 ::before / ::after 两个伪元素，不给 DOM 添节点、不写业务文案。
-     响应体和不做懒加载时逐字节一致，那些依赖页面内容的测试一个都不用改。
+     不带 cookie 的响应体和不做懒加载时逐字节一致，那些依赖页面内容的
+     测试一个都不用改。
+   * 取回失败的分区由 JS 挂上 ``data-ops-failed``，此时骨架撤掉、换成一句
+     可以点了重试的人话。失败态照样挂在 ``html.js`` 下面——没有 JS 就
+     没有取回，也就没有失败可言。
    -------------------------------------------------------------------------- */
 html.js .ops-section[data-ops-deferred]:not(.is-revealed) {
     position: relative;
@@ -7132,6 +7137,30 @@ html.js .ops-section[data-ops-deferred]:not(.is-revealed)::after {
 
 @media (prefers-reduced-motion: reduce) {
     html.js .ops-section[data-ops-deferred]:not(.is-revealed)::before { animation: none; }
+}
+
+/* 取回失败的态：骨架撤掉（不再假装在加载），换一句能点的话。点击重试由
+   main.js 挂——不做重试的话，运营只会看到一块永远空白的分区，还以为是
+   看板坏了。 */
+html.js .ops-section[data-ops-deferred][data-ops-failed] { min-height: 0; }
+
+html.js .ops-section[data-ops-deferred][data-ops-failed]::before {
+    content: "";
+    display: block;
+    min-height: 132px;
+    border: 1px dashed rgba(24, 122, 91, .35);
+    border-radius: 20px;
+    background: #fbfdfb;
+}
+
+html.js .ops-section[data-ops-deferred][data-ops-failed]::after {
+    content: "这个分区没取回来，点一下重试";
+    cursor: pointer;
+}
+
+html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
 }
 
 /* 跳转条 scrollspy：main.js 按滚动位置给当前分区的 chip 加 .is-active，同时

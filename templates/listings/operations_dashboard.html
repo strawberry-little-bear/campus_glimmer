@@ -48,40 +48,40 @@
 <section class="ops-section" id="ops-metrics">{% include 'listings/operations/_overview_metrics.html' %}</section>
 <section class="ops-section" id="ops-overview">{% include 'listings/operations/_overview.html' %}</section>
 <section class="ops-section" id="ops-charts">{% include 'listings/operations/_overview_charts.html' %}</section>
-<section class="ops-section" id="ops-demand-match" data-ops-deferred>{% include 'listings/operations/_demand_match.html' %}</section>
-<section class="ops-section" id="ops-demand" data-ops-deferred>{% include 'listings/operations/_demand.html' %}</section>
-<section class="ops-section" id="ops-notification-reach" data-ops-deferred>{% include 'listings/operations/_notification_reach.html' %}</section>
-<section class="ops-section" id="ops-notifications" data-ops-deferred>{% include 'listings/operations/_notifications.html' %}</section>
-<section class="ops-section" id="ops-governance" data-ops-deferred>{% include 'listings/operations/_governance.html' %}</section>
-<section class="ops-section" id="ops-campaigns" data-ops-deferred>{% include 'listings/operations/_campaigns.html' %}</section>
-<section class="ops-section" id="ops-response" data-ops-deferred>{% include 'listings/operations/_response.html' %}</section>
-<section class="ops-section" id="ops-recommendations" data-ops-deferred>{% include 'listings/operations/_recommendations.html' %}</section>
-<section class="ops-section" id="ops-semester-phase" data-ops-deferred>{% include 'listings/operations/_semester_phase.html' %}</section>
-<section class="ops-section" id="ops-academic-calendar" data-ops-deferred>{% include 'listings/operations/_academic_calendar.html' %}</section>
-<section class="ops-section" id="ops-mutual-aid" data-ops-deferred>{% include 'listings/operations/_mutual_aid.html' %}</section>
-<section class="ops-section" id="ops-order-lifecycle" data-ops-deferred>{% include 'listings/operations/_order_lifecycle.html' %}</section>
-<section class="ops-section" id="ops-reminders" data-ops-deferred>{% include 'listings/operations/_lifecycle_reminders.html' %}</section>
-<section class="ops-section" id="ops-scheduler" data-ops-deferred>{% include 'listings/operations/_scheduler.html' %}</section>
-<section class="ops-section" id="ops-borrow" data-ops-deferred>{% include 'listings/operations/_borrow.html' %}</section>
-<section class="ops-section" id="ops-demand-radar" data-ops-deferred>{% include 'listings/operations/_demand_radar.html' %}</section>
-<section class="ops-section" id="ops-meeting" data-ops-deferred>{% include 'listings/operations/_meeting.html' %}</section>
-<section class="ops-section" id="ops-handover-codes" data-ops-deferred>{% include 'listings/operations/_handover_codes.html' %}</section>
-<section class="ops-section" id="ops-delivery-confirm" data-ops-deferred>{% include 'listings/operations/_delivery_confirm.html' %}</section>
-<section class="ops-section" id="ops-saved-search" data-ops-deferred>{% include 'listings/operations/_saved_search.html' %}</section>
-<section class="ops-section" id="ops-lost-found" data-ops-deferred>{% include 'listings/operations/_lost_found.html' %}</section>
-<section class="ops-section" id="ops-campus-verify" data-ops-deferred>{% include 'listings/operations/_campus_verify.html' %}</section>
-<section class="ops-section" id="ops-queues" data-ops-deferred>{% include 'listings/operations/_free_claims.html' %}</section>
-<section class="ops-section" id="ops-item-images" data-ops-deferred>{% include 'listings/operations/_item_images.html' %}</section>
-<section class="ops-section" id="ops-moderation" data-ops-deferred>{% include 'listings/operations/_moderation_ops.html' %}</section>
-<section class="ops-section" id="ops-trade-quality" data-ops-deferred>{% include 'listings/operations/_trade_quality.html' %}</section>
-<section class="ops-section" id="ops-deal-outcomes" data-ops-deferred>{% include 'listings/operations/_deal_outcomes.html' %}</section>
-<section class="ops-section" id="ops-item-refresh" data-ops-deferred>{% include 'listings/operations/_item_refresh.html' %}</section>
-<section class="ops-section" id="ops-search-exposure" data-ops-deferred>{% include 'listings/operations/_search_exposure.html' %}</section>
-<section class="ops-section" id="ops-price-signal" data-ops-deferred>{% include 'listings/operations/_price_signal.html' %}</section>
-<section class="ops-section" id="ops-contribution" data-ops-deferred>{% include 'listings/operations/_contribution.html' %}</section>
-<section class="ops-section" id="ops-audit-shapes" data-ops-deferred>{% include 'listings/operations/_audit_shapes.html' %}</section>
-<section class="ops-section" id="ops-build-performance" data-ops-deferred>{% include 'listings/operations/_build_performance.html' %}</section>
-<section class="ops-section" id="ops-locations" data-ops-deferred>{% include 'listings/operations/_locations.html' %}</section>
+<section class="ops-section" id="ops-demand-match" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-demand-match' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_demand_match.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-demand" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-demand' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_demand.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-notification-reach" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-notification-reach' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_notification_reach.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-notifications" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-notifications' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_notifications.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-governance" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-governance' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_governance.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-campaigns" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-campaigns' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_campaigns.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-response" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-response' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_response.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-recommendations" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-recommendations' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_recommendations.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-semester-phase" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-semester-phase' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_semester_phase.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-academic-calendar" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-academic-calendar' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_academic_calendar.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-mutual-aid" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-mutual-aid' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_mutual_aid.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-order-lifecycle" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-order-lifecycle' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_order_lifecycle.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-reminders" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-reminders' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_lifecycle_reminders.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-scheduler" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-scheduler' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_scheduler.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-borrow" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-borrow' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_borrow.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-demand-radar" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-demand-radar' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_demand_radar.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-meeting" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-meeting' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_meeting.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-handover-codes" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-handover-codes' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_handover_codes.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-delivery-confirm" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-delivery-confirm' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_delivery_confirm.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-saved-search" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-saved-search' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_saved_search.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-lost-found" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-lost-found' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_lost_found.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-campus-verify" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-campus-verify' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_campus_verify.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-queues" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-queues' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_free_claims.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-item-images" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-item-images' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_item_images.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-moderation" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-moderation' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_moderation_ops.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-trade-quality" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-trade-quality' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_trade_quality.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-deal-outcomes" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-deal-outcomes' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_deal_outcomes.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-item-refresh" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-item-refresh' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_item_refresh.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-search-exposure" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-search-exposure' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_search_exposure.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-price-signal" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-price-signal' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_price_signal.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-contribution" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-contribution' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_contribution.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-audit-shapes" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-audit-shapes' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_audit_shapes.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-build-performance" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-build-performance' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_build_performance.html' %}{% endif %}</section>
+<section class="ops-section" id="ops-locations" data-ops-deferred{% if ops_lazy %} data-ops-src="{% url 'operations_dashboard_fragment' 'ops-locations' %}?days={{ period_days }}"{% endif %}>{% if not ops_lazy %}{% include 'listings/operations/_locations.html' %}{% endif %}</section>
 
 </div>
 

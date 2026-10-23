@@ -4,9 +4,24 @@
 <head>
     <!-- 渐进增强开关：有 JS 的浏览器拿到 js 类，运营看板才会把延后分区改成
          滚动到位再揭开；关掉脚本的浏览器没有这个类，整页照常全量渲染。
+         下面那段再种一个 ops_lazy cookie：同一种浏览器第二次打开看板时，
+         服务端只渲染首屏四个分区，其余滚到附近由 JS 取回。cookie 由脚本种，
+         所以关掉脚本的浏览器永远走全量渲染，看不到空分区。
          分区数不写死，以 listings/operations_nav.py 的注册表和
          listings/test_operations_deferred_sections.py 的断言为准；改分区数要同步更新那两处。 -->
     <script>document.documentElement.classList.add('js');</script>
+    <script>
+// 运营看板按需取回：第一次访问照旧全量渲染，同时种下 ops_lazy；
+// 之后同一种浏览器再打开就只渲染首屏，其余分区滚到附近再取回。
+// 关掉脚本的浏览器永远种不下这个 cookie，于是永远走全量渲染——
+// 无脚本用户和 Django 测试客户端看到的一直是完整看板。
+try {
+    if (window.fetch && !/(?:^|;\s*)ops_lazy=1(?:;|$)/.test(document.cookie)) {
+        document.cookie = 'ops_lazy=1; path=/; max-age=31536000; samesite=lax';
+    }
+} catch (error) { /* 隐私模式下读写 cookie 可能抛错，忽略即可 */ }
+// 没有 fetch 的老浏览器也不种：种了也取回不了，只会得到 34 个空分区。
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="拾光校园：让闲置流转，让好物遇见对的人。">
