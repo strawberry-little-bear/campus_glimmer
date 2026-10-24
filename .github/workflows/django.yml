@@ -81,3 +81,75 @@ jobs:
         run: python manage.py collectstatic --noinput
       - name: PostgreSQL 与 Redis 集成测试
         run: python manage.py test
+
+  # 对象存储只在自带 MinIO 的这个 job 里走真实上传，不进 quality 与
+  # production-deps：那两个 job 的默认存储保持 filesystem，既不让 2700 多项
+  # 业务测试依赖一台 S3，也不把“对象存储不可用”和“业务失败”混成同一片红。
+  object-storage:
+    runs-on: ubuntu-latest
+    services:
+      minio:
+        image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin123
+        ports:
+          - 9000:9000
+    env:
+      DJANGO_STORAGE_BACKEND: s3
+      DJANGO_S3_BUCKET: campus-glimmer-ci
+      DJANGO_S3_REGION: us-east-1
+      DJANGO_S3_ENDPOINT_URL: http://127.0.0.1:9000
+      DJANGO_S3_PUBLIC_ENDPOINT_URL: http://127.0.0.1:9000
+      DJANGO_S3_ACCESS_KEY_ID: minioadmin
+      DJANGO_S3_SECRET_ACCESS_KEY: minioadmin123
+      DJANGO_S3_ADDRESSING_STYLE: path
+      DJANGO_S3_SIGNATURE_VERSION: s3v4
+      DJANGO_S3_QUERYSTRING_AUTH: "1"
+      DJANGO_S3_QUERYSTRING_EXPIRE: "3600"
+      DJANGO_S3_LOCATION: media
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+      - name: 配置 Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: 安装依赖
+        run: python -m pip install -r requirements.txt
+      # 不给 MinIO 配 healthcheck：镜像里可用的探针命令随版本变动，写错会让
+      # service 直接判成 unhealthy。改为在这里显式等待并就绪后建桶。
+      - name: 准备 MinIO 桶
+        run: |
+          python - <<'PY'
+          import time
+
+          import boto3
+
+          BUCKET = 'campus-glimmer-ci'
+          client = boto3.client(
+              's3',
+              endpoint_url='http://127.0.0.1:9000',
+              aws_access_key_id='minioadmin',
+              aws_secret_access_key='minioadmin123',
+          )
+
+          for attempt in range(30):
+              try:
+                  names = {b['Name'] for b in client.list_buckets()['Buckets']}
+                  break
+              except Exception as exc:
+                  print('waiting for minio:', type(exc).__name__)
+                  time.sleep(2)
+          else:
+              raise SystemExit('MinIO 未在 60 秒内就绪')
+
+          if BUCKET not in names:
+              client.create_bucket(Bucket=BUCKET)
+          # 桶必须保持私有，否则“未授权访问被拒”的断言会失去意义。
+          client.delete_bucket_policy(Bucket=BUCKET)
+          print('bucket ready:', BUCKET)
+          PY
+      - name: 对象存储集成测试
+        run: python manage.py test campus_glimmer.test_object_storage_integration -v 2
