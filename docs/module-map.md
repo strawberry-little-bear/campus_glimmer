@@ -665,6 +665,7 @@ campus_glimmer/
 - **`campaign-goals-funnel-design.md`**：专题目标的周期口径、实时进度、节奏偏差、严格漏斗与跨专题汇总边界
 - **`production-deployment.md`**：PostgreSQL、Redis、MinIO / S3、WhiteNoise、单机 Compose 拓扑与上线边界
 - **`backup-restore.md`**：数据库 custom dump、对象镜像、SHA-256 校验、保留期、恢复顺序与演练边界
+- **ackup-script-boundary-design.md**：备份脚本 30 项离线测试钉住的失败分支、mock 选在脚本与外部世界的接缝上、以及为什么 dump 的恢复仍要人工演练
 
 - **`delivery-handshake-design.md`**：当面交付两次确认的顺序四档、双方同秒单列、挂起不按周期切
 

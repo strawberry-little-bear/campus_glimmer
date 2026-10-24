@@ -48,6 +48,17 @@ sequenceDiagram
 - 数据库与对象不是同一事务快照，极端情况下可能出现引用存在但对象缺失，或对象存在但数据库引用已删除；
 - PostgreSQL 客户端主版本必须与服务端一致，升级 PostgreSQL 主版本时要同步更新镜像的 `POSTGRES_MAJOR` 并重新做恢复演练。
 
+## 边界由测试钉住
+
+备份脚本最容易出问题的分支不需要真实 PostgreSQL 或 MinIO 就能验证，因此它们由 campus_glimmer/test_backup_script.py 固定下来：
+
+- URL 解析：非 PostgreSQL scheme、缺主机或缺库名必须显式失败；pg_dump 参数里不出现密码，密码只通过 PGPASSWORD 传给子进程；
+- 版本护栏：客户端主版本读不出来、服务端主版本读不出来、两者不一致，都以 RuntimeError 结束，不生成目标库无法恢复的 dump；
+- 校验：大小不符、SHA-256 不符、清单版本不受支持、清单不可读、清单路径越权都要报错，并一次汇总所有问题；
+- 清理：只删除过期的 ackup- 目录；manifest 不可解析的目录跳过，不会中断其余清理；
+- 失败路径：dump 或对象下载失败时 staging 目录必须被清空，不留下"看起来可用"的半成品。
+
+这些用例是纯本地的：_dump_database、_download_objects 和 S3 客户端都被替换，因此不引入对数据库或对象存储的依赖。真正的恢复演练（把 dump 灌回 PostgreSQL）仍要按下面的步骤人工执行。
 ## 手动创建与校验
 
 在 Compose 环境中执行：

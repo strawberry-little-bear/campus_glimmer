@@ -335,7 +335,8 @@ def prune_backups(root, retention_days, *, now=None):
             created = datetime.fromisoformat(manifest['created_at'])
             if created.tzinfo is None:
                 created = created.replace(tzinfo=timezone.utc)
-        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+            # One unreadable manifest must not stop the other expiries.
             continue
         if created < cutoff:
             shutil.rmtree(resolved)
