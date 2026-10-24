@@ -83,18 +83,15 @@ jobs:
         run: python manage.py test
 
   # 对象存储只在自带 MinIO 的这个 job 里走真实上传，不进 quality 与
-  # production-deps：那两个 job 的默认存储保持 filesystem，既不让 2700 多项
-  # 业务测试依赖一台 S3，也不把“对象存储不可用”和“业务失败”混成同一片红。
+  # production-deps：那两个 job 的默认存储保持 filesystem，既不让两千多项业务测试
+  # 依赖一台 S3，也不把“对象存储不可用”和“业务失败”混成同一片红。
+  #
+  # MinIO 不用 service 容器跑：Docker Hub 上的 minio/minio 已被官方撤下，迁移后的
+  # 镜像源在 CI 里拉取不稳定（401 或仓库不存在），失败信息指向基础设施而不是被
+  # 测代码。改为直接下载 GitHub Releases 的官方二进制启动，版本仍钉在同一个
+  # release tag 上，也与本地演练用的方式一致。
   object-storage:
     runs-on: ubuntu-latest
-    services:
-      minio:
-        image: minio/minio:RELEASE.2025-09-07T16-13-09Z
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin123
-        ports:
-          - 9000:9000
     env:
       DJANGO_STORAGE_BACKEND: s3
       DJANGO_S3_BUCKET: campus-glimmer-ci
@@ -118,10 +115,26 @@ jobs:
           cache: pip
       - name: 安装依赖
         run: python -m pip install -r requirements.txt
-      # 不给 MinIO 配 healthcheck：镜像里可用的探针命令随版本变动，写错会让
-      # service 直接判成 unhealthy。改为在这里显式等待并就绪后建桶。
-      - name: 准备 MinIO 桶
+      # 下载官方二进制后台启动，重试等待就绪后建桶，并收回桶策略：桶必须私有，
+      # 否则“未授权访问被拒”的断言会失去意义。
+      - name: 启动 MinIO 并准备桶
         run: |
+          case "$(uname -m)" in
+            x86_64 | amd64) ARCH=amd64 ;;
+            aarch64 | arm64) ARCH=arm64 ;;
+            *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+          esac
+
+          mkdir -p "$RUNNER_TEMP/minio-data"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/minio" \
+            "https://github.com/minio/minio/releases/download/RELEASE.2025-09-07T16-13-09Z/minio.linux-${ARCH}.RELEASE.2025-09-07T16-13-09Z"
+          chmod +x "$RUNNER_TEMP/minio"
+
+          MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin123 \
+            "$RUNNER_TEMP/minio" server "$RUNNER_TEMP/minio-data" \
+            --address 127.0.0.1:9000 --console-address 127.0.0.1:9001 \
+            > "$RUNNER_TEMP/minio.log" 2>&1 &
+
           python - <<'PY'
           import time
 
@@ -135,7 +148,7 @@ jobs:
               aws_secret_access_key='minioadmin123',
           )
 
-          for attempt in range(30):
+          for _ in range(30):
               try:
                   names = {b['Name'] for b in client.list_buckets()['Buckets']}
                   break
@@ -153,3 +166,6 @@ jobs:
           PY
       - name: 对象存储集成测试
         run: python manage.py test campus_glimmer.test_object_storage_integration -v 2
+      - name: 失败时输出 MinIO 日志
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/minio.log"

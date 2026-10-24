@@ -340,8 +340,8 @@ git diff --check
 
 GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查、Django check、
 迁移一致性检查和完整测试集。三个任务分工不同：`quality` 在 SQLite 下跑完整业务测试，
-`production-deps` 用 PostgreSQL 16 与 Redis 7 再跑一遍，`object-storage` 自带 MinIO
-对对象存储做真实上传、签名 URL 与备份恢复验证。目标不是只看“能启动”，而是让每次迭代
+`production-deps` 用 PostgreSQL 16 与 Redis 7 再跑一遍，`object-storage` 在 runner 上启动
+MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证。目标不是只看“能启动”，而是让每次迭代
 都能独立验证和回溯。
 
 ### 定时任务

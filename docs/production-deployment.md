@@ -140,7 +140,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 
 ## 8. CI 覆盖
 
-GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务自带 MinIO service，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。
+GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。
 
 ## 相关文档
 

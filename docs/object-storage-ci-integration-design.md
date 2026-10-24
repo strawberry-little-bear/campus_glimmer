@@ -33,16 +33,28 @@
 - **并进 `production-deps`**：这个任务的意义是"业务代码在 PostgreSQL 上对不对"。混入 S3 之后，一次 MinIO 启动抖动会让整片业务测试变红，排查时要先分辨红的是业务还是存储；反过来，几条 S3 用例失败也会被两千多项业务测试的量淹没。
 - **并进 `quality`**：`quality` 跑的是本地零服务的同一套命令。加一个 S3 依赖，本地 `manage.py test` 就不再是"拿下来就能跑"，与项目一直坚持的零服务本地体验冲突。
 
-单独一个 job 的代价是 CI 多一分钟左右，换来的是三类故障各有一片属于自己的红。
+单独一个 job 的代价是 CI 多几分钟（主要是下载 MinIO 二进制），换来的是三类故障各有一片属于自己的红。
 
-## 为什么不做 healthcheck
+## 为什么不用 service 容器跑 MinIO
 
-GitHub Actions 的 service 容器支持 `healthcheck`，这里没有采用，改为在步骤里显式重试等待：
+最初的写法是把 MinIO 作为 GitHub Actions 的 service 容器，`image: minio/minio:RELEASE.2025-09-07T16-13-09Z`。第一轮 CI 立刻失败在 `Initialize containers`：
 
-- MinIO 镜像内可用的探针命令随发行版变动（`mc ready`、`curl /minio/health/live` 的可用性与路径都改过）。写错一条不会报错，只会让 service 被判成 unhealthy，整个 job 以"服务未就绪"失败——失败信息指向 CI 配置，而不是指向对象存储本身。
-- 建桶与清桶策略放在同一步骤，"桶不存在"和"桶策略被放开"这两种真实故障都会在测试开始前暴露，错误信息直接来自 boto3。
+```text
+Error response from daemon: pull access denied for minio/minio,
+repository does not exist or may require 'docker login'
+```
 
-重试 60 秒后仍不可达则直接失败，不降级为跳过：CI 里端点不可达说明这个 job 自己的 service 没起来，属于必须修的问题。
+Docker Hub 上的 `minio/minio` 已被官方撤下（该仓库现在返回 404），迁移后的镜像源也拉不到——`quay.io/minio/minio` 对同版本 tag 返回 401 或 not found，`ghcr.io/minio/minio` 直接拒绝访问。这不是网络抖动，换一个 runner 再跑也不会好。
+
+于是改成在步骤里直接下载 GitHub Releases 的官方二进制启动：
+
+- 版本仍然钉在同一个 release tag 上，和本地演练用的是同一份产物，不是"另一个发行渠道"；
+- 不依赖任何容器镜像 registry 的可用性与配额，少一类与业务无关的红；
+- 启动方式与本地演练逐字一致，出问题时本地能原样复现。
+
+MinIO 仍然只是后台进程：`RUNNER_TEMP` 下建数据目录，日志写到文件避免 step 挂起，job 结束时随 runner 一起回收，不需要额外的清理步骤。另有一个 `if: failure()` 的步骤输出 MinIO 日志，否则启动类失败只能看到一句"未在 60 秒内就绪"。
+
+建桶与清桶策略和二进制启动放在同一步骤："桶不存在"和"桶策略被放开"这两种故障都会在测试开始前暴露，错误信息直接来自 boto3。重试 60 秒后仍不可达则直接失败，不降级为跳过——CI 里端点不可达说明这个 job 自己的 MinIO 没起来，属于必须修的问题。
 
 ## 跳过与失败的边界
 
