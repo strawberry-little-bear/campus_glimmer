@@ -89,7 +89,7 @@ jobs:
   # MinIO 不用 service 容器跑：Docker Hub 上的 minio/minio 已被官方撤下，迁移后的
   # 镜像源在 CI 里拉取不稳定（401 或仓库不存在），失败信息指向基础设施而不是被
   # 测代码。改为直接下载 GitHub Releases 的官方二进制启动，版本仍钉在同一个
-  # release tag 上，也与本地演练用的方式一致。
+  # release tag 上，也与本地演练用的方式一致。启动细节见 scripts/start-minio.sh。
   object-storage:
     runs-on: ubuntu-latest
     env:
@@ -118,54 +118,255 @@ jobs:
       # 下载官方二进制后台启动，重试等待就绪后建桶，并收回桶策略：桶必须私有，
       # 否则“未授权访问被拒”的断言会失去意义。
       - name: 启动 MinIO 并准备桶
-        run: |
-          case "$(uname -m)" in
-            x86_64 | amd64) ARCH=amd64 ;;
-            aarch64 | arm64) ARCH=arm64 ;;
-            *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
-          esac
-
-          mkdir -p "$RUNNER_TEMP/minio-data"
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/minio" \
-            "https://github.com/minio/minio/releases/download/RELEASE.2025-09-07T16-13-09Z/minio.linux-${ARCH}.RELEASE.2025-09-07T16-13-09Z"
-          chmod +x "$RUNNER_TEMP/minio"
-
-          MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin123 \
-            "$RUNNER_TEMP/minio" server "$RUNNER_TEMP/minio-data" \
-            --address 127.0.0.1:9000 --console-address 127.0.0.1:9001 \
-            > "$RUNNER_TEMP/minio.log" 2>&1 &
-
-          python - <<'PY'
-          import time
-
-          import boto3
-
-          BUCKET = 'campus-glimmer-ci'
-          client = boto3.client(
-              's3',
-              endpoint_url='http://127.0.0.1:9000',
-              aws_access_key_id='minioadmin',
-              aws_secret_access_key='minioadmin123',
-          )
-
-          for _ in range(30):
-              try:
-                  names = {b['Name'] for b in client.list_buckets()['Buckets']}
-                  break
-              except Exception as exc:
-                  print('waiting for minio:', type(exc).__name__)
-                  time.sleep(2)
-          else:
-              raise SystemExit('MinIO 未在 60 秒内就绪')
-
-          if BUCKET not in names:
-              client.create_bucket(Bucket=BUCKET)
-          # 桶必须保持私有，否则“未授权访问被拒”的断言会失去意义。
-          client.delete_bucket_policy(Bucket=BUCKET)
-          print('bucket ready:', BUCKET)
-          PY
+        run: bash .github/scripts/start-minio.sh "$DJANGO_S3_BUCKET"
       - name: 对象存储集成测试
         run: python manage.py test campus_glimmer.test_object_storage_integration -v 2
+      - name: 失败时输出 MinIO 日志
+        if: failure()
+        run: tail -n 200 "$RUNNER_TEMP/minio.log"
+
+  # 备份链路单独一个 job，不塞进 production-deps：那个任务的意义是“业务代码在
+  # PostgreSQL 上对不对”，已经压着两千多项业务测试；混入恢复演练之后，一次客户端
+  # 版本问题会让整片业务测试变红，排查时先要分辨红的是业务还是备份。
+  #
+  # 这里不写 fixture：migrate 之后库里已经有 django_migrations、django_content_type
+  # 和 auth_permission，足够回答“dump 里的每一张表、索引、约束能不能原样恢复”，
+  # 也不需要一份会随模型演进而过时的数据文件。
+  #
+  # 必须显式安装 PostgreSQL 16 客户端：runner 自带的是 18，而 backup.py 的版本护栏
+  # 要求客户端与服务端主版本一致，不一致时直接拒绝生成 dump。这条护栏本身就是
+  # “17 客户端 + 16 服务端”那次真实事故的产物，不能在 CI 里被绕过。
+  backup-restore:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: campus_glimmer
+          POSTGRES_USER: campus_glimmer
+          POSTGRES_PASSWORD: ci-database-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U campus_glimmer -d campus_glimmer"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: ci-only-backup-restore-secret-key
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,testserver
+      DJANGO_DATABASE_URL: postgresql://campus_glimmer:ci-database-password@127.0.0.1:5432/campus_glimmer
+      DJANGO_STORAGE_BACKEND: s3
+      DJANGO_S3_BUCKET: campus-glimmer-ci
+      DJANGO_S3_REGION: us-east-1
+      DJANGO_S3_ENDPOINT_URL: http://127.0.0.1:9000
+      DJANGO_S3_PUBLIC_ENDPOINT_URL: http://127.0.0.1:9000
+      DJANGO_S3_ACCESS_KEY_ID: minioadmin
+      DJANGO_S3_SECRET_ACCESS_KEY: minioadmin123
+      DJANGO_S3_ADDRESSING_STYLE: path
+      DJANGO_S3_SIGNATURE_VERSION: s3v4
+      DJANGO_S3_QUERYSTRING_AUTH: "1"
+      DJANGO_S3_QUERYSTRING_EXPIRE: "3600"
+      DJANGO_S3_LOCATION: media
+      BACKUP_DIR: ${{ runner.temp }}/backups
+      # psql / pg_restore 用，避免密码出现在命令行参数里。
+      PGPASSWORD: ci-database-password
+      # 断言里要匹配中文错误信息，固定 UTF-8 输出，不依赖 runner 的 locale。
+      PYTHONUTF8: "1"
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v5
+      - name: 配置 Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: 安装依赖
+        run: python -m pip install -r requirements.txt
+      # 先试发行版仓库（24.04 自带 16）；镜像升级后默认版本可能更高，此时退回
+      # PostgreSQL 官方源。版本由 apt 包名钉死，不依赖镜像默认值。
+      - name: 安装 PostgreSQL 16 客户端
+        run: |
+          sudo apt-get update
+          if ! sudo apt-get install -y --no-install-recommends postgresql-client-16; then
+            sudo apt-get install -y --no-install-recommends postgresql-common
+            sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+            sudo apt-get install -y --no-install-recommends postgresql-client-16
+          fi
+          pg_dump --version
+          pg_dump --version | grep -Eq '\(PostgreSQL\) 16\.' || {
+            echo "pg_dump 不是 16 客户端，备份链路会拒绝生成 dump" >&2
+            exit 1
+          }
+      - name: 启动 MinIO 并准备桶
+        run: bash .github/scripts/start-minio.sh campus-glimmer-ci campus-glimmer-restore
+      - name: 建立备份数据源
+        run: |
+          python manage.py migrate --noinput
+          # 让对象镜像非空：真实上传一个对象，后面按原 key 与原字节验证恢复。
+          python - <<'PY'
+          import os
+
+          import django
+
+          os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus_glimmer.settings')
+          django.setup()
+
+          from django.core.files.base import ContentFile
+          from django.core.files.storage import default_storage
+
+          name = default_storage.save(
+              'ci-restore-proof.txt',
+              ContentFile(b'campus glimmer ci restore proof\n'),
+          )
+          print('uploaded object key:', name)
+          PY
+      - name: 执行备份并校验
+        run: |
+          python docker/backup.py --once
+          BACKUP_DIR_PATH="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name 'backup-*' | sort | tail -n 1)"
+          if [ -z "$BACKUP_DIR_PATH" ]; then
+            echo "没有生成任何 backup-* 目录" >&2
+            exit 1
+          fi
+          python docker/backup.py --verify "$BACKUP_DIR_PATH"
+          echo "BACKUP_DIR_PATH=$BACKUP_DIR_PATH" >> "$GITHUB_ENV"
+      # 负向用例：把主版本不一致的客户端放到 PATH 最前面，备份必须失败。这一条
+      # 复现的是本地真实踩过的事故——17 客户端生成 dump、清单校验也全部通过，
+      # 直到灌回 16 的服务端才被拒绝。
+      - name: 版本护栏必须拦住不匹配的客户端
+        run: |
+          mkdir -p "$RUNNER_TEMP/fake-client"
+          cat > "$RUNNER_TEMP/fake-client/pg_dump" <<'SH'
+          #!/usr/bin/env bash
+          if [ "$1" = "--version" ]; then
+            echo "pg_dump (PostgreSQL) 17.0"
+            exit 0
+          fi
+          exit 1
+          SH
+          chmod +x "$RUNNER_TEMP/fake-client/pg_dump"
+          if PATH="$RUNNER_TEMP/fake-client:$PATH" python docker/backup.py --once \
+            > "$RUNNER_TEMP/version-guard.log" 2>&1; then
+            echo "版本护栏没有拦住不匹配的 pg_dump" >&2
+            cat "$RUNNER_TEMP/version-guard.log" >&2
+            exit 1
+          fi
+          grep -q "pg_dump 主版本 17 与 PostgreSQL 服务端主版本 16 不一致" \
+            "$RUNNER_TEMP/version-guard.log"
+          tail -n 3 "$RUNNER_TEMP/version-guard.log"
+      - name: 隔离数据库恢复并逐表比对
+        run: |
+          psql --no-psqlrc --host 127.0.0.1 --port 5432 \
+            --username campus_glimmer --dbname postgres \
+            --command "DROP DATABASE IF EXISTS campus_glimmer_restore" \
+            --command "CREATE DATABASE campus_glimmer_restore"
+          pg_restore --no-owner --no-acl --host 127.0.0.1 --port 5432 \
+            --username campus_glimmer --dbname campus_glimmer_restore \
+            "$BACKUP_DIR_PATH/database.dump"
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit, urlunsplit
+
+          import psycopg
+
+          RESTORE_DB = 'campus_glimmer_restore'
+          source_dsn = os.environ['DJANGO_DATABASE_URL']
+          parts = urlsplit(source_dsn)
+          target_dsn = urlunsplit(
+              (parts.scheme, parts.netloc, '/' + RESTORE_DB, '', ''))
+
+
+          def snapshot(dsn):
+              """public schema 每张表的行数，外加索引与约束总数。"""
+              with psycopg.connect(dsn) as connection:
+                  with connection.cursor() as cursor:
+                      cursor.execute(
+                          "select tablename from pg_tables "
+                          "where schemaname = 'public' order by tablename")
+                      tables = [row[0] for row in cursor.fetchall()]
+                      counts = {}
+                      for table in tables:
+                          cursor.execute('select count(*) from "%s"' % table)
+                          counts[table] = cursor.fetchone()[0]
+                      cursor.execute(
+                          "select count(*) from pg_indexes "
+                          "where schemaname = 'public'")
+                      indexes = cursor.fetchone()[0]
+                      cursor.execute(
+                          'select count(*) from pg_constraint c '
+                          'join pg_namespace n on n.oid = c.connamespace '
+                          "where n.nspname = 'public'")
+                      constraints = cursor.fetchone()[0]
+              return counts, indexes, constraints
+
+
+          source_counts, source_indexes, source_constraints = \
+              snapshot(source_dsn)
+          target_counts, target_indexes, target_constraints = \
+              snapshot(target_dsn)
+
+          migrations = source_counts.get('django_migrations', 0)
+          if len(source_counts) < 5 or migrations < 50:
+              raise SystemExit(
+                  '源库不像一次完整迁移：%d 张表，django_migrations %d 行'
+                  % (len(source_counts), migrations))
+
+          problems = []
+          for table in sorted(set(source_counts) | set(target_counts)):
+              if source_counts.get(table) != target_counts.get(table):
+                  problems.append('%s: 源库 %s 行，恢复库 %s 行' % (
+                      table, source_counts.get(table),
+                      target_counts.get(table)))
+          if source_indexes != target_indexes:
+              problems.append('索引数：源库 %d，恢复库 %d'
+                              % (source_indexes, target_indexes))
+          if source_constraints != target_constraints:
+              problems.append('约束数：源库 %d，恢复库 %d'
+                              % (source_constraints, target_constraints))
+
+          print('比对 %d 张表、%d 个索引、%d 条约束，django_migrations %d 行'
+                % (len(source_counts), source_indexes,
+                   source_constraints, migrations))
+          if problems:
+              raise SystemExit('隔离恢复结果与源库不一致：\n'
+                               + '\n'.join(problems))
+          print('隔离恢复与源库一致')
+          PY
+      - name: 对象恢复到第二个桶并逐字节比对
+        run: |
+          python docker/backup.py --restore-objects "$BACKUP_DIR_PATH" \
+            --restore-bucket campus-glimmer-restore
+          python - <<'PY'
+          import os
+
+          import boto3
+          from botocore.config import Config
+
+          client = boto3.session.Session().client(
+              's3',
+              endpoint_url=os.environ['DJANGO_S3_ENDPOINT_URL'],
+              region_name=os.environ.get('DJANGO_S3_REGION', 'us-east-1'),
+              aws_access_key_id=os.environ['DJANGO_S3_ACCESS_KEY_ID'],
+              aws_secret_access_key=os.environ['DJANGO_S3_SECRET_ACCESS_KEY'],
+              config=Config(
+                  signature_version=os.environ.get(
+                      'DJANGO_S3_SIGNATURE_VERSION', 's3v4'),
+                  s3={'addressing_style': os.environ.get(
+                      'DJANGO_S3_ADDRESSING_STYLE', 'path')},
+              ),
+          )
+
+          bucket = 'campus-glimmer-restore'
+          key = 'media/ci-restore-proof.txt'
+          body = client.get_object(Bucket=bucket, Key=key)['Body'].read()
+          expected = b'campus glimmer ci restore proof\n'
+          if body != expected:
+              raise SystemExit('%s/%s 字节与备份前不一致' % (bucket, key))
+          print('对象按原 key 恢复成功：%s/%s（%d 字节）'
+                % (bucket, key, len(body)))
+          PY
       - name: 失败时输出 MinIO 日志
         if: failure()
         run: tail -n 200 "$RUNNER_TEMP/minio.log"
