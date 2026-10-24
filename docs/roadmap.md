@@ -315,7 +315,7 @@
   - 当前基线面向单机小规模部署：Web 启动时执行迁移，不适合多实例并发发布；数据库与对象存储不是同一事务快照，默认备份也没有异地容灾能力。
 
 - **生产可靠性继续演进**：把单机基线推进到可运营的正式环境，仍需独立迁移任务、多实例无状态 Web、集中日志与指标告警、异机备份、恢复演练和 PostgreSQL PITR。
-  - 对象存储的真实上传链路已由 `object-storage` CI 任务覆盖：该任务在 runner 上直接启动 MinIO，真实执行上传、回源、匿名拒绝、签名 URL、过期与篡改签名的拒绝以及对象镜像恢复，口径见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。本地演练过的「PostgreSQL dump 后隔离恢复」仍未进 CI，正式上线前仍需按[备份与恢复](backup-restore.md)的口径人工做一次恢复演练。备份脚本自身的失败分支（校验汇总、清单路径越权、版本护栏、保留期清理、失败时清空 staging）已由 30 项离线测试钉住，口径见[备份脚本边界设计](backup-script-boundary-design.md)。
+  - 对象存储的真实上传链路已由 `object-storage` CI 任务覆盖：该任务在 runner 上直接启动 MinIO，真实执行上传、回源、匿名拒绝、签名 URL、过期与篡改签名的拒绝以及对象镜像恢复，口径见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务把「PostgreSQL dump 后隔离恢复」也接进了 CI：migrate 之后真实 dump、灌进一个全新的隔离库，再逐表比对行数、索引数与约束数，对象部分恢复到第二个桶后按原 key 逐字节比对；同一任务还用一份假的 17 客户端验证版本护栏真的会拦。备份脚本自身的失败分支（校验汇总、清单路径越权、版本护栏、保留期清理、失败时清空 staging）已由 30 项离线测试钉住，口径见[备份脚本边界设计](backup-script-boundary-design.md)。仍然人工的部分：跨机复制、加密托管与密钥轮换，以及真实数据量下的恢复耗时。
   - Redis 只承担缓存与 `cached_db` 会话缓存，不保存唯一业务事实；Redis 故障应影响性能与就绪状态，而不改变订单、通知等数据库事实。
   - HSTS 需在 HTTPS 稳定后显式开启；默认安全响应头基线已经落地。
 

@@ -91,7 +91,7 @@ MinIO 仍然只是后台进程：`RUNNER_TEMP` 下建数据目录，日志写到
 
 这一轮**没有**覆盖的部分，需要如实说明：
 
-- **数据库 dump 的恢复没有进 CI。** 本地已经演练过"dump 后恢复到隔离库再查询"，但 `object-storage` 任务只验证对象镜像恢复。上线前仍需按[备份与恢复](backup-restore.md)的口径人工做一次完整恢复演练。
+- **数据库 dump 的恢复不在这个任务里。** `object-storage` 只验证对象镜像恢复；dump 灌回 PostgreSQL 的那一段由 `backup-restore` 任务覆盖，见[备份与恢复](backup-restore.md)。
 - 只验证 MinIO，不验证真实 AWS S3 或其它兼容实现在细节上的差异（region 处理、分片上传阈值等）。
 - 不覆盖 multipart 大文件上传，也不覆盖 `DJANGO_S3_CUSTOM_DOMAIN` 与 CDN 域名路径。
 - 不覆盖 `collectstatic` 到对象存储的部署路径。

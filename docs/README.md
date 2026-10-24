@@ -83,7 +83,7 @@
 | 图片处理 | Pillow | EXIF 方向、WebP 重编码、缩略图和响应式候选 |
 | 容器 | Docker + Gunicorn + WhiteNoise | 本地 Compose 与单机生产 Compose 分层 |
 | 备份 | PostgreSQL dump + 对象镜像 | manifest、大小与 SHA-256 校验、按保留期清理 |
-| 持续集成 | GitHub Actions | SQLite 质量任务 + PostgreSQL/Redis 集成任务 |
+| 持续集成 | GitHub Actions | SQLite 质量任务 + PostgreSQL/Redis 集成任务 + 对象存储与备份恢复演练 |
 
 ## 功能地图
 

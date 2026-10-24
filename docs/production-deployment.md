@@ -140,7 +140,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 
 ## 8. CI 覆盖
 
-GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。
+GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。
 
 ## 相关文档
 

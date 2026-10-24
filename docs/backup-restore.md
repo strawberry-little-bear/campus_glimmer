@@ -58,7 +58,19 @@ sequenceDiagram
 - 清理：只删除过期的 ackup- 目录；manifest 不可解析的目录跳过，不会中断其余清理；
 - 失败路径：dump 或对象下载失败时 staging 目录必须被清空，不留下"看起来可用"的半成品。
 
-这些用例是纯本地的：_dump_database、_download_objects 和 S3 客户端都被替换，因此不引入对数据库或对象存储的依赖。真正的恢复演练（把 dump 灌回 PostgreSQL）仍要按下面的步骤人工执行。
+这些用例是纯本地的：_dump_database、_download_objects 和 S3 客户端都被替换，因此不引入对数据库或对象存储的依赖。把 dump 灌回 PostgreSQL 的那一段由下面的 CI 恢复演练覆盖，正式环境的恢复演练仍要按「恢复步骤」人工执行。
+## CI 恢复演练
+
+`backup-restore` 任务把人工路径里能自动化的部分搬进了 CI：`migrate` 之后真实生成一份备份，灌进一个全新的隔离数据库，再逐项比对。它不写 fixture——库里已有的 `django_migrations`、`django_content_type` 与 `auth_permission` 就足够回答「dump 能不能原样恢复」，也不需要一份会随模型演进而过时的数据文件。
+
+比对的是三类东西，而不是只看 `pg_restore` 有没有返回 0：
+
+- `public` schema 下每一张表的行数，源库与恢复库逐张对齐；
+- `pg_indexes` 的索引总数与 `pg_constraint` 的约束总数；
+- 上传到 MinIO 的一个对象，恢复到第二个桶后按原 key 与原字节比对。
+
+同一个任务还包含一条负向用例：往 `PATH` 最前面放一个只对 `--version` 报告 17 的假 `pg_dump`，备份必须失败。这一条复现的是本地真实踩过的事故——17 客户端生成的 dump 能通过清单校验，直到灌回 16 的服务端才被拒绝。
+
 ## 手动创建与校验
 
 在 Compose 环境中执行：
@@ -110,7 +122,7 @@ Compose 示例默认 `BACKUP_RETENTION_DAYS=14`、`BACKUP_INTERVAL_SECONDS=86400
 ## 当前边界
 
 - 备份不是 PostgreSQL PITR；归档日志和持续恢复需要数据库层方案；
-- 不自动执行 `pg_restore`，恢复必须人工确认目标库；
+- 不自动执行 `pg_restore`，恢复必须人工确认目标库；CI 里的隔离恢复只针对一次性数据库，不碰任何真实环境；
 - 不提供跨区域复制、加密托管或密钥轮换；
 - 默认目录位于宿主机，主机损坏会同时丢失业务卷和备份；
 - Redis 不备份，因为业务事实应能从 PostgreSQL 和对象存储重建。
