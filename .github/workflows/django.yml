@@ -196,6 +196,17 @@ jobs:
             sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
             sudo apt-get install -y --no-install-recommends postgresql-client-16
           fi
+          # Debian/Ubuntu 把各版本客户端装在 /usr/lib/postgresql/<版本>/bin，并不覆盖
+          # /usr/bin 下的默认版本（当前镜像是 18，pg_dump 是 pg_wrapper 的分发入口）。
+          # 只装包不够，必须把 16 的 bin 目录提到 PATH 最前面；写进 GITHUB_PATH 是
+          # 为了让后续步骤里的 pg_dump / psql / pg_restore 同样落到 16。
+          PG_BIN=/usr/lib/postgresql/16/bin
+          if [ ! -x "$PG_BIN/pg_dump" ]; then
+            echo "找不到 $PG_BIN/pg_dump，16 客户端没有装到预期位置" >&2
+            exit 1
+          fi
+          export PATH="$PG_BIN:$PATH"
+          echo "$PG_BIN" >> "$GITHUB_PATH"
           pg_dump --version
           pg_dump --version | grep -Eq '\(PostgreSQL\) 16\.' || {
             echo "pg_dump 不是 16 客户端，备份链路会拒绝生成 dump" >&2
