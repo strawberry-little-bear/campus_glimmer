@@ -427,6 +427,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [专题目标与转化漏斗](campaign-goals-funnel-design.md) | 想了解六类目标、节奏偏差、严格漏斗和跨专题去重限制 |
 | [生产部署基线](production-deployment.md) | 想配置 PostgreSQL、Redis、MinIO、Gunicorn 与生产探针 |
 | [备份与恢复](backup-restore.md) | 想创建、校验、保留或恢复数据库与对象存储 |
+| [对象存储 CI 集成设计](object-storage-ci-integration-design.md) | 想了解 MinIO 集成任务覆盖了什么，以及为什么宁可失败也不静默跳过 |
 | [核心数据模型](data-model.md) | 想理解模型分组、关键字段和约束 |
 | [模块与测试地图](module-map.md) | 想找代码模块、测试以及设计文档索引 |
 | [后台与定时任务](scheduled-tasks.md) | 想接入周期任务、回填数据或排查运行台账 |
