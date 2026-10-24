@@ -64,6 +64,8 @@ python manage.py test
 - 失败时优先修复第一个真实错误，不要通过跳过测试、放宽迁移检查或忽略异常来“变绿”；
 - 依赖缓存使用 `requirements.txt` 指纹，修改依赖后首次运行会重新安装；
 - MinIO 的启动逻辑统一放在 `scripts/start-minio.sh`，需要新任务时改脚本，不要复制一段内联 shell；
+- 备份恢复的验证逻辑放在 `scripts/` 下的 Python 脚本里，不要在 `run` 块里写内联 heredoc：YAML 块标量里缩进的 `PY` 终止符 bash 并不认，会一路吞到脚本末尾；
+- job 级 `env` 不要写 `${{ runner.* }}`：该位置的可用上下文只有 `github, needs, strategy, matrix, vars, secrets, inputs`，写错会让整个 workflow 解析失败——run 会以 0 个 job 秒失败，且不允许重跑；要用就写到 step 级 `env`；
 - workflow 当前使用 `actions/checkout@v5` 与 `actions/setup-python@v6`，避免旧 Node 运行时告警。
 
 ## 🧯 常见排查
@@ -75,6 +77,7 @@ python manage.py test
 | Django 检查 | 环境变量、URL、应用注册和模板配置 |
 | 迁移检查 | 模型改动后是否忘记提交迁移 |
 | 测试 | 先看第一个失败用例，再判断是否是共享状态或数据库问题 |
+| 整个 run 0 个 job 秒失败 | 几乎一定是 workflow 本身没通过解析：先查 job 级 `env` 里的 `${{ runner.* }}`，再用 `npx @action-validator/cli` 过一遍 |
 
 ## 📚 继续阅读
 

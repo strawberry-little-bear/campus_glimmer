@@ -136,6 +136,9 @@ jobs:
   # 必须显式安装 PostgreSQL 16 客户端：runner 自带的是 18，而 backup.py 的版本护栏
   # 要求客户端与服务端主版本一致，不一致时直接拒绝生成 dump。这条护栏本身就是
   # “17 客户端 + 16 服务端”那次真实事故的产物，不能在 CI 里被绕过。
+  #
+  # BACKUP_DIR 只能写在 step 级 env：job 级 env 的可用上下文不含 runner，
+  # 写 ${{ runner.temp }} 会让整个 workflow 解析失败（run 直接 0 job 秒红）。
   backup-restore:
     runs-on: ubuntu-latest
     services:
@@ -169,7 +172,6 @@ jobs:
       DJANGO_S3_QUERYSTRING_AUTH: "1"
       DJANGO_S3_QUERYSTRING_EXPIRE: "3600"
       DJANGO_S3_LOCATION: media
-      BACKUP_DIR: ${{ runner.temp }}/backups
       # psql / pg_restore 用，避免密码出现在命令行参数里。
       PGPASSWORD: ci-database-password
       # 断言里要匹配中文错误信息，固定 UTF-8 输出，不依赖 runner 的 locale。
@@ -205,24 +207,10 @@ jobs:
         run: |
           python manage.py migrate --noinput
           # 让对象镜像非空：真实上传一个对象，后面按原 key 与原字节验证恢复。
-          python - <<'PY'
-          import os
-
-          import django
-
-          os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus_glimmer.settings')
-          django.setup()
-
-          from django.core.files.base import ContentFile
-          from django.core.files.storage import default_storage
-
-          name = default_storage.save(
-              'ci-restore-proof.txt',
-              ContentFile(b'campus glimmer ci restore proof\n'),
-          )
-          print('uploaded object key:', name)
-          PY
+          python .github/scripts/seed-restore-object.py
       - name: 执行备份并校验
+        env:
+          BACKUP_DIR: ${{ runner.temp }}/backups
         run: |
           python docker/backup.py --once
           BACKUP_DIR_PATH="$(find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name 'backup-*' | sort | tail -n 1)"
@@ -236,16 +224,11 @@ jobs:
       # 复现的是本地真实踩过的事故——17 客户端生成 dump、清单校验也全部通过，
       # 直到灌回 16 的服务端才被拒绝。
       - name: 版本护栏必须拦住不匹配的客户端
+        env:
+          BACKUP_DIR: ${{ runner.temp }}/backups
         run: |
           mkdir -p "$RUNNER_TEMP/fake-client"
-          cat > "$RUNNER_TEMP/fake-client/pg_dump" <<'SH'
-          #!/usr/bin/env bash
-          if [ "$1" = "--version" ]; then
-            echo "pg_dump (PostgreSQL) 17.0"
-            exit 0
-          fi
-          exit 1
-          SH
+          cp .github/scripts/fake-pg-dump-17.sh "$RUNNER_TEMP/fake-client/pg_dump"
           chmod +x "$RUNNER_TEMP/fake-client/pg_dump"
           if PATH="$RUNNER_TEMP/fake-client:$PATH" python docker/backup.py --once \
             > "$RUNNER_TEMP/version-guard.log" 2>&1; then
@@ -265,108 +248,12 @@ jobs:
           pg_restore --no-owner --no-acl --host 127.0.0.1 --port 5432 \
             --username campus_glimmer --dbname campus_glimmer_restore \
             "$BACKUP_DIR_PATH/database.dump"
-          python - <<'PY'
-          import os
-          from urllib.parse import urlsplit, urlunsplit
-
-          import psycopg
-
-          RESTORE_DB = 'campus_glimmer_restore'
-          source_dsn = os.environ['DJANGO_DATABASE_URL']
-          parts = urlsplit(source_dsn)
-          target_dsn = urlunsplit(
-              (parts.scheme, parts.netloc, '/' + RESTORE_DB, '', ''))
-
-
-          def snapshot(dsn):
-              """public schema 每张表的行数，外加索引与约束总数。"""
-              with psycopg.connect(dsn) as connection:
-                  with connection.cursor() as cursor:
-                      cursor.execute(
-                          "select tablename from pg_tables "
-                          "where schemaname = 'public' order by tablename")
-                      tables = [row[0] for row in cursor.fetchall()]
-                      counts = {}
-                      for table in tables:
-                          cursor.execute('select count(*) from "%s"' % table)
-                          counts[table] = cursor.fetchone()[0]
-                      cursor.execute(
-                          "select count(*) from pg_indexes "
-                          "where schemaname = 'public'")
-                      indexes = cursor.fetchone()[0]
-                      cursor.execute(
-                          'select count(*) from pg_constraint c '
-                          'join pg_namespace n on n.oid = c.connamespace '
-                          "where n.nspname = 'public'")
-                      constraints = cursor.fetchone()[0]
-              return counts, indexes, constraints
-
-
-          source_counts, source_indexes, source_constraints = \
-              snapshot(source_dsn)
-          target_counts, target_indexes, target_constraints = \
-              snapshot(target_dsn)
-
-          migrations = source_counts.get('django_migrations', 0)
-          if len(source_counts) < 5 or migrations < 50:
-              raise SystemExit(
-                  '源库不像一次完整迁移：%d 张表，django_migrations %d 行'
-                  % (len(source_counts), migrations))
-
-          problems = []
-          for table in sorted(set(source_counts) | set(target_counts)):
-              if source_counts.get(table) != target_counts.get(table):
-                  problems.append('%s: 源库 %s 行，恢复库 %s 行' % (
-                      table, source_counts.get(table),
-                      target_counts.get(table)))
-          if source_indexes != target_indexes:
-              problems.append('索引数：源库 %d，恢复库 %d'
-                              % (source_indexes, target_indexes))
-          if source_constraints != target_constraints:
-              problems.append('约束数：源库 %d，恢复库 %d'
-                              % (source_constraints, target_constraints))
-
-          print('比对 %d 张表、%d 个索引、%d 条约束，django_migrations %d 行'
-                % (len(source_counts), source_indexes,
-                   source_constraints, migrations))
-          if problems:
-              raise SystemExit('隔离恢复结果与源库不一致：\n'
-                               + '\n'.join(problems))
-          print('隔离恢复与源库一致')
-          PY
-      - name: 对象恢复到第二个桶并逐字节比对
+          python .github/scripts/verify-restore-db.py
+      - name: 对象镜像恢复到第二个桶并逐字节比对
         run: |
           python docker/backup.py --restore-objects "$BACKUP_DIR_PATH" \
             --restore-bucket campus-glimmer-restore
-          python - <<'PY'
-          import os
-
-          import boto3
-          from botocore.config import Config
-
-          client = boto3.session.Session().client(
-              's3',
-              endpoint_url=os.environ['DJANGO_S3_ENDPOINT_URL'],
-              region_name=os.environ.get('DJANGO_S3_REGION', 'us-east-1'),
-              aws_access_key_id=os.environ['DJANGO_S3_ACCESS_KEY_ID'],
-              aws_secret_access_key=os.environ['DJANGO_S3_SECRET_ACCESS_KEY'],
-              config=Config(
-                  signature_version=os.environ.get(
-                      'DJANGO_S3_SIGNATURE_VERSION', 's3v4'),
-                  s3={'addressing_style': os.environ.get(
-                      'DJANGO_S3_ADDRESSING_STYLE', 'path')},
-              ),
-          )
-
-          bucket = 'campus-glimmer-restore'
-          key = 'media/ci-restore-proof.txt'
-          body = client.get_object(Bucket=bucket, Key=key)['Body'].read()
-          expected = b'campus glimmer ci restore proof\n'
-          if body != expected:
-              raise SystemExit('%s/%s 字节与备份前不一致' % (bucket, key))
-          print('对象按原 key 恢复成功：%s/%s（%d 字节）'
-                % (bucket, key, len(body)))
-          PY
+          python .github/scripts/verify-restore-object.py
       - name: 失败时输出 MinIO 日志
         if: failure()
         run: tail -n 200 "$RUNNER_TEMP/minio.log"
