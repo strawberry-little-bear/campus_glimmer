@@ -6,10 +6,18 @@ auth_permission，足够回答「dump 能不能原样恢复」；但对象存储
 """
 
 import os
+import sys
+from pathlib import Path
+
+# 直接 `python .github/scripts/xxx.py` 运行时，Python 只把脚本所在目录放进
+# sys.path[0]，仓库根不在路径里，`import campus_glimmer` 会失败。这里显式把
+# 仓库根补进 sys.path，让脚本从仓库任何位置被调用都能导入设置模块。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus_glimmer.settings')
 
 import django
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'campus_glimmer.settings')
 django.setup()
 
 from django.core.files.base import ContentFile
