@@ -4,7 +4,7 @@
 
 # screenshots · 系统界面预览
 
-**十二张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
+**十三张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、治理和运营六类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
@@ -76,11 +76,18 @@
 </tr>
 </table>
 
-<p align="center">
-  <a href="operations.png"><img src="operations.png" alt="运营数据概览，展示供给、搜索、预约、互助和看板构建耗时" width="100%" /></a>
-</p>
-
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="moderation-queue.png"><img src="moderation-queue.png" alt="内容审核值班台，展示四项待办、三级复核时限、组合筛选和审核记录" width="100%" /></a>
+<p align="center"><strong>内容审核值班台</strong><br /><sub>待办入口、分级时限、当前筛选结果与审核操作同屏 · 本地演示数据</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="operations.png"><img src="operations.png" alt="运营数据概览，展示供给、搜索、预约、互助和看板构建耗时" width="100%" /></a>
 <p align="center"><strong>运营看板</strong><br /><sub>管理员视角下的指标、告警和构建观测 · 本地演示数据</sub></p>
+</td>
+</tr>
+</table>
 
 点击图片可查看原始尺寸。
 
@@ -99,6 +106,7 @@
 | [`public-profile.png`](public-profile.png) | `1424 × 969` | 公开档案；公开信誉、互助反馈和在售摘要 |
 | [`contributions.png`](contributions.png) | `1424 × 969` | 贡献中心；等级、贡献进度、徽章与最近贡献 |
 | [`inbox.png`](inbox.png) | `1424 × 969` | 消息工作台；未读统计、搜索筛选、会话与批量已读 |
+| [`moderation-queue.png`](moderation-queue.png) | `1424 × 969` | 内容审核值班台；四项待办、三级复核时限、组合筛选和审核记录 |
 | [`operations.png`](operations.png) | `1424 × 969` | 运营看板；管理员指标、告警和构建耗时 |
 
 ## 🔄 更新截图时
