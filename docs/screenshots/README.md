@@ -76,8 +76,8 @@
 </tr>
 <tr>
 <td width="100%" valign="top">
-<a href="my-orders.png"><img src="my-orders.png" alt="我的交易工作台，展示买入卖出计数、状态筛选、对方身份、下一步动作和交易金额" width="100%" /></a>
-<p align="center"><strong>我的交易 · 买卖总览</strong><br /><sub>全部、待推进、已完成与已取消分栏，身份、下一步动作和截止时间集中呈现 · 本地演示数据</sub></p>
+<a href="my-orders.png"><img src="my-orders.png" alt="我的交易工作台，展示买入卖出计数、状态筛选、第二页订单、结果区间和分页控件" width="100%" /></a>
+<p align="center"><strong>我的交易 · 买卖总览</strong><br /><sub>全部、待推进、已完成与已取消分栏，结果每页 10 笔并保留筛选 · 本地演示数据</sub></p>
 </td>
 </tr>
 <tr>
@@ -128,7 +128,7 @@
 | [`moderation-queue.png`](moderation-queue.png) | `1424 × 969` | 内容审核值班台；四项待办、三级复核时限、组合筛选和审核记录 |
 | [`operations.png`](operations.png) | `1424 × 969` | 运营看板；管理员指标、告警和构建耗时 |
 | [`my-items.png`](my-items.png) | `1424 × 969` | 我的商品；生命周期诊断、批量专题与续期、状态页签和商品操作 |
-| [`my-orders.png`](my-orders.png) | `1424 × 969` | 我的交易；买卖计数、状态筛选、对方身份、下一步动作和金额 |
+| [`my-orders.png`](my-orders.png) | `1424 × 969` | 我的交易；买卖计数、状态筛选、结果区间、第二页订单与分页控件 |
 
 ## 🔄 更新截图时
 

@@ -62,10 +62,10 @@ flowchart LR
 <p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、专题与续期批量工具、状态页签和逐件操作集中管理 · 本地演示数据</sub></p>
 
 <p align="center">
-  <a href="../docs/screenshots/my-orders.png"><img src="../docs/screenshots/my-orders.png" alt="我的交易工作台，展示买入卖出计数、状态筛选、对方身份、下一步动作和交易金额" width="100%" /></a>
+  <a href="../docs/screenshots/my-orders.png"><img src="../docs/screenshots/my-orders.png" alt="我的交易工作台，展示买入卖出计数、状态筛选、第二页订单、结果区间和分页控件" width="100%" /></a>
 </p>
 
-<p align="center"><strong>我的交易 · 买卖总览</strong><br /><sub>同一用户作为买家与卖家的记录汇总在一处，按推进阶段筛选并明确下一步动作 · 本地演示数据</sub></p>
+<p align="center"><strong>我的交易 · 买卖总览</strong><br /><sub>买卖记录按阶段筛选，结果每页 10 笔且保留当前筛选，全量统计不受分页影响 · 本地演示数据</sub></p>
 
 <p align="center">
   <a href="../docs/screenshots/operations.png"><img src="../docs/screenshots/operations.png" alt="运营数据概览，展示供给、搜索、预约、互助与看板构建耗时" width="100%" /></a>
@@ -101,7 +101,7 @@ flowchart LR
 | `/listings/lost-found/` | 失物招领 |
 | `/listings/item/<item_id>/` | 商品详情与交易入口 |
 | `/listings/my_items/` | 我的商品与卖家工作台 |
-| `/listings/orders/` | 我的交易工作台，汇总买入与卖出订单 |
+| `/listings/orders/` | 我的交易工作台，汇总买卖订单，支持阶段筛选与分页 |
 | `/listings/notifications/` | 通知中心 |
 | `/listings/notifications/activity/` | 通知与私信汇合的站内动态 |
 | `/listings/operations/` | 运营看板，仅管理员可用 |
