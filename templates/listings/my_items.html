@@ -1,24 +1,22 @@
-<!-- templates/listings/my_items.html -->
 {% extends 'base.html' %}
 
 {% block title %}{{ title }} - 拾光校园{% endblock %}
 
 {% block content %}
-<div class="page-intro mb-4">
+<div class="page-intro seller-desk-intro mb-4">
     <div>
         <span class="eyebrow eyebrow-soft">Seller desk</span>
         <h1 class="mt-2">{{ title }}</h1>
-        <p class="text-muted mb-0">在这里统一管理在售商品：刷新、续期、改状态，或者一次性把一批商品加进校园专题。</p>
+        <p class="text-muted mb-0">从发布、补图到专题与续期，在同一个工作台里掌握每件商品的下一步。</p>
     </div>
-    <div class="d-flex flex-wrap gap-2">
-        <a href="{% url 'new_item' %}" class="btn btn-success">发布新商品</a>
-        <a href="{% url 'bulk_create_items' %}" class="btn btn-outline-primary">批量发布</a>
+    <div class="seller-desk-actions">
+        <a href="{% url 'new_item' %}" class="btn btn-success"><i class="bi bi-plus-lg me-1"></i>发布新商品</a>
+        <a href="{% url 'bulk_create_items' %}" class="btn btn-outline-primary"><i class="bi bi-collection me-1"></i>批量发布</a>
         {% if has_bulk_listing_image_queue %}
-        <a href="{% url 'bulk_listing_image_queue' %}" class="btn btn-outline-secondary">本批次补图</a>
+        <a href="{% url 'bulk_listing_image_queue' %}" class="btn btn-outline-secondary"><i class="bi bi-images me-1"></i>本批次补图</a>
         {% endif %}
     </div>
 </div>
-
 
 {% if lifecycle.summary.total %}
 <section class="content-card lifecycle-panel mb-4" aria-label="商品生命周期诊断">
@@ -71,258 +69,113 @@
 {% endif %}
 
 {% if items %}
-<div class="content-card bulk-campaign-toolbar mb-4">
-    <div>
-        <span class="eyebrow eyebrow-soft">Seller batch tools</span>
-        <strong>批量管理勾选商品</strong>
-        <p>统一加入或移出校园专题，也可以为毕业季一批即将到期的商品设置新的展示截止时间。</p>
+<section class="content-card seller-bulk-toolbar mb-4" aria-labelledby="seller-bulk-title">
+    <div class="seller-bulk-heading">
+        <div>
+            <span class="eyebrow eyebrow-soft">Seller batch tools</span>
+            <h2 id="seller-bulk-title">批量管理勾选商品</h2>
+            <p>在“全部”页签勾选商品，再统一整理专题，或为即将到期的一批商品续期。</p>
+        </div>
+        <span class="seller-selection-badge"><i class="bi bi-check2-square"></i>已选 <strong data-selected-count>0</strong> 件</span>
     </div>
-    <form method="post" action="{% url 'bulk_assign_campaign' %}" id="bulk-campaign-form" class="d-flex flex-wrap gap-2 align-items-center">
+    <form method="post" action="{% url 'bulk_assign_campaign' %}" id="bulk-campaign-form" class="seller-bulk-form">
         {% csrf_token %}
-        <select name="campaign_id" class="form-select form-select-sm" aria-label="选择校园专题">
-            <option value="none">移出当前专题</option>
-            {% for campaign in campaigns %}<option value="{{ campaign.id }}">加入：{{ campaign.title }}</option>{% endfor %}
-        </select>
-        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-stars me-1"></i>应用专题</button>
-        <input type="datetime-local" name="expires_at" class="form-control form-control-sm" aria-label="批量续期的新展示截止时间">
-        <button type="submit" formaction="{% url 'bulk_renew_items' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-calendar-check me-1"></i>批量续期</button>
+        <div class="seller-bulk-step">
+            <label for="bulk-campaign-select">校园专题</label>
+            <div class="seller-bulk-control">
+                <select name="campaign_id" id="bulk-campaign-select" class="form-select form-select-sm" aria-label="选择校园专题">
+                    <option value="none">移出当前专题</option>
+                    {% for campaign in campaigns %}<option value="{{ campaign.id }}">加入：{{ campaign.title }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-stars me-1"></i>应用专题</button>
+            </div>
+        </div>
+        <div class="seller-bulk-step">
+            <label for="bulk-expiry-input">新的展示截止时间</label>
+            <div class="seller-bulk-control">
+                <input type="datetime-local" name="expires_at" id="bulk-expiry-input" class="form-control form-control-sm" aria-label="批量续期的新展示截止时间">
+                <button type="submit" formaction="{% url 'bulk_renew_items' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-calendar-check me-1"></i>批量续期</button>
+            </div>
+        </div>
     </form>
-</div>
+</section>
 {% endif %}
 
 <section class="content-card my-items-panel">
-    <div class="my-items-tabs" id="itemsTabs" role="tablist">
-        <button class="my-items-tab active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="true">全部</button>
-        <button class="my-items-tab" id="available-tab" data-bs-toggle="tab" data-bs-target="#available" type="button" role="tab" aria-controls="available" aria-selected="false">可购买</button>
-        <button class="my-items-tab" id="reserved-tab" data-bs-toggle="tab" data-bs-target="#reserved" type="button" role="tab" aria-controls="reserved" aria-selected="false">已预定</button>
-        <button class="my-items-tab" id="sold-tab" data-bs-toggle="tab" data-bs-target="#sold" type="button" role="tab" aria-controls="sold" aria-selected="false">已售出</button>
+    <div class="my-items-tabs-bar">
+        <div class="my-items-tabs" id="itemsTabs" role="tablist" aria-label="按商品状态查看">
+            <button class="my-items-tab active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="true">
+                全部 <span class="my-items-tab-count">{{ item_counts.all }}</span>
+            </button>
+            <button class="my-items-tab" id="available-tab" data-bs-toggle="tab" data-bs-target="#available" type="button" role="tab" aria-controls="available" aria-selected="false">
+                在售 <span class="my-items-tab-count">{{ item_counts.available }}</span>
+            </button>
+            <button class="my-items-tab" id="reserved-tab" data-bs-toggle="tab" data-bs-target="#reserved" type="button" role="tab" aria-controls="reserved" aria-selected="false">
+                已预订 <span class="my-items-tab-count">{{ item_counts.reserved }}</span>
+            </button>
+            <button class="my-items-tab" id="sold-tab" data-bs-toggle="tab" data-bs-target="#sold" type="button" role="tab" aria-controls="sold" aria-selected="false">
+                已售出 <span class="my-items-tab-count">{{ item_counts.sold }}</span>
+            </button>
+            <button class="my-items-tab" id="expired-tab" data-bs-toggle="tab" data-bs-target="#expired" type="button" role="tab" aria-controls="expired" aria-selected="false">
+                已过期 <span class="my-items-tab-count">{{ item_counts.expired }}</span>
+            </button>
+        </div>
+        <span class="my-items-tabs-note"><i class="bi bi-info-circle me-1"></i>状态标签页只改变当前视图，不会修改商品</span>
     </div>
+
     <div class="tab-content" id="itemsTabContent">
-            <!-- 全部商品 -->
-            <div class="tab-pane fade show active my-items-pane" id="all" role="tabpanel" aria-labelledby="all-tab">
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle seller-desk-table mb-0">
-                    <caption class="visually-hidden">我的商品 · 全部</caption>
-                        <thead>
-                            <tr>
-                                <th><input type="checkbox" class="form-check-input" aria-label="选择全部商品" onclick="document.querySelectorAll('.bulk-item-checkbox').forEach((box) => { box.checked = this.checked; });"></th>
-                                <th>商品</th>
-                                <th>价格</th>
-                                <th>状态</th>
-                                <th>发布时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in items %}
-                            <tr>
-                                <td><input type="checkbox" name="item_ids" value="{{ item.id }}" class="form-check-input bulk-item-checkbox" form="bulk-campaign-form" aria-label="选择商品 {{ item.title }}"></td>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        {% if item.images.all.0 %}
-                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
-                                        {% endif %}
-                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
-                                    </div>
-                                </td>
-                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
-                                <td>
-                                    <span class="badge {% if item.status == 'available' %}bg-success{% elif item.status == 'reserved' %}bg-warning{% else %}bg-secondary{% endif %}">
-                                        {{ item.get_status_display }}
-                                    </span>
-                                    {% with row=item.lifecycle_diagnosis %}
-                                    {% if row %}
-                                    <div class="lifecycle-diagnosis mt-1">
-                                        <span class="lifecycle-tag lifecycle-tag-{{ row.tone }}">{{ row.level_label }}</span>
-                                        <small class="text-muted">已发布 {{ row.age_days }} 天{% if row.days_until_expiry is not None %} · 剩 {{ row.days_until_expiry }} 天到期{% endif %}</small>
-                                    </div>
-                                    <ul class="lifecycle-reasons">
-                                        {% for reason in row.reasons %}<li>{{ reason }}</li>{% endfor %}
-                                    </ul>
-                                    <div class="lifecycle-signal">
-                                        <span>{{ row.signals.views }} 次浏览</span>
-                                        <span>{{ row.signals.favorites }} 次收藏</span>
-                                        <span>{{ row.signals.orders }} 次预约</span>
-                                    </div>
-                                    {% endif %}
-                                    {% endwith %}
-                                </td>
-                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary">编辑</a>
-                                        <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success">状态</a>
-                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
-                                    </div>
-                                    {% with row=item.lifecycle_diagnosis %}
-                                    {% if row.can_refresh %}
-                                    <form method="post" action="{% url 'refresh_item' item.id %}" class="lifecycle-refresh-form mt-1">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-success btn-sm w-100"><i class="bi bi-arrow-clockwise me-1"></i>刷新到前排</button>
-                                    </form>
-                                    {% elif row.refresh_block_reason %}
-                                    <small class="text-muted d-block mt-1">{{ row.refresh_block_reason }}</small>
-                                    {% endif %}
-                                    {% endwith %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="6" class="text-center py-4">
-                                    <p class="text-muted mb-0">您还没有发布任何商品</p>
-                                    <a href="{% url 'new_item' %}" class="btn btn-success mt-3">立即发布</a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            <!-- 可购买商品 -->
-            <div class="tab-pane fade my-items-pane" id="available" role="tabpanel" aria-labelledby="available-tab">
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle seller-desk-table mb-0">
-                    <caption class="visually-hidden">我的商品 · 可购买</caption>
-                        <thead>
-                            <tr>
-                                <th>商品</th>
-                                <th>价格</th>
-                                <th>发布时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in items %}
-                            {% if item.status == 'available' %}
-                            <tr>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        {% if item.images.all.0 %}
-                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
-                                        {% endif %}
-                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
-                                    </div>
-                                </td>
-                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
-                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary">编辑</a>
-                                        <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success">状态</a>
-                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endif %}
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center py-4">
-                                    <p class="text-muted mb-0">没有可购买状态的商品</p>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            <!-- 已预定商品 -->
-            <div class="tab-pane fade my-items-pane" id="reserved" role="tabpanel" aria-labelledby="reserved-tab">
-                <!-- 与可购买商品结构类似，只是筛选status == 'reserved' -->
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle seller-desk-table mb-0">
-                    <caption class="visually-hidden">我的商品 · 已预定</caption>
-                        <thead>
-                            <tr>
-                                <th>商品</th>
-                                <th>价格</th>
-                                <th>发布时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in items %}
-                            {% if item.status == 'reserved' %}
-                            <tr>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        {% if item.images.all.0 %}
-                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
-                                        {% endif %}
-                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
-                                    </div>
-                                </td>
-                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
-                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary">编辑</a>
-                                        <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success">状态</a>
-                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endif %}
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center py-4">
-                                    <p class="text-muted mb-0">没有已预定状态的商品</p>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            
-            <!-- 已售出商品 -->
-            <div class="tab-pane fade my-items-pane" id="sold" role="tabpanel" aria-labelledby="sold-tab">
-                <!-- 与可购买商品结构类似，只是筛选status == 'sold' -->
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle seller-desk-table mb-0">
-                    <caption class="visually-hidden">我的商品 · 已售出</caption>
-                        <thead>
-                            <tr>
-                                <th>商品</th>
-                                <th>价格</th>
-                                <th>发布时间</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in items %}
-                            {% if item.status == 'sold' %}
-                            <tr>
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        {% if item.images.all.0 %}
-                                        <img src="{{ item.images.all.0.list_image_url }}" alt="{{ item.title }}" style="width: 50px; height: 50px; object-fit: cover;" class="me-2"{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
-                                        {% endif %}
-                                        <a href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
-                                    </div>
-                                </td>
-                                <td>{% if item.trade_mode == 'free' %}<span class="text-success">免费赠送</span>{% else %}¥{{ item.price }}{% endif %}</td>
-                                <td>{{ item.created_at|date:"Y-m-d" }}</td>
-                                <td>
-                                    <div class="btn-group btn-group-sm">
-                                        <a href="{% url 'item_detail' item.id %}" class="btn btn-outline-primary">查看</a>
-                                        <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger confirm-delete">删除</a>
-                                    </div>
-                                </td>
-                            </tr>
-                            {% endif %}
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center py-4">
-                                    <p class="text-muted mb-0">没有已售出状态的商品</p>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+        <div class="tab-pane fade show active my-items-pane" id="all" role="tabpanel" aria-labelledby="all-tab">
+            {% include 'listings/_my_items_table.html' with items=items row_mode='all' table_caption='我的商品 · 全部' empty_message='您还没有发布任何商品' only %}
+        </div>
+        <div class="tab-pane fade my-items-pane" id="available" role="tabpanel" aria-labelledby="available-tab">
+            {% include 'listings/_my_items_table.html' with items=available_items row_mode='available' table_caption='我的商品 · 在售' empty_message='没有在售状态的商品' only %}
+        </div>
+        <div class="tab-pane fade my-items-pane" id="reserved" role="tabpanel" aria-labelledby="reserved-tab">
+            {% include 'listings/_my_items_table.html' with items=reserved_items row_mode='reserved' table_caption='我的商品 · 已预订' empty_message='没有已预订状态的商品' only %}
+        </div>
+        <div class="tab-pane fade my-items-pane" id="sold" role="tabpanel" aria-labelledby="sold-tab">
+            {% include 'listings/_my_items_table.html' with items=sold_items row_mode='sold' table_caption='我的商品 · 已售出' empty_message='没有已售出状态的商品' only %}
+        </div>
+        <div class="tab-pane fade my-items-pane" id="expired" role="tabpanel" aria-labelledby="expired-tab">
+            {% include 'listings/_my_items_table.html' with items=expired_items row_mode='expired' table_caption='我的商品 · 已过期' empty_message='没有已过期状态的商品' only %}
+        </div>
     </div>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var form = document.getElementById('bulk-campaign-form');
+    if (!form) {
+        return;
+    }
+
+    var selectAll = document.getElementById('select-all-items');
+    var checkboxes = Array.prototype.slice.call(document.querySelectorAll('.bulk-item-checkbox'));
+
+    function updateSelection() {
+        var selected = checkboxes.filter(function (checkbox) { return checkbox.checked; }).length;
+        document.querySelectorAll('[data-selected-count]').forEach(function (node) {
+            node.textContent = selected;
+        });
+        if (selectAll) {
+            selectAll.checked = checkboxes.length > 0 && selected === checkboxes.length;
+            selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
+        }
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function () {
+            checkboxes.forEach(function (checkbox) { checkbox.checked = selectAll.checked; });
+            updateSelection();
+        });
+    }
+
+    checkboxes.forEach(function (checkbox) {
+        checkbox.addEventListener('change', updateSelection);
+    });
+    updateSelection();
+})();
+</script>
 {% endblock %}

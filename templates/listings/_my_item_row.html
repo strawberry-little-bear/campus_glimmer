@@ -1,0 +1,92 @@
+{% load static %}
+<tr class="seller-desk-row">
+    {% if row_mode == 'all' %}
+    <td class="seller-desk-check" data-label="选择">
+        <input type="checkbox" name="item_ids" value="{{ item.id }}" class="form-check-input bulk-item-checkbox" form="bulk-campaign-form" aria-label="选择商品 {{ item.title }}">
+    </td>
+    {% endif %}
+    <td data-label="商品">
+        <div class="seller-item-cell">
+            <a class="seller-item-thumb" href="{% url 'item_detail' item.id %}" aria-label="查看 {{ item.title }}">
+                {% if item.images.all.0 %}
+                <img src="{{ item.images.all.0.list_image_url }}" alt=""{% if item.images.all.0.list_image_width %} width="{{ item.images.all.0.list_image_width }}" height="{{ item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+                {% else %}
+                <img src="{% static 'img/no-image.png' %}" alt="" loading="lazy" decoding="async">
+                {% endif %}
+            </a>
+            <div class="seller-item-copy">
+                <a class="seller-item-title" href="{% url 'item_detail' item.id %}">{{ item.title }}</a>
+                <div class="seller-item-meta">
+                    <span><i class="bi bi-grid"></i>{{ item.category.name }}</span>
+                    <span><i class="bi bi-stars"></i>{{ item.condition }}</span>
+                    {% if item.location %}<span><i class="bi bi-geo-alt"></i>{{ item.location.name }}</span>{% endif %}
+                    {% if item.campaign %}<span class="seller-item-campaign"><i class="bi bi-collection"></i>{{ item.campaign.title }}</span>{% endif %}
+                </div>
+            </div>
+        </div>
+    </td>
+    <td data-label="交易">
+        {% if item.trade_mode == 'free' %}
+        <strong class="seller-item-price seller-item-free">免费赠送</strong>
+        {% elif item.trade_mode == 'borrow' %}
+        <strong class="seller-item-price">押金 ¥{{ item.deposit_amount }}</strong>
+        <small class="seller-item-note">{{ item.borrow_days }} 天借用</small>
+        {% else %}
+        <strong class="seller-item-price">¥{{ item.price }}</strong>
+        {% endif %}
+    </td>
+    {% if row_mode == 'all' %}
+    <td data-label="状态">
+        <span class="seller-status seller-status-{{ item.status }}">{{ item.get_status_display }}</span>
+        {% with row=item.lifecycle_diagnosis %}
+        {% if row %}
+        <details class="lifecycle-detail-toggle">
+            <summary>
+                <span class="lifecycle-tag lifecycle-tag-{{ row.tone }}">{{ row.level_label }}</span>
+                <small>已发布 {{ row.age_days }} 天{% if row.days_until_expiry is not None %} · 剩 {{ row.days_until_expiry }} 天到期{% endif %}</small>
+                <span class="lifecycle-detail-hint">查看依据</span>
+            </summary>
+            <div class="lifecycle-detail-body">
+                <ul class="lifecycle-reasons">
+                    {% for reason in row.reasons %}<li>{{ reason }}</li>{% endfor %}
+                </ul>
+                <div class="lifecycle-signal">
+                    <span><i class="bi bi-eye"></i>{{ row.signals.views }} 浏览</span>
+                    <span><i class="bi bi-heart"></i>{{ row.signals.favorites }} 收藏</span>
+                    <span><i class="bi bi-calendar-check"></i>{{ row.signals.orders }} 预约</span>
+                </div>
+            </div>
+        </details>
+        {% endif %}
+        {% endwith %}
+    </td>
+    {% endif %}
+    <td data-label="发布时间">
+        <time class="seller-item-date" datetime="{{ item.created_at|date:'c' }}">{{ item.created_at|date:"Y-m-d" }}</time>
+        <small class="seller-item-note">更新于 {{ item.updated_at|date:"m-d" }}</small>
+    </td>
+    <td data-label="操作">
+        <div class="seller-row-actions">
+            {% if row_mode == 'sold' %}
+            <a href="{% url 'item_detail' item.id %}" class="btn btn-outline-primary btn-sm">查看</a>
+            <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger btn-sm confirm-delete">删除</a>
+            {% else %}
+            <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-primary btn-sm">编辑</a>
+            <a href="{% url 'mark_sold' item.id %}" class="btn btn-outline-success btn-sm">状态</a>
+            <a href="{% url 'delete_item' item.id %}" class="btn btn-outline-danger btn-sm confirm-delete">删除</a>
+            {% endif %}
+        </div>
+        {% if row_mode == 'all' %}
+        {% with row=item.lifecycle_diagnosis %}
+        {% if row.can_refresh %}
+        <form method="post" action="{% url 'refresh_item' item.id %}" class="seller-refresh-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-success btn-sm"><i class="bi bi-arrow-clockwise me-1"></i>刷新到前排</button>
+        </form>
+        {% elif row.refresh_block_reason %}
+        <small class="seller-item-note seller-refresh-note">{{ row.refresh_block_reason }}</small>
+        {% endif %}
+        {% endwith %}
+        {% endif %}
+    </td>
+</tr>

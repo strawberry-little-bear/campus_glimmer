@@ -3194,9 +3194,9 @@ def bulk_listing_image_queue(request):
 
 @login_required
 def my_items(request):
-    items = Item.objects.filter(seller=request.user).select_related(
+    items = list(Item.objects.filter(seller=request.user).select_related(
         'category', 'location', 'campaign',
-    ).prefetch_related('images')
+    ).prefetch_related('images'))
     now = timezone.now()
     campaigns = CampusCampaign.objects.filter(is_active=True).filter(
         Q(ends_at__isnull=True) | Q(ends_at__gt=now),
@@ -3207,8 +3207,20 @@ def my_items(request):
     # 不需要额外注册模板过滤器。
     for item in items:
         item.lifecycle_diagnosis = diagnoses_by_id.get(item.pk)
+
+    # 状态页签复用同一份已取回的商品列表，避免模板逐行判断或在渲染时追加查询。
+    status_groups = {
+        status: [item for item in items if item.status == status]
+        for status in ('available', 'reserved', 'sold', 'expired')
+    }
+    item_counts = {'all': len(items), **{status: len(group) for status, group in status_groups.items()}}
     return render(request, 'listings/my_items.html', {
         'items': items,
+        'available_items': status_groups['available'],
+        'reserved_items': status_groups['reserved'],
+        'sold_items': status_groups['sold'],
+        'expired_items': status_groups['expired'],
+        'item_counts': item_counts,
         'campaigns': campaigns,
         'lifecycle': lifecycle,
         'has_bulk_listing_image_queue': _load_bulk_listing_image_queue(request) is not None,

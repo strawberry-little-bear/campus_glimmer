@@ -7758,70 +7758,270 @@ a { color: inherit; text-decoration: none; }
 
 
 /* --------------------------------------------------------------------------
-   卖家工作台：分段标签与清单表格
+   卖家工作台：商品概览、批量工具、状态页签与清单表格
 
-   这一页此前直接用 Bootstrap 的 card / card-header / nav-tabs / card-header-tabs，
-   是全站最后一处停留在默认组件外观的页面。标签换成自定义分段控件，表格跟上
-   全站主流的 table-sm + align-middle 写法。这里保留 data-bs-toggle="tab" 和
-   .tab-content / .tab-pane / .fade —— Bootstrap 的 Tab 插件用
-   .list-group, .nav, [role="tablist"] 定位父级，所以带 role="tablist" 的自定义
-   容器同样能驱动切换、方向键与 aria-selected，不需要再引一份 JS。
-
-   .seller-desk-table 同时服务我的商品页与批量补图页，两者同属卖家工作台。
+   商品行由 _my_item_row.html 复用，四个状态页签不再各维护一份结构。
+   .seller-desk-table--stacked 只负责窄屏呈现；表格在 DOM 中仍是原生 table，
+   屏幕阅读器和 Bootstrap 页签行为都不变。.seller-desk-table 同时服务批量补图页。
    -------------------------------------------------------------------------- */
-.my-items-panel { padding: 0; overflow: hidden; }
+.seller-desk-intro { align-items: center; }
+.seller-desk-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
-.my-items-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    padding: 12px 16px 0;
-    border-bottom: 1px solid var(--line);
+.seller-bulk-toolbar {
+    padding: 22px;
+    border-color: #dcece1;
+    background: linear-gradient(125deg, #f4fbf6 0%, #ffffff 72%);
 }
 
+.seller-bulk-heading,
+.my-items-tabs-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.seller-bulk-heading h2 { margin: 5px 0 0; color: #294f40; font-size: 1.04rem; font-weight: 800; }
+.seller-bulk-heading p { max-width: 640px; margin: 5px 0 0; color: var(--muted); font-size: .76rem; line-height: 1.65; }
+.seller-selection-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    padding: 8px 12px;
+    border: 1px solid #cfe5d8;
+    border-radius: 999px;
+    color: #3c6553;
+    background: #eef8f1;
+    font-size: .75rem;
+}
+.seller-selection-badge strong { color: var(--primary-dark); font-size: .9rem; }
+
+.seller-bulk-form {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+.seller-bulk-step {
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid #e4eee7;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, .82);
+}
+.seller-bulk-step > label {
+    display: block;
+    margin-bottom: 7px;
+    color: #60756c;
+    font-size: .69rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+}
+.seller-bulk-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.seller-bulk-control .form-select,
+.seller-bulk-control .form-control { min-width: 0; border-color: #dce9e1; border-radius: 9px; }
+.seller-bulk-control .btn { white-space: nowrap; border-radius: 9px; }
+
+.my-items-panel { padding: 0; overflow: hidden; }
+.my-items-tabs-bar {
+    flex-wrap: wrap;
+    padding: 12px 16px 0;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #fbfdfb, #fff);
+}
+.my-items-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
 .my-items-tab {
-    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    padding: 10px 13px;
     border: 0;
     border-radius: 10px 10px 0 0;
-    padding: 9px 15px;
-    background: transparent;
     color: var(--muted);
+    background: transparent;
     font-size: .8rem;
     font-weight: 700;
     cursor: pointer;
     transition: background .2s ease, color .2s ease;
 }
-
 .my-items-tab:hover { color: var(--primary-dark); background: #f3faf6; }
-
-.my-items-tab.active {
-    color: var(--primary-dark);
-    background: var(--mint);
-    box-shadow: inset 0 -2px 0 var(--primary);
-}
-
+.my-items-tab.active { color: var(--primary-dark); background: var(--mint); box-shadow: inset 0 -2px 0 var(--primary); }
 .my-items-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.my-items-tab-count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 21px;
+    height: 21px;
+    padding: 0 6px;
+    border-radius: 999px;
+    color: #5a7166;
+    background: #eef3ef;
+    font-size: .66rem;
+    font-weight: 800;
+}
+.my-items-tab.active .my-items-tab-count { color: #fff; background: var(--primary); }
+.my-items-tabs-note { color: #7b8b83; font-size: .67rem; white-space: nowrap; }
+.my-items-tabs-note i { color: var(--primary); }
 
 .my-items-pane { padding: 16px; }
-
-.seller-desk-table { --bs-table-bg: transparent; font-size: .82rem; }
+.seller-desk-table-wrap { overflow-x: auto; }
+.seller-desk-table { --bs-table-bg: transparent; font-size: .8rem; }
 .seller-desk-table th {
+    padding-top: 9px;
+    padding-bottom: 9px;
     color: var(--muted);
     border-bottom-color: #e6eee9;
-    font-size: .72rem;
-    font-weight: 600;
+    font-size: .69rem;
+    font-weight: 700;
+    letter-spacing: .02em;
     white-space: nowrap;
 }
-.seller-desk-table td { color: #4a5b53; border-bottom-color: #eef3ef; }
+.seller-desk-table td { padding-top: 11px; padding-bottom: 11px; color: #4a5b53; border-bottom-color: #eef3ef; vertical-align: middle; }
 .seller-desk-table tr:last-child td { border-bottom: 0; }
-.seller-desk-table tbody tr:hover td { background: #f6fbf8; }
+.seller-desk-table tbody .seller-desk-row { transition: background .18s ease; }
+.seller-desk-table tbody .seller-desk-row:hover { background: #f7fbf8; }
 .seller-desk-table a { color: #2f6a4f; font-weight: 700; }
 .seller-desk-table a:hover { color: var(--primary-dark); text-decoration: underline; }
+.seller-desk-check { width: 34px; }
 
-@media (max-width: 575.98px) {
-    .my-items-tabs { padding: 10px 12px 0; }
-    .my-items-tab { flex: 1 1 auto; padding: 9px 8px; font-size: .76rem; }
+.seller-item-cell { display: flex; align-items: center; gap: 11px; min-width: 250px; }
+.seller-item-thumb {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    overflow: hidden;
+    width: 52px;
+    height: 52px;
+    border: 1px solid #e3ece6;
+    border-radius: 12px;
+    background: #f2f7f3;
+}
+.seller-item-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.seller-item-copy { min-width: 0; }
+.seller-item-title {
+    display: -webkit-box;
+    overflow: hidden;
+    max-width: 360px;
+    line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+}
+.seller-item-meta { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 5px; color: #809087; font-size: .65rem; line-height: 1.5; }
+.seller-item-meta span { display: inline-flex; align-items: center; gap: 3px; }
+.seller-item-meta i { color: #5c9278; }
+.seller-item-campaign { color: #946226; }
+.seller-item-campaign i { color: #c07a32; }
+.seller-item-price { display: block; color: #234d3b; font-size: .86rem; white-space: nowrap; }
+.seller-item-free { color: #2d805b; }
+.seller-item-note { display: block; margin-top: 3px; color: #89988f; font-size: .64rem; line-height: 1.45; }
+.seller-item-date { display: block; color: #53665d; font-size: .75rem; white-space: nowrap; }
+
+.seller-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: .66rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.seller-status-available { color: #236b4c; background: #e4f4e9; }
+.seller-status-reserved { color: #84571a; background: #fff2d9; }
+.seller-status-sold { color: #5a6661; background: #edf0ee; }
+.seller-status-expired { color: #9a4d36; background: #fff0e9; }
+
+.lifecycle-detail-toggle { margin-top: 7px; }
+.lifecycle-detail-toggle summary { display: grid; gap: 4px; list-style: none; cursor: pointer; }
+.lifecycle-detail-toggle summary::-webkit-details-marker { display: none; }
+.lifecycle-detail-toggle summary .lifecycle-tag { justify-self: start; white-space: nowrap; }
+.lifecycle-detail-toggle summary small { color: #84938b; font-size: .62rem; line-height: 1.5; }
+.lifecycle-detail-hint { color: #397158; font-size: .62rem; font-weight: 700; }
+.lifecycle-detail-hint::after { content: ' ↓'; }
+.lifecycle-detail-toggle[open] .lifecycle-detail-hint::after { content: ' ↑'; }
+.lifecycle-detail-body {
+    max-width: 330px;
+    margin-top: 7px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: #f5f9f6;
+}
+.lifecycle-detail-body .lifecycle-reasons { margin: 0; }
+.lifecycle-detail-body .lifecycle-signal { margin-top: 6px; }
+.lifecycle-detail-body .lifecycle-signal span { display: inline-flex; align-items: center; gap: 3px; }
+
+.seller-row-actions { display: flex; flex-wrap: wrap; gap: 5px; min-width: 184px; }
+.seller-row-actions .btn { border-radius: 8px; padding: 4px 8px; font-size: .69rem; white-space: nowrap; }
+.seller-refresh-form { margin-top: 6px; }
+.seller-refresh-form .btn { width: 100%; border-radius: 8px; padding: 4px 8px; font-size: .69rem; }
+.seller-refresh-note { max-width: 210px; }
+.seller-desk-empty { padding: 44px 18px !important; color: var(--muted) !important; text-align: center; }
+.seller-desk-empty > i { display: block; margin-bottom: 10px; color: #75a28b; font-size: 1.8rem; }
+.seller-desk-empty strong { display: block; color: #385b4b; font-size: .95rem; }
+.seller-desk-empty p { margin: 5px 0 12px; font-size: .73rem; }
+
+@media (max-width: 991.98px) {
+    .seller-bulk-form { grid-template-columns: 1fr; }
+    .my-items-tabs-note { display: none; }
+}
+
+@media (max-width: 767.98px) {
+    .seller-desk-intro { align-items: flex-start; }
+    .seller-desk-actions { width: 100%; }
+    .seller-desk-actions .btn { flex: 1 1 auto; }
+    .seller-bulk-toolbar { padding: 16px; }
+    .seller-bulk-heading { align-items: flex-start; }
+    .seller-selection-badge { margin-top: 2px; }
+    .seller-bulk-control { grid-template-columns: 1fr; }
+    .seller-bulk-control .btn { width: 100%; }
+    .my-items-tabs-bar { padding: 9px 10px 0; }
+    .my-items-tabs { width: 100%; padding-bottom: 8px; gap: 2px; }
+    .my-items-tab { gap: 4px; padding: 8px 6px; font-size: .72rem; }
+    .my-items-tab-count { min-width: 18px; height: 18px; padding: 0 4px; }
     .my-items-pane { padding: 12px; }
+    .seller-desk-table-wrap { overflow: visible; }
+    .seller-desk-table--stacked { display: block; }
+    .seller-desk-table--stacked thead { display: none; }
+    .seller-desk-table--stacked tbody { display: grid; gap: 10px; }
+    .seller-desk-table--stacked .seller-desk-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        padding: 13px;
+        border: 1px solid #e1ece5;
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 5px 16px rgba(34, 73, 57, .035);
+    }
+    .seller-desk-table--stacked .seller-desk-row:hover { background: #fff; }
+    .seller-desk-table--stacked .seller-desk-row td { display: block; width: auto; padding: 0 !important; border: 0; }
+    .seller-desk-table--stacked .seller-desk-row td[data-label]:not([data-label="商品"]):not(.seller-desk-check) {
+        display: grid;
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 8px;
+        margin-top: 9px;
+        padding-top: 9px !important;
+        border-top: 1px dashed #e8efea;
+    }
+    .seller-desk-table--stacked .seller-desk-row td[data-label]:not([data-label="商品"]):not(.seller-desk-check)::before {
+        content: attr(data-label);
+        color: #829188;
+        font-size: .65rem;
+        font-weight: 700;
+    }
+    .seller-desk-table--stacked .seller-desk-row td[data-label="状态"]:not([data-label="商品"]):not(.seller-desk-check) { grid-template-columns: minmax(0, 1fr); }
+    .seller-desk-table--stacked .seller-status { justify-self: start; }
+    .seller-desk-table--stacked .seller-desk-check { position: absolute; top: 14px; right: 14px; z-index: 1; }
+    .seller-item-cell { min-width: 0; padding-right: 28px; }
+    .seller-item-title { max-width: none; }
+    .seller-detail-cell { min-width: 0; }
+    .seller-item-note { margin-top: 2px; }
+    .seller-row-actions { min-width: 0; }
+    .seller-row-actions .btn { flex: 1 1 auto; }
+    .lifecycle-detail-body { max-width: none; }
+    .seller-desk-table--stacked tr:not(.seller-desk-row) { display: block; }
+    .seller-desk-table--stacked tr:not(.seller-desk-row) td { display: block; width: 100%; }
 }
 
 /* --------------------------------------------------------------------------

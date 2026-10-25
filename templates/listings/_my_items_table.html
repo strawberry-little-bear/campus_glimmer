@@ -1,0 +1,42 @@
+<div class="table-responsive seller-desk-table-wrap">
+    <table class="table table-sm align-middle seller-desk-table seller-desk-table--stacked mb-0">
+        <caption class="visually-hidden">{{ table_caption }}</caption>
+        <thead>
+            <tr>
+                {% if row_mode == 'all' %}
+                <th class="seller-desk-check">
+                    <input type="checkbox" class="form-check-input" id="select-all-items" aria-label="选择全部商品">
+                </th>
+                <th>商品</th>
+                <th>交易</th>
+                <th>状态与诊断</th>
+                <th>发布时间</th>
+                <th>操作</th>
+                {% else %}
+                <th>商品</th>
+                <th>交易</th>
+                <th>发布时间</th>
+                <th>操作</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            {% include 'listings/_my_item_row.html' with item=item row_mode=row_mode only %}
+            {% empty %}
+            <tr>
+                <td colspan="{% if row_mode == 'all' %}6{% else %}4{% endif %}" class="seller-desk-empty">
+                    <i class="bi {% if row_mode == 'all' %}bi-box-seam{% else %}bi-inbox{% endif %}"></i>
+                    <strong>{{ empty_message }}</strong>
+                    {% if row_mode == 'all' %}
+                    <p>发布第一件商品后，这里会集中显示生命周期、批量和日常管理工具。</p>
+                    <a href="{% url 'new_item' %}" class="btn btn-success btn-sm">立即发布</a>
+                    {% else %}
+                    <p>其他状态的商品仍可在“全部”中查看。</p>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
