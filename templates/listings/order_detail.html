@@ -1,140 +1,117 @@
 {% extends 'base.html' %}
 {% block title %}{{ title }} · 拾光校园{% endblock %}
 {% block content %}
-<div class="page-intro mb-4">
-    <div>
+<header class="order-detail-hero">
+    <div class="order-detail-hero-copy">
         <span class="eyebrow eyebrow-soft">交易进度</span>
         <h1>订单详情</h1>
-        <p>{{ order.item.title }} · 创建于 {{ order.created_at|date:'Y年m月d日 H:i' }}</p>
+        <p><span class="order-detail-item-name">{{ order.item.title }}</span><span aria-hidden="true">·</span>创建于 {{ order.created_at|date:'Y年m月d日 H:i' }}</p>
     </div>
-    <a href="{% url 'my_orders' %}" class="btn btn-outline-primary"><i class="bi bi-receipt me-2"></i>我的交易</a>
-</div>
+    <a href="{% url 'my_orders' %}" class="btn btn-outline-primary order-detail-back"><i class="bi bi-receipt me-2"></i>我的交易</a>
+</header>
 
-<div class="row g-4">
-    <div class="col-lg-8">
-        <section class="content-card">
-            <div class="d-flex justify-content-between align-items-start gap-3">
+<div class="order-detail-layout">
+    <div class="order-detail-primary">
+        <section class="content-card order-detail-overview">
+            <div class="order-detail-status-head">
                 <div>
                     <span class="eyebrow eyebrow-soft">订单状态</span>
-                    <h2 class="mt-2">{{ order.get_status_display }}</h2>
+                    <h2>{{ order.get_status_display }}</h2>
+                    <p class="order-detail-status-note">关键节点在站内确认，完成情况会同步写入状态记录。</p>
                 </div>
                 <span class="order-status order-status-{{ order.status }}">{{ order.get_status_display }}</span>
             </div>
 
-            <div class="order-progress mt-4">
+            <div class="order-detail-progress-panel">
+                <div class="order-detail-progress-heading">
+                    <strong>交易进度</strong>
+                    <small>共 4 个节点</small>
+                </div>
                 {% if order.item.trade_mode == 'borrow' %}
-                <div class="progress-step {% if order.status != 'cancelled' %}is-done{% endif %}"><span>1</span><small>提交申请</small></div>
-                <div class="progress-line {% if order.status in 'confirmed meeting borrowed returned' %}is-done{% endif %}"></div>
-                <div class="progress-step {% if order.status in 'confirmed meeting borrowed returned' %}is-done{% endif %}"><span>2</span><small>发布者确认</small></div>
-                <div class="progress-line {% if order.status in 'meeting borrowed returned' %}is-done{% endif %}"></div>
-                <div class="progress-step {% if order.status in 'meeting borrowed returned' %}is-done{% endif %}"><span>3</span><small>借用开始</small></div>
-                <div class="progress-line {% if order.status == 'returned' %}is-done{% endif %}"></div>
-                <div class="progress-step {% if order.status == 'returned' %}is-done{% endif %}"><span>4</span><small>归还完成</small></div>
+                <ol class="order-progress" aria-label="借用订单进度">
+                    <li class="progress-step {% if order.status != 'cancelled' %}is-done{% endif %} {% if order.status == 'pending' %}is-current{% endif %} {% if order.status in 'confirmed meeting borrowed returned' %}is-linked{% endif %}"><span>1</span><small>提交申请</small></li>
+                    <li class="progress-step {% if order.status in 'confirmed meeting borrowed returned' %}is-done{% endif %} {% if order.status == 'confirmed' %}is-current{% endif %} {% if order.status in 'meeting borrowed returned' %}is-linked{% endif %}"><span>2</span><small>发布者确认</small></li>
+                    <li class="progress-step {% if order.status in 'meeting borrowed returned' %}is-done{% endif %} {% if order.status in 'meeting borrowed' %}is-current{% endif %} {% if order.status == 'returned' %}is-linked{% endif %}"><span>3</span><small>借用开始</small></li>
+                    <li class="progress-step {% if order.status == 'returned' %}is-done{% endif %} {% if order.status == 'returned' %}is-current{% endif %}"><span>4</span><small>归还完成</small></li>
+                </ol>
                 {% else %}
-                <div class="progress-step {% if order.status != 'cancelled' %}is-done{% endif %}"><span>1</span><small>提交预约</small></div>
-                <div class="progress-line {% if order.status in 'confirmed meeting completed' %}is-done{% endif %}"></div>
-                <div class="progress-step {% if order.status in 'confirmed meeting completed' %}is-done{% endif %}"><span>2</span><small>卖家确认</small></div>
-                <div class="progress-line {% if order.status in 'meeting completed' %}is-done{% endif %}"></div>
-                <div class="progress-step {% if order.status in 'meeting completed' %}is-done{% endif %}"><span>3</span><small>当面交付</small></div>
-                <div class="progress-line {% if order.status == 'completed' %}is-done{% endif %}"></div>
-                <div class="progress-step {% if order.status == 'completed' %}is-done{% endif %}"><span>4</span><small>交易完成</small></div>
+                <ol class="order-progress" aria-label="交易订单进度">
+                    <li class="progress-step {% if order.status != 'cancelled' %}is-done{% endif %} {% if order.status == 'pending' %}is-current{% endif %} {% if order.status in 'confirmed meeting completed' %}is-linked{% endif %}"><span>1</span><small>提交预约</small></li>
+                    <li class="progress-step {% if order.status in 'confirmed meeting completed' %}is-done{% endif %} {% if order.status == 'confirmed' %}is-current{% endif %} {% if order.status in 'meeting completed' %}is-linked{% endif %}"><span>2</span><small>卖家确认</small></li>
+                    <li class="progress-step {% if order.status in 'meeting completed' %}is-done{% endif %} {% if order.status == 'meeting' %}is-current{% endif %} {% if order.status == 'completed' %}is-linked{% endif %}"><span>3</span><small>当面交付</small></li>
+                    <li class="progress-step {% if order.status == 'completed' %}is-done{% endif %} {% if order.status == 'completed' %}is-current{% endif %}"><span>4</span><small>交易完成</small></li>
+                </ol>
                 {% endif %}
             </div>
 
-            <dl class="row order-info-list mt-5 mb-0">
-                <dt class="col-sm-4">商品</dt><dd class="col-sm-8"><a href="{% url 'item_detail' order.item.id %}">{{ order.item.title }}</a></dd>
-                <dt class="col-sm-4">交易方式</dt><dd class="col-sm-8">{% if order.item.trade_mode == 'free' %}<span class="text-success">免费领取</span>{% elif order.item.trade_mode == 'borrow' %}<span class="text-primary">限期借用 · {{ order.item.borrow_days }} 天</span>{% else %}出售 · ¥{{ order.agreed_price|floatformat:2 }}{% endif %}</dd>
-                {% if order.item.trade_mode == 'borrow' %}<dt class="col-sm-4">借用押金</dt><dd class="col-sm-8">{% if order.deposit_amount %}¥{{ order.deposit_amount|floatformat:2 }}{% else %}无押金{% endif %}<small class="d-block text-muted">押金由双方线下处理，平台只记录约定</small></dd>{% endif %}
-                <dt class="col-sm-4">买家</dt><dd class="col-sm-8">{{ order.buyer.username }}</dd>
-                <dt class="col-sm-4">卖家</dt><dd class="col-sm-8">{{ order.seller.username }}</dd>
-                <dt class="col-sm-4">交付地点</dt><dd class="col-sm-8">{% if order.meeting_location %}{{ order.meeting_location.name }}{% if order.meeting_location.address %} · {{ order.meeting_location.address }}{% endif %}{% else %}待双方沟通{% endif %}</dd>
-                {% if appointment %}<dt class="col-sm-4">交付时间</dt><dd class="col-sm-8">{{ appointment.start_at|date:'Y年m月d日 H:i' }} – {{ appointment.end_at|date:'H:i' }} <span class="appointment-status appointment-status-{{ appointment.status }}">{{ appointment.get_status_display }}</span></dd>{% endif %}
-                {% if order.buyer_note %}<dt class="col-sm-4">买家备注</dt><dd class="col-sm-8">{{ order.buyer_note|linebreaksbr }}</dd>{% endif %}
-                {% if order.status == 'pending' and order.confirmation_deadline %}<dt class="col-sm-4">确认截止</dt><dd class="col-sm-8"><span class="order-deadline"><i class="bi bi-hourglass-split me-1"></i>{{ order.confirmation_deadline|date:'Y年m月d日 H:i' }} 前</span></dd>{% endif %}
-                {% if order.item.trade_mode == 'borrow' and order.return_due_at %}<dt class="col-sm-4">预计归还</dt><dd class="col-sm-8"><span class="{% if order.status == 'borrowed' and order.return_due_at < now %}text-danger{% endif %}"><i class="bi bi-calendar2-check me-1"></i>{{ order.return_due_at|date:'Y年m月d日 H:i' }}</span></dd>{% endif %}
-                {% if order.item.trade_mode == 'borrow' and order.returned_at %}<dt class="col-sm-4">实际归还</dt><dd class="col-sm-8">{{ order.returned_at|date:'Y年m月d日 H:i' }}</dd>{% endif %}
+            <dl class="order-info-list">
+                <dt>商品</dt><dd><a href="{% url 'item_detail' order.item.id %}">{{ order.item.title }}</a></dd>
+                <dt>交易方式</dt><dd>{% if order.item.trade_mode == 'free' %}<span class="text-success">免费领取</span>{% elif order.item.trade_mode == 'borrow' %}<span class="text-primary">限期借用 · {{ order.item.borrow_days }} 天</span>{% else %}出售 · ¥{{ order.agreed_price|floatformat:2 }}{% endif %}</dd>
+                {% if order.item.trade_mode == 'borrow' %}<dt>借用押金</dt><dd>{% if order.deposit_amount %}¥{{ order.deposit_amount|floatformat:2 }}{% else %}无押金{% endif %}<small class="d-block text-muted">押金由双方线下处理，平台只记录约定</small></dd>{% endif %}
+                <dt>买家</dt><dd>{{ order.buyer.username }}</dd>
+                <dt>卖家</dt><dd>{{ order.seller.username }}</dd>
+                <dt>交付地点</dt><dd>{% if order.meeting_location %}{{ order.meeting_location.name }}{% if order.meeting_location.address %} · {{ order.meeting_location.address }}{% endif %}{% else %}待双方沟通{% endif %}</dd>
+                {% if appointment %}<dt>交付时间</dt><dd>{{ appointment.start_at|date:'Y年m月d日 H:i' }} – {{ appointment.end_at|date:'H:i' }} <span class="appointment-status appointment-status-{{ appointment.status }}">{{ appointment.get_status_display }}</span></dd>{% endif %}
+                {% if order.buyer_note %}<dt>买家备注</dt><dd>{{ order.buyer_note|linebreaksbr }}</dd>{% endif %}
+                {% if order.status == 'pending' and order.confirmation_deadline %}<dt>确认截止</dt><dd><span class="order-deadline"><i class="bi bi-hourglass-split me-1"></i>{{ order.confirmation_deadline|date:'Y年m月d日 H:i' }} 前</span></dd>{% endif %}
+                {% if order.item.trade_mode == 'borrow' and order.return_due_at %}<dt>预计归还</dt><dd><span class="{% if order.status == 'borrowed' and order.return_due_at < now %}text-danger{% endif %}"><i class="bi bi-calendar2-check me-1"></i>{{ order.return_due_at|date:'Y年m月d日 H:i' }}</span></dd>{% endif %}
+                {% if order.item.trade_mode == 'borrow' and order.returned_at %}<dt>实际归还</dt><dd>{{ order.returned_at|date:'Y年m月d日 H:i' }}</dd>{% endif %}
             </dl>
-
-            {% if transaction_safety %}
-            <section class="transaction-safety-card transaction-safety-{{ transaction_safety.tone }} mt-5">
-                <div class="d-flex justify-content-between align-items-start gap-3">
-                    <div><span class="eyebrow eyebrow-soft">交易安全卡</span><h3 class="mt-2 mb-1">{{ transaction_safety.label }}</h3><p class="small text-muted mb-0">基于订单、公开交易记录和当前预约状态生成，仅作提醒，不会替代双方判断。</p></div>
-                    <i class="bi {% if transaction_safety.tone == 'warning' %}bi-shield-exclamation{% elif transaction_safety.tone == 'safe' %}bi-shield-check{% else %}bi-shield{% endif %} transaction-safety-icon"></i>
-                </div>
-                <div class="transaction-safety-list mt-3">
-                    {% for signal in transaction_safety.signals %}
-                    <article class="transaction-safety-signal transaction-safety-signal-{{ signal.level }}">
-                        <i class="bi {% if signal.level == 'warning' %}bi-exclamation-triangle{% elif signal.level == 'positive' %}bi-check-circle{% else %}bi-info-circle{% endif %}"></i>
-                        <div><strong>{{ signal.title }}</strong><p>{{ signal.detail }}</p>{% if signal.action %}<small><i class="bi bi-arrow-right-short me-1"></i>{{ signal.action }}</small>{% endif %}</div>
-                    </article>
-                    {% endfor %}
-                </div>
-                <div class="mt-3 pt-3 border-top">
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-                        <div class="d-flex flex-wrap align-items-center gap-2">
-                            <small class="text-muted">当前安全卡确认：</small>
-                            {% if buyer_safety_acknowledgement %}
-                            <span class="badge text-bg-success">买家已确认 · {{ buyer_safety_acknowledgement.acknowledged_at|date:'Y-m-d H:i' }}</span>
-                            {% else %}
-                            <span class="badge text-bg-secondary">买家未确认</span>
-                            {% endif %}
-                            {% if seller_safety_acknowledgement %}
-                            <span class="badge text-bg-success">卖家已确认 · {{ seller_safety_acknowledgement.acknowledged_at|date:'Y-m-d H:i' }}</span>
-                            {% else %}
-                            <span class="badge text-bg-secondary">卖家未确认</span>
-                            {% endif %}
-                        </div>
-                        {% if can_acknowledge_order_safety %}
-                        <form method="post" action="{% url 'acknowledge_order_safety' order.id %}">
-                            {% csrf_token %}
-                            <button type="submit" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-check2-square me-1"></i>我已核对当前安全提醒
-                            </button>
-                        </form>
-                        {% elif my_safety_acknowledgement %}
-                        <span class="small text-muted"><i class="bi bi-check2-circle me-1"></i>你已确认当前版本</span>
-                        {% endif %}
-                    </div>
-                    <p class="small text-muted mt-2 mb-0">确认只表示已核对当前提醒，不是平台担保；交付安排变化后需要重新确认。</p>
-                </div>
-            </section>
-            {% endif %}
-
-            {% if order.status == 'completed' or order.status == 'returned' %}
-            <div class="rating-panel mt-5">
-                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
-                    <div>
-                        <span class="eyebrow eyebrow-soft">交易反馈</span>
-                        <h3 class="mt-2 mb-1">评价 {{ rating_target.username }}</h3>
-                        <p class="mb-0 text-muted">完成交易后留下真实体验，让校园交易更有参考。</p>
-                    </div>
-                    {% if my_rating %}
-                    <span class="rating-score-badge"><span class="rating-stars" aria-label="{{ my_rating.score }} 星">{% for star in '12345' %}{% if forloop.counter <= my_rating.score %}★{% else %}☆{% endif %}{% endfor %}</span> {{ my_rating.score }}.0</span>
-                    {% else %}
-                    <a href="{% url 'rate_order' order.id %}" class="btn btn-primary"><i class="bi bi-star me-2"></i>去评价</a>
-                    {% endif %}
-                </div>
-                {% if my_rating.comment %}<p class="rating-own-comment mt-3 mb-0">“{{ my_rating.comment|linebreaksbr }}”</p>{% endif %}
-            </div>
-            {% endif %}
-
-            {% if events %}
-            <section class="order-timeline mt-5">
-                <div class="card-section-heading"><h2><i class="bi bi-clock-history me-2"></i>状态记录</h2><span>{{ events|length }} 次变更</span></div>
-                <ol class="timeline-list mt-3">
-                    {% for event in events %}
-                    <li class="timeline-item {% if forloop.last %}is-current{% endif %}">
-                        <span class="timeline-dot"></span>
-                        <div class="timeline-content"><div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ event.get_to_status_display }}</strong><time>{{ event.created_at|date:'Y-m-d H:i' }}</time></div><p class="mb-1">{{ event.note }}</p><small>{% if event.actor %}由 {{ event.actor.username }} 操作{% else %}系统记录{% endif %}</small></div>
-                    </li>
-                    {% endfor %}
-                </ol>
-            </section>
-            {% endif %}
         </section>
+
     </div>
 
-    <div class="col-lg-4">
+    <aside class="order-detail-aside">
+        <section class="content-card order-action-card">
+            <span class="eyebrow eyebrow-soft">下一步</span>
+            {% if order.status == 'pending' and user == order.seller %}
+                <p class="mt-3">买家正在等待你的确认。</p>
+                <form method="post" action="{% url 'update_order_status' order.id %}" class="d-grid gap-2">{% csrf_token %}<button name="status" value="confirmed" class="btn btn-primary">确认预约</button><button name="status" value="cancelled" class="btn btn-outline-danger">无法交易，取消订单</button></form>
+            {% elif order.status == 'confirmed' and user == order.seller %}
+                <p class="mt-3">请与买家沟通后确认见面安排。</p>
+                <form method="post" action="{% url 'update_order_status' order.id %}" class="d-grid gap-2">{% csrf_token %}<button name="status" value="meeting" class="btn btn-primary">标记为待交付</button><button name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
+            {% elif order.status == 'meeting' %}
+                <p class="mt-3">完成当面交付后，需要买卖双方分别确认，订单才会自动{% if order.item.trade_mode == 'borrow' %}进入借用中{% else %}完成{% endif %}。</p>
+                <div class="delivery-confirmation-summary">
+                    <div class="delivery-confirmation-person {% if confirmation and confirmation.buyer_confirmed_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.buyer_confirmed_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>买家{% if confirmation and confirmation.buyer_confirmed_at %}已确认{% else %}待确认{% endif %}</span></div>
+                    <div class="delivery-confirmation-person {% if confirmation and confirmation.seller_confirmed_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.seller_confirmed_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>卖家{% if confirmation and confirmation.seller_confirmed_at %}已确认{% else %}待确认{% endif %}</span></div>
+                </div>
+                {% if user == order.buyer and not confirmation.buyer_confirmed_at %}
+                    <div class="handoff-code-panel mt-3">
+                        <div class="d-flex justify-content-between align-items-start gap-2"><div><strong><i class="bi bi-shield-lock me-1"></i>交付确认码</strong><p class="small mb-0 mt-1">到现场后只向卖家口头提供，不要发在公开留言中。</p></div><span class="badge text-bg-light">买家生成</span></div>
+                        {% if handoff_code_display %}<div class="handoff-code-value">{{ handoff_code_display }}</div><p class="small text-muted mb-0">请记住或现场出示此 6 位数字。末两位提示：{{ confirmation.handoff_code_hint|default:'未生成' }}。</p>{% elif confirmation and confirmation.handoff_code_hash %}<p class="small text-muted mt-3 mb-0">本次确认码已生成，出于安全原因页面不会重复显示完整号码。末两位提示：{{ confirmation.handoff_code_hint }}。</p>{% else %}<p class="small text-muted mt-3 mb-0">还没有确认码，建议在交付前生成一次。</p>{% endif %}
+                        <form method="post" action="{% url 'generate_delivery_code' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-outline-primary w-100"><i class="bi bi-arrow-repeat me-1"></i>{% if confirmation and confirmation.handoff_code_hash %}重新生成确认码{% else %}生成确认码{% endif %}</button></form>
+                    </div>
+                    <form method="post" action="{% url 'confirm_delivery' order.id %}" class="d-grid gap-2 mt-3">{% csrf_token %}<button class="btn btn-primary"><i class="bi bi-hand-thumbs-up me-1"></i>确认已完成交付</button><button type="submit" formaction="{% url 'update_order_status' order.id %}" name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
+                {% elif user == order.seller and not confirmation.seller_confirmed_at %}
+                    {% if confirmation and confirmation.handoff_code_hash %}
+                    <div class="handoff-code-panel mt-3"><strong><i class="bi bi-shield-check me-1"></i>现场核对确认码</strong><p class="small mb-0 mt-1">请向买家当面索取 6 位数字，再提交确认。已尝试 {{ confirmation.handoff_code_attempts }} 次，最多 5 次。</p>
+                        {% if confirmation.handoff_code_attempts >= 5 %}<div class="alert alert-warning small mt-3 mb-0">错误次数已达上限，请让买家重新生成确认码。</div>{% else %}<form method="post" action="{% url 'confirm_delivery' order.id %}" class="mt-3">{% csrf_token %}{% for field in delivery_code_form %}<label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endfor %}<button class="btn btn-primary w-100 mt-2"><i class="bi bi-check2-circle me-1"></i>核对并确认交付</button></form>{% endif %}
+                    </div>
+                    {% else %}<form method="post" action="{% url 'confirm_delivery' order.id %}" class="d-grid gap-2 mt-3">{% csrf_token %}<button class="btn btn-primary"><i class="bi bi-hand-thumbs-up me-1"></i>确认已完成交付</button></form>{% endif %}
+                {% else %}<p class="small text-muted mt-3 mb-0">你已完成确认，请等待对方确认。</p>{% endif %}
+            {% elif order.status == 'borrowed' %}
+                <div class="mt-3">
+                    <strong><i class="bi bi-arrow-repeat me-1"></i>借用进行中</strong>
+                    {% if order.return_due_at %}<p class="small mb-0 mt-2">预计归还：{{ order.return_due_at|date:'Y年m月d日 H:i' }}</p>{% endif %}
+                </div>
+                <div class="delivery-confirmation-summary mt-3">
+                    <div class="delivery-confirmation-person {% if confirmation and confirmation.buyer_returned_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.buyer_returned_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>借用者{% if confirmation and confirmation.buyer_returned_at %}已登记{% else %}待归还{% endif %}</span></div>
+                    <div class="delivery-confirmation-person {% if confirmation and confirmation.seller_returned_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.seller_returned_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>发布者{% if confirmation and confirmation.seller_returned_at %}已确认{% else %}待确认{% endif %}</span></div>
+                </div>
+                {% if user == order.buyer and not confirmation.buyer_returned_at %}<form method="post" action="{% url 'confirm_return' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-left me-1"></i>登记我已归还</button></form>{% elif user == order.seller and not confirmation.seller_returned_at %}<form method="post" action="{% url 'confirm_return' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-primary w-100"><i class="bi bi-check2-circle me-1"></i>确认已收到归还物品</button></form>{% else %}<p class="small text-muted mt-3 mb-0">你已完成当前归还确认，请等待对方操作。</p>{% endif %}
+            {% elif order.status == 'returned' %}
+                <div class="mt-3"><strong><i class="bi bi-check-circle me-1"></i>借用已归还</strong><p class="small mb-0 mt-2">双方已确认物品归还，商品现在可以再次被借用。</p></div>
+            {% elif order.status == 'confirmed' and user == order.buyer %}
+                <p class="mt-3">卖家已确认预约，请继续沟通见面时间。</p>
+                <form method="post" action="{% url 'update_order_status' order.id %}">{% csrf_token %}<button name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
+            {% elif order.status == 'completed' or order.status == 'cancelled' %}
+                <p class="mt-3 mb-0 text-muted">这笔订单已经结束。</p>
+            {% else %}
+                <p class="mt-3 mb-0 text-muted">等待卖家确认后继续推进。</p>
+            {% endif %}
+        </section>
+
         {% if order.status == 'confirmed' or order.status == 'meeting' %}
         <section class="content-card meeting-appointment-card mb-4">
             <div class="card-section-heading"><div><span class="eyebrow eyebrow-soft">交付安排</span><h2 class="mt-2">约定见面时间</h2></div><i class="bi bi-calendar2-week meeting-appointment-icon"></i></div>
@@ -228,56 +205,88 @@
         </section>
         {% endif %}
 
-        <section class="content-card">
-            <span class="eyebrow eyebrow-soft">下一步</span>
-            {% if order.status == 'pending' and user == order.seller %}
-                <p class="mt-3">买家正在等待你的确认。</p>
-                <form method="post" action="{% url 'update_order_status' order.id %}" class="d-grid gap-2">{% csrf_token %}<button name="status" value="confirmed" class="btn btn-primary">确认预约</button><button name="status" value="cancelled" class="btn btn-outline-danger">无法交易，取消订单</button></form>
-            {% elif order.status == 'confirmed' and user == order.seller %}
-                <p class="mt-3">请与买家沟通后确认见面安排。</p>
-                <form method="post" action="{% url 'update_order_status' order.id %}" class="d-grid gap-2">{% csrf_token %}<button name="status" value="meeting" class="btn btn-primary">标记为待交付</button><button name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
-            {% elif order.status == 'meeting' %}
-                <p class="mt-3">完成当面交付后，需要买卖双方分别确认，订单才会自动{% if order.item.trade_mode == 'borrow' %}进入借用中{% else %}完成{% endif %}。</p>
-                <div class="delivery-confirmation-summary">
-                    <div class="delivery-confirmation-person {% if confirmation and confirmation.buyer_confirmed_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.buyer_confirmed_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>买家{% if confirmation and confirmation.buyer_confirmed_at %}已确认{% else %}待确认{% endif %}</span></div>
-                    <div class="delivery-confirmation-person {% if confirmation and confirmation.seller_confirmed_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.seller_confirmed_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>卖家{% if confirmation and confirmation.seller_confirmed_at %}已确认{% else %}待确认{% endif %}</span></div>
-                </div>
-                {% if user == order.buyer and not confirmation.buyer_confirmed_at %}
-                    <div class="handoff-code-panel mt-3">
-                        <div class="d-flex justify-content-between align-items-start gap-2"><div><strong><i class="bi bi-shield-lock me-1"></i>交付确认码</strong><p class="small mb-0 mt-1">到现场后只向卖家口头提供，不要发在公开留言中。</p></div><span class="badge text-bg-light">买家生成</span></div>
-                        {% if handoff_code_display %}<div class="handoff-code-value">{{ handoff_code_display }}</div><p class="small text-muted mb-0">请记住或现场出示此 6 位数字。末两位提示：{{ confirmation.handoff_code_hint|default:'未生成' }}。</p>{% elif confirmation and confirmation.handoff_code_hash %}<p class="small text-muted mt-3 mb-0">本次确认码已生成，出于安全原因页面不会重复显示完整号码。末两位提示：{{ confirmation.handoff_code_hint }}。</p>{% else %}<p class="small text-muted mt-3 mb-0">还没有确认码，建议在交付前生成一次。</p>{% endif %}
-                        <form method="post" action="{% url 'generate_delivery_code' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-outline-primary w-100"><i class="bi bi-arrow-repeat me-1"></i>{% if confirmation and confirmation.handoff_code_hash %}重新生成确认码{% else %}生成确认码{% endif %}</button></form>
-                    </div>
-                    <form method="post" action="{% url 'confirm_delivery' order.id %}" class="d-grid gap-2 mt-3">{% csrf_token %}<button class="btn btn-primary"><i class="bi bi-hand-thumbs-up me-1"></i>确认已完成交付</button><button type="submit" formaction="{% url 'update_order_status' order.id %}" name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
-                {% elif user == order.seller and not confirmation.seller_confirmed_at %}
-                    {% if confirmation and confirmation.handoff_code_hash %}
-                    <div class="handoff-code-panel mt-3"><strong><i class="bi bi-shield-check me-1"></i>现场核对确认码</strong><p class="small mb-0 mt-1">请向买家当面索取 6 位数字，再提交确认。已尝试 {{ confirmation.handoff_code_attempts }} 次，最多 5 次。</p>
-                        {% if confirmation.handoff_code_attempts >= 5 %}<div class="alert alert-warning small mt-3 mb-0">错误次数已达上限，请让买家重新生成确认码。</div>{% else %}<form method="post" action="{% url 'confirm_delivery' order.id %}" class="mt-3">{% csrf_token %}{% for field in delivery_code_form %}<label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endfor %}<button class="btn btn-primary w-100 mt-2"><i class="bi bi-check2-circle me-1"></i>核对并确认交付</button></form>{% endif %}
-                    </div>
-                    {% else %}<form method="post" action="{% url 'confirm_delivery' order.id %}" class="d-grid gap-2 mt-3">{% csrf_token %}<button class="btn btn-primary"><i class="bi bi-hand-thumbs-up me-1"></i>确认已完成交付</button></form>{% endif %}
-                {% else %}<p class="small text-muted mt-3 mb-0">你已完成确认，请等待对方确认。</p>{% endif %}
-            {% elif order.status == 'borrowed' %}
-                <div class="mt-3">
-                    <strong><i class="bi bi-arrow-repeat me-1"></i>借用进行中</strong>
-                    {% if order.return_due_at %}<p class="small mb-0 mt-2">预计归还：{{ order.return_due_at|date:'Y年m月d日 H:i' }}</p>{% endif %}
-                </div>
-                <div class="delivery-confirmation-summary mt-3">
-                    <div class="delivery-confirmation-person {% if confirmation and confirmation.buyer_returned_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.buyer_returned_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>借用者{% if confirmation and confirmation.buyer_returned_at %}已登记{% else %}待归还{% endif %}</span></div>
-                    <div class="delivery-confirmation-person {% if confirmation and confirmation.seller_returned_at %}is-confirmed{% endif %}"><i class="bi {% if confirmation and confirmation.seller_returned_at %}bi-check-circle-fill{% else %}bi-hourglass-split{% endif %}"></i><span>发布者{% if confirmation and confirmation.seller_returned_at %}已确认{% else %}待确认{% endif %}</span></div>
-                </div>
-                {% if user == order.buyer and not confirmation.buyer_returned_at %}<form method="post" action="{% url 'confirm_return' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-left me-1"></i>登记我已归还</button></form>{% elif user == order.seller and not confirmation.seller_returned_at %}<form method="post" action="{% url 'confirm_return' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-primary w-100"><i class="bi bi-check2-circle me-1"></i>确认已收到归还物品</button></form>{% else %}<p class="small text-muted mt-3 mb-0">你已完成当前归还确认，请等待对方操作。</p>{% endif %}
-            {% elif order.status == 'returned' %}
-                <div class="mt-3"><strong><i class="bi bi-check-circle me-1"></i>借用已归还</strong><p class="small mb-0 mt-2">双方已确认物品归还，商品现在可以再次被借用。</p></div>
-            {% elif order.status == 'confirmed' and user == order.buyer %}
-                <p class="mt-3">卖家已确认预约，请继续沟通见面时间。</p>
-                <form method="post" action="{% url 'update_order_status' order.id %}">{% csrf_token %}<button name="status" value="cancelled" class="btn btn-outline-danger">取消订单</button></form>
-            {% elif order.status == 'completed' or order.status == 'cancelled' %}
-                <p class="mt-3 mb-0 text-muted">这笔订单已经结束。</p>
-            {% else %}
-                <p class="mt-3 mb-0 text-muted">等待卖家确认后继续推进。</p>
-            {% endif %}
-        </section>
+    </aside>
 
+    <section class="content-card order-detail-support-card">
+        {% if transaction_safety %}
+        <section class="transaction-safety-card transaction-safety-{{ transaction_safety.tone }}">
+            <div class="d-flex justify-content-between align-items-start gap-3">
+                <div><span class="eyebrow eyebrow-soft">交易安全卡</span><h3 class="mt-2 mb-1">{{ transaction_safety.label }}</h3><p class="small text-muted mb-0">基于订单、公开交易记录和当前预约状态生成，仅作提醒，不会替代双方判断。</p></div>
+                <i class="bi {% if transaction_safety.tone == 'warning' %}bi-shield-exclamation{% elif transaction_safety.tone == 'safe' %}bi-shield-check{% else %}bi-shield{% endif %} transaction-safety-icon"></i>
+            </div>
+            <div class="transaction-safety-list mt-3">
+                {% for signal in transaction_safety.signals %}
+                <article class="transaction-safety-signal transaction-safety-signal-{{ signal.level }}">
+                    <i class="bi {% if signal.level == 'warning' %}bi-exclamation-triangle{% elif signal.level == 'positive' %}bi-check-circle{% else %}bi-info-circle{% endif %}"></i>
+                    <div><strong>{{ signal.title }}</strong><p>{{ signal.detail }}</p>{% if signal.action %}<small><i class="bi bi-arrow-right-short me-1"></i>{{ signal.action }}</small>{% endif %}</div>
+                </article>
+                {% endfor %}
+            </div>
+            <div class="mt-3 pt-3 border-top">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <small class="text-muted">当前安全卡确认：</small>
+                        {% if buyer_safety_acknowledgement %}
+                        <span class="badge text-bg-success">买家已确认 · {{ buyer_safety_acknowledgement.acknowledged_at|date:'Y-m-d H:i' }}</span>
+                        {% else %}
+                        <span class="badge text-bg-secondary">买家未确认</span>
+                        {% endif %}
+                        {% if seller_safety_acknowledgement %}
+                        <span class="badge text-bg-success">卖家已确认 · {{ seller_safety_acknowledgement.acknowledged_at|date:'Y-m-d H:i' }}</span>
+                        {% else %}
+                        <span class="badge text-bg-secondary">卖家未确认</span>
+                        {% endif %}
+                    </div>
+                    {% if can_acknowledge_order_safety %}
+                    <form method="post" action="{% url 'acknowledge_order_safety' order.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-check2-square me-1"></i>我已核对当前安全提醒
+                        </button>
+                    </form>
+                    {% elif my_safety_acknowledgement %}
+                    <span class="small text-muted"><i class="bi bi-check2-circle me-1"></i>你已确认当前版本</span>
+                    {% endif %}
+                </div>
+                <p class="small text-muted mt-2 mb-0">确认只表示已核对当前提醒，不是平台担保；交付安排变化后需要重新确认。</p>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if order.status == 'completed' or order.status == 'returned' %}
+        <div class="rating-panel">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                <div>
+                    <span class="eyebrow eyebrow-soft">交易反馈</span>
+                    <h3 class="mt-2 mb-1">评价 {{ rating_target.username }}</h3>
+                    <p class="mb-0 text-muted">完成交易后留下真实体验，让校园交易更有参考。</p>
+                </div>
+                {% if my_rating %}
+                <span class="rating-score-badge"><span class="rating-stars" aria-label="{{ my_rating.score }} 星">{% for star in '12345' %}{% if forloop.counter <= my_rating.score %}★{% else %}☆{% endif %}{% endfor %}</span> {{ my_rating.score }}.0</span>
+                {% else %}
+                <a href="{% url 'rate_order' order.id %}" class="btn btn-primary"><i class="bi bi-star me-2"></i>去评价</a>
+                {% endif %}
+            </div>
+            {% if my_rating.comment %}<p class="rating-own-comment mt-3 mb-0">“{{ my_rating.comment|linebreaksbr }}”</p>{% endif %}
+        </div>
+        {% endif %}
+
+        {% if events %}
+        <section class="order-timeline">
+            <div class="card-section-heading"><h2><i class="bi bi-clock-history me-2"></i>状态记录</h2><span>{{ events|length }} 次变更</span></div>
+            <ol class="timeline-list mt-3">
+                {% for event in events %}
+                <li class="timeline-item {% if forloop.last %}is-current{% endif %}">
+                    <span class="timeline-dot"></span>
+                    <div class="timeline-content"><div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ event.get_to_status_display }}</strong><time>{{ event.created_at|date:'Y-m-d H:i' }}</time></div><p class="mb-1">{{ event.note }}</p><small>{% if event.actor %}由 {{ event.actor.username }} 操作{% else %}系统记录{% endif %}</small></div>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+        {% endif %}
+    </section>
+
+    <div class="order-detail-secondary">
         {% if order.status == 'confirmed' or order.status == 'meeting' or order.status == 'completed' or order.status == 'borrowed' or order.status == 'returned' %}
         <section class="content-card mt-4 dispute-summary-card">
             <span class="eyebrow eyebrow-soft">交易保障</span>
@@ -317,7 +326,7 @@
         {% endif %}
 
         {% if ratings %}
-        <section class="content-card mt-4">
+        <section class="content-card order-ratings-card">
             <div class="card-section-heading"><h2><i class="bi bi-chat-square-heart me-2"></i>双方评价</h2><span>{{ ratings|length }} 条</span></div>
             <div class="rating-list mt-3">
                 {% for rating in ratings %}

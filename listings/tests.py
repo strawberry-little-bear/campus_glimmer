@@ -245,6 +245,18 @@ class ListingFlowTests(TestCase):
         self.assertContains(response, '买家发起交易预约')
         self.assertContains(response, '双方确认交易已完成')
 
+    def test_order_detail_uses_transaction_workbench_contract(self):
+        order = self._complete_order()
+        response = self.client.get(reverse('order_detail', args=[order.id]))
+
+        self.assertContains(response, 'class="order-detail-hero"')
+        self.assertContains(response, 'class="order-detail-layout"')
+        self.assertContains(response, 'class="content-card order-detail-overview"')
+        self.assertContains(response, '<ol class="order-progress" aria-label="交易订单进度">')
+        self.assertContains(response, 'class="content-card order-action-card"')
+        self.assertContains(response, 'class="order-timeline"')
+        self.assertContains(response, '状态记录')
+
     def test_new_order_notifies_seller_and_status_change_notifies_buyer(self):
         self.client.login(username='bob', password='safe-password-123')
         self.client.post(
