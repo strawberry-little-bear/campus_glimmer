@@ -24,11 +24,13 @@ class MyItemsWorkspaceTests(TestCase):
             **kwargs,
         )
 
-    def test_status_counts_and_grouped_tabs_share_one_item_snapshot(self):
-        self.make_item('在售教材')
-        self.make_item('预订台灯', status='reserved')
-        self.make_item('售出单车', status='sold')
-        self.make_item('过期收纳箱', status='expired')
+    def test_status_tabs_are_server_rendered_and_keep_full_workspace_counts(self):
+        items = {
+            'available': self.make_item('在售教材'),
+            'reserved': self.make_item('预订台灯', status='reserved'),
+            'sold': self.make_item('售出单车', status='sold'),
+            'expired': self.make_item('过期收纳箱', status='expired'),
+        }
         self.client.force_login(self.seller)
 
         response = self.client.get(reverse('my_items'))
@@ -38,16 +40,23 @@ class MyItemsWorkspaceTests(TestCase):
             response.context['item_counts'],
             {'all': 4, 'available': 1, 'reserved': 1, 'sold': 1, 'expired': 1},
         )
-        self.assertEqual([item.title for item in response.context['available_items']], ['在售教材'])
-        self.assertEqual([item.title for item in response.context['reserved_items']], ['预订台灯'])
-        self.assertEqual([item.title for item in response.context['sold_items']], ['售出单车'])
-        self.assertEqual([item.title for item in response.context['expired_items']], ['过期收纳箱'])
+        self.assertEqual(response.context['selected_tab'], 'all')
+        self.assertEqual({item.status for item in response.context['items']}, set(items))
+        for status, item in items.items():
+            tab_response = self.client.get(reverse('my_items'), {'tab': status})
+            self.assertEqual(tab_response.context['selected_tab'], status)
+            self.assertEqual([row.pk for row in tab_response.context['items']], [item.pk])
+            self.assertEqual(tab_response.context['item_counts']['all'], 4)
+            self.assertContains(tab_response, f'id="{status}"', html=False)
+            for other_status, other_item in items.items():
+                if other_status != status:
+                    self.assertNotContains(tab_response, other_item.title)
+
         self.assertContains(response, 'id="all-tab"', html=False)
         self.assertContains(response, 'id="available-tab"', html=False)
         self.assertContains(response, 'id="reserved-tab"', html=False)
         self.assertContains(response, 'id="sold-tab"', html=False)
         self.assertContains(response, 'id="expired-tab"', html=False)
-        self.assertContains(response, 'id="expired"', html=False)
 
     def test_workspace_only_renders_current_sellers_items(self):
         self.make_item('我的教材')

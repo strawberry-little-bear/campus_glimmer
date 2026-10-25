@@ -68,7 +68,7 @@
 </section>
 {% endif %}
 
-{% if items %}
+{% if selected_tab == 'all' and items %}
 <section class="content-card seller-bulk-toolbar mb-4" aria-labelledby="seller-bulk-title">
     <div class="seller-bulk-heading">
         <div>
@@ -80,6 +80,7 @@
     </div>
     <form method="post" action="{% url 'bulk_assign_campaign' %}" id="bulk-campaign-form" class="seller-bulk-form">
         {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'my_items' %}?tab=all&amp;page={{ page_obj.number }}">
         <div class="seller-bulk-step">
             <label for="bulk-campaign-select">校园专题</label>
             <div class="seller-bulk-control">
@@ -103,42 +104,62 @@
 
 <section class="content-card my-items-panel">
     <div class="my-items-tabs-bar">
-        <div class="my-items-tabs" id="itemsTabs" role="tablist" aria-label="按商品状态查看">
-            <button class="my-items-tab active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="true">
+        <nav class="my-items-tabs" id="itemsTabs" aria-label="按商品状态查看">
+            <a class="my-items-tab{% if selected_tab == 'all' %} active{% endif %}" id="all-tab" href="?tab=all"{% if selected_tab == 'all' %} aria-current="page"{% endif %}>
                 全部 <span class="my-items-tab-count">{{ item_counts.all }}</span>
-            </button>
-            <button class="my-items-tab" id="available-tab" data-bs-toggle="tab" data-bs-target="#available" type="button" role="tab" aria-controls="available" aria-selected="false">
+            </a>
+            <a class="my-items-tab{% if selected_tab == 'available' %} active{% endif %}" id="available-tab" href="?tab=available"{% if selected_tab == 'available' %} aria-current="page"{% endif %}>
                 在售 <span class="my-items-tab-count">{{ item_counts.available }}</span>
-            </button>
-            <button class="my-items-tab" id="reserved-tab" data-bs-toggle="tab" data-bs-target="#reserved" type="button" role="tab" aria-controls="reserved" aria-selected="false">
+            </a>
+            <a class="my-items-tab{% if selected_tab == 'reserved' %} active{% endif %}" id="reserved-tab" href="?tab=reserved"{% if selected_tab == 'reserved' %} aria-current="page"{% endif %}>
                 已预订 <span class="my-items-tab-count">{{ item_counts.reserved }}</span>
-            </button>
-            <button class="my-items-tab" id="sold-tab" data-bs-toggle="tab" data-bs-target="#sold" type="button" role="tab" aria-controls="sold" aria-selected="false">
+            </a>
+            <a class="my-items-tab{% if selected_tab == 'sold' %} active{% endif %}" id="sold-tab" href="?tab=sold"{% if selected_tab == 'sold' %} aria-current="page"{% endif %}>
                 已售出 <span class="my-items-tab-count">{{ item_counts.sold }}</span>
-            </button>
-            <button class="my-items-tab" id="expired-tab" data-bs-toggle="tab" data-bs-target="#expired" type="button" role="tab" aria-controls="expired" aria-selected="false">
+            </a>
+            <a class="my-items-tab{% if selected_tab == 'expired' %} active{% endif %}" id="expired-tab" href="?tab=expired"{% if selected_tab == 'expired' %} aria-current="page"{% endif %}>
                 已过期 <span class="my-items-tab-count">{{ item_counts.expired }}</span>
-            </button>
-        </div>
+            </a>
+        </nav>
         <span class="my-items-tabs-note"><i class="bi bi-info-circle me-1"></i>状态标签页只改变当前视图，不会修改商品</span>
     </div>
 
-    <div class="tab-content" id="itemsTabContent">
-        <div class="tab-pane fade show active my-items-pane" id="all" role="tabpanel" aria-labelledby="all-tab">
-            {% include 'listings/_my_items_table.html' with items=items row_mode='all' table_caption='我的商品 · 全部' empty_message='您还没有发布任何商品' only %}
+    <div class="my-items-pane" id="{{ selected_tab }}" aria-labelledby="{{ selected_tab }}-tab">
+        <div class="my-items-resultbar">
+            <span><i class="bi bi-layers me-1"></i>{% if page_obj.paginator.count %}第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 件 · 共 {{ page_obj.paginator.count }} 件{% else %}当前 0 件{% endif %}</span>
+            <strong>{{ selected_tab_label }}</strong>
         </div>
-        <div class="tab-pane fade my-items-pane" id="available" role="tabpanel" aria-labelledby="available-tab">
-            {% include 'listings/_my_items_table.html' with items=available_items row_mode='available' table_caption='我的商品 · 在售' empty_message='没有在售状态的商品' only %}
-        </div>
-        <div class="tab-pane fade my-items-pane" id="reserved" role="tabpanel" aria-labelledby="reserved-tab">
-            {% include 'listings/_my_items_table.html' with items=reserved_items row_mode='reserved' table_caption='我的商品 · 已预订' empty_message='没有已预订状态的商品' only %}
-        </div>
-        <div class="tab-pane fade my-items-pane" id="sold" role="tabpanel" aria-labelledby="sold-tab">
-            {% include 'listings/_my_items_table.html' with items=sold_items row_mode='sold' table_caption='我的商品 · 已售出' empty_message='没有已售出状态的商品' only %}
-        </div>
-        <div class="tab-pane fade my-items-pane" id="expired" role="tabpanel" aria-labelledby="expired-tab">
-            {% include 'listings/_my_items_table.html' with items=expired_items row_mode='expired' table_caption='我的商品 · 已过期' empty_message='没有已过期状态的商品' only %}
-        </div>
+        {% include 'listings/_my_items_table.html' with items=items row_mode=selected_tab table_caption=table_caption empty_message=empty_message return_url=return_url only %}
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="my-items-pagination" aria-label="{{ selected_tab_label }}分页">
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="?tab={{ selected_tab }}&amp;page={{ page_obj.previous_page_number }}" aria-label="上一页"><i class="bi bi-chevron-left"></i></a></li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-left"></i></span></li>
+                {% endif %}
+                {% for num in page_numbers %}
+                    {% if num %}
+                    <li class="page-item{% if page_obj.number == num %} active{% endif %}">
+                        {% if page_obj.number == num %}
+                        <span class="page-link" aria-current="page" aria-label="第 {{ num }} 页">{{ num }}</span>
+                        {% else %}
+                        <a class="page-link" href="?tab={{ selected_tab }}&amp;page={{ num }}" aria-label="第 {{ num }} 页">{{ num }}</a>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="?tab={{ selected_tab }}&amp;page={{ page_obj.next_page_number }}" aria-label="下一页"><i class="bi bi-chevron-right"></i></a></li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-right"></i></span></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
     </div>
 </section>
 {% endblock %}

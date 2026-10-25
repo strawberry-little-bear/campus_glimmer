@@ -22,7 +22,7 @@
         </thead>
         <tbody>
             {% for item in items %}
-            {% include 'listings/_my_item_row.html' with item=item row_mode=row_mode only %}
+            {% include 'listings/_my_item_row.html' with item=item row_mode=row_mode return_url=return_url only %}
             {% empty %}
             <tr>
                 <td colspan="{% if row_mode == 'all' %}6{% else %}4{% endif %}" class="seller-desk-empty">

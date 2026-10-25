@@ -81,6 +81,7 @@
         {% if row.can_refresh %}
         <form method="post" action="{% url 'refresh_item' item.id %}" class="seller-refresh-form">
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ return_url }}">
             <button type="submit" class="btn btn-outline-success btn-sm"><i class="bi bi-arrow-clockwise me-1"></i>刷新到前排</button>
         </form>
         {% elif row.refresh_block_reason %}

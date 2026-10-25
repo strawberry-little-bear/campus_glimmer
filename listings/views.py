@@ -2759,7 +2759,7 @@ def refresh_item(request, item_id):
     can_refresh, reason = _refresh_state(item, now=timezone.now())
     if not can_refresh:
         messages.warning(request, reason)
-        return redirect('my_items')
+        return _my_items_workspace_redirect(request)
 
     now = timezone.now()
     with transaction.atomic():
@@ -2767,7 +2767,7 @@ def refresh_item(request, item_id):
         can_refresh, reason = _refresh_state(locked, now=now)
         if not can_refresh:
             messages.warning(request, reason)
-            return redirect('my_items')
+            return _my_items_workspace_redirect(request)
         locked.last_refreshed_at = now
         locked.refresh_count = locked.refresh_count + 1
         locked.save(update_fields=['last_refreshed_at', 'refresh_count', 'updated_at'])
@@ -2779,7 +2779,7 @@ def refresh_item(request, item_id):
         )
 
     messages.success(request, f'已刷新《{item.title}》，商品会重新回到列表前排。')
-    return redirect('my_items')
+    return _my_items_workspace_redirect(request)
 
 
 BULK_LISTING_IMPORT_SESSION_KEY = 'listings:bulk_listing_csv_import'
@@ -3275,33 +3275,81 @@ def bulk_listing_image_queue(request):
 
 @login_required
 def my_items(request):
-    items = list(Item.objects.filter(seller=request.user).select_related(
+    tab_configs = {
+        'all': {
+            'status': None,
+            'label': '全部商品',
+            'caption': '我的商品 · 全部',
+            'empty': '您还没有发布任何商品',
+        },
+        'available': {
+            'status': 'available',
+            'label': '在售商品',
+            'caption': '我的商品 · 在售',
+            'empty': '没有在售状态的商品',
+        },
+        'reserved': {
+            'status': 'reserved',
+            'label': '已预订商品',
+            'caption': '我的商品 · 已预订',
+            'empty': '没有已预订状态的商品',
+        },
+        'sold': {
+            'status': 'sold',
+            'label': '已售出商品',
+            'caption': '我的商品 · 已售出',
+            'empty': '没有已售出状态的商品',
+        },
+        'expired': {
+            'status': 'expired',
+            'label': '已过期商品',
+            'caption': '我的商品 · 已过期',
+            'empty': '没有已过期状态的商品',
+        },
+    }
+    selected_tab = request.GET.get('tab', 'all')
+    if selected_tab not in tab_configs:
+        selected_tab = 'all'
+    selected_config = tab_configs[selected_tab]
+
+    seller_items = Item.objects.filter(seller=request.user)
+    item_counts = seller_items.aggregate(
+        all=Count('pk'),
+        available=Count('pk', filter=Q(status='available')),
+        reserved=Count('pk', filter=Q(status='reserved')),
+        sold=Count('pk', filter=Q(status='sold')),
+        expired=Count('pk', filter=Q(status='expired')),
+    )
+
+    items_query = seller_items.select_related(
         'category', 'location', 'campaign',
-    ).prefetch_related('images'))
+    ).prefetch_related('images').order_by('-created_at', '-pk')
+    if selected_config['status'] is not None:
+        items_query = items_query.filter(status=selected_config['status'])
+    page_obj = Paginator(items_query, 12).get_page(request.GET.get('page'))
+    items = list(page_obj.object_list)
+
     now = timezone.now()
     campaigns = CampusCampaign.objects.filter(is_active=True).filter(
         Q(ends_at__isnull=True) | Q(ends_at__gt=now),
     ).order_by('-starts_at', 'title')
     lifecycle = build_seller_lifecycle(request.user)
     diagnoses_by_id = {row.item_id: row for row in lifecycle['diagnoses']}
-    # 把诊断结果挂到商品对象上，模板里可以直接用 item.lifecycle_diagnosis，
-    # 不需要额外注册模板过滤器。
+    # 把诊断结果挂到当前页的商品对象上，模板里可以直接用
+    # item.lifecycle_diagnosis，不需要额外注册模板过滤器。
     for item in items:
         item.lifecycle_diagnosis = diagnoses_by_id.get(item.pk)
 
-    # 状态页签复用同一份已取回的商品列表，避免模板逐行判断或在渲染时追加查询。
-    status_groups = {
-        status: [item for item in items if item.status == status]
-        for status in ('available', 'reserved', 'sold', 'expired')
-    }
-    item_counts = {'all': len(items), **{status: len(group) for status, group in status_groups.items()}}
     return render(request, 'listings/my_items.html', {
         'items': items,
-        'available_items': status_groups['available'],
-        'reserved_items': status_groups['reserved'],
-        'sold_items': status_groups['sold'],
-        'expired_items': status_groups['expired'],
         'item_counts': item_counts,
+        'selected_tab': selected_tab,
+        'selected_tab_label': selected_config['label'],
+        'table_caption': selected_config['caption'],
+        'empty_message': selected_config['empty'],
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
+        'return_url': f"{reverse('my_items')}?tab={selected_tab}&page={page_obj.number}",
         'campaigns': campaigns,
         'lifecycle': lifecycle,
         'has_bulk_listing_image_queue': _load_bulk_listing_image_queue(request) is not None,
@@ -3309,15 +3357,27 @@ def my_items(request):
     })
 
 
+def _my_items_workspace_redirect(request):
+    """Return to the seller workspace page that submitted an action."""
+    next_url = request.POST.get('next', '').strip()
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect('my_items')
+
+
 @login_required
 def bulk_assign_campaign(request):
     if request.method != 'POST':
-        return redirect('my_items')
+        return _my_items_workspace_redirect(request)
 
     item_ids = [value for value in request.POST.getlist('item_ids') if value.isdigit()]
     if not item_ids:
         messages.warning(request, '请先选择至少一件商品。')
-        return redirect('my_items')
+        return _my_items_workspace_redirect(request)
 
     campaign_id = request.POST.get('campaign_id', '').strip()
     campaign = None
@@ -3348,7 +3408,7 @@ def bulk_assign_campaign(request):
 
     action = f'加入“{campaign.title}”' if campaign else '移出当前专题'
     messages.success(request, f'已将 {updated} 件商品{action}。')
-    return redirect('my_items')
+    return _my_items_workspace_redirect(request)
 
 
 @login_required
@@ -3360,7 +3420,7 @@ def bulk_renew_items(request):
     match notifications stay untouched.
     """
     if request.method != 'POST':
-        return redirect('my_items')
+        return _my_items_workspace_redirect(request)
 
     raw_item_ids = [value.strip() for value in request.POST.getlist('item_ids')]
     try:
@@ -3369,7 +3429,7 @@ def bulk_renew_items(request):
         item_ids = []
     if not item_ids or len(item_ids) != len(raw_item_ids) or len(set(item_ids)) != len(item_ids):
         messages.warning(request, '请先选择至少一件商品，且不要重复提交同一件商品。')
-        return redirect('my_items')
+        return _my_items_workspace_redirect(request)
 
     form = BulkListingRenewalForm(request.POST)
     if not form.is_valid():
@@ -3378,7 +3438,7 @@ def bulk_renew_items(request):
             errors.extend(error for error in field.errors)
         errors.extend(form.non_field_errors())
         messages.warning(request, f'批量续期未执行：{"；".join(errors)}')
-        return redirect('my_items')
+        return _my_items_workspace_redirect(request)
 
     new_expires_at = form.cleaned_data['expires_at']
     with transaction.atomic():
@@ -3389,7 +3449,7 @@ def bulk_renew_items(request):
         )
         if len(locked_items) != len(item_ids):
             messages.warning(request, '批量续期未执行：请只选择您自己当前仍存在的商品。')
-            return redirect('my_items')
+            return _my_items_workspace_redirect(request)
 
         blocked_items = [
             item for item in locked_items
@@ -3403,7 +3463,7 @@ def bulk_renew_items(request):
                 request,
                 f'批量续期未执行：{len(blocked_items)} 件商品不可续期。请只勾选已过期，或已有截止时间的在售商品。',
             )
-            return redirect('my_items')
+            return _my_items_workspace_redirect(request)
 
         for item in locked_items:
             was_expired = item.status == 'expired'
@@ -3418,7 +3478,7 @@ def bulk_renew_items(request):
         request,
         f'已为 {len(locked_items)} 件商品续期到 {timezone.localtime(new_expires_at):%Y-%m-%d %H:%M}。',
     )
-    return redirect('my_items')
+    return _my_items_workspace_redirect(request)
 
 
 
