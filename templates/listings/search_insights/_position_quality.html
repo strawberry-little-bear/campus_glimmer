@@ -1,0 +1,33 @@
+<section class="content-card ops-panel mb-4 rewrite-candidate-panel">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Position quality</span><h2>搜索结果位置质量</h2></div><span class="ops-panel-hint">按位置分档的点击率与排序效果</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-bar-chart-steps me-1"></i>曝光和点击从上线起就一直记着各自落在第几位，但此前只有后台列表页读过这两个字段。排序是平台自己写的，却从来没有人量过它到底有没有用——总量点击率回答不了「是用户懒得点，还是我们把好商品埋在了第二页」，而这两件事的处置正好相反。</p>
+    <div class="rewrite-candidate-summary">
+        <div><span>曝光 / 点击</span><strong>{{ position_quality.metrics.impressions }}<em style="font-size:.9rem;font-weight:700;"> / {{ position_quality.metrics.clicks }}</em></strong><small>仅统计带位置的记录</small></div>
+        <div><span>总体点击率</span><strong>{{ position_quality.metrics.overall_click_through_rate }}%</strong><small>{{ position_quality.metrics.measured_buckets }} 个位置档达到样本门槛</small></div>
+        <div><span>排序效果</span><strong style="font-size:1.1rem;">{{ position_quality.ranking_effect.direction_label }}</strong><small>被点商品平均第 {{ position_quality.ranking_effect.click_average_position|default:"—" }} 位 · 曝光平均第 {{ position_quality.ranking_effect.exposure_average_position|default:"—" }} 位</small></div>
+        <div{% if position_quality.metrics.decayed_buckets %} class="rewrite-candidate-warning"{% endif %}><span>明显衰减档</span><strong>{{ position_quality.metrics.decayed_buckets }}</strong><small>点击率低于前排 {{ position_quality.metrics.decay_flag_points }} 个百分点以上</small></div>
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-lightbulb me-1"></i>{{ position_quality.summary }}</p>
+    {% if position_quality.has_data %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-graph-down-arrow me-1"></i>位置衰减曲线</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><caption class="visually-hidden">搜索结果位置质量 · 位置衰减曲线</caption><thead><tr><th>位置区间</th><th>曝光数</th><th>点击数</th><th>点击率</th><th>平均曝光位置</th><th>平均点击位置</th><th>读数</th></tr></thead><tbody>
+        {% for row in position_quality.decay_curve %}
+        <tr{% if row.is_small_sample %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ row.label }}</strong>{% if row.decay_flag %}<span class="rewrite-candidate-confidence" data-level="weak">衰减</span>{% endif %}</td>
+            <td>{{ row.impression_count }}</td>
+            <td>{{ row.click_count }}</td>
+            <td><strong>{{ row.click_through_rate }}%</strong></td>
+            <td>{% if row.average_impression_position is not None %}{{ row.average_impression_position }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if row.average_click_position is not None %}{{ row.average_click_position }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if row.is_small_sample %}样本不足{{ position_quality.metrics.min_bucket_sample }} 次曝光，只报数字{% else %}可读数{% endif %}</td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>这里只报告，不改 relevance 权重、不自动调整分页、也不把统计写回曝光或点击记录。样本不足的位置档照样列出数字，但不参与任何结论——12 次曝光之下，一次点击就是 8 个百分点的摆动。</p>
+    {% if position_quality.recommendations %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-lightbulb me-1"></i>可以做什么</h3>
+    <div class="rewrite-candidate-summary" style="grid-template-columns:1fr;">
+        {% for note in position_quality.recommendations %}<div style="min-height:auto;"><span>建议 {{ forloop.counter }}</span><small>{{ note }}</small></div>
+        {% endfor %}</div>
+    {% endif %}
+    {% else %}<div class="empty-inline">当前周期还没有带上结果位置的曝光记录。等更多学生从搜索结果点进详情，这里才开始有读数。</div>{% endif %}
+</section>

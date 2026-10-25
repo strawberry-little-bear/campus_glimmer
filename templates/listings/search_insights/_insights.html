@@ -1,0 +1,4 @@
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Action queue</span><h2>运营建议</h2></div><span class="ops-panel-hint">由搜索行为自动生成</span></div>
+    {% if insights %}<div class="search-insight-grid">{% for insight in insights %}<article class="search-insight-card"><div class="search-insight-icon"><i class="bi bi-lightbulb"></i></div><div><strong>{{ insight.query }}</strong><p>{{ insight.message }}</p><a href="{% url 'item_list' %}?q={{ insight.query|urlencode }}">查看相关商品 <i class="bi bi-arrow-right"></i></a></div></article>{% endfor %}</div>{% else %}<div class="empty-inline">暂无需要跟进的搜索需求。可以扩大统计周期，或等待新的搜索记录积累。</div>{% endif %}
+</section>

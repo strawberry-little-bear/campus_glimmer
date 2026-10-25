@@ -1,0 +1,10 @@
+<div class="ops-metric-grid mb-4">
+    <div class="ops-metric-card ops-metric-purple"><span><i class="bi bi-search"></i>搜索次数</span><strong>{{ metrics.searches }}</strong><small>符合当前筛选条件</small></div>
+    <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-tags"></i>搜索词数量</span><strong>{{ metrics.unique_terms }}</strong><small>去重后的需求表达</small></div>
+    <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-exclamation-circle"></i>无结果搜索</span><strong>{{ metrics.zero_result_searches }}</strong><small>值得跟进的需求信号</small></div>
+    <div class="ops-metric-card ops-metric-green"><span><i class="bi bi-graph-up-arrow"></i>无结果占比</span><strong>{{ metrics.zero_result_rate }}%</strong><small>搜索体验健康度参考</small></div>
+    <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-eye"></i>结果曝光</span><strong>{{ metrics.impressions }}</strong><small>{{ metrics.exposed_searches }} 次搜索产生结果曝光</small></div>
+    <div class="ops-metric-card ops-metric-blue"><span><i class="bi bi-cursor"></i>结果点击</span><strong>{{ metrics.clicks }}</strong><small>从搜索结果进入详情</small></div>
+    <div class="ops-metric-card ops-metric-purple"><span><i class="bi bi-bullseye"></i>搜索点击率</span><strong>{{ metrics.click_through_rate }}%</strong><small>搜索后产生详情点击</small></div>
+    <div class="ops-metric-card ops-metric-orange"><span><i class="bi bi-arrow-down-circle"></i>无点击搜索</span><strong>{{ metrics.zero_click_searches }}</strong><small>{{ metrics.zero_click_rate }}% 的有结果搜索没有后续点击</small></div>
+</div>

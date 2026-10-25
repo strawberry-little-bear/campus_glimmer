@@ -1,3 +1,101 @@
+/* ------------------------------------------------------------------
+   分区延后揭开（运营看板 / 搜索洞察共用）
+
+   两页都是「服务端只吐首屏，其余分区滚到再取」，机制一模一样，只有三处配置
+   不同：分区选择器、取回地址属性、失败态属性。所以帮手抽成工厂，两页各自调
+   一次。复制一份出来的话，下次改揭开方向就得改两处，而那种 bug 在 Django
+   测试客户端里看不出来——那里干脆没有 JS。
+
+   延后分两层，别混为一谈：
+
+   CSS 那层是兜底。html.js 下面把分区内容藏起来，滚近时这里加 is-revealed
+   揭开。关掉脚本的浏览器没有 html.js，整页照常全量可见。
+
+   JS 这层才是懒加载。带着 ops_lazy / si_lazy cookie 来的请求，服务端只渲染
+   首屏分区，其余只留一个空 <section> 加一条取回地址（data-*-src），滚到
+   附近再由这里去 fetch。没有取回地址的分区——不带 cookie 的全量渲染、以及
+   首屏分区——内容本来就在响应体里，只换类、不发请求。
+
+   所以「没有 JS 就没有数据」这个分支不存在：脚本关掉时连 cookie 都种不下，
+   服务端只会给全量页面。
+------------------------------------------------------------------ */
+const createSectionRevealer = function (panels, options) {
+    const deferred = panels.querySelectorAll(options.deferredSelector);
+    const srcAttr = options.srcAttr;
+    const failedAttr = options.failedAttr;
+    const settle = options.onSettled || function () {};
+
+    const isDeferredSection = function (section) {
+        for (let i = 0; i < deferred.length; i += 1) {
+            if (deferred[i] === section) return true;
+        }
+        return false;
+    };
+
+    // 取回一个延后分区（deferred section）的内容。没有取回地址的分区
+    // （不带 cookie 的全量渲染）内容就在响应体里，换个类就行，绝不碰 DOM；
+    // 带地址的才去 fetch，回来整段塞进这个 section。同一个分区只取一次，
+    // section._sectionLoad 记住那个 Promise——观察器和跳转条两条路同时指向
+    // 它时不会发出两个请求。
+    const loadSection = function (section) {
+        const url = section.getAttribute(srcAttr);
+        if (!url) {
+            section.classList.add('is-revealed');
+            return Promise.resolve();
+        }
+        if (section._sectionLoad) return section._sectionLoad;
+        section._sectionLoad = fetch(url, { credentials: 'same-origin' })
+            .then(function (response) {
+                if (!response.ok) throw new Error('分区取回失败：' + response.status);
+                return response.text();
+            })
+            .then(function (html) {
+                section.innerHTML = html;
+                section.classList.add('is-revealed');
+                section.removeAttribute(failedAttr);
+                settle();
+            })
+            .catch(function () {
+                // 取回失败不能留在「假装加载完」的状态：摘掉 is-revealed 让骨架
+                // 回来，点亮失败态，点一下分区重试。静默的空分区没人会深究，
+                // 用户只会以为这个看板本来就没数据。
+                section.classList.remove('is-revealed');
+                section.setAttribute(failedAttr, '');
+                section._sectionLoad = null;
+                section.addEventListener('click', function retryOnce() {
+                    section.removeEventListener('click', retryOnce);
+                    loadSection(section).then(settle);
+                });
+            });
+        return section._sectionLoad;
+    };
+
+    // 顺着文档顺序把 target 及其之前的分区一并取回。两个地方非它不可：
+    //   * 点跳转 chip 或带 #hash 直接打开时，目标分区上面的分区还是骨架，
+    //     此时 scrollIntoView 会按骨架高度算距离，落到半路就停；
+    //   * 快速滚动时 IntersectionObserver 只在回调那一刻判断是否相交，被
+    //     一跳而过的分区早就出了根矩形，再也收不到通知，会永远停在骨架态。
+    // 这两种情形都是「已经被滚过去/要被滚过去」，一并取回不会让用户少看东西。
+    const revealThrough = function (target) {
+        // 从文档开头揭到 target 为止，target 自己也算。target 为 null 时永远
+        // 匹配不到，于是一次揭完——无 IntersectionObserver 的旧浏览器走这条。
+        const jobs = [];
+        // target 是首屏分区时，它本来就有内容，不必为了它把下面的一堆都拽回来。
+        if (target && !isDeferredSection(target)) return Promise.all(jobs);
+        for (let i = 0; i < deferred.length; i += 1) {
+            jobs.push(loadSection(deferred[i]));
+            if (deferred[i] === target) break;
+        }
+        return Promise.all(jobs);
+    };
+
+    return {
+        deferred: deferred,
+        isDeferredSection: isDeferredSection,
+        loadSection: loadSection,
+        revealThrough: revealThrough,
+    };
+};
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('input[type="file"]').forEach(function (input) {
         input.addEventListener('change', function () {
@@ -36,21 +134,10 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     /* ------------------------------------------------------------------
-       运营看板：分区延后渲染 + 跳转条当前位置高亮
+        运营看板：分区延后取回 + 跳转条当前位置高亮。
 
-       延后分两层，别混为一谈：
-
-       CSS 那层是兜底。html.js 下面把分区内容藏起来，滚近时这里加 is-revealed
-       揭开。关掉脚本的浏览器没有 html.js，整页照常全量可见。
-
-       JS 这层才是懒加载。带着 ops_lazy cookie 来的请求，服务端只渲染首屏
-       四个分区，其余 34 个只留一个空 <section> 加一条取回地址
-       （data-ops-src），滚到附近再由这里去 fetch。没有 data-ops-src 的
-       分区——不带 cookie 的全量渲染、以及前四个首屏分区——内容本来就在
-       响应体里，只换类、不发请求。
-
-       所以「没有 JS 就没有数据」这个分支不存在：脚本关掉时连 cookie 都种
-       不下，服务端只会给全量页面。
+        延后机制本身在文件顶部的 createSectionRevealer，这里只负责看板自己的
+        两件事：38 个分区的 scrollspy，以及点跳转条之前先把目标分区取回来。
     ------------------------------------------------------------------ */
     const opsPanels = document.querySelector('.operations-panels');
     const opsJump = document.querySelector('.ops-jump');
@@ -79,69 +166,16 @@ document.addEventListener('DOMContentLoaded', function () {
             return entries.find(function (item) { return item.id === id; }) || null;
         };
 
-        const deferred = opsPanels.querySelectorAll('.ops-section[data-ops-deferred]');
-        const isDeferredSection = function (section) {
-            for (let i = 0; i < deferred.length; i += 1) {
-                if (deferred[i] === section) return true;
-            }
-            return false;
-        };
-
-        // 取回一个延后分区（deferred section）的内容。没有 data-ops-src 的分区
-        // （不带 cookie 的全量渲染）内容就在响应体里，换个类就行，绝不碰 DOM；
-        // 带地址的才去 fetch，
-        // 回来整段塞进这个 section。同一个分区只取一次，_opsLoad 记住那个
-        // Promise——观察器和跳转条两条路同时指向它时不会发出两个请求。
-        const loadSection = function (section) {
-            const url = section.getAttribute('data-ops-src');
-            if (!url) {
-                section.classList.add('is-revealed');
-                return Promise.resolve();
-            }
-            if (section._opsLoad) return section._opsLoad;
-            section._opsLoad = fetch(url, { credentials: 'same-origin' })
-                .then(function (response) {
-                    if (!response.ok) throw new Error('分区取回失败：' + response.status);
-                    return response.text();
-                })
-                .then(function (html) {
-                    section.innerHTML = html;
-                    section.classList.add('is-revealed');
-                    section.removeAttribute('data-ops-failed');
-                })
-                .catch(function () {
-                    // 取回失败不能留在「假装加载完」的状态：摘掉 is-revealed 让骨架
-                    // 回来，点亮失败态，点一下分区重试。静默的空分区没人会深究，
-                    // 用户只会以为这个看板本来就没数据。
-                    section.classList.remove('is-revealed');
-                    section.setAttribute('data-ops-failed', '');
-                    section._opsLoad = null;
-                    section.addEventListener('click', function retryOnce() {
-                        section.removeEventListener('click', retryOnce);
-                        loadSection(section).then(onScroll);
-                    });
-                });
-            return section._opsLoad;
-        };
-
-        // 顺着文档顺序把 target 及其之前的分区一并取回。两个地方非它不可：
-        //   * 点跳转 chip 或带 #hash 直接打开时，目标分区上面的分区还是骨架，
-        //     此时 scrollIntoView 会按骨架高度算距离，落到半路就停；
-        //   * 快速滚动时 IntersectionObserver 只在回调那一刻判断是否相交，被
-        //     一跳而过的分区早就出了根矩形，再也收不到通知，会永远停在骨架态。
-        // 这两种情形都是「已经被滚过去/要被滚过去」，一并取回不会让用户少看东西。
-        const revealThrough = function (target) {
-            // 从文档开头揭到 target 为止，target 自己也算。target 为 null 时永远
-            // 匹配不到，于是一次揭完——无 IntersectionObserver 的旧浏览器走这条。
-            const jobs = [];
-            // target 是首屏分区时，它本来就有内容，不必为了它把下面 34 个都拽回来。
-            if (target && !isDeferredSection(target)) return Promise.all(jobs);
-            for (let i = 0; i < deferred.length; i += 1) {
-                jobs.push(loadSection(deferred[i]));
-                if (deferred[i] === target) break;
-            }
-            return Promise.all(jobs);
-        };
+        const revealer = createSectionRevealer(opsPanels, {
+            deferredSelector: '.ops-section[data-ops-deferred]',
+            srcAttr: 'data-ops-src',
+            failedAttr: 'data-ops-failed',
+            onSettled: function () { onScroll(); },
+        });
+        const deferred = revealer.deferred;
+        const isDeferredSection = revealer.isDeferredSection;
+        const loadSection = revealer.loadSection;
+        const revealThrough = revealer.revealThrough;
 
         const jumpTo = function (id) {
             const entry = findEntry(id);
@@ -238,6 +272,59 @@ document.addEventListener('DOMContentLoaded', function () {
         window.addEventListener('hashchange', function () { jumpTo(location.hash.slice(1)); });
         if (location.hash) jumpTo(location.hash.slice(1));
     }
+
+    /* ------------------------------------------------------------------
+       搜索洞察：同一套延后机制，只是没有跳转条。
+
+       这页 15 个分区，前两个是记分卡（八张指标卡 + 搜索质量分），其余 13 个
+       延后。取回地址多带一个 q 参数：趋势和偏好迁移两个面板吃搜索词筛选，
+       不带的话，运营筛完「台灯」再滚下来，看到的是全量词的偏好迁移。
+    ------------------------------------------------------------------ */
+    const siPanels = document.querySelector('.search-insights-panels');
+    if (siPanels) {
+        const siRevealer = createSectionRevealer(siPanels, {
+            deferredSelector: '.si-section[data-si-deferred]',
+            srcAttr: 'data-si-src',
+            failedAttr: 'data-si-failed',
+        });
+        const siDeferred = siRevealer.deferred;
+        const siRevealThrough = siRevealer.revealThrough;
+
+        const settleSiObserver = function (observer) {
+            // 已取回的分区不再观察：占位高度换成真实高度后 observer 会再触发一次，
+            // 不摘掉就是每次滚动都白跑一轮 revealThrough
+            siDeferred.forEach(function (section) {
+                if (section.classList.contains('is-revealed')) observer.unobserve(section);
+            });
+        };
+
+        // 洞察页没有跳转条，但 hash 直达（从看板或站内链接跳到某个分区）一样要走
+        // revealThrough：不先把目标之前的分区取回来，浏览器会停在占位高度上，
+        // 真实内容到位后整页位移，用户看到的是另一个分区
+        const siJumpTo = function (id) {
+            const section = id ? document.getElementById(id) : null;
+            if (!section) return;
+            siRevealThrough(section).then(function () {
+                section.scrollIntoView({ block: 'start', behavior: 'auto' });
+            });
+        };
+
+        if ('IntersectionObserver' in window) {
+            const siRevealObserver = new IntersectionObserver(function (records) {
+                records.forEach(function (record) {
+                    if (!record.isIntersecting) return;
+                    siRevealThrough(record.target).then(function () { settleSiObserver(siRevealObserver); });
+                });
+            }, { rootMargin: '320px 0px' });
+            siDeferred.forEach(function (section) { siRevealObserver.observe(section); });
+        } else {
+            siRevealThrough(null);
+        }
+
+        window.addEventListener('hashchange', function () { siJumpTo(location.hash.slice(1)); });
+        if (location.hash) siJumpTo(location.hash.slice(1));
+    }
+
     const chat = document.querySelector('.chat-messages');
     if (chat) chat.scrollTop = chat.scrollHeight;
 

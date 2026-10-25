@@ -1,0 +1,26 @@
+<section class="content-card search-quality-panel mb-4">
+    <div class="search-quality-score search-quality-{{ search_quality.level_key }}">
+        <span class="search-quality-icon"><i class="bi bi-speedometer2"></i></span>
+        <div class="search-quality-score-copy">
+            <span class="eyebrow eyebrow-soft">Search quality score</span>
+            <div class="search-quality-title"><strong>{{ search_quality.score }}</strong><span>/ 100</span><b>{{ search_quality.level }}</b></div>
+            <small>{{ search_quality.sample_label }} · 样本量 {{ search_quality.sample_size }} 次搜索</small>
+        </div>
+    </div>
+    <div class="search-quality-breakdown">
+        <div class="search-quality-dimension">
+            <div><span>供给覆盖</span><strong>{{ search_quality.supply_score }}</strong></div>
+            <div class="search-quality-track"><i style="width: {{ search_quality.supply_score }}%"></i></div>
+            <small>无结果越少，覆盖得分越高</small>
+        </div>
+        <div class="search-quality-dimension">
+            <div><span>结果互动</span><strong>{{ search_quality.engagement_score }}</strong></div>
+            <div class="search-quality-track"><i style="width: {{ search_quality.engagement_score }}%"></i></div>
+            <small>有结果搜索产生点击的比例</small>
+        </div>
+    </div>
+    <div class="search-quality-actions">
+        <span><i class="bi bi-lightbulb me-1"></i>建议动作</span>
+        <ul>{% for recommendation in search_quality.recommendations %}<li>{{ recommendation }}</li>{% endfor %}</ul>
+    </div>
+</section>

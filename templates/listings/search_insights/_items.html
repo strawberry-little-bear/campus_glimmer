@@ -1,0 +1,20 @@
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Exposure leaders</span><h2>曝光最多的商品</h2></div><span class="ops-panel-hint">搜索结果展现</span></div>
+            {% if exposed_items %}<div class="search-gap-list">{% for row in exposed_items %}<a class="search-gap-row" href="{% url 'item_detail' row.item_id %}"><span><strong>{{ row.item__title }}</strong><small>{{ row.impression_count }} 次曝光 · 出现在 {{ row.exposed_searches }} 次搜索</small></span><b>{{ row.impression_count }}<em>曝光</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前周期还没有可分析的搜索曝光。</div>{% endif %}
+        </section>
+    </div>
+    <div class="col-lg-6">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Click-through leaders</span><h2>被点击最多的商品</h2></div><span class="ops-panel-hint">{{ metrics.clicks }} 次点击 · {{ metrics.searches_with_results }} 次有结果搜索</span></div>
+            {% if clicked_items %}<div class="search-gap-list">{% for row in clicked_items %}<a class="search-gap-row" href="{% url 'item_detail' row.item_id %}"><span><strong>{{ row.item__title }}</strong><small>{{ row.click_count }} 次点击 · 来自 {{ row.unique_searches }} 次搜索</small></span><b>{{ row.click_count }}<em>点击</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前周期还没有可分析的搜索点击。</div>{% endif %}
+        </section>
+    </div>
+    <div class="col-lg-5">
+        <section class="content-card ops-panel h-100">
+            <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Needs attention</span><h2>有搜索但未点击</h2></div><span class="ops-panel-hint">可优化排序或供给</span></div>
+            {% if no_click_terms %}<div class="search-gap-list">{% for row in no_click_terms %}<a class="search-gap-row" href="{% url 'item_list' %}?q={{ row.query|urlencode }}"><span><strong>{{ row.query }}</strong><small>{{ row.search_count }} 次搜索 · 平均结果 {{ row.average_results|floatformat:1 }}</small></span><b>{{ row.search_count }}<em>无点击</em></b></a>{% endfor %}</div>{% else %}<div class="empty-inline">当前没有出现明显的无点击搜索词。</div>{% endif %}
+        </section>
+    </div>
+</div>

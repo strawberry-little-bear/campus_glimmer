@@ -42,6 +42,16 @@ from .bulk_listing_import_summary import build_bulk_listing_import_error_summary
 from .dashboard_build_performance import build_dashboard_build_performance
 from .operations_fragments import section_needs_core, section_panel_keys, section_partial
 from .operations_nav import OPERATIONS_DASHBOARD_FIRST_SCREEN, OPERATIONS_DASHBOARD_SECTIONS
+# 搜索洞察这两个助手必须起别名：operations_fragments 里有一对同名函数
+# （section_panel_keys / section_partial），同名导入会把看板取回端点正在用的
+# 那个悄悄盖掉。症状是看板每个延后分区都变成空态，而页面其它部分完全正常——
+# listings.test_operations_fragments 的等价性测试就是抓这个的。
+from .search_insights_fragments import (
+    SEARCH_INSIGHTS_FIRST_SCREEN,
+    section_core_parts,
+    section_panel_keys as search_insights_panel_keys,
+)
+from .search_insights_fragments import section_partial as search_insights_partial
 from .lifecycle_reminder_term_trend import build_lifecycle_reminder_term_trend_dashboard
 from .search_combo_shift import build_search_combo_shift
 from .search_threshold_feedback import build_search_threshold_feedback
@@ -12113,28 +12123,117 @@ def search_items(request):
     return redirect(f'/listings/?{urlencode({"q": query})}') if query else redirect('item_list')
 
 
+def _ignores_query(builder):
+    """把一个只认 ``days`` 的面板构建器包装成 ``(days, query)`` 签名。
+
+    包装而不是去改签名：这八个构建器各自还有别的调用方（定时任务、管理页），
+    为了让注册表整齐一个个改公开签名，会把同一次改动散到八个文件里，而且每个
+    调用点都要重新读一遍。包装留在这一处，签名就这一处。
+    """
+    def build(days, query):
+        return builder(days=days)
+    return build
+
+
+def _takes_query(builder):
+    """把认 ``query`` 的面板构建器包装成 ``(days, query)`` 签名。"""
+    def build(days, query):
+        return builder(days=days, query=query)
+    return build
+
+
+# 搜索洞察的页面、分区取回与 CSV 共用的面板注册表。八个构建器里只有趋势和偏好
+# 迁移吃 ``query``，上面两个小包装把剩下的统一过来，于是这张表和运营看板那张
+# 一样是同构的三元组，调用点不必各自判断该传几个参数。
+SEARCH_INSIGHTS_PANEL_BUILDERS = (
+    ('rewrite_candidates', '搜索同义词候选', _ignores_query(build_search_rewrite_candidates)),
+    ('synonym_effects', '同义词效果回流', _ignores_query(build_search_synonym_effects)),
+    ('search_trend', '搜索趋势与筛选偏好', _takes_query(build_search_trend)),
+    ('combo_shift', '搜索组合偏好迁移', _takes_query(build_search_combo_shift)),
+    ('threshold_feedback', '候选门槛建议', _ignores_query(build_search_threshold_feedback)),
+    ('rejection_stats', '候选否决分析', _ignores_query(build_search_rejection_stats)),
+    ('rejection_recurrence', '否决的回头与被推翻', _ignores_query(build_search_rejection_recurrence)),
+    ('position_quality', '搜索结果位置质量', _ignores_query(build_search_position_quality)),
+)
+
+
+def _search_insights_period_days(request):
+    try:
+        return int(request.GET.get('days', 30))
+    except (TypeError, ValueError):
+        return 30
+
+
+# 懒加载开关，语义和 ops_lazy 一模一样：cookie 由 <head> 的内联脚本种下，
+# 关掉脚本的浏览器永远种不下它，于是永远拿全量页面。
+SEARCH_INSIGHTS_LAZY_COOKIE = 'si_lazy'
+
+
+def _build_shared_search_insights(*, days, query='', anchors=None):
+    """构建页面、分区取回与 CSV 共用的搜索洞察数据。
+
+    ``anchors`` 是懒加载的口子：给了分区列表，就只构建这些分区渲染所需的部分，
+    其余面板和统计块一个都不跑。``None``（默认）表示整份——CSV 导出和不带
+    ``si_lazy`` cookie 的页面走这条，行为和加这个参数之前逐字节一致。分区与
+    上下文的对应关系在 ``search_insights_fragments.py``，那份表由
+    ``test_search_insights_fragments`` 反查盯着，不会悄悄漏键。
+
+    和运营看板的区别在这页的核心统计没法整块裁掉：九个构建器里有八个各喂一个
+    分区，剩下全挤在 ``build_search_insights`` 里，所以那边筛面板、这边还要再
+    按统计块裁一次（``parts``）。
+    """
+    dashboard = build_search_insights(days, query, parts=section_core_parts(anchors))
+    builders = SEARCH_INSIGHTS_PANEL_BUILDERS
+    if anchors is not None:
+        wanted = search_insights_panel_keys(anchors)
+        if wanted is not None:
+            builders = [row for row in builders if row[0] in wanted]
+    for key, _label, builder in builders:
+        dashboard[key] = builder(days, query)
+    # 否决原因的选项表不查库，永远给全：整页和分区取回必须看到同一份理由列表，
+    # 否则同一个下拉框在两种入口下选项会不一样，而那种不一致在页面上看不出来。
+    dashboard['rejection_reasons'] = list(SearchSynonymRejection.REASON_CHOICES)
+    return dashboard
+
+
 def search_insights(request):
     if not request.user.is_staff:
         raise PermissionDenied
-    try:
-        period_days = int(request.GET.get('days', 30))
-    except (TypeError, ValueError):
-        period_days = 30
-    dashboard = build_search_insights(period_days, request.GET.get('q', ''))
-    dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
-    dashboard['synonym_effects'] = build_search_synonym_effects(days=period_days)
-    dashboard['search_trend'] = build_search_trend(
-        days=period_days, query=request.GET.get('q', ''),
+    period_days = _search_insights_period_days(request)
+    query = request.GET.get('q', '')
+    lazy = request.COOKIES.get(SEARCH_INSIGHTS_LAZY_COOKIE) == '1'
+    # 懒加载时只构建首屏两个分区用得到的部分；其余十三个分区等前端来取。
+    dashboard = _build_shared_search_insights(
+        days=period_days,
+        query=query,
+        anchors=SEARCH_INSIGHTS_FIRST_SCREEN if lazy else None,
     )
-    dashboard['combo_shift'] = build_search_combo_shift(
-        days=period_days, query=request.GET.get('q', ''),
-    )
-    dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
-    dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
-    dashboard['rejection_recurrence'] = build_search_rejection_recurrence(days=period_days)
-    dashboard['rejection_reasons'] = list(SearchSynonymRejection.REASON_CHOICES)
-    dashboard['position_quality'] = build_search_position_quality(days=period_days)
+    dashboard['si_lazy'] = lazy
     return render(request, 'listings/search_insights.html', dashboard)
+
+
+def search_insights_fragment(request, anchor):
+    """按需取回一个搜索洞察分区，返回该分区的 HTML 片段。
+
+    只渲染 ``anchor`` 那一个分区，上下文按 ``search_insights_fragments`` 的表
+    裁剪，所以取回「搜索结果位置质量」不会顺带把趋势、偏好迁移和词表聚合全跑
+    一遍——那几个正是这页最贵的查询。
+
+    权限和整页一致：staff。这里没有 ``@login_required``，和 ``search_insights``
+    本身保持同一套口径（匿名访问 403 而不是 302 到登录页），因为调用方是
+    fetch 而不是用户点击，跳登录页对脚本没有意义。
+    """
+    if not request.user.is_staff:
+        raise PermissionDenied
+    partial = search_insights_partial(anchor)
+    if partial is None:
+        raise Http404('搜索洞察没有这个分区：%s' % anchor)
+    days = _search_insights_period_days(request)
+    dashboard = _build_shared_search_insights(
+        days=days, query=request.GET.get('q', ''), anchors=(anchor,),
+    )
+    return render(request, 'listings/search_insights/' + partial, dashboard)
+
 
 
 def _insights_rejection_pair(request):
@@ -12226,19 +12325,10 @@ def search_insights_export(request):
         period_days = int(request.GET.get('days', 30))
     except (TypeError, ValueError):
         period_days = 30
-    dashboard = build_search_insights(period_days, request.GET.get('q', ''))
-    dashboard['rewrite_candidates'] = build_search_rewrite_candidates(days=period_days)
-    dashboard['synonym_effects'] = build_search_synonym_effects(days=period_days)
-    dashboard['search_trend'] = build_search_trend(
+    # 导出永远走整份：CSV 是一次性、离线的，没有人「滚到这里再导」。
+    dashboard = _build_shared_search_insights(
         days=period_days, query=request.GET.get('q', ''),
     )
-    dashboard['combo_shift'] = build_search_combo_shift(
-        days=period_days, query=request.GET.get('q', ''),
-    )
-    dashboard['threshold_feedback'] = build_search_threshold_feedback(days=period_days)
-    dashboard['rejection_stats'] = build_search_rejection_stats(days=period_days)
-    dashboard['rejection_recurrence'] = build_search_rejection_recurrence(days=period_days)
-    dashboard['position_quality'] = build_search_position_quality(days=period_days)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -12265,12 +12355,42 @@ def search_insights_export(request):
     writer.writerow(['无点击占比（%）', dashboard['metrics']['zero_click_rate']])
 
     writer.writerow([])
-    writer.writerow(['搜索词分析', '搜索次数', '点击次数', '点击率（%）', '无结果次数', '无结果占比（%）', '平均结果数', '独立用户数', '最近搜索时间'])
+    writer.writerow(['搜索词表现', '搜索次数', '点击次数', '点击率（%）', '无结果次数', '无结果占比（%）', '平均结果数', '独立用户数', '最近搜索时间'])
     for row in dashboard['term_rows']:
         writer.writerow([
             row['query'], row['search_count'], row['click_count'], row['click_rate'],
             row['zero_result_count'], row['zero_result_rate'], row['average_results'],
             row['unique_users'], row['last_searched'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['供给缺口', '搜索词', '搜索次数', '涉及用户数', '无结果次数'])
+    for row in dashboard['gap_terms']:
+        writer.writerow([
+            '供给缺口', row['query'], row['search_count'], row['unique_users'],
+            row['zero_result_count'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['曝光最多的商品', '商品', '曝光次数', '出现在搜索次数'])
+    for row in dashboard['exposed_items']:
+        writer.writerow([
+            '曝光最多的商品', row['item__title'], row['impression_count'], row['exposed_searches'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['被点击最多的商品', '商品', '点击次数', '来自搜索次数'])
+    for row in dashboard['clicked_items']:
+        writer.writerow([
+            '被点击最多的商品', row['item__title'], row['click_count'], row['unique_searches'],
+        ])
+
+    writer.writerow([])
+    writer.writerow(['有搜索但未点击', '搜索词', '搜索次数', '平均结果数'])
+    for row in dashboard['no_click_terms']:
+        writer.writerow([
+            '有搜索但未点击', row['query'], row['search_count'],
+            round(row['average_results'], 1) if row['average_results'] is not None else '',
         ])
 
     writer.writerow([])
@@ -12288,7 +12408,7 @@ def search_insights_export(request):
         ])
 
     writer.writerow([])
-    writer.writerow(['同义词候选', '出现次数', '涉及用户数', '置信提示', '最近出现', '处理方式'])
+    writer.writerow(['搜索同义词候选', '出现次数', '涉及用户数', '置信提示', '最近出现', '处理方式'])
     for row in dashboard['rewrite_candidates']['rows']:
         writer.writerow([
             f"{row['source']} → {row['target']}", row['occurrences'], row['user_count'],
@@ -12316,9 +12436,9 @@ def search_insights_export(request):
 
     rejections = dashboard['rejection_stats']
     writer.writerow([])
-    writer.writerow(['候选否决记录', '否决总数', '达到当前门槛', '低于门槛', '累计出现次数'])
+    writer.writerow(['候选否决分析', '否决总数', '达到当前门槛', '低于门槛', '累计出现次数'])
     writer.writerow([
-        '候选否决记录', rejections['total_count'], rejections['passing_count'],
+        '候选否决分析', rejections['total_count'], rejections['passing_count'],
         rejections['below_threshold_count'], rejections['occurrence_total'],
     ])
     writer.writerow([
@@ -12375,7 +12495,7 @@ def search_insights_export(request):
 
     writer.writerow([])
     writer.writerow([
-        '搜索趋势与筛选偏好对比',
+        '搜索趋势与筛选偏好',
         '本周期', '上一周期', '变化',
     ])
     writer.writerow([
@@ -12440,22 +12560,26 @@ def search_insights_export(request):
         ])
 
     writer.writerow([])
-    writer.writerow(['高需求缺口', '搜索次数', '无结果次数', '无结果占比（%）', '运营建议'])
+    writer.writerow(['运营建议', '搜索词', '搜索次数', '无结果次数', '无结果占比（%）', '建议内容'])
     for row in dashboard['insights']:
-        writer.writerow([row['query'], row['search_count'], row['zero_result_count'], row['zero_result_rate'], row['message']])
+        writer.writerow([
+            '运营建议', row['query'], row['search_count'],
+            row['zero_result_count'], row['zero_result_rate'], row['message'],
+        ])
 
     writer.writerow([])
-    writer.writerow(['分类供给缺口', '分类', '搜索次数', '无结果次数', '无结果占比（%）', '当前在售', '缺口优先级'])
+    writer.writerow(['分类与地点缺口'])
+    writer.writerow(['分类需求', '搜索次数', '无结果次数', '无结果占比（%）', '当前在售', '缺口优先级'])
     for row in dashboard['facet_supply_gaps']['categories']:
         writer.writerow([
-            '分类', row['category__name'], row['search_count'], row['zero_result_count'],
+            '分类需求', row['category__name'], row['search_count'], row['zero_result_count'],
             row['zero_result_rate'], row['available_count'], row['priority_score'],
         ])
     writer.writerow([])
-    writer.writerow(['地点供给缺口', '地点', '搜索次数', '无结果次数', '无结果占比（%）', '当前在售', '缺口优先级'])
+    writer.writerow(['地点需求', '搜索次数', '无结果次数', '无结果占比（%）', '当前在售', '缺口优先级'])
     for row in dashboard['facet_supply_gaps']['locations']:
         writer.writerow([
-            '地点', row['location__name'], row['search_count'], row['zero_result_count'],
+            '地点需求', row['location__name'], row['search_count'], row['zero_result_count'],
             row['zero_result_rate'], row['available_count'], row['priority_score'],
         ])
 
@@ -12471,7 +12595,7 @@ def search_insights_export(request):
 
     comparison = dashboard['period_comparison']
     writer.writerow([])
-    writer.writerow(['周期对比', '当前周期', '上一周期', '变化'])
+    writer.writerow(['需求变化', '当前周期', '上一周期', '变化'])
     writer.writerow(['搜索次数', comparison['current_searches'], comparison['previous_searches'], comparison['search_change']['change_display']])
     writer.writerow(['无结果占比（%）', comparison['current_zero_result_rate'], comparison['previous_zero_result_rate'], comparison['zero_result_rate_change_display']])
     writer.writerow([])

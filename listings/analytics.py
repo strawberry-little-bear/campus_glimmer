@@ -420,11 +420,57 @@ def _merge_term_impression_stats(term_rows, search_period, start, end):
         row['impression_count'] = stat['impression_count'] if stat else 0
 
 
-def build_search_insights(days=30, query=''):
-    """Build an actionable view of search demand for staff operations work."""
+# 搜索洞察的统计块。build_search_insights 一个 builder 喂页面上十几个分区，
+# 分区懒加载要按分区裁剪，所以这些块必须能单独关掉。名字和
+# ``search_insights_fragments.SEARCH_INSIGHTS_SECTION_FRAGMENTS`` 的第三列一一
+# 对应，那份表由 ``test_search_insights_fragments`` 反查盯着——漏登记一个键的
+# 症状是分区静默变成空态，页面其它部分看起来完全正常。
+SEARCH_INSIGHTS_PARTS = (
+    'terms', 'counts', 'clicks', 'metrics', 'quality', 'rhythm', 'comparison',
+    'facets', 'insights',
+)
+
+# 块与块之间的依赖。分区表只写「这个分区直接要什么」，闭包在这里补：
+# 指标卡要搜索词数量，那要先把整张词表聚合出来；质量分要四个计数，其中
+# clicked_search_count 来自 clicks；运营建议读 gap_terms，而 gap_terms 来自
+# terms。少了这一层，单独取回「搜索质量分」会拿到一篇 0 分，而页面其它部分
+# 看起来完全正常。
+SEARCH_INSIGHTS_PART_DEPENDENCIES = {
+    'metrics': ('terms', 'counts', 'clicks'),
+    'clicks': ('counts',),
+    'quality': ('counts', 'clicks'),
+    'insights': ('terms',),
+}
+
+
+def _close_search_insight_parts(parts):
+    """把分区声明的统计块补成闭包，见 SEARCH_INSIGHTS_PART_DEPENDENCIES。"""
+    closed = set()
+    pending = list(parts)
+    while pending:
+        part = pending.pop()
+        if part in closed:
+            continue
+        closed.add(part)
+        pending.extend(SEARCH_INSIGHTS_PART_DEPENDENCIES.get(part, ()))
+    return closed
+
+
+def build_search_insights(days=30, query='', parts=None):
+    """Build an actionable view of search demand for staff operations work.
+
+    ``parts`` 是分区懒加载的裁剪刀：给了就只算这些统计块，其余一块查询都不发；
+    ``None``（默认）表示整页，CSV 导出和不带 ``ops_lazy`` cookie 的页面走这条，
+    行为和加这个参数之前逐字节一致。块与分区的对应关系在
+    ``search_insights_fragments``，那份表由反查测试盯着。
+    """
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
         days = 30
+    wanted = None if parts is None else _close_search_insight_parts(parts)
+
+    def wants(part):
+        return wanted is None or part in wanted
 
     now = timezone.now()
     start = _period_start(days, timezone.localdate())
@@ -442,28 +488,8 @@ def build_search_insights(days=30, query=''):
     if query:
         previous_search_period = previous_search_period.filter(query__icontains=query)
 
-    term_rows = list(
-        search_period.values('query').annotate(
-            search_count=Count('id'),
-            result_search_count=Count('id', filter=Q(result_count__gt=0)),
-            zero_result_count=Count('id', filter=Q(result_count=0)),
-            average_results=Avg('result_count'),
-            unique_users=Count('user', distinct=True),
-            last_searched=Max('created_at'),
-        ).order_by('-search_count', 'query')
-    )
-    _merge_term_click_stats(term_rows, search_period, start, now)
-    _merge_term_impression_stats(term_rows, search_period, start, now)
-    for row in term_rows:
-        row['zero_result_rate'] = round(
-            row['zero_result_count'] / row['search_count'] * 100, 1
-        ) if row['search_count'] else 0
-        row['click_rate'] = round(
-            row['clicked_searches'] / row['result_search_count'] * 100, 1
-        ) if row['result_search_count'] else 0
-
-    search_count = search_period.count()
-    zero_result_count = search_period.filter(result_count=0).count()
+    # 下面这些 queryset 都是惰性的，构造本身不发查询；真正花钱的是求值那几步，
+    # 所以可以无条件构造，只把求值关在 wants() 里。
     click_period = SearchClick.objects.filter(
         created_at__gte=start, created_at__lte=now,
         search_query__isnull=False, search_query__result_count__gt=0,
@@ -476,61 +502,82 @@ def build_search_insights(days=30, query=''):
     )
     if query:
         impression_period = impression_period.filter(search_query__query__icontains=query)
-    click_count = click_period.count()
-    impression_count = impression_period.count()
-    exposed_search_count = impression_period.values('search_query_id').distinct().count()
-    exposed_items = list(
-        impression_period.values('item_id', 'item__title').annotate(
-            impression_count=Count('id'),
-            exposed_searches=Count('search_query', distinct=True),
-        ).order_by('-impression_count', 'item__title')[:10]
-    )
-    result_search_count = search_period.filter(result_count__gt=0).count()
-    clicked_search_count = click_period.values('search_query_id').distinct().count()
-    zero_click_search_count = max(result_search_count - clicked_search_count, 0)
-    clicked_items = list(
-        click_period.values('item_id', 'item__title').annotate(
-            click_count=Count('id'),
-            unique_searches=Count('search_query', distinct=True),
-        ).order_by('-click_count', 'item__title')[:10]
-    )
-    gap_terms = sorted(
-        (row for row in term_rows if row['zero_result_count']),
-        key=lambda row: (-row['zero_result_count'], -row['search_count'], row['query']),
-    )[:12]
-    facet_supply_gaps = _build_facet_supply_gaps(search_period)
-    search_quality = _build_search_quality(
-        search_count,
-        zero_result_count,
-        result_search_count,
-        clicked_search_count,
-    )
-    insights = []
-    for row in gap_terms[:6]:
-        insights.append({
-            'query': row['query'],
-            'search_count': row['search_count'],
-            'zero_result_count': row['zero_result_count'],
-            'zero_result_rate': row['zero_result_rate'],
-            'message': (
-                f"“{row['query']}”有 {row['zero_result_count']} 次搜索没有结果，"
-                '可以考虑补充库存、调整分类或发布求购引导。'
-            ),
-        })
 
-    return {
+    dashboard = {
         'period_days': days,
         'period_choices': PERIOD_CHOICES,
-        'search_rhythm': _build_search_rhythm(search_period),
-        'period_comparison': _build_search_period_comparison(
-            search_period,
-            previous_search_period,
-        ),
         'period_start': start,
         'period_end': now,
         'query_filter': query,
-        'search_quality': search_quality,
-        'metrics': {
+    }
+
+    term_rows = []
+    gap_terms = []
+    no_click_terms = []
+    if wants('terms'):
+        term_rows = list(
+            search_period.values('query').annotate(
+                search_count=Count('id'),
+                result_search_count=Count('id', filter=Q(result_count__gt=0)),
+                zero_result_count=Count('id', filter=Q(result_count=0)),
+                average_results=Avg('result_count'),
+                unique_users=Count('user', distinct=True),
+                last_searched=Max('created_at'),
+            ).order_by('-search_count', 'query')
+        )
+        _merge_term_click_stats(term_rows, search_period, start, now)
+        _merge_term_impression_stats(term_rows, search_period, start, now)
+        for row in term_rows:
+            row['zero_result_rate'] = round(
+                row['zero_result_count'] / row['search_count'] * 100, 1
+            ) if row['search_count'] else 0
+            row['click_rate'] = round(
+                row['clicked_searches'] / row['result_search_count'] * 100, 1
+            ) if row['result_search_count'] else 0
+        gap_terms = sorted(
+            (row for row in term_rows if row['zero_result_count']),
+            key=lambda row: (-row['zero_result_count'], -row['search_count'], row['query']),
+        )[:12]
+        no_click_terms = sorted(
+            (row for row in term_rows if row['result_search_count'] and not row['clicked_searches']),
+            key=lambda row: (-row['search_count'], row['query']),
+        )[:12]
+        dashboard['term_rows'] = term_rows[:30]
+        dashboard['gap_terms'] = gap_terms
+        dashboard['no_click_terms'] = no_click_terms
+
+    search_count = zero_result_count = result_search_count = 0
+    if wants('counts'):
+        search_count = search_period.count()
+        zero_result_count = search_period.filter(result_count=0).count()
+        result_search_count = search_period.filter(result_count__gt=0).count()
+
+    click_count = impression_count = exposed_search_count = 0
+    clicked_search_count = 0
+    zero_click_search_count = 0
+    if wants('clicks'):
+        click_count = click_period.count()
+        impression_count = impression_period.count()
+        exposed_search_count = impression_period.values('search_query_id').distinct().count()
+        exposed_items = list(
+            impression_period.values('item_id', 'item__title').annotate(
+                impression_count=Count('id'),
+                exposed_searches=Count('search_query', distinct=True),
+            ).order_by('-impression_count', 'item__title')[:10]
+        )
+        clicked_search_count = click_period.values('search_query_id').distinct().count()
+        zero_click_search_count = max(result_search_count - clicked_search_count, 0)
+        clicked_items = list(
+            click_period.values('item_id', 'item__title').annotate(
+                click_count=Count('id'),
+                unique_searches=Count('search_query', distinct=True),
+            ).order_by('-click_count', 'item__title')[:10]
+        )
+        dashboard['clicked_items'] = clicked_items
+        dashboard['exposed_items'] = exposed_items
+
+    if wants('metrics'):
+        dashboard['metrics'] = {
             'searches': search_count,
             'unique_terms': len(term_rows),
             'zero_result_searches': zero_result_count,
@@ -542,18 +589,44 @@ def build_search_insights(days=30, query=''):
             'click_through_rate': round(clicked_search_count / result_search_count * 100, 1) if result_search_count else 0,
             'zero_click_searches': zero_click_search_count,
             'zero_click_rate': round(zero_click_search_count / result_search_count * 100, 1) if result_search_count else 0,
-        },
-        'clicked_items': clicked_items,
-        'exposed_items': exposed_items,
-        'no_click_terms': sorted(
-            (row for row in term_rows if row['result_search_count'] and not row['clicked_searches']),
-            key=lambda row: (-row['search_count'], row['query']),
-        )[:12],
-        'term_rows': term_rows[:30],
-        'gap_terms': gap_terms,
-        'facet_supply_gaps': facet_supply_gaps,
-        'insights': insights,
-    }
+        }
+
+    if wants('quality'):
+        dashboard['search_quality'] = _build_search_quality(
+            search_count,
+            zero_result_count,
+            result_search_count,
+            clicked_search_count,
+        )
+
+    if wants('rhythm'):
+        dashboard['search_rhythm'] = _build_search_rhythm(search_period)
+
+    if wants('comparison'):
+        dashboard['period_comparison'] = _build_search_period_comparison(
+            search_period,
+            previous_search_period,
+        )
+
+    if wants('facets'):
+        dashboard['facet_supply_gaps'] = _build_facet_supply_gaps(search_period)
+
+    if wants('insights'):
+        dashboard['insights'] = [
+            {
+                'query': row['query'],
+                'search_count': row['search_count'],
+                'zero_result_count': row['zero_result_count'],
+                'zero_result_rate': row['zero_result_rate'],
+                'message': (
+                    f"“{row['query']}”有 {row['zero_result_count']} 次搜索没有结果，"
+                    '可以考虑补充库存、调整分类或发布求购引导。'
+                ),
+            }
+            for row in gap_terms[:6]
+        ]
+
+    return dashboard
 
 
 def _build_user_activity_segments(start, end):

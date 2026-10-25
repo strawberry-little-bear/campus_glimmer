@@ -1,0 +1,26 @@
+<section class="content-card ops-panel mb-4 rewrite-candidate-panel">
+    <div class="ops-panel-heading"><div><span class="eyebrow eyebrow-soft">Dismissed later</span><h2>否决的回头与被推翻</h2></div><span class="ops-panel-hint">同一条否决在更长周期里的两种走向</span></div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-arrow-repeat me-1"></i>上一节只看一个周期内的否决，而否决锁住的是一个会重复出现的候选：三月的判断和九月再次出现的同一个词对，在那里是两个互不相干的数字。这里把同一条否决连起来看——它后来还在不在被人认着，以及那个词对有没有自己回来。两个数分开报：<strong>被确认覆盖</strong>是「当初否错了，它其实是个等价关系」，<strong>仍然生效</strong>是「当初的判断现在仍作数」，方向相反，合成一个撤销率什么都说明不了。</p>
+    <div class="rewrite-candidate-summary">
+        <div><span>仍然生效</span><strong>{{ rejection_recurrence.standing_count }}</strong><small>判断至今作数</small></div>
+        <div><span>被确认覆盖</span><strong>{{ rejection_recurrence.superseded_count }}</strong><small>词对已进同义词表</small></div>
+        <div{% if rejection_recurrence.is_reversed %} class="rewrite-candidate-warning"{% endif %}><span>推翻率</span><strong>{% if rejection_recurrence.reversed_share is not None %}{{ rejection_recurrence.reversed_share }}%{% else %}&mdash;{% endif %}</strong><small>{% if rejection_recurrence.is_measurable %}超过 {{ rejection_recurrence.reversed_share_limit }}% 说明判据该看{% else %}不足 {{ rejection_recurrence.min_judged_rejections }} 条样本，暂不判断{% endif %}</small></div>
+        <div><span>反复出现</span><strong>{{ rejection_recurrence.recurred_count }}</strong><small>否决后回头 {{ rejection_recurrence.min_recurrences }} 次以上</small></div>
+    </div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-lightbulb me-1"></i>{{ rejection_recurrence.summary }}</p>
+    {% if rejection_recurrence.rows %}
+    <h3 class="search-trend-subtitle"><i class="bi bi-clock-history me-1"></i>每一条否决的后来</h3>
+    <div class="ops-table-wrap"><table class="table ops-table align-middle mb-0 rewrite-candidate-table"><caption class="visually-hidden">否决的回头与被推翻 · 每一条否决的后来</caption><thead><tr><th>用户先搜</th><th>随后改搜</th><th>否决原因</th><th>现在的状态</th><th>否决后回头</th><th>最近回头</th></tr></thead><tbody>
+        {% for row in rejection_recurrence.rows %}
+        <tr{% if not row.has_recurred and row.kind == 'standing' %} class="is-below-threshold"{% endif %}>
+            <td><strong>{{ row.source }}</strong><small class="d-block text-muted">无结果搜索</small></td>
+            <td><strong>{{ row.target }}</strong><small class="d-block text-muted">有结果搜索</small></td>
+            <td>{{ row.reason_label }}</td>
+            <td><span class="rewrite-candidate-confidence" data-level="{% if row.kind == 'standing' %}weak{% else %}strong{% endif %}">{{ row.kind_label }}</span></td>
+            <td><strong>{{ row.recurrences }}</strong><small class="d-block text-muted">次</small></td>
+            <td>{% if row.last_seen %}{{ row.last_seen|date:"Y-m-d H:i" }}{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% endfor %}</tbody></table></div>
+    <p class="rewrite-candidate-footnote"><i class="bi bi-shield-check me-1"></i>回头数的是否决生效期间的改口次数，规则与候选挖掘完全一致；已被覆盖的否决数到失效那一刻为止，它之后不再挡任何候选。<strong>「已撤销删除」这一桶读不到</strong>——撤销只写消息日志、不落表，所以这里不为它编一个 0，也不把它和「一条都没撤销」混为一谈。回头只报数、不给方向：一个回头三十次的词对仍然是当初否掉它的那个理由，除非它被覆盖，否则它一天就不该出现在候选里。</p>
+    {% else %}<div class="empty-inline">统计周期内还没有否决记录。回头与被推翻都需要先有否决存在，先到上一节记下几条否决。</div>{% endif %}
+</section>
