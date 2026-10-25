@@ -8381,6 +8381,11 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
     white-space: nowrap;
 }
 
+.trade-overview-all .trade-overview-icon {
+    color: var(--primary);
+    background: var(--mint);
+}
+
 .trade-overview-active .trade-overview-icon {
     color: #9a651f;
     background: #fff4df;
