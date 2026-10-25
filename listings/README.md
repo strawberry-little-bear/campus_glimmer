@@ -103,6 +103,7 @@ flowchart LR
 | `/listings/my_items/` | 我的商品与卖家工作台 |
 | `/listings/orders/` | 我的交易工作台，汇总买卖订单，支持阶段筛选与分页 |
 | `/listings/favorites/` | 我的心愿单，支持收藏分组、全量计数与每页 12 件分页 |
+| `/listings/saved-searches/` | 关注的搜索，支持每页 8 条、当前页命中统计和操作后回跳 |
 | `/listings/notifications/` | 通知中心 |
 | `/listings/notifications/activity/` | 通知与私信汇合的站内动态 |
 | `/listings/operations/` | 运营看板，仅管理员可用 |

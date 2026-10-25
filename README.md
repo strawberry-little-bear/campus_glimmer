@@ -264,6 +264,7 @@ python init_data.py
 | 搜索 | <http://127.0.0.1:8000/listings/search/> |
 | 我的交易 | <http://127.0.0.1:8000/listings/orders/> |
 | 我的心愿单 | <http://127.0.0.1:8000/listings/favorites/> |
+| 关注的搜索 | <http://127.0.0.1:8000/listings/saved-searches/> |
 | 消息工作台 | <http://127.0.0.1:8000/messages/inbox/> |
 | 通知中心 | <http://127.0.0.1:8000/listings/notifications/> |
 | 校园专题 | <http://127.0.0.1:8000/listings/campaigns/> |
