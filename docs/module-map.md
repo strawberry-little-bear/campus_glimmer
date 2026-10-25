@@ -480,7 +480,7 @@ campus_glimmer/
 ## chat_messages/ 的关键测试
 
 <details>
-<summary>消息、私信与审核测试（7 组）</summary>
+<summary>消息、私信与审核测试（8 组）</summary>
 
 - **`tests.py`**：留言、私信、会话、审核队列和通知路径的基础流程测试。
 
@@ -489,6 +489,8 @@ campus_glimmer/
 - **`test_moderation_appeal.py`**：作者单次申诉、队列优先与筛选、原复核快照、改判恢复、缺材料终态与后台只读边界。
 
 - **`test_moderation_risk_tier.py`**：规则最高档、拦截持久化、历史标签回填、复核节奏、队列排序筛选和后台只读测试。
+
+- **`test_moderation_queue_pagination.py`**：每页 12 条、非法与越界页码收敛、组合筛选保留、空态、单页隐藏分页和操作回跳测试。
 
 - **`test_chat_response.py`**：私信第一次被打开的响应时效、静默样本、商品分类与交易方式分层、未关联商品边界、样本门槛、看板与 CSV 同构测试。
 
@@ -501,7 +503,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（108 篇，持续更新）</summary>
+<summary>设计文档清单（109 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -612,6 +614,8 @@ campus_glimmer/
 - **`moderation-rule-quality-design.md`**：四条审核规则的误判率、漏判率与复核时效
 
 - **`moderation-risk-tier-design.md`**：内容审核规则按严重风险、脱离平台联系与低权重线索给出不同复核节奏
+
+- **`moderation-queue-pagination-design.md`**：审核队列每页 12 条、筛选保留、越界页码收敛与操作回跳边界
 
 - **`moderation-appeal-design.md`**：确认违规后的单次申诉、改判留痕与恢复闭环
 - **`moderation-appeal-quality-design.md`**：内容申诉的提交线与处理线分窗、积压等待、成立与恢复缺口
