@@ -61,6 +61,12 @@
 <p align="center"><strong>求购广场 · 需求筛选工作台</strong><br /><sub>结果数与已启用条件可读，关键词、分类和地点支持逐项移除 · 本地演示数据</sub></p>
 
 <p align="center">
+  <a href="docs/screenshots/my-items.png"><img src="docs/screenshots/my-items.png" alt="我的商品卖家工作台，展示生命周期诊断、批量专题与续期工具、状态页签和商品管理表格" width="100%" /></a>
+</p>
+
+<p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、专题与续期批量工具、状态页签和逐件操作集中管理 · 本地演示数据</sub></p>
+
+<p align="center">
   <a href="docs/screenshots/order-detail.png"><img src="docs/screenshots/order-detail.png" alt="订单详情交易工作台，展示订单状态、四步交易进度、下一步操作、交付安排和状态记录" width="100%" /></a>
 </p>
 

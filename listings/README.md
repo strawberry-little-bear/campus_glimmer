@@ -56,6 +56,12 @@ flowchart LR
 </table>
 
 <p align="center">
+  <a href="../docs/screenshots/my-items.png"><img src="../docs/screenshots/my-items.png" alt="我的商品卖家工作台，展示生命周期诊断、批量专题与续期工具、状态页签和商品管理表格" width="100%" /></a>
+</p>
+
+<p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、专题与续期批量工具、状态页签和逐件操作集中管理 · 本地演示数据</sub></p>
+
+<p align="center">
   <a href="../docs/screenshots/operations.png"><img src="../docs/screenshots/operations.png" alt="运营数据概览，展示供给、搜索、预约、互助与看板构建耗时" width="100%" /></a>
 </p>
 
@@ -88,6 +94,7 @@ flowchart LR
 | `/listings/demands/` | 求购广场 |
 | `/listings/lost-found/` | 失物招领 |
 | `/listings/item/<item_id>/` | 商品详情与交易入口 |
+| `/listings/my_items/` | 我的商品与卖家工作台 |
 | `/listings/orders/` | 我的订单 |
 | `/listings/notifications/` | 通知中心 |
 | `/listings/notifications/activity/` | 通知与私信汇合的站内动态 |
