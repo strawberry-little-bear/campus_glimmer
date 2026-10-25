@@ -4,7 +4,7 @@
 
 # screenshots · 系统界面预览
 
-**十五张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、治理和运营六类入口。**
+**十六张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、治理和运营六类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
@@ -76,6 +76,12 @@
 </tr>
 <tr>
 <td width="100%" valign="top">
+<a href="my-orders.png"><img src="my-orders.png" alt="我的交易工作台，展示买入卖出计数、状态筛选、对方身份、下一步动作和交易金额" width="100%" /></a>
+<p align="center"><strong>我的交易 · 买卖总览</strong><br /><sub>全部、待推进、已完成与已取消分栏，身份、下一步动作和截止时间集中呈现 · 本地演示数据</sub></p>
+</td>
+</tr>
+<tr>
+<td width="100%" valign="top">
 <a href="order-detail.png"><img src="order-detail.png" alt="订单详情交易工作台，展示订单状态、四步交易进度、下一步操作、交付安排和状态记录" width="100%" /></a>
 <p align="center"><strong>订单详情 · 交易工作台</strong><br /><sub>状态、语义化进度、下一步动作与交付安排形成同一条交易主线</sub></p>
 </td>
@@ -122,6 +128,7 @@
 | [`moderation-queue.png`](moderation-queue.png) | `1424 × 969` | 内容审核值班台；四项待办、三级复核时限、组合筛选和审核记录 |
 | [`operations.png`](operations.png) | `1424 × 969` | 运营看板；管理员指标、告警和构建耗时 |
 | [`my-items.png`](my-items.png) | `1424 × 969` | 我的商品；生命周期诊断、批量专题与续期、状态页签和商品操作 |
+| [`my-orders.png`](my-orders.png) | `1424 × 969` | 我的交易；买卖计数、状态筛选、对方身份、下一步动作和金额 |
 
 ## 🔄 更新截图时
 

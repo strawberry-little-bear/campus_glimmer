@@ -67,6 +67,12 @@
 <p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、专题与续期批量工具、状态页签和逐件操作集中管理 · 本地演示数据</sub></p>
 
 <p align="center">
+  <a href="docs/screenshots/my-orders.png"><img src="docs/screenshots/my-orders.png" alt="我的交易工作台，展示买入卖出计数、状态筛选、对方身份、下一步动作和交易金额" width="100%" /></a>
+</p>
+
+<p align="center"><strong>我的交易 · 买入与卖出总览</strong><br /><sub>待推进、已完成与已取消分栏，身份、下一步动作和交易金额在同一张卡片内可读 · 本地演示数据</sub></p>
+
+<p align="center">
   <a href="docs/screenshots/order-detail.png"><img src="docs/screenshots/order-detail.png" alt="订单详情交易工作台，展示订单状态、四步交易进度、下一步操作、交付安排和状态记录" width="100%" /></a>
 </p>
 

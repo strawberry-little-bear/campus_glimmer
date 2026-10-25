@@ -236,7 +236,7 @@ python manage.py runserver
 | 首页 | <http://127.0.0.1:8000/> |
 | 商品列表 | <http://127.0.0.1:8000/listings/> |
 | 搜索 | <http://127.0.0.1:8000/listings/search/> |
-| 我的订单 | <http://127.0.0.1:8000/listings/orders/> |
+| 我的交易 | <http://127.0.0.1:8000/listings/orders/> |
 | 消息工作台 | <http://127.0.0.1:8000/messages/inbox/> |
 | 站内通知 | <http://127.0.0.1:8000/listings/notifications/> |
 | 校园专题 | <http://127.0.0.1:8000/listings/campaigns/> |
