@@ -1,17 +1,111 @@
 {% extends 'base.html' %}
 {% block title %}{% if is_mine %}我的求购{% else %}求购广场{% endif %} · 拾光校园{% endblock %}
 {% block content %}
-<div class="page-intro demand-intro">
-    <div><span class="eyebrow">REVERSE MARKETPLACE</span><h1>{% if is_mine %}我的求购{% else %}求购广场{% endif %}</h1><p>{% if is_mine %}管理你发布的需求，及时更新预算与截止时间。{% else %}没有找到想要的商品？把需求说出来，让校园里的闲置主动来找你。{% endif %}</p></div>
-    <div class="d-flex gap-2 flex-wrap"><a href="{% if is_mine %}{% url 'demand_list' %}{% else %}{% url 'my_demands' %}{% endif %}" class="btn btn-light">{% if is_mine %}浏览全部求购{% else %}我的求购{% endif %}</a><a href="{% url 'new_demand' %}" class="btn btn-primary"><i class="bi bi-megaphone me-1"></i>发布求购</a></div>
+<div class="page-intro demand-intro mb-4">
+    <div>
+        <span class="eyebrow">REVERSE MARKETPLACE</span>
+        <h1>{% if is_mine %}我的求购{% else %}求购广场{% endif %}</h1>
+        <p>{% if is_mine %}管理你发布的需求，及时更新预算与截止时间。{% else %}没有找到想要的商品？把需求说出来，让校园里的闲置主动来找你。{% endif %}</p>
+    </div>
+    <div class="demand-intro-actions">
+        <a href="{% if is_mine %}{% url 'demand_list' %}{% else %}{% url 'my_demands' %}{% endif %}" class="btn btn-light">{% if is_mine %}浏览全部求购{% else %}我的求购{% endif %}</a>
+        <a href="{% url 'new_demand' %}" class="btn btn-primary"><i class="bi bi-megaphone me-1"></i>发布求购</a>
+    </div>
 </div>
-<div class="content-card demand-filter-card mb-4"><form method="get" class="row g-2 align-items-end">
-    <div class="col-lg-5"><label class="form-label small text-muted" for="demand-q">搜索需求</label><input class="form-control" name="q" id="demand-q" value="{{ demand_search_query }}" placeholder="例如：显示器、考研资料、羽毛球拍"></div>
-    <div class="col-md-3 col-lg-2"><label class="form-label small text-muted" for="demand-category">分类</label><select class="form-select" name="category" id="demand-category"><option value="">全部分类</option>{% for category in categories %}<option value="{{ category.id }}" {% if demand_category_filter == category.id|stringformat:'s' %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></div>
-    <div class="col-md-3 col-lg-2"><label class="form-label small text-muted" for="demand-location">地点</label><select class="form-select" name="location" id="demand-location"><option value="">全部地点</option>{% for location in locations %}<option value="{{ location.id }}" {% if demand_location_filter == location.id|stringformat:'s' %}selected{% endif %}>{{ location.name }}</option>{% endfor %}</select></div>
-    <div class="col-md-3 col-lg-2"><label class="form-label small text-muted" for="demand-sort">排序</label><select class="form-select" name="sort" id="demand-sort"><option value="latest" {% if demand_sort == 'latest' %}selected{% endif %}>最新发布</option><option value="ending" {% if demand_sort == 'ending' %}selected{% endif %}>即将截止</option><option value="popular" {% if demand_sort == 'popular' %}selected{% endif %}>浏览最多</option></select></div>
-    <div class="col-md-3 col-lg-1"><button class="btn btn-primary w-100" type="submit" aria-label="搜索需求"><i class="bi bi-search"></i></button></div>
-</form></div>
-<div class="row g-4">{% for demand in demands %}<div class="col-md-6 col-xl-4"><article class="demand-card h-100"><div class="demand-card-head"><span class="demand-status"><i class="bi bi-bullseye me-1"></i>寻找中</span><small>{{ demand.created_at|date:'m月d日 H:i' }}</small></div><h2><a href="{% url 'demand_detail' demand.id %}">{{ demand.title }}</a></h2><p class="demand-excerpt">{{ demand.description|truncatechars:92 }}</p><div class="demand-meta">{% if demand.category %}<span><i class="bi bi-tag me-1"></i>{{ demand.category.name }}</span>{% endif %}{% if demand.location %}<span><i class="bi bi-geo-alt me-1"></i>{{ demand.location.name }}</span>{% endif %}</div><div class="demand-card-footer"><strong>{% if demand.min_price and demand.max_price %}¥{{ demand.min_price }} - ¥{{ demand.max_price }}{% elif demand.max_price %}最高 ¥{{ demand.max_price }}{% elif demand.min_price %}至少 ¥{{ demand.min_price }}{% else %}预算面议{% endif %}</strong><span><i class="bi bi-eye me-1"></i>{{ demand.view_count }}</span></div></article></div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-bullseye display-6 d-block mb-3"></i><h2 class="h3">还没有匹配的求购信息</h2><p>你可以发布第一条需求，或换个筛选条件再看看。</p><a href="{% url 'new_demand' %}" class="btn btn-primary">发布求购</a></div></div>{% endfor %}</div>
-{% if page_obj.paginator.num_pages > 1 %}<nav class="mt-5" aria-label="求购分页"><ul class="pagination justify-content-center">{% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if demand_filter_query %}&{{ demand_filter_query }}{% endif %}">上一页</a></li>{% endif %}{% for num in page_numbers %}<li class="page-item {% if page_obj.number == num %}active{% endif %}">{% if num %}<a class="page-link" href="?page={{ num }}{% if demand_filter_query %}&{{ demand_filter_query }}{% endif %}">{{ num }}</a>{% else %}<span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span>{% endif %}</li>{% endfor %}{% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if demand_filter_query %}&{{ demand_filter_query }}{% endif %}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
+
+<section class="content-card demand-filter-card" aria-labelledby="demand-filter-title">
+    <div class="demand-filter-heading">
+        <div>
+            <strong id="demand-filter-title">筛选求购需求</strong>
+            <span>当前显示 {{ page_obj.paginator.count }} 条{% if demand_active_filter_count %} · 已启用 {{ demand_active_filter_count }} 个条件{% endif %}</span>
+        </div>
+        {% if demand_active_filter_count %}<a class="demand-filter-reset" href="{% if is_mine %}{% url 'my_demands' %}{% else %}{% url 'demand_list' %}{% endif %}"><i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选</a>{% endif %}
+    </div>
+    <form method="get" class="demand-filter-form" role="search">
+        <div class="demand-filter-primary">
+            <label class="demand-filter-search">
+                <span class="visually-hidden">搜索求购需求</span>
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input name="q" type="search" value="{{ demand_search_query }}" placeholder="搜索显示器、考研资料、羽毛球拍" autocomplete="off">
+            </label>
+            <label class="demand-filter-field">
+                <span>需求分类</span>
+                <select name="category" class="form-select form-select-sm">
+                    <option value="">全部分类</option>
+                    {% for category in categories %}<option value="{{ category.id }}" {% if demand_category_filter == category.id|stringformat:'s' %}selected{% endif %}>{{ category.name }}</option>{% endfor %}
+                </select>
+            </label>
+            <label class="demand-filter-field">
+                <span>期望地点</span>
+                <select name="location" class="form-select form-select-sm">
+                    <option value="">全部地点</option>
+                    {% for location in locations %}<option value="{{ location.id }}" {% if demand_location_filter == location.id|stringformat:'s' %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
+                </select>
+            </label>
+            <label class="demand-filter-field">
+                <span>排列方式</span>
+                <select name="sort" class="form-select form-select-sm">
+                    <option value="latest" {% if demand_sort == 'latest' %}selected{% endif %}>最新发布</option>
+                    <option value="ending" {% if demand_sort == 'ending' %}selected{% endif %}>即将截止</option>
+                    <option value="popular" {% if demand_sort == 'popular' %}selected{% endif %}>浏览最多</option>
+                </select>
+            </label>
+            <button class="btn btn-primary demand-filter-submit" type="submit"><i class="bi bi-funnel me-1"></i>应用</button>
+        </div>
+        {% if demand_active_filters %}
+        <div class="demand-filter-chips" aria-label="已启用的筛选条件">
+            <span class="demand-filter-chips-label"><i class="bi bi-check2-circle me-1"></i>已启用</span>
+            {% for filter in demand_active_filters %}
+            <a class="demand-filter-chip" href="?{{ filter.remove_query }}" title="移除{{ filter.label }}筛选">
+                <span>{{ filter.label }}：{{ filter.value }}</span><i class="bi bi-x-lg" aria-hidden="true"></i>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </form>
+</section>
+
+<div class="demand-results-heading">
+    <div><strong id="demand-results-title">正在寻找的需求</strong><span class="demand-results-count">{{ page_obj.paginator.count }} 条</span></div>
+    <span>按{{ demand_sort_label }}排序{% if page_obj.paginator.num_pages > 1 %} · 第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页{% endif %}</span>
+</div>
+
+<div class="row g-4" aria-labelledby="demand-results-title">
+    {% for demand in demands %}
+    <div class="col-md-6 col-xl-4">
+        <article class="demand-card h-100">
+            <div class="demand-card-head"><span class="demand-status"><i class="bi bi-bullseye me-1"></i>寻找中</span><small>{{ demand.created_at|date:'m月d日 H:i' }}</small></div>
+            <h2><a href="{% url 'demand_detail' demand.id %}">{{ demand.title }}</a></h2>
+            <p class="demand-excerpt">{{ demand.description|truncatechars:92 }}</p>
+            <div class="demand-meta">
+                {% if demand.category %}<span><i class="bi bi-tag me-1"></i>{{ demand.category.name }}</span>{% endif %}
+                {% if demand.location %}<span><i class="bi bi-geo-alt me-1"></i>{{ demand.location.name }}</span>{% endif %}
+            </div>
+            <div class="demand-card-footer"><strong>{% if demand.min_price and demand.max_price %}¥{{ demand.min_price }} - ¥{{ demand.max_price }}{% elif demand.max_price %}最高 ¥{{ demand.max_price }}{% elif demand.min_price %}至少 ¥{{ demand.min_price }}{% else %}预算面议{% endif %}</strong><span><i class="bi bi-eye me-1"></i>{{ demand.view_count }}</span></div>
+        </article>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="empty-state py-5">
+            <i class="bi bi-bullseye display-6 d-block mb-3"></i>
+            <h2 class="h3">{% if demand_active_filter_count %}没有被这组条件筛中的求购{% elif is_mine %}你还没有正在寻找的求购{% else %}还没有匹配的求购信息{% endif %}</h2>
+            <p>{% if demand_active_filter_count %}换一个关键词、分类或地点，再看看其他校园需求。{% else %}发布第一条需求，让校园里的闲置主动来找你。{% endif %}</p>
+            <div class="demand-empty-actions">
+                {% if demand_active_filter_count %}<a href="{% if is_mine %}{% url 'my_demands' %}{% else %}{% url 'demand_list' %}{% endif %}" class="btn btn-light"><i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选</a>{% endif %}
+                <a href="{% url 'new_demand' %}" class="btn btn-primary"><i class="bi bi-megaphone me-1"></i>发布求购</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="mt-5" aria-label="求购分页">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if demand_filter_query %}&{{ demand_filter_query }}{% endif %}">上一页</a></li>{% endif %}
+        {% for num in page_numbers %}<li class="page-item {% if page_obj.number == num %}active{% endif %}">{% if num %}<a class="page-link" href="?page={{ num }}{% if demand_filter_query %}&{{ demand_filter_query }}{% endif %}">{{ num }}</a>{% else %}<span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span>{% endif %}</li>{% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if demand_filter_query %}&{{ demand_filter_query }}{% endif %}">下一页</a></li>{% endif %}
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}

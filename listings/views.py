@@ -12908,16 +12908,45 @@ def demand_list(request, mine=False):
     page = Paginator(demands, 12).get_page(request.GET.get('page'))
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
+
+    categories = list(Category.objects.all())
+    locations = list(CampusLocation.objects.filter(is_active=True))
+    category_labels = {str(category.id): category.name for category in categories}
+    location_labels = {str(location.id): location.name for location in locations}
+    active_filters = []
+    for parameter, label, value in (
+        ('q', '关键词', search_query),
+        ('category', '分类', category_labels.get(category_id)),
+        ('location', '地点', location_labels.get(location_id)),
+    ):
+        if not value:
+            continue
+        remaining_params = filter_params.copy()
+        remaining_params.pop(parameter, None)
+        active_filters.append({
+            'label': label,
+            'value': value,
+            'remove_query': remaining_params.urlencode(),
+        })
+
+    sort_labels = {
+        'latest': '最新发布',
+        'ending': '即将截止',
+        'popular': '浏览最多',
+    }
     return render(request, 'listings/demand_list.html', {
         'demands': page,
         'page_obj': page,
         'page_numbers': _elided_page_numbers(page),
-        'categories': Category.objects.all(),
-        'locations': CampusLocation.objects.filter(is_active=True),
+        'categories': categories,
+        'locations': locations,
         'demand_search_query': search_query,
         'demand_category_filter': category_id,
         'demand_location_filter': location_id,
         'demand_sort': sort,
+        'demand_sort_label': sort_labels[sort],
+        'demand_active_filters': active_filters,
+        'demand_active_filter_count': len(active_filters),
         'demand_filter_query': filter_params.urlencode(),
         'is_mine': mine,
     })
