@@ -4,7 +4,7 @@
 
 # screenshots · 系统界面预览
 
-**十一张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
+**十二张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息和运营五类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
@@ -64,6 +64,12 @@
 </tr>
 <tr>
 <td width="100%" valign="top">
+<a href="order-detail.png"><img src="order-detail.png" alt="订单详情交易工作台，展示订单状态、四步交易进度、下一步操作、交付安排和状态记录" width="100%" /></a>
+<p align="center"><strong>订单详情 · 交易工作台</strong><br /><sub>状态、语义化进度、下一步动作与交付安排形成同一条交易主线</sub></p>
+</td>
+</tr>
+<tr>
+<td width="100%" valign="top">
 <a href="inbox.png"><img src="inbox.png" alt="消息工作台，展示未读统计、搜索筛选、会话列表和批量已读" width="100%" /></a>
 <p align="center"><strong>消息工作台</strong><br /><sub>会话整理、未读聚焦、收到与发出视图</sub></p>
 </td>
@@ -86,6 +92,7 @@
 | [`discover.png`](discover.png) | `1424 × 969` | 发现页；关键词搜索、分类、校园地点、商品卡片和排序 |
 | [`login.png`](login.png) | `1424 × 969` | 登录页；品牌信息、认证表单与全局导航 |
 | [`item-detail.png`](item-detail.png) | `1424 × 969` | 详情页；图片、状态、价格、地点和价格参考 |
+| [`order-detail.png`](order-detail.png) | `1424 × 969` | 订单详情；交易状态、四步进度、下一步动作和交付安排 |
 | [`notifications.png`](notifications.png) | `1424 × 969` | 通知中心；未读统计、类型分布和批量操作 |
 | [`profile.png`](profile.png) | `1424 × 969` | 账户中心；校园认证、贡献、联系方式与活动入口 |
 | [`edit-profile.png`](edit-profile.png) | `1424 × 969` | 编辑资料；头像预览、账户信息、简介与联系方式表单 |

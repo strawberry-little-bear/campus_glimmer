@@ -55,12 +55,18 @@
 </table>
 
 <p align="center">
+  <a href="docs/screenshots/order-detail.png"><img src="docs/screenshots/order-detail.png" alt="订单详情交易工作台，展示订单状态、四步交易进度、下一步操作、交付安排和状态记录" width="100%" /></a>
+</p>
+
+<p align="center"><strong>订单详情 · 交易工作台</strong><br /><sub>订单状态、语义化四步进度、下一步动作、交付安排与安全记录保持同一阅读层级 · 本地演示数据</sub></p>
+
+<p align="center">
   <a href="docs/screenshots/operations.png"><img src="docs/screenshots/operations.png" alt="运营看板，展示供给、搜索、预约、互助和看板构建观测" width="100%" /></a>
 </p>
 
 <p align="center"><strong>运营看板 · 把校园交易现场变成可解释的运营信号</strong><br /><sub>供给、需求、搜索、交付、互助与告警共用同一套指标口径 · 本地演示数据</sub></p>
 
-<p align="center"><sub>全部截图来自当前本地页面与演示数据；登录、通知、贡献中心、公开档案等更多界面见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
+<p align="center"><sub>全部截图来自当前本地页面与演示数据；登录、通知、订单详情、贡献中心、公开档案等更多界面见 <a href="docs/screenshots/README.md">系统界面预览</a></sub></p>
 
 ---
 
