@@ -1,6 +1,134 @@
 {% extends 'base.html' %}
+{% load static %}
+
 {% block title %}{{ title }} · 拾光校园{% endblock %}
+
 {% block content %}
-<div class="page-intro mb-4"><div><span class="eyebrow eyebrow-soft">交易记录</span><h1>我的交易</h1><p>查看你作为买家或卖家的每一笔预约。</p></div><a href="{% url 'item_list' %}" class="btn btn-outline-primary"><i class="bi bi-compass me-2"></i>继续逛逛</a></div>
-<div class="row g-3">{% for order in orders %}<div class="col-12"><a href="{% url 'order_detail' order.id %}" class="order-list-card"><div class="order-list-icon"><i class="bi bi-bag-check"></i></div><div class="flex-grow-1"><div class="d-flex flex-wrap justify-content-between gap-2"><strong>{{ order.item.title }}</strong><span class="order-status order-status-{{ order.status }}">{{ order.get_status_display }}</span></div><small>{% if user == order.buyer %}买家{% else %}卖家{% endif %} · {% if order.item.trade_mode == 'borrow' %}免费借用{% elif order.item.trade_mode == 'free' %}免费领取{% else %}¥{{ order.agreed_price|floatformat:2 }}{% endif %}{% if order.meeting_location %} · {{ order.meeting_location.name }}{% endif %}</small></div><i class="bi bi-chevron-right text-muted"></i></a></div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-receipt display-6 d-block mb-3"></i><h2 class="h3">还没有交易记录</h2><p>遇到合适的商品后，可以从详情页发起预约。</p><a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a></div></div>{% endfor %}</div>
+<div class="page-intro trade-desk-intro mb-4">
+    <div>
+        <span class="eyebrow eyebrow-soft">Trade desk</span>
+        <h1 class="mt-2">我的交易</h1>
+        <p class="text-muted mb-0">把买到与卖出的预约放在同一张工作台上，先处理待推进的订单，再回看已经完成的交易。</p>
+    </div>
+    <div class="trade-desk-actions">
+        <a href="{% url 'my_items' %}" class="btn btn-outline-primary"><i class="bi bi-box-seam me-1"></i>管理我的商品</a>
+        <a href="{% url 'item_list' %}" class="btn btn-success"><i class="bi bi-compass me-1"></i>继续逛逛</a>
+    </div>
+</div>
+
+<section class="trade-desk-overview" aria-label="交易概览">
+    <a class="trade-overview-card trade-overview-all" href="?state=all">
+        <span class="trade-overview-icon"><i class="bi bi-receipt"></i></span>
+        <span class="trade-overview-copy"><small>全部交易</small><strong>{{ order_counts.all }}</strong><span>买入 {{ order_counts.buying }} · 卖出 {{ order_counts.selling }}</span></span>
+    </a>
+    <a class="trade-overview-card trade-overview-active" href="?state=active">
+        <span class="trade-overview-icon"><i class="bi bi-activity"></i></span>
+        <span class="trade-overview-copy"><small>正在推进</small><strong>{{ order_counts.active }}</strong><span>等待确认、交付或归还</span></span>
+    </a>
+    <a class="trade-overview-card trade-overview-completed" href="?state=completed">
+        <span class="trade-overview-icon"><i class="bi bi-check2-circle"></i></span>
+        <span class="trade-overview-copy"><small>已经完成</small><strong>{{ order_counts.completed }}</strong><span>交易完成或借用已归还</span></span>
+    </a>
+    <a class="trade-overview-card trade-overview-cancelled" href="?state=cancelled">
+        <span class="trade-overview-icon"><i class="bi bi-slash-circle"></i></span>
+        <span class="trade-overview-copy"><small>已经取消</small><strong>{{ order_counts.cancelled }}</strong><span>保留取消前后的完整记录</span></span>
+    </a>
+</section>
+
+<nav class="trade-state-tabs" aria-label="按交易状态筛选">
+    <a class="trade-state-tab{% if selected_state == 'all' %} is-active{% endif %}" href="?state=all"{% if selected_state == 'all' %} aria-current="page"{% endif %}>
+        全部 <span>{{ order_counts.all }}</span>
+    </a>
+    <a class="trade-state-tab{% if selected_state == 'active' %} is-active{% endif %}" href="?state=active"{% if selected_state == 'active' %} aria-current="page"{% endif %}>
+        待推进 <span>{{ order_counts.active }}</span>
+    </a>
+    <a class="trade-state-tab{% if selected_state == 'completed' %} is-active{% endif %}" href="?state=completed"{% if selected_state == 'completed' %} aria-current="page"{% endif %}>
+        已完成 <span>{{ order_counts.completed }}</span>
+    </a>
+    <a class="trade-state-tab{% if selected_state == 'cancelled' %} is-active{% endif %}" href="?state=cancelled"{% if selected_state == 'cancelled' %} aria-current="page"{% endif %}>
+        已取消 <span>{{ order_counts.cancelled }}</span>
+    </a>
+</nav>
+
+<div class="trade-list-heading">
+    <div>
+        <span class="eyebrow eyebrow-soft">Order timeline</span>
+        <h2>
+            {% if selected_state == 'active' %}待推进的交易
+            {% elif selected_state == 'completed' %}已完成的交易
+            {% elif selected_state == 'cancelled' %}已取消的交易
+            {% else %}全部交易记录{% endif %}
+        </h2>
+    </div>
+    <span class="trade-list-count"><i class="bi bi-layers me-1"></i>{{ orders|length }} 笔</span>
+</div>
+
+<div class="trade-order-list">
+    {% for order in orders %}
+    <article class="trade-order-card trade-order-{{ order.state_group }}{% if order.is_overdue %} is-overdue{% endif %}">
+        <a class="trade-order-thumb" href="{% url 'order_detail' order.id %}" aria-label="查看 {{ order.item.title }} 的交易详情">
+            {% if order.item.images.all.0 %}
+            <img src="{{ order.item.images.all.0.list_image_url }}" alt=""{% if order.item.images.all.0.list_image_width %} width="{{ order.item.images.all.0.list_image_width }}" height="{{ order.item.images.all.0.list_image_height }}"{% endif %} loading="lazy" decoding="async">
+            {% else %}
+            <img src="{% static 'img/no-image.png' %}" alt="" loading="lazy" decoding="async">
+            {% endif %}
+        </a>
+
+        <div class="trade-order-main">
+            <div class="trade-order-kicker">
+                <span class="trade-role trade-role-{{ order.viewer_role }}"><i class="bi {% if order.viewer_role == 'buyer' %}bi-bag-check{% else %}bi-shop{% endif %}"></i>{{ order.viewer_role_label }}</span>
+                <span class="order-status order-status-{{ order.status }}">{{ order.get_status_display }}</span>
+                {% if order.is_overdue %}<span class="trade-overdue-badge"><i class="bi bi-exclamation-triangle"></i>已超时</span>{% endif %}
+            </div>
+            <a class="trade-order-title" href="{% url 'order_detail' order.id %}">{{ order.item.title }}</a>
+            <div class="trade-order-meta">
+                <span><i class="bi bi-person"></i>{{ order.counterparty_role }} {{ order.counterparty.username }}</span>
+                <span><i class="bi bi-calendar3"></i>发起于 {{ order.created_at|date:"Y-m-d H:i" }}</span>
+                {% if order.meeting_location %}<span><i class="bi bi-geo-alt"></i>{{ order.meeting_location.name }}</span>{% endif %}
+            </div>
+            <div class="trade-next-step">
+                <span><i class="bi bi-arrow-right-circle"></i>下一步</span>
+                <strong>{{ order.next_step }}</strong>
+                {% if order.deadline_at %}
+                <small class="{% if order.is_overdue %}is-overdue{% endif %}">{{ order.deadline_label }} {{ order.deadline_at|date:"m-d H:i" }}</small>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="trade-order-side">
+            <div class="trade-order-value">
+                {% if order.item.trade_mode == 'free' %}
+                <strong>免费领取</strong>
+                <small>赠送交易</small>
+                {% elif order.item.trade_mode == 'borrow' %}
+                <strong>押金 ¥{{ order.deposit_amount|floatformat:2 }}</strong>
+                <small>借用交易</small>
+                {% else %}
+                <strong>¥{{ order.agreed_price|floatformat:2 }}</strong>
+                <small>约定成交价</small>
+                {% endif %}
+            </div>
+            <a href="{% url 'order_detail' order.id %}" class="btn btn-outline-primary btn-sm trade-order-action">查看交易<i class="bi bi-chevron-right ms-1"></i></a>
+        </div>
+    </article>
+    {% empty %}
+    <div class="empty-state trade-empty-state">
+        <i class="bi bi-receipt display-6 d-block mb-3"></i>
+        {% if selected_state == 'all' %}
+        <h2 class="h3">还没有交易记录</h2>
+        <p>遇到合适的商品后，可以从详情页发起预约。买家与卖家的每一笔交易都会汇总在这里。</p>
+        {% elif selected_state == 'active' %}
+        <h2 class="h3">当前没有待推进的交易</h2>
+        <p>新的预约、待交付订单和借用中的交易会出现在这里。</p>
+        {% elif selected_state == 'completed' %}
+        <h2 class="h3">还没有已完成的交易</h2>
+        <p>双方完成交付或借用归还后，交易会沉淀到这里。</p>
+        {% else %}
+        <h2 class="h3">没有已取消的交易</h2>
+        <p>取消记录会被保留，方便以后回看当时的交易信息。</p>
+        {% endif %}
+        <a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a>
+    </div>
+    {% endfor %}
+</div>
 {% endblock %}

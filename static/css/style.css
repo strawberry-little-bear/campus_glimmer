@@ -8288,3 +8288,585 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
     .ops-section, .si-section { scroll-margin-top: 140px; }
     html.js .ops-section[data-ops-deferred]:not(.is-revealed), html.js .si-section[data-si-deferred]:not(.is-revealed) { min-height: 220px; }
 }
+
+/* --------------------------------------------------------------------------
+   我的交易工作台
+   原来的「我的交易」只是逐行文本链接，买家/卖家身份、交易阶段和下一步动作
+   都埋在状态徽章和详情页里。这里把总览、状态页签、交易卡和操作入口放到
+   同一视线内，同时保留订单详情作为唯一执行页。
+   -------------------------------------------------------------------------- */
+.trade-desk-intro {
+    align-items: flex-start;
+}
+
+.trade-desk-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.trade-desk-overview {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.trade-overview-card {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 13px;
+    padding: 17px 18px;
+    color: inherit;
+    text-decoration: none;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: 0 7px 22px rgba(28, 83, 63, .045);
+    transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.trade-overview-card:hover {
+    color: inherit;
+    border-color: var(--line-strong);
+    transform: translateY(-2px);
+    box-shadow: 0 13px 28px rgba(28, 83, 63, .09);
+}
+
+.trade-overview-icon {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: var(--primary);
+    background: var(--mint);
+    border-radius: 14px;
+    font-size: 1.15rem;
+}
+
+.trade-overview-copy {
+    display: block;
+    min-width: 0;
+}
+
+.trade-overview-copy small,
+.trade-overview-copy strong,
+.trade-overview-copy span {
+    display: block;
+}
+
+.trade-overview-copy small {
+    color: var(--muted);
+    font-size: .73rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+}
+
+.trade-overview-copy strong {
+    margin: 1px 0;
+    color: var(--ink);
+    font-size: 1.55rem;
+    line-height: 1.2;
+}
+
+.trade-overview-copy span {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: .72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trade-overview-active .trade-overview-icon {
+    color: #9a651f;
+    background: #fff4df;
+}
+
+.trade-overview-completed .trade-overview-icon {
+    color: #257153;
+    background: #e6f5ec;
+}
+
+.trade-overview-cancelled .trade-overview-icon {
+    color: #7d7770;
+    background: #f1f0ed;
+}
+
+.trade-state-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 7px;
+    margin-bottom: 26px;
+    padding: 6px;
+    background: #f0f4f0;
+    border: 1px solid rgba(31, 102, 77, .08);
+    border-radius: 16px;
+}
+
+.trade-state-tab {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 10px 12px;
+    color: #60706a;
+    text-decoration: none;
+    border-radius: 11px;
+    font-size: .84rem;
+    font-weight: 700;
+    transition: color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.trade-state-tab:hover {
+    color: var(--primary);
+    background: rgba(255, 255, 255, .62);
+}
+
+.trade-state-tab.is-active {
+    color: var(--ink);
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(26, 73, 56, .08);
+}
+
+.trade-state-tab span {
+    display: inline-grid;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    place-items: center;
+    color: #61726a;
+    background: #e8efea;
+    border-radius: 999px;
+    font-size: .68rem;
+}
+
+.trade-state-tab.is-active span {
+    color: var(--primary);
+    background: var(--mint);
+}
+
+.trade-list-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 13px;
+}
+
+.trade-list-heading h2 {
+    margin: 5px 0 0;
+    font-size: 1.25rem;
+}
+
+.trade-list-count {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: .78rem;
+    font-weight: 600;
+}
+
+.trade-order-list {
+    display: grid;
+    gap: 12px;
+}
+
+.trade-order-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 92px minmax(0, 1fr) 178px;
+    gap: 18px;
+    align-items: center;
+    min-width: 0;
+    padding: 16px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid rgba(31, 102, 77, .12);
+    border-radius: 20px;
+    box-shadow: 0 7px 24px rgba(26, 73, 56, .045);
+}
+
+.trade-order-card::before {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: #8ead9d;
+    content: '';
+}
+
+.trade-order-card.trade-order-active::before {
+    background: linear-gradient(180deg, #d39b3f, #e9c987);
+}
+
+.trade-order-card.trade-order-completed::before {
+    background: linear-gradient(180deg, #2d9169, #83bd91);
+}
+
+.trade-order-card.trade-order-cancelled::before {
+    background: #bdb9b2;
+}
+
+.trade-order-card.is-overdue {
+    border-color: rgba(183, 87, 65, .28);
+    box-shadow: 0 8px 26px rgba(150, 65, 45, .07);
+}
+
+.trade-order-card.is-overdue::before {
+    background: #bd654f;
+}
+
+.trade-order-thumb {
+    display: block;
+    width: 92px;
+    height: 92px;
+    overflow: hidden;
+    background: #eef3ee;
+    border-radius: 15px;
+}
+
+.trade-order-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.trade-order-main {
+    min-width: 0;
+}
+
+.trade-order-kicker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 7px;
+}
+
+.trade-role,
+.trade-overdue-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: .67rem;
+    font-weight: 700;
+}
+
+.trade-role-buyer {
+    color: #2b6f58;
+    background: #e9f5ee;
+}
+
+.trade-role-seller {
+    color: #8a5b21;
+    background: #fff3dd;
+}
+
+.trade-overdue-badge {
+    color: #a7442d;
+    background: #fff0eb;
+}
+
+.trade-order-title {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 1.02rem;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trade-order-title:hover {
+    color: var(--primary);
+}
+
+.trade-order-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: .74rem;
+}
+
+.trade-order-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.trade-next-step {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+    margin-top: 11px;
+    padding: 8px 10px;
+    color: #52665d;
+    background: #f5f8f5;
+    border-radius: 10px;
+    font-size: .75rem;
+}
+
+.trade-next-step > span {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.trade-next-step strong {
+    overflow: hidden;
+    color: #485a52;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trade-next-step small {
+    flex: 0 0 auto;
+    margin-left: auto;
+    color: var(--muted);
+    font-size: .69rem;
+    white-space: nowrap;
+}
+
+.trade-next-step small.is-overdue {
+    color: #a7442d;
+    font-weight: 700;
+}
+
+.trade-order-side {
+    display: grid;
+    gap: 10px;
+    padding-left: 18px;
+    border-left: 1px solid #edf1ed;
+    text-align: right;
+}
+
+.trade-order-value strong,
+.trade-order-value small {
+    display: block;
+}
+
+.trade-order-value strong {
+    color: var(--ink);
+    font-size: 1rem;
+}
+
+.trade-order-value small {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: .7rem;
+}
+
+.trade-order-action {
+    width: 100%;
+}
+
+.trade-empty-state {
+    padding: 48px 20px;
+    text-align: center;
+    background: #fff;
+    border: 1px dashed var(--line-strong);
+    border-radius: 20px;
+}
+
+.trade-empty-state .btn {
+    margin-top: 6px;
+}
+
+@media (max-width: 1199.98px) {
+    .trade-desk-overview {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .trade-order-card {
+        grid-template-columns: 84px minmax(0, 1fr) 156px;
+        gap: 15px;
+    }
+
+    .trade-order-thumb {
+        width: 84px;
+        height: 84px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .trade-desk-intro,
+    .trade-list-heading {
+        align-items: stretch;
+    }
+
+    .trade-desk-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .trade-overview-card {
+        padding: 14px;
+    }
+
+    .trade-overview-icon {
+        width: 39px;
+        height: 39px;
+        border-radius: 12px;
+    }
+
+    .trade-overview-copy strong {
+        font-size: 1.35rem;
+    }
+
+    .trade-order-card {
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 13px;
+        align-items: start;
+        padding: 14px;
+    }
+
+    .trade-order-thumb {
+        width: 72px;
+        height: 72px;
+        border-radius: 13px;
+    }
+
+    .trade-order-side {
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        padding: 11px 0 0;
+        border-top: 1px solid #edf1ed;
+        border-left: 0;
+        text-align: left;
+    }
+
+    .trade-order-action {
+        width: auto;
+        min-width: 118px;
+    }
+
+    .trade-next-step {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .trade-next-step strong {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+    }
+
+    .trade-next-step small {
+        grid-column: 2;
+        margin-left: 0;
+        white-space: normal;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .trade-desk-actions .btn {
+        flex: 1 1 145px;
+    }
+
+    .trade-desk-overview {
+        gap: 8px;
+    }
+
+    .trade-overview-card {
+        gap: 9px;
+        padding: 12px;
+        border-radius: 15px;
+    }
+
+    .trade-overview-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        font-size: .98rem;
+    }
+
+    .trade-overview-copy small {
+        font-size: .67rem;
+    }
+
+    .trade-overview-copy strong {
+        font-size: 1.2rem;
+    }
+
+    .trade-overview-copy span {
+        font-size: .64rem;
+    }
+
+    .trade-state-tabs {
+        gap: 3px;
+        padding: 4px;
+        border-radius: 13px;
+    }
+
+    .trade-state-tab {
+        gap: 4px;
+        padding: 8px 3px;
+        font-size: .72rem;
+    }
+
+    .trade-state-tab span {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 4px;
+        font-size: .62rem;
+    }
+
+    .trade-order-card {
+        grid-template-columns: 62px minmax(0, 1fr);
+        gap: 11px;
+        padding: 12px;
+    }
+
+    .trade-order-thumb {
+        width: 62px;
+        height: 62px;
+        border-radius: 11px;
+    }
+
+    .trade-order-title {
+        font-size: .94rem;
+    }
+
+    .trade-order-meta {
+        display: grid;
+        gap: 4px;
+    }
+
+    .trade-order-meta span:nth-child(2) {
+        order: 3;
+    }
+
+    .trade-next-step {
+        grid-column: 1 / -1;
+        margin-top: 2px;
+    }
+
+    .trade-order-side {
+        padding-top: 9px;
+    }
+
+    .trade-order-value strong {
+        font-size: .9rem;
+    }
+
+    .trade-order-action {
+        min-width: 105px;
+        padding-inline: 9px;
+    }
+}

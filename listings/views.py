@@ -2460,8 +2460,79 @@ def dismiss_opportunity(request):
 
 @login_required
 def my_orders(request):
-    orders = Order.objects.filter(Q(buyer=request.user) | Q(seller=request.user)).select_related('item', 'buyer', 'seller', 'meeting_location')
-    return render(request, 'listings/my_orders.html', {'orders': orders, 'title': '我的交易'})
+    all_orders = list(
+        Order.objects.filter(Q(buyer=request.user) | Q(seller=request.user))
+        .select_related('item', 'buyer', 'seller', 'meeting_location')
+        .prefetch_related('item__images')
+    )
+
+    state_groups = {
+        'active': {'pending', 'confirmed', 'meeting', 'borrowed'},
+        'completed': {'completed', 'returned'},
+        'cancelled': {'cancelled'},
+    }
+    order_counts = {
+        'all': len(all_orders),
+        'active': sum(order.status in state_groups['active'] for order in all_orders),
+        'completed': sum(order.status in state_groups['completed'] for order in all_orders),
+        'cancelled': sum(order.status in state_groups['cancelled'] for order in all_orders),
+        'buying': sum(order.buyer_id == request.user.id for order in all_orders),
+        'selling': sum(order.seller_id == request.user.id for order in all_orders),
+    }
+
+    selected_state = request.GET.get('state', 'all')
+    if selected_state not in {'all', *state_groups}:
+        selected_state = 'all'
+
+    now = timezone.now()
+    orders = all_orders
+    if selected_state != 'all':
+        orders = [order for order in orders if order.status in state_groups[selected_state]]
+
+    for order in orders:
+        is_buyer = order.buyer_id == request.user.id
+        order.viewer_role = 'buyer' if is_buyer else 'seller'
+        order.viewer_role_label = '我买到' if is_buyer else '我卖出'
+        order.counterparty = order.seller if is_buyer else order.buyer
+        order.counterparty_role = '卖家' if is_buyer else '买家'
+        if order.status in state_groups['active']:
+            order.state_group = 'active'
+        elif order.status in state_groups['completed']:
+            order.state_group = 'completed'
+        else:
+            order.state_group = 'cancelled'
+
+        if order.status == 'pending':
+            order.next_step = '等待卖家确认预约' if is_buyer else '核对预约并确认或取消'
+        elif order.status == 'confirmed':
+            order.next_step = '与卖家约定交付时间' if is_buyer else '联系买家并安排交付'
+        elif order.status == 'meeting':
+            order.next_step = '按约定完成当面交付，双方确认后订单才会完成'
+        elif order.status == 'borrowed':
+            order.next_step = '按约定时间归还物品' if is_buyer else '关注归还时间并确认收回'
+        elif order.status == 'completed':
+            order.next_step = '交易已完成，可回看订单与评价记录'
+        elif order.status == 'returned':
+            order.next_step = '借用已归还，这笔交易已经闭环'
+        else:
+            order.next_step = '订单已取消，可以回到发现页继续寻找'
+
+        deadline = None
+        if order.status == 'pending':
+            deadline = order.confirmation_deadline
+            order.deadline_label = '卖家确认截止'
+        elif order.status == 'borrowed':
+            deadline = order.return_due_at
+            order.deadline_label = '预计归还'
+        order.deadline_at = deadline
+        order.is_overdue = bool(deadline and deadline < now)
+
+    return render(request, 'listings/my_orders.html', {
+        'orders': orders,
+        'order_counts': order_counts,
+        'selected_state': selected_state,
+        'title': '我的交易',
+    })
 
 
 @login_required
