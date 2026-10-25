@@ -1,4 +1,6 @@
 # chat_messages/views.py (原messages/views.py)
+from urllib.parse import urlencode
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -458,9 +460,40 @@ def moderation_queue(request):
         bool(search_query),
     ))
 
+    # Keep pagination links readable by emitting only non-default conditions.
+    # The form always submits every select, so copying request.GET would make
+    # each link carry seven redundant parameters even for an unfiltered queue.
+    pagination_params = {}
+    if status_filter != 'pending':
+        pagination_params['status'] = status_filter
+    if channel_filter != 'all':
+        pagination_params['channel'] = channel_filter
+    if risk_filter != 'all':
+        pagination_params['risk'] = risk_filter
+    if tier_filter != 'all':
+        pagination_params['tier'] = tier_filter
+    if appeal_filter != 'all':
+        pagination_params['appeal'] = appeal_filter
+    if release_filter != 'all':
+        pagination_params['release'] = release_filter
+    if search_query:
+        pagination_params['q'] = search_query
+    moderation_filter_query = urlencode(pagination_params)
+
+    page_obj = Paginator(events, 12).get_page(request.GET.get('page'))
+    page_numbers = [
+        None if number == Paginator.ELLIPSIS else number
+        for number in page_obj.paginator.get_elided_page_range(
+            page_obj.number, on_each_side=1, on_ends=1,
+        )
+    ]
+
     return render(request, 'chat_messages/moderation_queue.html', {
-        'moderation_events': events,
-        'moderation_filtered_count': events.count(),
+        'moderation_events': page_obj.object_list,
+        'moderation_filtered_count': page_obj.paginator.count,
+        'moderation_filter_query': moderation_filter_query,
+        'page_obj': page_obj,
+        'page_numbers': page_numbers,
         'moderation_active_filter_count': active_filter_count,
         'moderation_pending_count': base_events.filter(status='pending').count(),
         'moderation_total_count': base_events.count(),

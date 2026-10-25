@@ -112,7 +112,7 @@
 
 <section class="content-card" aria-labelledby="moderation-record-title">
     <div class="notification-toolbar moderation-record-toolbar">
-        <div><strong id="moderation-record-title">审核记录</strong><span class="moderation-record-count">{{ moderation_filtered_count }} 条</span></div>
+        <div><strong id="moderation-record-title">审核记录</strong><span class="moderation-record-count">{% if page_obj.paginator.count %}第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 条 · 共 {{ moderation_filtered_count }} 条{% else %}0 条{% endif %}</span></div>
         <span class="text-muted small">排序：待处理申诉 → 待复核 → 严重风险 → 风险分</span>
     </div>
     <div class="mod-event-list">
@@ -166,5 +166,34 @@
         <div class="empty-state py-5"><i class="bi bi-shield-check display-6 d-block mb-3"></i><h2 class="h3">当前筛选下没有审核记录</h2><p>换个筛选条件，或者去运营看板看看整体拦截趋势。</p></div>
         {% endfor %}
     </div>
+    {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="moderation-pagination" aria-label="内容审核分页">
+        <ul class="pagination justify-content-center mb-0">
+            {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if moderation_filter_query %}&amp;{{ moderation_filter_query }}{% endif %}" aria-label="上一页"><i class="bi bi-chevron-left" aria-hidden="true"></i></a></li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-left"></i></span></li>
+            {% endif %}
+            {% for num in page_numbers %}
+                {% if num %}
+                <li class="page-item{% if page_obj.number == num %} active{% endif %}">
+                    {% if page_obj.number == num %}
+                    <span class="page-link" aria-current="page" aria-label="第 {{ num }} 页">{{ num }}</span>
+                    {% else %}
+                    <a class="page-link" href="?page={{ num }}{% if moderation_filter_query %}&amp;{{ moderation_filter_query }}{% endif %}" aria-label="第 {{ num }} 页">{{ num }}</a>
+                    {% endif %}
+                </li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link"><span class="visually-hidden">跳过的页码</span>&hellip;</span></li>
+                {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if moderation_filter_query %}&amp;{{ moderation_filter_query }}{% endif %}" aria-label="下一页"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-right"></i></span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
 </section>
 {% endblock %}
