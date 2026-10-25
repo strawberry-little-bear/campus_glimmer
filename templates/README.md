@@ -59,6 +59,10 @@ flowchart TD
 - 复用结构优先抽成下划线前缀片段，例如 `_item_card.html`；
 - 审核队列和用户申诉是同一类内容的两端，改一边时同时看 `moderation_queue.html` 和 `moderation_appeals.html`，保持 `.mod-event-*` 结构一致；
 - 运营看板已按分区拆到 `listings/operations/` 下，新增分区用 `{% include %}` 挂到主模板，不要再往单文件里继续堆。一个分区要改三处才算是真的加上了：`listings/operations/_xxx.html` 写内容、`operations_dashboard.html` 里用 `<section class="ops-section" id="ops-xxx">` 包住 include、`listings/operations_nav.py` 的 `OPERATIONS_DASHBOARD_SECTIONS` 登记锚点和 chip 文案。三处少任何一处， `listings/test_operations_nav.py` 与 `listings/test_operations_deferred_sections.py` 会当场报错；
+- 搜索洞察页同样是分区结构，但只有两处登记：`templates/listings/search_insights/_<锚点>.html` 写内容，`listings/search_insights_fragments.py` 的 `SEARCH_INSIGHTS_SECTION_FRAGMENTS` 登记一行`(锚点, partial, 统计块, 面板键)`，顺序就是页面顺序。主模板的 `<section class="si-section" id="...">` 跟着这两处走，没有第三处跳转条注册表——这页没有跳转条。
+  - 和运营看板的区别在第三列：这页的统计大半挤在 `build_search_insights` 一个 builder 里，所以分区除了点名面板，还要点名统计块（`parts`）。块间依赖的闭包在 `analytics.SEARCH_INSIGHTS_PART_DEPENDENCIES`，分区表只写直接依赖。漏登记一个键的症状是取回回来的分区静默变成空态，`listings/test_search_insights_fragments.py` 会拿一次真实渲染反查，少写多写都会红。
+  - 新增分区还要同步 `test_search_insights_export_coverage.py`：CSV 导出的节标题必须等于面板 `h2`，默认同名，只有确实不能同名的情况才在 `PANEL_TO_SECTION` 里登记并写明理由。
+
 - 运营看板里单个分区**混了多个主题**才按主题再拆一层：原文件退化成只写 `{% include %}` 的 umbrella，内容搬到 `_<主题>_<子主题>.html`。这样分区数、跳转条和两个守卫测试的常量都不用动；拆完拿 `git show HEAD:<文件>` 和子 partial 拼回来逐字节比对，确认一个字节都没动。判据是主题聚合度、不是体积——单一主题的分区（贡献体系、借用催收、地点档案）哪怕 28KB 也保持整块，`_demand.html` 这种一块讲供需、三块讲跟进闭环的才拆。当前最大 `_contribution.html`（约 28KB，三块同属贡献体系故未拆）；
 - **新增分区还要在 `listings/operations_fragments.py` 的 `OPERATIONS_SECTION_FRAGMENTS` 里登记一行**：`(锚点, partial 文件名, 是否需要核心统计, 需要的共享面板键)`，顺序就是页面顺序。这张表是「渲染这个分区需要哪些上下文」的唯一权威，懒加载的取回端点靠它裁剪——漏登记一个键，症状是取回回来的那一块静默变成空态，而页面其它部分看起来完全正常。`listings/test_operations_fragments.py` 会拿一次真实渲染反查模板到底读了哪些顶层键，表里少写、多写都会红。`needs_core=True` 要慎重：核心统计整座看板只跑一次，是最贵的一部分；
 - **umbrella 是过渡形态，不是归宿。** 按主题拆完如果 umbrella 只剩一个孩子，说明当初的「多主题」判断判错了——把那一个孩子提回主模板直接 include，删掉 umbrella，`operations_nav.py` 补一个锚点，两个守卫测试的分区常量跟着 +1。判据始终是主题聚合度：`_ops_queues.html` 当初拆成免费领取申请 + 商品图片覆盖，但后者根本不是队列，错挂在「运营队列」下；现在它独立成 `ops-item-images`，umbrella 随之退场。分区数是给运营看的跳转条长度，不是技术指标，别为了少改一个常量把不相干的主题塞在同一块；

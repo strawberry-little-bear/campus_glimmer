@@ -154,12 +154,16 @@ flowchart LR
 
 取回失败不能留在「假装加载完」的状态：摘掉 `is-revealed` 让骨架回来，点亮 `data-ops-failed`，点一下分区重试。静默的空分区没人会深究，用户只会以为这个看板本来就没数据。
 
+搜索洞察页（`/operations/search-insights/`）是同一套机制的第二处使用者：15 个分区里前两个是记分卡，其余 13 个走 `data-si-deferred` / `data-si-src` / `data-si-failed`。两页的揭开逻辑共用文件顶部的`createSectionRevealer(panels, options)` 工厂，差别只有三处配置——分区选择器、取回地址属性、失败态属性。复制一份出来的话，下次改揭开方向就得改两处，而那种 bug 在 Django 测试客户端里看不出来：那里干脆没有 JS。`listings/test_operations_deferred_sections.py` 同时盯两页：工厂本体只允许一个 `innerHTML` 赋值点，两个调用点都必须各自配齐三个属性。
+
+搜索洞察的取回地址多带一个 `q` 参数：趋势和偏好迁移两个面板吃搜索词筛选，不带的话，运营筛完「台灯」再滚下来，看到的是全量词的偏好迁移。
+
 ## 📁 目录内容
 
 | 路径 | 作用 |
 | --- | --- |
 | [`css/style.css`](css/style.css) | 全站主题、布局、账户中心、消息工作台、运营页和响应式样式 |
-| [`js/main.js`](js/main.js) | 搜索建议、未读角标轮询、运营看板分区懒加载等轻量页面增强 |
+| [`js/main.js`](js/main.js) | 搜索建议、未读角标轮询、运营看板与搜索洞察分区懒加载等轻量页面增强 |
 
 | [`img/no-image.png`](img/no-image.png) | 商品缺图占位 |
 | [`vendor/`](vendor/) | Bootstrap 5.3.3 与 Bootstrap Icons 1.11.3 的本地副本，版本与升级方式见 [`vendor/README.md`](vendor/README.md) |
@@ -217,7 +221,7 @@ flowchart LR
 - 修改未读数轮询时，确认隐藏标签页不会持续请求，且 99+ 显示仍然正确；
 - 交互元素要保留清晰的 `:focus-visible` 状态，并检查键盘操作顺序。
 - 新增单选 / 多选组用 `RadioCardGroup` / `CheckboxCardGroup`，不要往 widget attrs 写 class（类名会漏到每个选项上，见上文）；
-- 动运营看板的懒加载时，记住「没有 `data-ops-src` 的分区只换类、绝不碰 DOM」这条线。改 `loadSection` 之前先跑 `python manage.py test listings.test_operations_deferred_sections listings.test_operations_fragments`——前者盯着这条边界，后者盯着取回结果与全量渲染逐字节一致；
+- 动分区懒加载时，记住「没有取回地址的分区只换类、绝不碰 DOM」这条线，以及「每条规则写成一行两个选择器」——`test_operations_deferred_sections.py` 是按行正则校验 `html.js` 前缀的，拆成多行会让第二个选择器逃过检查。改 `loadSection` / `createSectionRevealer` 之前先跑 `python manage.py test listings.test_operations_deferred_sections listings.test_operations_fragments listings.test_search_insights_fragments`——第一个盯着这条边界，第二个盯着取回结果与全量渲染逐字节一致，第三个盯着搜索洞察的分区登记表和导出同构；
 
 ## ✅ 验证
 
