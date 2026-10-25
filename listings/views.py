@@ -2554,17 +2554,22 @@ def favorite_list(request):
             selected_collection = None
 
     all_favorites = Favorite.objects.filter(user=request.user)
+    favorite_total_count = all_favorites.count()
     favorites = all_favorites.select_related(
         'item__category', 'item__seller', 'item__location', 'collection',
-    ).prefetch_related('item__images')
+    ).prefetch_related('item__images').order_by('-created_at', '-pk')
     if selected_collection:
         favorites = favorites.filter(collection=selected_collection)
+    page_obj = Paginator(favorites, 12).get_page(request.GET.get('page'))
     context = {
-        'favorites': favorites,
+        'favorites': page_obj.object_list,
         'favorite_ids': set(all_favorites.values_list('item_id', flat=True)),
+        'favorite_total_count': favorite_total_count,
         'collections': collections,
         'selected_collection': selected_collection,
         'collection_form': FavoriteCollectionForm(),
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
         'title': '我的心愿单',
     }
     return render(request, 'listings/favorite_list.html', context)

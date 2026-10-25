@@ -8691,13 +8691,39 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
     margin-top: 6px;
 }
 
-.trade-desk-pagination {
+.favorite-list-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.favorite-result-summary {
+    color: var(--muted);
+    font-size: .78rem;
+    font-weight: 700;
+}
+
+.trade-desk-pagination,
+.favorite-pagination {
     margin-top: 22px;
     padding-top: 18px;
     border-top: 1px solid #e7ede8;
 }
 
-.trade-desk-pagination .page-link {
+.favorite-pagination {
+    margin-top: 8px;
+}
+
+.trade-desk-pagination .pagination,
+.favorite-pagination .pagination {
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.trade-desk-pagination .page-link,
+.favorite-pagination .page-link {
     display: inline-flex;
     min-width: 38px;
     min-height: 38px;
@@ -8710,13 +8736,15 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
     font-weight: 700;
 }
 
-.trade-desk-pagination .page-item.active .page-link {
+.trade-desk-pagination .page-item.active .page-link,
+.favorite-pagination .page-item.active .page-link {
     color: #fff;
     background: var(--primary);
     border-color: var(--primary);
 }
 
-.trade-desk-pagination .page-item.disabled .page-link {
+.trade-desk-pagination .page-item.disabled .page-link,
+.favorite-pagination .page-item.disabled .page-link {
     color: #a9b3ad;
     background: #f7f9f7;
     border-color: #e8ede9;

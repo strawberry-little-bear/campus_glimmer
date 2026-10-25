@@ -17,10 +17,10 @@
         <section class="content-card h-100">
             <div class="d-flex align-items-center justify-content-between mb-3">
                 <h2 class="h5 mb-0">心愿单分组</h2>
-                <span class="badge text-bg-light">{{ favorites|length }}</span>
+                <span class="badge text-bg-light">{{ favorite_total_count }}</span>
             </div>
             <div class="filter-stack mb-4">
-                <a class="filter-link {% if not selected_collection %}active{% endif %}" href="{% url 'favorite_list' %}"><span><i class="bi bi-grid me-1"></i>全部收藏</span><span>{{ favorites|length }}</span></a>
+                <a class="filter-link {% if not selected_collection %}active{% endif %}" href="{% url 'favorite_list' %}"><span><i class="bi bi-grid me-1"></i>全部收藏</span><span>{{ favorite_total_count }}</span></a>
                 {% for collection in collections %}
                 <a class="filter-link {% if selected_collection and selected_collection.id == collection.id %}active{% endif %}" href="{% url 'favorite_list' %}?collection={{ collection.id }}"><span><i class="bi bi-folder2 me-1"></i>{{ collection.name }}</span><span>{{ collection.favorite_count }}</span></a>
                 {% empty %}
@@ -40,12 +40,15 @@
     </aside>
 
     <section class="col-lg-9">
-        {% if selected_collection %}
-        <div class="content-card mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <div><span class="eyebrow eyebrow-soft">Current collection</span><h2 class="h4 mb-0">{{ selected_collection.name }}</h2></div>
-            <span class="text-muted small">{{ selected_collection.favorite_count }} 件收藏</span>
+        <div class="content-card mb-3 favorite-list-heading">
+            <div>
+                <span class="eyebrow eyebrow-soft">{% if selected_collection %}Current collection{% else %}All saved items{% endif %}</span>
+                <h2 class="h4 mb-0">{% if selected_collection %}{{ selected_collection.name }}{% else %}全部收藏{% endif %}</h2>
+            </div>
+            <span class="favorite-result-summary">
+                {% if page_obj.paginator.count %}第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 件 · 共 {{ page_obj.paginator.count }} 件{% else %}0 件收藏{% endif %}
+            </span>
         </div>
-        {% endif %}
         <div class="row g-4">
             {% for favorite in favorites %}
             <div class="col-sm-6 col-xl-4">
@@ -81,6 +84,36 @@
             </div>
             {% endfor %}
         </div>
+
+        {% if page_obj.paginator.num_pages > 1 %}
+        <nav class="favorite-pagination" aria-label="心愿单分页">
+            <ul class="pagination justify-content-center mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item"><a class="page-link" href="{% if selected_collection %}?collection={{ selected_collection.id }}&amp;{% else %}?{% endif %}page={{ page_obj.previous_page_number }}" aria-label="上一页"><i class="bi bi-chevron-left"></i></a></li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-left"></i></span></li>
+                {% endif %}
+                {% for num in page_numbers %}
+                    {% if num %}
+                    <li class="page-item{% if page_obj.number == num %} active{% endif %}">
+                        {% if page_obj.number == num %}
+                        <span class="page-link" aria-current="page" aria-label="第 {{ num }} 页">{{ num }}</span>
+                        {% else %}
+                        <a class="page-link" href="{% if selected_collection %}?collection={{ selected_collection.id }}&amp;{% else %}?{% endif %}page={{ num }}" aria-label="第 {{ num }} 页">{{ num }}</a>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span></li>
+                    {% endif %}
+                {% endfor %}
+                {% if page_obj.has_next %}
+                <li class="page-item"><a class="page-link" href="{% if selected_collection %}?collection={{ selected_collection.id }}&amp;{% else %}?{% endif %}page={{ page_obj.next_page_number }}" aria-label="下一页"><i class="bi bi-chevron-right"></i></a></li>
+                {% else %}
+                <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-right"></i></span></li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
     </section>
 </div>
 {% endblock %}
