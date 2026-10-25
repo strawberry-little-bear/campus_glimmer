@@ -8691,6 +8691,37 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
     margin-top: 6px;
 }
 
+.trade-desk-pagination {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #e7ede8;
+}
+
+.trade-desk-pagination .page-link {
+    display: inline-flex;
+    min-width: 38px;
+    min-height: 38px;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+    background: #fff;
+    border-color: #dfe8e2;
+    border-radius: 10px;
+    font-weight: 700;
+}
+
+.trade-desk-pagination .page-item.active .page-link {
+    color: #fff;
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.trade-desk-pagination .page-item.disabled .page-link {
+    color: #a9b3ad;
+    background: #f7f9f7;
+    border-color: #e8ede9;
+}
+
 @media (max-width: 1199.98px) {
     .trade-desk-overview {
         grid-template-columns: repeat(2, minmax(0, 1fr));

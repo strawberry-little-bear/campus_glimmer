@@ -114,6 +114,45 @@ class MyOrdersWorkspaceTests(TestCase):
         self.assertContains(response, '已超时')
         self.assertEqual(sum(order.is_overdue for order in response.context['orders']), 1)
 
+    def test_orders_are_paginated_without_losing_filter_or_full_counts(self):
+        for index in range(13):
+            self.make_order(
+                f'分页待确认交易 {index:02d}',
+                buyer=self.buyer,
+                seller=self.seller,
+                status='pending',
+            )
+        self.client.force_login(self.buyer)
+
+        first_page = self.client.get(reverse('my_orders'), {'state': 'active'})
+        second_page = self.client.get(reverse('my_orders'), {'state': 'active', 'page': 2})
+
+        self.assertEqual(first_page.context['page_obj'].paginator.count, 13)
+        self.assertEqual(len(first_page.context['orders']), 10)
+        self.assertEqual(second_page.context['page_obj'].number, 2)
+        self.assertEqual(len(second_page.context['orders']), 3)
+        self.assertEqual(first_page.context['order_counts']['all'], 13)
+        self.assertEqual(first_page.context['order_counts']['active'], 13)
+        self.assertContains(first_page, '第 1–10 笔 · 共 13 笔')
+        self.assertContains(second_page, '第 11–13 笔 · 共 13 笔')
+        self.assertContains(second_page, '?state=active&amp;page=1', html=False)
+
+    def test_out_of_range_page_falls_back_to_last_page(self):
+        for index in range(11):
+            self.make_order(
+                f'末页交易 {index:02d}',
+                buyer=self.buyer,
+                seller=self.seller,
+                status='completed',
+            )
+        self.client.force_login(self.buyer)
+
+        response = self.client.get(reverse('my_orders'), {'state': 'completed', 'page': 99})
+
+        self.assertEqual(response.context['page_obj'].number, 2)
+        self.assertEqual(len(response.context['orders']), 1)
+        self.assertContains(response, '第 11–11 笔 · 共 11 笔')
+
     def test_empty_workspace_keeps_counts_tabs_and_discovery_entry(self):
         self.client.force_login(self.buyer)
 

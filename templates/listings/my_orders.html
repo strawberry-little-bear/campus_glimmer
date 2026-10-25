@@ -53,17 +53,19 @@
 <div class="trade-list-heading">
     <div>
         <span class="eyebrow eyebrow-soft">Order timeline</span>
-        <h2>
+        <h2 id="trade-list-title">
             {% if selected_state == 'active' %}待推进的交易
             {% elif selected_state == 'completed' %}已完成的交易
             {% elif selected_state == 'cancelled' %}已取消的交易
             {% else %}全部交易记录{% endif %}
         </h2>
     </div>
-    <span class="trade-list-count"><i class="bi bi-layers me-1"></i>{{ orders|length }} 笔</span>
+    <span class="trade-list-count">
+        <i class="bi bi-layers me-1"></i>{% if page_obj.paginator.count %}第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 笔 · 共 {{ page_obj.paginator.count }} 笔{% else %}0 笔{% endif %}
+    </span>
 </div>
 
-<div class="trade-order-list">
+<section class="trade-order-list" aria-labelledby="trade-list-title">
     {% for order in orders %}
     <article class="trade-order-card trade-order-{{ order.state_group }}{% if order.is_overdue %} is-overdue{% endif %}">
         <a class="trade-order-thumb" href="{% url 'order_detail' order.id %}" aria-label="查看 {{ order.item.title }} 的交易详情">
@@ -130,5 +132,35 @@
         <a href="{% url 'item_list' %}" class="btn btn-primary">去发现好物</a>
     </div>
     {% endfor %}
-</div>
+</section>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="trade-desk-pagination" aria-label="我的交易分页">
+    <ul class="pagination justify-content-center mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?state={{ selected_state }}&amp;page={{ page_obj.previous_page_number }}" aria-label="上一页"><i class="bi bi-chevron-left"></i></a></li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-left"></i></span></li>
+        {% endif %}
+        {% for num in page_numbers %}
+            {% if num %}
+            <li class="page-item{% if page_obj.number == num %} active{% endif %}">
+                {% if page_obj.number == num %}
+                <span class="page-link" aria-current="page" aria-label="第 {{ num }} 页">{{ num }}</span>
+                {% else %}
+                <a class="page-link" href="?state={{ selected_state }}&amp;page={{ num }}" aria-label="第 {{ num }} 页">{{ num }}</a>
+                {% endif %}
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span></li>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?state={{ selected_state }}&amp;page={{ page_obj.next_page_number }}" aria-label="下一页"><i class="bi bi-chevron-right"></i></a></li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-right"></i></span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}

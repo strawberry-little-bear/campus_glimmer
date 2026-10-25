@@ -2460,34 +2460,37 @@ def dismiss_opportunity(request):
 
 @login_required
 def my_orders(request):
-    all_orders = list(
-        Order.objects.filter(Q(buyer=request.user) | Q(seller=request.user))
-        .select_related('item', 'buyer', 'seller', 'meeting_location')
-        .prefetch_related('item__images')
-    )
-
     state_groups = {
-        'active': {'pending', 'confirmed', 'meeting', 'borrowed'},
+        'active': set(Order.ACTIVE_STATUS_VALUES),
         'completed': {'completed', 'returned'},
         'cancelled': {'cancelled'},
     }
-    order_counts = {
-        'all': len(all_orders),
-        'active': sum(order.status in state_groups['active'] for order in all_orders),
-        'completed': sum(order.status in state_groups['completed'] for order in all_orders),
-        'cancelled': sum(order.status in state_groups['cancelled'] for order in all_orders),
-        'buying': sum(order.buyer_id == request.user.id for order in all_orders),
-        'selling': sum(order.seller_id == request.user.id for order in all_orders),
-    }
+    base_orders = Order.objects.filter(Q(buyer=request.user) | Q(seller=request.user))
+    order_counts = base_orders.aggregate(
+        all=Count('id'),
+        active=Count('id', filter=Q(status__in=state_groups['active'])),
+        completed=Count('id', filter=Q(status__in=state_groups['completed'])),
+        cancelled=Count('id', filter=Q(status__in=state_groups['cancelled'])),
+        buying=Count('id', filter=Q(buyer=request.user)),
+        selling=Count('id', filter=Q(seller=request.user)),
+    )
 
     selected_state = request.GET.get('state', 'all')
     if selected_state not in {'all', *state_groups}:
         selected_state = 'all'
 
-    now = timezone.now()
-    orders = all_orders
+    orders_query = (
+        base_orders
+        .select_related('item', 'buyer', 'seller', 'meeting_location')
+        .prefetch_related('item__images')
+        .order_by('-created_at', '-pk')
+    )
     if selected_state != 'all':
-        orders = [order for order in orders if order.status in state_groups[selected_state]]
+        orders_query = orders_query.filter(status__in=state_groups[selected_state])
+
+    page_obj = Paginator(orders_query, 10).get_page(request.GET.get('page'))
+    orders = list(page_obj.object_list)
+    now = timezone.now()
 
     for order in orders:
         is_buyer = order.buyer_id == request.user.id
@@ -2531,6 +2534,8 @@ def my_orders(request):
         'orders': orders,
         'order_counts': order_counts,
         'selected_state': selected_state,
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
         'title': '我的交易',
     })
 
