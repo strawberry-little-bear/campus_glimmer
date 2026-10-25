@@ -413,15 +413,32 @@ class LifecycleReminderEffectTests(TestCase):
         for index in range(3):
             item = self.make_item(title='批量商品 ' + str(index), age_days=60)
             self.stamp_reminder(item)
-            self.make_notice(read=(index == 0))
+            notice = self.make_notice(read=(index == 0))
+            self.record_event(item, notification=notice)
 
         summary = self.data()['summary']
 
+        self.assertEqual(summary['event_backed_items'], 3)
         self.assertEqual(summary['read_items'], 1)
         self.assertEqual(summary['notice_read_rate'], 33.3)
         self.assertEqual(summary['read_rate'], 33.3)
 
+    def test_merged_notice_read_state_applies_to_each_linked_item(self):
+        items = [
+            self.make_item(title='合并提醒商品 ' + str(index), age_days=60)
+            for index in range(3)
+        ]
+        notice = self.make_notice(read=True)
+        for item in items:
+            self.record_event(item, notification=notice)
 
+        summary = self.data()['summary']
+
+        self.assertEqual(summary['notices'], 1)
+        self.assertEqual(summary['read_notices'], 1)
+        self.assertEqual(summary['reached_items'], 3)
+        self.assertEqual(summary['read_items'], 3)
+        self.assertEqual(summary['read_rate'], 100.0)
 
     def test_category_rows_separate_actions_and_keep_their_order(self):
         book = Category.objects.create(name='教材')
