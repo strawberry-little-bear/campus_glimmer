@@ -3,38 +3,136 @@
 {% block title %}内容审核队列 · 拾光校园{% endblock %}
 
 {% block content %}
-<div class="page-intro">
+<div class="page-intro moderation-page-intro">
     <div>
         <span class="eyebrow">社区安全与内容治理</span>
         <h1 class="mt-2">内容审核队列</h1>
-        <p class="text-muted mb-0">自动拦截可疑留言和私信，按分级复核，并单独处理用户提交的内容申诉。</p>
+        <p class="text-muted mb-0">先处理超时、高风险和待申诉记录，再回看已处置内容。分级只决定复核节奏，不替代人工结论。</p>
     </div>
-    <a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a>
+    <div class="moderation-header-actions">
+        <a class="btn btn-outline-primary" href="{% url 'governance_workbench' %}"><i class="bi bi-shield-check me-1"></i>治理工作台</a>
+        <a class="btn btn-outline-secondary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>运营看板</a>
+    </div>
 </div>
 
-<section class="content-card mb-4">
-    <div class="notification-insight-grid">
-        <div class="notification-insight-card is-highlighted"><span class="notification-insight-icon"><i class="bi bi-shield-exclamation"></i></span><span><small>待复核</small><strong>{{ moderation_pending_count }}</strong></span></div><div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-fire"></i></span><span><small>高风险待复核</small><strong>{{ moderation_pending_high_count }}</strong></span></div>
-        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-exclamation-octagon"></i></span><span><small>严重风险 · 4小时目标</small><strong>{{ moderation_pending_critical_count }}</strong><small>{{ moderation_overdue_critical_count }} 条已超时</small></span></div><div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-telephone-outbound"></i></span><span><small>脱离平台联系 · 12小时目标</small><strong>{{ moderation_pending_elevated_count }}</strong><small>{{ moderation_overdue_elevated_count }} 条已超时</small></span></div>
-        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-link-45deg"></i></span><span><small>低权重线索 · 48小时目标</small><strong>{{ moderation_pending_caution_count }}</strong><small>{{ moderation_overdue_caution_count }} 条已超时</small></span></div>
-        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-inbox"></i></span><span><small>累计拦截</small><strong>{{ moderation_total_count }}</strong></span></div><div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-chat-square-text"></i></span><span><small>待处理申诉</small><strong>{{ moderation_appeal_pending_count }}</strong><small>{{ moderation_appeal_resolved_count }} 条已处理</small></span></div>
-        <div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-arrow-counterclockwise"></i></span><span><small>误判已恢复</small><strong>{{ moderation_released_count }}</strong></span></div><div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-exclamation-triangle"></i></span><span><small>误判未恢复</small><strong>{{ moderation_unreleased_count }}</strong></span></div><div class="notification-insight-card"><span class="notification-insight-icon"><i class="bi bi-lightning-charge"></i></span><span><small>待复核缺材料</small><strong>{{ moderation_missing_material_count }}</strong></span></div>
+<section class="moderation-command" aria-label="审核概况">
+    <div class="moderation-priority-grid">
+        <a class="moderation-priority-card is-primary" href="?status=pending" aria-label="查看全部待复核记录">
+            <span class="moderation-priority-icon"><i class="bi bi-shield-exclamation"></i></span>
+            <span class="moderation-priority-copy"><small>待复核</small><strong>{{ moderation_pending_count }}</strong><span>按申诉、分级与风险分排序</span></span>
+        </a>
+        <a class="moderation-priority-card is-danger" href="?status=pending&amp;risk=high" aria-label="查看高风险待复核记录">
+            <span class="moderation-priority-icon"><i class="bi bi-fire"></i></span>
+            <span class="moderation-priority-copy"><small>高风险待复核</small><strong>{{ moderation_pending_high_count }}</strong><span>优先核对交易与联系方式线索</span></span>
+        </a>
+        <a class="moderation-priority-card is-warm" href="?status=all&amp;appeal=pending" aria-label="查看待处理申诉">
+            <span class="moderation-priority-icon"><i class="bi bi-chat-square-text"></i></span>
+            <span class="moderation-priority-copy"><small>待处理申诉</small><strong>{{ moderation_appeal_pending_count }}</strong><span>{{ moderation_appeal_resolved_count }} 条已完成复核</span></span>
+        </a>
+        <a class="moderation-priority-card is-muted" href="?status=pending&amp;release=missing_material" aria-label="查看缺少恢复材料的待复核记录">
+            <span class="moderation-priority-icon"><i class="bi bi-link-45deg"></i></span>
+            <span class="moderation-priority-copy"><small>待复核缺材料</small><strong>{{ moderation_missing_material_count }}</strong><span>放行前需要补齐作者或接收方</span></span>
+        </a>
     </div>
-    <form method="get" class="notification-filter-bar mt-3">
-        <div class="notification-search"><i class="bi bi-search"></i><input name="q" type="search" value="{{ moderation_search_query }}" placeholder="搜索内容、作者、商品或命中规则" aria-label="搜索审核记录"></div>
-        <select class="form-select form-select-sm" name="status" aria-label="审核状态">{% for value, label in moderation_status_options %}<option value="{{ value }}" {% if moderation_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-        <select class="form-select form-select-sm" name="channel" aria-label="内容渠道">{% for value, label in moderation_channel_options %}<option value="{{ value }}" {% if moderation_channel_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><select class="form-select form-select-sm" name="risk" aria-label="风险等级">{% for value, label in moderation_risk_options %}<option value="{{ value }}" {% if moderation_risk_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><select class="form-select form-select-sm" name="tier" aria-label="复核分级">{% for value, label in moderation_tier_options %}<option value="{{ value }}" {% if moderation_tier_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><select class="form-select form-select-sm" name="appeal" aria-label="申诉状态">{% for value, label in moderation_appeal_options %}<option value="{{ value }}" {% if moderation_appeal_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><select class="form-select form-select-sm" name="release" aria-label="放行状态">{% for value, label in moderation_release_options %}<option value="{{ value }}" {% if moderation_release_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
-        <button class="btn btn-primary btn-sm" type="submit"><i class="bi bi-funnel me-1"></i>筛选</button>
+
+    <aside class="moderation-sla-board" aria-labelledby="moderation-sla-title">
+        <div class="moderation-sla-heading">
+            <div><span>复核时限</span><small id="moderation-sla-title">超时记录优先显示</small></div>
+            <i class="bi bi-stopwatch"></i>
+        </div>
+        <div class="moderation-sla-list">
+            <div class="moderation-sla-row is-critical">
+                <span class="moderation-sla-dot" aria-hidden="true"></span>
+                <span class="moderation-sla-copy"><strong>严重风险</strong><small>4 小时目标</small></span>
+                <span class="moderation-sla-stat"><strong>{{ moderation_pending_critical_count }}</strong><small>{{ moderation_overdue_critical_count }} 条超时</small></span>
+            </div>
+            <div class="moderation-sla-row is-elevated">
+                <span class="moderation-sla-dot" aria-hidden="true"></span>
+                <span class="moderation-sla-copy"><strong>脱离平台联系</strong><small>12 小时目标</small></span>
+                <span class="moderation-sla-stat"><strong>{{ moderation_pending_elevated_count }}</strong><small>{{ moderation_overdue_elevated_count }} 条超时</small></span>
+            </div>
+            <div class="moderation-sla-row is-caution">
+                <span class="moderation-sla-dot" aria-hidden="true"></span>
+                <span class="moderation-sla-copy"><strong>低权重线索</strong><small>48 小时目标</small></span>
+                <span class="moderation-sla-stat"><strong>{{ moderation_pending_caution_count }}</strong><small>{{ moderation_overdue_caution_count }} 条超时</small></span>
+            </div>
+        </div>
+    </aside>
+</section>
+
+<div class="moderation-secondary-strip" aria-label="历史审核概况">
+    <span class="moderation-secondary-item"><i class="bi bi-inbox"></i>累计拦截 <strong>{{ moderation_total_count }}</strong></span>
+    <span class="moderation-secondary-item is-good"><i class="bi bi-arrow-counterclockwise"></i>误判已恢复 <strong>{{ moderation_released_count }}</strong></span>
+    <span class="moderation-secondary-item is-warning"><i class="bi bi-exclamation-triangle"></i>误判未恢复 <strong>{{ moderation_unreleased_count }}</strong></span>
+    <span class="moderation-secondary-item"><i class="bi bi-check2-circle"></i>申诉已处理 <strong>{{ moderation_appeal_resolved_count }}</strong></span>
+</div>
+
+<section class="content-card moderation-filter-card" aria-labelledby="moderation-filter-title">
+    <div class="moderation-filter-heading">
+        <div><strong id="moderation-filter-title">筛选审核记录</strong><span>当前显示 {{ moderation_filtered_count }} 条{% if moderation_active_filter_count %} · 已启用 {{ moderation_active_filter_count }} 个条件{% endif %}</span></div>
+        {% if moderation_active_filter_count %}<a class="moderation-filter-reset" href="{% url 'moderation_queue' %}"><i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选</a>{% endif %}
+    </div>
+    <form method="get" class="moderation-filter-form" role="search">
+        <div class="moderation-filter-primary">
+            <label class="moderation-filter-search">
+                <span class="visually-hidden">搜索审核记录</span>
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input name="q" type="search" value="{{ moderation_search_query }}" placeholder="搜索内容、作者、商品或命中规则">
+            </label>
+            <label class="moderation-filter-field">
+                <span>审核状态</span>
+                <select name="status" class="form-select form-select-sm">{% for value, label in moderation_status_options %}<option value="{{ value }}" {% if moderation_status_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            </label>
+            <label class="moderation-filter-field">
+                <span>内容渠道</span>
+                <select name="channel" class="form-select form-select-sm">{% for value, label in moderation_channel_options %}<option value="{{ value }}" {% if moderation_channel_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            </label>
+            <button class="btn btn-primary moderation-filter-submit" type="submit"><i class="bi bi-funnel me-1"></i>应用筛选</button>
+        </div>
+        <div class="moderation-filter-grid">
+            <label class="moderation-filter-field">
+                <span>风险等级</span>
+                <select name="risk" class="form-select form-select-sm">{% for value, label in moderation_risk_options %}<option value="{{ value }}" {% if moderation_risk_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            </label>
+            <label class="moderation-filter-field">
+                <span>复核分级</span>
+                <select name="tier" class="form-select form-select-sm">{% for value, label in moderation_tier_options %}<option value="{{ value }}" {% if moderation_tier_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            </label>
+            <label class="moderation-filter-field">
+                <span>申诉状态</span>
+                <select name="appeal" class="form-select form-select-sm">{% for value, label in moderation_appeal_options %}<option value="{{ value }}" {% if moderation_appeal_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            </label>
+            <label class="moderation-filter-field">
+                <span>放行状态</span>
+                <select name="release" class="form-select form-select-sm">{% for value, label in moderation_release_options %}<option value="{{ value }}" {% if moderation_release_filter == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            </label>
+        </div>
     </form>
 </section>
 
-<section class="content-card">
-    <div class="notification-toolbar"><strong>审核记录</strong><span class="text-muted small">分级只影响人工复核节奏，不是违规结论，也不是对外 SLA。</span></div>
+<section class="content-card" aria-labelledby="moderation-record-title">
+    <div class="notification-toolbar moderation-record-toolbar">
+        <div><strong id="moderation-record-title">审核记录</strong><span class="moderation-record-count">{{ moderation_filtered_count }} 条</span></div>
+        <span class="text-muted small">排序：待处理申诉 → 待复核 → 严重风险 → 风险分</span>
+    </div>
     <div class="mod-event-list">
         {% for event in moderation_events %}
         <article class="mod-event {% if event.status == 'pending' %}is-pending{% endif %}">
             <div class="mod-event-head">
-                <span class="badge {% if event.status == 'pending' %}text-bg-warning{% elif event.status == 'confirmed' %}text-bg-danger{% else %}text-bg-success{% endif %}">{{ event.get_status_display }}</span>{% if event.appeal %}<span class="badge {% if event.appeal.status == 'pending' %}text-bg-danger{% elif event.appeal.status == 'accepted' %}text-bg-success{% elif event.appeal.status == 'accepted_without_restore' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">申诉 · {{ event.appeal.get_status_display }}</span>{% endif %}<span class="badge {% if event.risk_tier == 'critical' %}text-bg-danger{% elif event.risk_tier == 'elevated' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.get_risk_tier_display }}{% if event.status == 'pending' %} · {{ event.review_target_hours }}小时目标{% endif %}</span><span class="badge {% if event.risk_level == 'high' %}text-bg-danger{% elif event.risk_level == 'medium' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.get_risk_level_display }} · {{ event.risk_score }} 分</span><span class="badge text-bg-light">{{ event.get_channel_display }}</span>{% if event.status == 'dismissed' and event.released_at %}<span class="badge text-bg-success">已恢复原渠道 · {{ event.released_at|date:'Y-m-d H:i' }}</span>{% elif event.status == 'dismissed' %}<span class="badge text-bg-warning">误判未恢复：缺少材料</span>{% elif not event.has_release_material %}<span class="badge text-bg-warning">待复核缺少恢复材料</span>{% else %}<span class="badge text-bg-info">误判可自动恢复</span>{% if event.review_timing_state == 'overdue' %}<span class="badge text-bg-danger">已超过复核目标</span>{% elif event.review_timing_state == 'due_soon' %}<span class="badge text-bg-warning">即将超过复核目标</span>{% else %}<span class="badge text-bg-light">复核目标内</span>{% endif %}{% endif %}{% if event.author %}<span class="mod-event-author">作者：{{ event.author.username }}</span>{% endif %}
+                <span class="badge {% if event.status == 'pending' %}text-bg-warning{% elif event.status == 'confirmed' %}text-bg-danger{% else %}text-bg-success{% endif %}">{{ event.get_status_display }}</span>
+                {% if event.appeal %}<span class="badge {% if event.appeal.status == 'pending' %}text-bg-danger{% elif event.appeal.status == 'accepted' %}text-bg-success{% elif event.appeal.status == 'accepted_without_restore' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">申诉 · {{ event.appeal.get_status_display }}</span>{% endif %}
+                <span class="badge {% if event.risk_tier == 'critical' %}text-bg-danger{% elif event.risk_tier == 'elevated' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.get_risk_tier_display }}{% if event.status == 'pending' %} · {{ event.review_target_hours }}小时目标{% endif %}</span>
+                <span class="badge {% if event.risk_level == 'high' %}text-bg-danger{% elif event.risk_level == 'medium' %}text-bg-warning{% else %}text-bg-secondary{% endif %}">{{ event.get_risk_level_display }} · {{ event.risk_score }} 分</span>
+                <span class="badge text-bg-light">{{ event.get_channel_display }}</span>
+                {% if event.status == 'dismissed' and event.released_at %}<span class="badge text-bg-success">已恢复原渠道 · {{ event.released_at|date:'Y-m-d H:i' }}</span>
+                {% elif event.status == 'dismissed' %}<span class="badge text-bg-warning">误判未恢复：缺少材料</span>
+                {% elif not event.has_release_material %}<span class="badge text-bg-warning">待复核缺少恢复材料</span>
+                {% else %}<span class="badge text-bg-info">误判可自动恢复</span>
+                    {% if event.review_timing_state == 'overdue' %}<span class="badge text-bg-danger">已超过复核目标</span>
+                    {% elif event.review_timing_state == 'due_soon' %}<span class="badge text-bg-warning">即将超过复核目标</span>
+                    {% else %}<span class="badge text-bg-light">复核目标内</span>{% endif %}
+                {% endif %}
+                {% if event.author %}<span class="mod-event-author">作者：{{ event.author.username }}</span>{% endif %}
                 <span class="mod-event-head-time">{{ event.created_at|date:'Y-m-d H:i' }}</span>
             </div>
             <div class="mod-event-body">
@@ -64,7 +162,9 @@
             </div>
             {% else %}<div class="mod-event-reviewed">复核人：{{ event.reviewed_by.username|default:'—' }} · {{ event.reviewed_at|date:'Y-m-d H:i' }}</div>{% endif %}
         </article>
-        {% empty %}<div class="empty-state py-5"><i class="bi bi-shield-check display-6 d-block mb-3"></i><h2 class="h3">当前筛选下没有审核记录</h2><p>换个筛选条件，或者去运营看板看看整体拦截趋势。</p></div>{% endfor %}
+        {% empty %}
+        <div class="empty-state py-5"><i class="bi bi-shield-check display-6 d-block mb-3"></i><h2 class="h3">当前筛选下没有审核记录</h2><p>换个筛选条件，或者去运营看板看看整体拦截趋势。</p></div>
+        {% endfor %}
     </div>
 </section>
 {% endblock %}

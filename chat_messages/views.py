@@ -448,9 +448,20 @@ def moderation_queue(request):
         ).count()
         for tier in ('critical', 'elevated', 'caution')
     }
+    active_filter_count = sum((
+        status_filter != 'pending',
+        channel_filter != 'all',
+        risk_filter != 'all',
+        tier_filter != 'all',
+        appeal_filter != 'all',
+        release_filter != 'all',
+        bool(search_query),
+    ))
 
     return render(request, 'chat_messages/moderation_queue.html', {
         'moderation_events': events,
+        'moderation_filtered_count': events.count(),
+        'moderation_active_filter_count': active_filter_count,
         'moderation_pending_count': base_events.filter(status='pending').count(),
         'moderation_total_count': base_events.count(),
         'moderation_status_filter': status_filter,

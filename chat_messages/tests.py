@@ -333,6 +333,38 @@ class ModerationFlowTests(TestCase):
         self.assertEqual(list(response.context['moderation_events']), [high])
         self.assertEqual(response.context['moderation_pending_high_count'], 1)
 
+    def test_moderation_queue_reports_filtered_and_active_filter_counts(self):
+        matched = ModerationEvent.objects.create(
+            channel='private_message', author=self.buyer,
+            content='押金和手机号', matched_terms='高风险交易、手机号',
+            risk_score=85, risk_level='high',
+        )
+        ModerationEvent.objects.create(
+            channel='comment', author=self.buyer, item=self.item,
+            content='外链线索', matched_terms='外部链接',
+            risk_score=20, risk_level='low',
+        )
+        ModerationEvent.objects.create(
+            channel='comment', author=self.buyer, item=self.item,
+            content='已处置记录', matched_terms='外部链接',
+            risk_score=20, risk_level='low', status='confirmed',
+        )
+        self.client.login(username='mod-staff', password='safe-password-123')
+
+        default_response = self.client.get(reverse('moderation_queue'))
+        self.assertEqual(default_response.context['moderation_filtered_count'], 2)
+        self.assertEqual(default_response.context['moderation_active_filter_count'], 0)
+
+        filtered_response = self.client.get(reverse('moderation_queue'), {
+            'status': 'all',
+            'channel': 'private_message',
+            'risk': 'high',
+            'q': '押金',
+        })
+        self.assertEqual(filtered_response.context['moderation_filtered_count'], 1)
+        self.assertEqual(filtered_response.context['moderation_active_filter_count'], 4)
+        self.assertEqual(list(filtered_response.context['moderation_events']), [matched])
+
     def test_non_staff_cannot_open_moderation_queue(self):
         self.client.login(username='mod-buyer', password='safe-password-123')
         response = self.client.get(reverse('moderation_queue'))

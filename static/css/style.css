@@ -6900,6 +6900,544 @@ a { color: inherit; text-decoration: none; }
    与消息工作台一致的卡片列表：头部集中状态徽章，正文放被审内容，
    底部固定操作区。
    -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   内容审核值班台
+
+   原页面把 9 项指标、7 个筛选项和记录列表竖着叠在一起，首屏几乎看不到
+   真正要处理的记录。这里把指标收敛成“4 个待办入口 + 3 级时限看板”，
+   历史数据降为一条摘要；筛选拆成主条件和分级条件两行，记录区因此更早
+   进入视野。记录卡本身沿用上一轮已经统一的 mod-event 结构。
+   -------------------------------------------------------------------------- */
+.moderation-page-intro {
+    align-items: flex-start;
+}
+
+.moderation-header-actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.moderation-command {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(330px, .8fr);
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.moderation-priority-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.moderation-priority-card {
+    display: flex;
+    min-width: 0;
+    min-height: 94px;
+    align-items: center;
+    gap: 13px;
+    padding: 14px 15px;
+    border: 1px solid var(--line);
+    border-radius: 17px;
+    color: var(--ink);
+    background: #fff;
+    box-shadow: 0 8px 22px rgba(32, 76, 59, .035);
+    transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+
+.moderation-priority-card:hover,
+.moderation-priority-card:focus-visible {
+    transform: translateY(-2px);
+    border-color: #b5d9c8;
+    box-shadow: 0 12px 28px rgba(32, 76, 59, .08);
+}
+
+.moderation-priority-card:focus-visible,
+.moderation-filter-reset:focus-visible,
+.moderation-filter-search:focus-within,
+.moderation-filter-field select:focus,
+.moderation-filter-submit:focus-visible {
+    outline: 3px solid rgba(24, 122, 91, .2);
+    outline-offset: 2px;
+}
+
+.moderation-priority-card.is-primary {
+    border-color: rgba(24, 122, 91, .22);
+    background: linear-gradient(145deg, #f6fcf8, #fff);
+}
+
+.moderation-priority-card.is-danger {
+    border-color: rgba(178, 85, 72, .18);
+}
+
+.moderation-priority-card.is-warm {
+    border-color: rgba(208, 139, 45, .2);
+}
+
+.moderation-priority-card.is-muted {
+    border-color: rgba(100, 123, 112, .18);
+}
+
+.moderation-priority-icon {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 12px;
+    color: var(--primary);
+    background: var(--mint);
+    font-size: 1.02rem;
+}
+
+.moderation-priority-card.is-danger .moderation-priority-icon {
+    color: #b25548;
+    background: #fff0ed;
+}
+
+.moderation-priority-card.is-warm .moderation-priority-icon {
+    color: #ad6b1f;
+    background: #fff5e8;
+}
+
+.moderation-priority-card.is-muted .moderation-priority-icon {
+    color: #647b70;
+    background: #f1f5f2;
+}
+
+.moderation-priority-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.moderation-priority-copy small {
+    color: var(--muted);
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+.moderation-priority-copy strong {
+    color: #214d3c;
+    font-size: 1.55rem;
+    line-height: 1.08;
+}
+
+.moderation-priority-copy span {
+    overflow: hidden;
+    color: #72827a;
+    font-size: .68rem;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.moderation-sla-board {
+    padding: 14px 15px;
+    border: 1px solid #dce9e1;
+    border-radius: 17px;
+    background: linear-gradient(145deg, #edf7f1, #f9fcfa);
+}
+
+.moderation-sla-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(31, 102, 77, .11);
+}
+
+.moderation-sla-heading > div {
+    display: grid;
+    gap: 1px;
+}
+
+.moderation-sla-heading span {
+    color: #285a46;
+    font-size: .84rem;
+    font-weight: 800;
+}
+
+.moderation-sla-heading small {
+    color: var(--muted);
+    font-size: .66rem;
+}
+
+.moderation-sla-heading > i {
+    color: #6aa78a;
+    font-size: 1.1rem;
+}
+
+.moderation-sla-list {
+    display: grid;
+    gap: 6px;
+    padding-top: 9px;
+}
+
+.moderation-sla-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .65);
+}
+
+.moderation-sla-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #7b9386;
+    box-shadow: 0 0 0 4px rgba(123, 147, 134, .1);
+}
+
+.moderation-sla-row.is-critical .moderation-sla-dot {
+    background: #bb5b4d;
+    box-shadow: 0 0 0 4px rgba(187, 91, 77, .1);
+}
+
+.moderation-sla-row.is-elevated .moderation-sla-dot {
+    background: #d08b2d;
+    box-shadow: 0 0 0 4px rgba(208, 139, 45, .1);
+}
+
+.moderation-sla-row.is-caution .moderation-sla-dot {
+    background: #739889;
+}
+
+.moderation-sla-copy,
+.moderation-sla-stat {
+    display: grid;
+    gap: 1px;
+}
+
+.moderation-sla-copy strong {
+    color: #36584a;
+    font-size: .72rem;
+}
+
+.moderation-sla-copy small,
+.moderation-sla-stat small {
+    color: var(--muted);
+    font-size: .61rem;
+}
+
+.moderation-sla-stat {
+    min-width: 62px;
+    text-align: right;
+}
+
+.moderation-sla-stat strong {
+    color: #274f3f;
+    font-size: .86rem;
+    line-height: 1.1;
+}
+
+.moderation-secondary-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 12px;
+}
+
+.moderation-secondary-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: #60736a;
+    background: rgba(255, 255, 255, .7);
+    font-size: .67rem;
+}
+
+.moderation-secondary-item i {
+    color: #7b9186;
+}
+
+.moderation-secondary-item strong {
+    color: #315946;
+    font-size: .74rem;
+}
+
+.moderation-secondary-item.is-good i {
+    color: var(--primary);
+}
+
+.moderation-secondary-item.is-warning i {
+    color: #bd792a;
+}
+
+.moderation-filter-card {
+    margin-bottom: 12px;
+    padding: 17px 18px;
+}
+
+.moderation-filter-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.moderation-filter-heading > div {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.moderation-filter-heading strong {
+    color: #274f3f;
+    font-size: .94rem;
+}
+
+.moderation-filter-heading span {
+    color: var(--muted);
+    font-size: .7rem;
+}
+
+.moderation-filter-reset {
+    flex: 0 0 auto;
+    color: var(--primary);
+    font-size: .72rem;
+    font-weight: 700;
+}
+
+.moderation-filter-reset:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+}
+
+.moderation-filter-form {
+    display: grid;
+    gap: 10px;
+}
+
+.moderation-filter-primary {
+    display: grid;
+    grid-template-columns: minmax(240px, 1.65fr) minmax(140px, .72fr) minmax(140px, .72fr) auto;
+    align-items: end;
+    gap: 9px;
+}
+
+.moderation-filter-search {
+    position: relative;
+    display: block;
+    margin: 0;
+}
+
+.moderation-filter-search i {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    color: #7e9187;
+    transform: translateY(-50%);
+}
+
+.moderation-filter-search input {
+    width: 100%;
+    min-height: 36px;
+    padding: 7px 11px 7px 34px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: #49655a;
+    background: #fff;
+    font-size: .75rem;
+}
+
+.moderation-filter-search input::placeholder {
+    color: #91a096;
+}
+
+.moderation-filter-field {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+    margin: 0;
+}
+
+.moderation-filter-field > span {
+    color: #73857b;
+    font-size: .62rem;
+    font-weight: 700;
+}
+
+.moderation-filter-field .form-select {
+    min-height: 36px;
+    border-color: var(--line);
+    border-radius: 10px;
+    color: #52685e;
+    font-size: .74rem;
+}
+
+.moderation-filter-submit {
+    min-height: 36px;
+    padding-inline: 16px;
+    border-radius: 10px;
+    font-size: .74rem;
+}
+
+.moderation-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 9px;
+}
+
+.moderation-record-toolbar {
+    flex-wrap: wrap;
+    padding-bottom: 14px;
+}
+
+.moderation-record-toolbar > div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.moderation-record-count {
+    display: inline-flex;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #3b6b56;
+    background: #edf7f1;
+    font-size: .65rem;
+    font-weight: 700;
+}
+
+@media (max-width: 1199.98px) {
+    .moderation-command {
+        grid-template-columns: 1fr;
+    }
+
+    .moderation-sla-list {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .moderation-sla-row {
+        min-height: 55px;
+    }
+}
+
+@media (max-width: 991.98px) {
+    .moderation-priority-grid,
+    .moderation-filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .moderation-filter-primary {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .moderation-filter-search {
+        grid-column: 1 / -1;
+    }
+
+    .moderation-filter-submit {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .moderation-page-intro {
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .moderation-header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .moderation-header-actions .btn {
+        flex: 1 1 auto;
+    }
+
+    .moderation-sla-list {
+        grid-template-columns: 1fr;
+    }
+
+    .moderation-sla-row {
+        min-height: 0;
+    }
+
+    .moderation-filter-card {
+        padding: 15px;
+    }
+
+    .moderation-filter-heading {
+        align-items: flex-start;
+    }
+
+    .moderation-filter-primary {
+        grid-template-columns: 1fr;
+    }
+
+    .moderation-filter-search,
+    .moderation-filter-submit {
+        grid-column: auto;
+    }
+
+    .moderation-record-toolbar {
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .moderation-priority-card {
+        min-height: 104px;
+        align-items: flex-start;
+        gap: 9px;
+        padding: 12px;
+    }
+
+    .moderation-priority-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 10px;
+        font-size: .9rem;
+    }
+
+    .moderation-priority-copy strong {
+        font-size: 1.35rem;
+    }
+
+    .moderation-priority-copy span {
+        white-space: normal;
+    }
+
+    .moderation-secondary-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .moderation-secondary-item {
+        justify-content: flex-start;
+    }
+
+    .moderation-filter-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .moderation-filter-heading {
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .moderation-record-toolbar > span {
+        width: 100%;
+    }
+}
+
 .mod-event-list {
     display: grid;
     gap: 14px;
