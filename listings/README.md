@@ -102,6 +102,9 @@ flowchart LR
 | `/listings/item/<item_id>/` | 商品详情与交易入口 |
 | `/listings/my_items/` | 我的商品与卖家工作台 |
 | `/listings/orders/` | 我的交易工作台，汇总买卖订单，支持阶段筛选与分页 |
+| `/listings/history/` | 最近浏览，每页 24 件并显示全量浏览记录数 |
+| `/listings/gift-applications/` | 我的领取申请，按业务状态排序并每页显示 12 条 |
+| `/listings/item/<item_id>/gift-applications/` | 发布者管理领取申请，每页 12 条且保留全量待处理数 |
 | `/listings/favorites/` | 我的心愿单，支持收藏分组、全量计数与每页 12 件分页 |
 | `/listings/saved-searches/` | 关注的搜索，支持每页 8 条、当前页命中统计和操作后回跳 |
 | `/listings/notifications/` | 通知中心 |

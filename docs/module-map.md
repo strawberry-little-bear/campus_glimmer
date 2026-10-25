@@ -303,6 +303,7 @@ campus_glimmer/
 - **`test_free_gifting.py`**：免费赠送不伪装成 0 元商品、领取申请队列与结果通知
 
 - **`test_gift_application_queue.py`**：队列长度分商品聚合、处理时长、说明填写率对照与看板导出测试
+- **`test_personal_queue_pagination.py`**：浏览足迹固定 24 件分页、领取申请状态优先级、发布者全量待处理数、权限隔离与安全原页回跳
 
 - **`test_governance_borrow_queue.py`**：治理工作台真的能读到三级催收案件，不只是举报与争议
 
@@ -508,7 +509,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（116 篇，持续更新）</summary>
+<summary>设计文档清单（117 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -530,6 +531,7 @@ campus_glimmer/
 - **`graduation-bulk-listing-import-error-summary-design.md`**：批量发布导入错误摘要，重复问题分组、完整清单保留与只做阅读层的边界
 - **`graduation-bulk-listing-renewal-design.md`**：毕业季批量续期，统一新截止时间、可续期状态边界、整批失败与不触碰刷新额度
 - **`my-items-workspace-pagination-design.md`**：卖家工作台五类状态页签、服务端分页、全量统计与安全原页回跳
+- **`personal-queue-pagination-design.md`**：浏览足迹 24 件分页、领取申请状态排序、全量待处理统计与安全原页回跳
 - **`semester-bulk-listing-template-design.md`**：学期批量发布模板，共同设置私有保存、相对展示天数重算与不保存商品行边界
 
 - **`dispute-evidence-shape-design.md`**：证据文件的形状，attachment.name 与 size 第一次被数字读到
