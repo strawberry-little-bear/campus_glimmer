@@ -1079,11 +1079,24 @@ def create_order(request, item_id):
 def my_gift_applications(request):
     applications = GiftApplication.objects.filter(
         applicant=request.user,
-    ).select_related('item__seller', 'item__location', 'meeting_location', 'order').order_by(
-        'status', '-created_at',
-    )
+    ).annotate(
+        status_rank=Case(
+            When(status='pending', then=Value(0)),
+            When(status='selected', then=Value(1)),
+            When(status='rejected', then=Value(2)),
+            When(status='withdrawn', then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        ),
+    ).select_related(
+        'item__seller', 'item__location', 'meeting_location', 'order',
+    ).order_by('status_rank', '-created_at', '-pk')
+    page_obj = Paginator(applications, 12).get_page(request.GET.get('page'))
     return render(request, 'listings/gift_applications.html', {
-        'applications': applications,
+        'applications': page_obj.object_list,
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
+        'return_url': f"{reverse('my_gift_applications')}?page={page_obj.number}",
         'title': '我的领取申请',
     })
 
@@ -1097,15 +1110,39 @@ def manage_gift_applications(request, item_id):
     if item.trade_mode != 'free':
         messages.info(request, '只有免费赠送商品才有领取申请队列。')
         return redirect('item_detail', item_id=item.id)
-    applications = GiftApplication.objects.filter(item=item).select_related(
+    applications = GiftApplication.objects.filter(item=item).annotate(
+        status_rank=Case(
+            When(status='pending', then=Value(0)),
+            When(status='selected', then=Value(1)),
+            When(status='rejected', then=Value(2)),
+            When(status='withdrawn', then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        ),
+    ).select_related(
         'applicant', 'meeting_location', 'order',
-    ).order_by('status', 'created_at')
+    ).order_by('status_rank', 'created_at', '-pk')
+    page_obj = Paginator(applications, 12).get_page(request.GET.get('page'))
     return render(request, 'listings/manage_gift_applications.html', {
         'item': item,
-        'applications': applications,
+        'applications': page_obj.object_list,
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
         'pending_count': applications.filter(status='pending').count(),
+        'return_url': f"{reverse('manage_gift_applications', args=[item.id])}?page={page_obj.number}",
         'title': '管理领取申请',
     })
+
+
+def _manage_gift_applications_redirect(request, item_id):
+    next_url = request.POST.get('next', '').strip()
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect('manage_gift_applications', item_id=item_id)
 
 
 @login_required
@@ -1118,7 +1155,7 @@ def accept_gift_application(request, application_id):
         messages.error(request, '你没有权限处理这个领取申请。')
         return redirect('home')
     if request.method != 'POST':
-        return redirect('manage_gift_applications', item_id=application.item_id)
+        return _manage_gift_applications_redirect(request, application.item_id)
 
     try:
         with transaction.atomic():
@@ -1128,15 +1165,15 @@ def accept_gift_application(request, application_id):
             locked_item = Item.objects.select_for_update(of=('self',)).get(pk=locked_application.item_id)
             if locked_application.status != 'pending':
                 messages.info(request, '这个申请已经处理过了。')
-                return redirect('manage_gift_applications', item_id=locked_application.item_id)
+                return _manage_gift_applications_redirect(request, locked_application.item_id)
             if locked_item.trade_mode != 'free' or not locked_item.is_available_now:
                 messages.info(request, '商品已经无法继续选择领取人。')
-                return redirect('manage_gift_applications', item_id=locked_item.id)
+                return _manage_gift_applications_redirect(request, locked_item.id)
             if Order.objects.filter(
                 item_id=locked_item.id, status__in=Order.ACTIVE_STATUS_VALUES,
             ).exists():
                 messages.info(request, '这个商品已经有一笔进行中的交易。')
-                return redirect('manage_gift_applications', item_id=locked_item.id)
+                return _manage_gift_applications_redirect(request, locked_item.id)
 
             order = Order.objects.create(
                 item=locked_item,
@@ -1186,7 +1223,7 @@ def accept_gift_application(request, application_id):
                 )
     except IntegrityError:
         messages.info(request, '这个商品刚刚被其他操作选中了，请刷新申请队列。')
-        return redirect('manage_gift_applications', item_id=application.item_id)
+        return _manage_gift_applications_redirect(request, application.item_id)
 
     messages.success(request, '已选中领取人，并生成待确认交易订单。')
     return redirect('order_detail', order_id=order.id)
@@ -1202,6 +1239,13 @@ def withdraw_gift_application(request, application_id):
         application.decided_at = timezone.now()
         application.save(update_fields=['status', 'decided_at', 'updated_at'])
         messages.success(request, '领取申请已撤回。')
+    next_url = request.POST.get('next', '').strip()
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
     return redirect('my_gift_applications')
 
 
@@ -2773,8 +2817,16 @@ def mark_sold(request, item_id):
 
 @login_required
 def browsing_history(request):
-    history = BrowsingHistory.objects.filter(user=request.user).select_related('item__category', 'item__seller', 'item__location').prefetch_related('item__images')[:30]
-    return render(request, 'listings/browsing_history.html', {'history': history, 'title': '最近浏览'})
+    history = BrowsingHistory.objects.filter(user=request.user).select_related(
+        'item__category', 'item__seller', 'item__location',
+    ).prefetch_related('item__images').order_by('-last_viewed_at', '-pk')
+    page_obj = Paginator(history, 24).get_page(request.GET.get('page'))
+    return render(request, 'listings/browsing_history.html', {
+        'history': page_obj.object_list,
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
+        'title': '最近浏览',
+    })
 
 
 @login_required

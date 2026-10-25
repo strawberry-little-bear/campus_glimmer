@@ -8768,27 +8768,31 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
 
 .trade-desk-pagination,
 .favorite-pagination,
-.saved-search-pagination {
+.saved-search-pagination,
+.personal-queue-pagination {
     margin-top: 22px;
     padding-top: 18px;
     border-top: 1px solid #e7ede8;
 }
 
 .favorite-pagination,
-.saved-search-pagination {
+.saved-search-pagination,
+.personal-queue-pagination {
     margin-top: 8px;
 }
 
 .trade-desk-pagination .pagination,
 .favorite-pagination .pagination,
-.saved-search-pagination .pagination {
+.saved-search-pagination .pagination,
+.personal-queue-pagination .pagination {
     flex-wrap: wrap;
     gap: 6px;
 }
 
 .trade-desk-pagination .page-link,
 .favorite-pagination .page-link,
-.saved-search-pagination .page-link {
+.saved-search-pagination .page-link,
+.personal-queue-pagination .page-link {
     display: inline-flex;
     min-width: 38px;
     min-height: 38px;
@@ -8803,7 +8807,8 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
 
 .trade-desk-pagination .page-item.active .page-link,
 .favorite-pagination .page-item.active .page-link,
-.saved-search-pagination .page-item.active .page-link {
+.saved-search-pagination .page-item.active .page-link,
+.personal-queue-pagination .page-item.active .page-link {
     color: #fff;
     background: var(--primary);
     border-color: var(--primary);
@@ -8811,7 +8816,8 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
 
 .trade-desk-pagination .page-item.disabled .page-link,
 .favorite-pagination .page-item.disabled .page-link,
-.saved-search-pagination .page-item.disabled .page-link {
+.saved-search-pagination .page-item.disabled .page-link,
+.personal-queue-pagination .page-item.disabled .page-link {
     color: #a9b3ad;
     background: #f7f9f7;
     border-color: #e8ede9;
