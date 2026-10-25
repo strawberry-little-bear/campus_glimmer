@@ -2154,6 +2154,7 @@ a { color: inherit; text-decoration: none; }
 
 .mutual-aid-profile-stats { margin-top: 16px; }
 
+.saved-search-result-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 4px 0 14px; padding: 10px 13px; border: 1px solid #e1ebe4; border-radius: 12px; color: var(--muted); background: #fbfdfb; font-size: .75rem; }.saved-search-result-bar p { margin: 0; }.saved-search-result-bar strong { color: #315946; }.saved-search-result-bar span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }.saved-search-result-bar i { color: #609c74; }
 .saved-search-metrics { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
 .saved-search-metric { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid #dcece0; border-radius: 999px; color: #46705b; background: #f7fbf8; font-size: .72rem; font-weight: 600; }
 .saved-search-metric i { color: #4f9a72; }
@@ -2176,7 +2177,7 @@ a { color: inherit; text-decoration: none; }
 .saved-search-cadence-fields select:focus,
 .saved-search-cadence-fields input:focus { border-color: #79b694; outline: none; box-shadow: 0 0 0 3px rgba(121, 182, 148, .18); }
 .saved-search-cadence-hint { margin: 10px 0 12px; color: var(--muted); font-size: .71rem; }
-@media (max-width: 767px) { .saved-search-cadence-fields { grid-template-columns: 1fr; } }
+@media (max-width: 767px) { .saved-search-cadence-fields { grid-template-columns: 1fr; } .saved-search-result-bar { align-items: flex-start; flex-wrap: wrap; } }
 
 .academic-calendar-panel .academic-calendar-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .academic-calendar-panel .academic-calendar-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
@@ -8706,24 +8707,28 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
 }
 
 .trade-desk-pagination,
-.favorite-pagination {
+.favorite-pagination,
+.saved-search-pagination {
     margin-top: 22px;
     padding-top: 18px;
     border-top: 1px solid #e7ede8;
 }
 
-.favorite-pagination {
+.favorite-pagination,
+.saved-search-pagination {
     margin-top: 8px;
 }
 
 .trade-desk-pagination .pagination,
-.favorite-pagination .pagination {
+.favorite-pagination .pagination,
+.saved-search-pagination .pagination {
     flex-wrap: wrap;
     gap: 6px;
 }
 
 .trade-desk-pagination .page-link,
-.favorite-pagination .page-link {
+.favorite-pagination .page-link,
+.saved-search-pagination .page-link {
     display: inline-flex;
     min-width: 38px;
     min-height: 38px;
@@ -8737,14 +8742,16 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
 }
 
 .trade-desk-pagination .page-item.active .page-link,
-.favorite-pagination .page-item.active .page-link {
+.favorite-pagination .page-item.active .page-link,
+.saved-search-pagination .page-item.active .page-link {
     color: #fff;
     background: var(--primary);
     border-color: var(--primary);
 }
 
 .trade-desk-pagination .page-item.disabled .page-link,
-.favorite-pagination .page-item.disabled .page-link {
+.favorite-pagination .page-item.disabled .page-link,
+.saved-search-pagination .page-item.disabled .page-link {
     color: #a9b3ad;
     background: #f7f9f7;
     border-color: #e8ede9;

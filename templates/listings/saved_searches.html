@@ -12,6 +12,13 @@
     <a class="btn btn-outline-primary" href="{% url 'item_list' %}"><i class="bi bi-search me-1"></i>继续找商品</a>
 </div>
 
+{% if page_obj.paginator.count %}
+<div class="saved-search-result-bar">
+    <p>第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 条 · 共 {{ page_obj.paginator.count }} 条</p>
+    <span><i class="bi bi-layers"></i>每页 8 条</span>
+</div>
+{% endif %}
+
 <section class="saved-search-grid">
     {% for saved_search in saved_searches %}
     <article class="content-card saved-search-card {% if not saved_search.is_active %}is-paused{% endif %}">
@@ -39,6 +46,7 @@
 
         <form class="saved-search-cadence" method="post" action="{% url 'update_saved_search_cadence' saved_search.id %}">
             {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <div class="saved-search-cadence-fields">
                 <label for="cadence-frequency-{{ saved_search.id }}">
                     <span>提醒节奏</span>
@@ -64,10 +72,12 @@
         <div class="saved-search-actions">
             <form method="post" action="{% url 'toggle_saved_search' saved_search.id %}">
                 {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 <button class="btn btn-sm {% if saved_search.is_active %}btn-outline-secondary{% else %}btn-outline-primary{% endif %}" type="submit">{% if saved_search.is_active %}<i class="bi bi-pause me-1"></i>暂停提醒{% else %}<i class="bi bi-play me-1"></i>恢复提醒{% endif %}</button>
             </form>
             <form method="post" action="{% url 'delete_saved_search' saved_search.id %}" onsubmit="return confirm('确定删除这条关注搜索吗？');">
                 {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 <button class="btn btn-sm btn-link text-danger" type="submit"><i class="bi bi-trash3 me-1"></i>删除</button>
             </form>
         </div>
@@ -81,4 +91,34 @@
     </div>
     {% endfor %}
 </section>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="saved-search-pagination" aria-label="关注的搜索分页">
+    <ul class="pagination justify-content-center mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}" aria-label="上一页"><i class="bi bi-chevron-left"></i></a></li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-left"></i></span></li>
+        {% endif %}
+        {% for num in page_numbers %}
+            {% if num %}
+            <li class="page-item{% if page_obj.number == num %} active{% endif %}">
+                {% if page_obj.number == num %}
+                <span class="page-link" aria-current="page" aria-label="第 {{ num }} 页">{{ num }}</span>
+                {% else %}
+                <a class="page-link" href="?page={{ num }}" aria-label="第 {{ num }} 页">{{ num }}</a>
+                {% endif %}
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}" aria-label="下一页"><i class="bi bi-chevron-right"></i></a></li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-right"></i></span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}

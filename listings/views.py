@@ -12838,12 +12838,36 @@ def _saved_search_filter_url(saved_search):
     return f"{reverse('item_list')}?{urlencode(params)}"
 
 
+def _saved_search_redirect(request):
+    """Return to the current page after a saved-search action.
+
+    Only same-host destinations are accepted so the `next` field cannot turn
+    these small form actions into an open redirect.
+    """
+    next_url = (request.POST.get('next') or request.GET.get('next') or '').strip()
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(next_url)
+    return redirect('saved_search_list')
+
+
 @login_required
 def saved_search_list(request):
-    saved_searches = SavedSearch.objects.filter(user=request.user).select_related('category', 'location')
+    saved_search_queryset = (
+        SavedSearch.objects.filter(user=request.user)
+        .select_related('category', 'location')
+        .order_by('-is_active', '-created_at', '-pk')
+    )
+    page_obj = Paginator(saved_search_queryset, 8).get_page(request.GET.get('page'))
+    saved_searches = list(page_obj.object_list)
     _attach_saved_search_stats(saved_searches, user=request.user)
     return render(request, 'listings/saved_searches.html', {
         'saved_searches': saved_searches,
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
         'frequency_choices': SavedSearch.FREQUENCY_CHOICES,
         'title': '关注的搜索',
     })
@@ -12856,7 +12880,7 @@ def toggle_saved_search(request, saved_search_id):
         saved_search.is_active = not saved_search.is_active
         saved_search.save(update_fields=['is_active', 'updated_at'])
         messages.success(request, f'“{saved_search.name}”已{"开启" if saved_search.is_active else "暂停"}提醒。')
-    return redirect('saved_search_list')
+    return _saved_search_redirect(request)
 
 
 @login_required
@@ -12864,13 +12888,13 @@ def update_saved_search_cadence(request, saved_search_id):
     """Change the reminder cadence of a saved search without recreating it."""
     saved_search = get_object_or_404(SavedSearch, id=saved_search_id, user=request.user)
     if request.method != 'POST':
-        return redirect('saved_search_list')
+        return _saved_search_redirect(request)
 
     frequency = request.POST.get('notify_frequency', '')
     valid = dict(SavedSearch.FREQUENCY_CHOICES)
     if frequency not in valid:
         messages.error(request, '提醒频率无效，请重新选择。')
-        return redirect('saved_search_list')
+        return _saved_search_redirect(request)
 
     saved_search.notify_frequency = frequency
     raw_limit = (request.POST.get('max_matches_per_notice') or '').strip()
@@ -12879,10 +12903,10 @@ def update_saved_search_cadence(request, saved_search_id):
             limit = int(raw_limit)
         except ValueError:
             messages.error(request, '单次最多提醒条数需要是 1 到 9 之间的整数。')
-            return redirect('saved_search_list')
+            return _saved_search_redirect(request)
         if not 1 <= limit <= 9:
             messages.error(request, '单次最多提醒条数需要是 1 到 9 之间的整数。')
-            return redirect('saved_search_list')
+            return _saved_search_redirect(request)
         saved_search.max_matches_per_notice = limit
 
     raw_quiet = (request.POST.get('quiet_until') or '').strip()
@@ -12890,7 +12914,7 @@ def update_saved_search_cadence(request, saved_search_id):
         parsed = parse_datetime(raw_quiet)
         if parsed is None:
             messages.error(request, '临时静默时间格式不正确。')
-            return redirect('saved_search_list')
+            return _saved_search_redirect(request)
         if timezone.is_naive(parsed):
             parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
         saved_search.quiet_until = parsed
@@ -12908,10 +12932,10 @@ def update_saved_search_cadence(request, saved_search_id):
                 request,
                 f'“{saved_search.name}”已切换为即时提醒，补送了 {delivered} 条 待提醒命中。'
             )
-            return redirect('saved_search_list')
+            return _saved_search_redirect(request)
 
     messages.success(request, f'“{saved_search.name}”的提醒节奏已更新为{valid[frequency]}。')
-    return redirect('saved_search_list')
+    return _saved_search_redirect(request)
 
 
 @login_required
@@ -12920,8 +12944,8 @@ def delete_saved_search(request, saved_search_id):
     if request.method == 'POST':
         name = saved_search.name
         saved_search.delete()
-        messages.success(request, f'“已删除关注搜索”{name}”。')
-    return redirect('saved_search_list')
+        messages.success(request, f'已删除关注搜索“{name}”。')
+    return _saved_search_redirect(request)
 
 
 

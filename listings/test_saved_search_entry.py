@@ -187,7 +187,7 @@ class SavedSearchLiveMatchLinkTests(TestCase):
         SavedSearch.objects.create(user=self.user, name='没有任何条件')
         self.client.force_login(self.user)
         response = self.client.get(reverse('saved_search_list'))
-        card = response.context['saved_searches'].first()
+        card = response.context['saved_searches'][0]
         self.assertEqual(card.live_match_url, reverse('item_list'))
 
     def test_link_points_at_the_list_page_rather_than_filtering_out_own_items(self):
