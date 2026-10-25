@@ -53,12 +53,43 @@ BASE_TEMPLATE_PATH = os.path.join(PROJECT_ROOT, 'templates', 'base.html')
 CSS_PATH = os.path.join(PROJECT_ROOT, 'static', 'css', 'style.css')
 MAIN_JS_PATH = os.path.join(PROJECT_ROOT, 'static', 'js', 'main.js')
 
-# 提到 data-ops-deferred 的整条选择器，用来检查它挂在哪里。
-CSS_DEFERRED_SELECTOR_RE = re.compile(r'^([^\n{}]*data-ops-deferred[^\n{}]*)\{', re.MULTILINE)
+# 提到 data-ops-deferred / data-si-deferred 的整条选择器，用来检查它挂在哪里。
+# 看板和洞察两页共用同一批规则，每条都写成「一整行两个选择器」，所以捕获到的是
+# 整行——校验时要按逗号拆开逐个看，否则第二个选择器逃过检查也看不出来。
+CSS_DEFERRED_SELECTOR_RE = re.compile(r'^([^\n{}]*data-(?:ops|si)-deferred[^\n{}]*)\{', re.MULTILINE)
 
 
 def read_text(path):
     return io.open(path, encoding='utf-8').read()
+
+
+def balanced_block(text, start_marker):
+    """从 ``start_marker`` 处开始，按大括号深度取出整个函数/工厂字面量。"""
+    start = text.index(start_marker)
+    depth = 0
+    for index in range(text.index('{', start), len(text)):
+        if text[index] == '{':
+            depth += 1
+        elif text[index] == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+    raise AssertionError('%s 没有闭合的大括号' % start_marker)
+
+
+def revealer_factory(js):
+    """main.js 里两页共用的 createSectionRevealer 工厂本体。"""
+    return balanced_block(js, 'const createSectionRevealer = function')
+
+
+def ops_js_block(js):
+    """运营看板那段调用代码。"""
+    return js[js.index('const opsPanels ='):js.index('const chat =')]
+
+
+def si_js_block(js):
+    """搜索洞察那段调用代码。"""
+    return js[js.index('const siPanels ='):js.index('const chat =')]
 
 
 def nav_anchors():
@@ -151,7 +182,13 @@ class OperationsDashboardDeferredSectionTests(TestCase):
         selectors = CSS_DEFERRED_SELECTOR_RE.findall(read_text(CSS_PATH))
 
         self.assertTrue(selectors, 'CSS 里已经没有延后规则了，这个文件也就失去了意义')
-        ungated = [s for s in selectors if not s.strip().startswith('html.js')]
+        # 每条规则一整行两个选择器（看板 + 洞察），必须拆开逐个校验：只看整行的
+        # 话，后半段选择器少了 html.js 前缀也能通过。
+        ungated = []
+        for line in selectors:
+            for selector in line.split(','):
+                if not selector.strip().startswith('html.js'):
+                    ungated.append(selector.strip())
         self.assertEqual(ungated, [], '这些规则没有挂在 html.js 下面，无脚本用户会看到空分区')
 
     def test_the_hiding_rule_targets_children_not_the_section_itself(self):
@@ -178,31 +215,50 @@ class OperationsDashboardDeferredSectionTests(TestCase):
         # 取回分区当然要写 innerHTML——那是它唯一的职责，禁不掉。真正要拦住的
         # 是「无脚本用户也能看到的页面被 JS 拆掉」：那种改动会让没有 JS 的浏览器
         # 和搜索引擎什么都看不到，而日常浏览器里照样正常。
-        js = read_text(MAIN_JS_PATH)
-        start = js.index("const opsPanels = document.querySelector('.operations-panels');")
-        end = js.index("const chat = document.querySelector('.chat-messages');")
-        block = js[start:end]
+        # 揭开逻辑两页共用，住在文件顶部的工厂里，所以这里盯工厂本体。
+        factory = revealer_factory(read_text(MAIN_JS_PATH))
 
-        self.assertIn('data-ops-deferred', block, 'main.js 里找不到延后分区的逻辑')
-        self.assertIn('data-ops-src', block, 'main.js 里没有按需取回的入口')
-        self.assertIn('is-revealed', block)
-        self.assertIn('IntersectionObserver', block, '应该用 IntersectionObserver 判断滚动位置')
+        self.assertIn('fetch(', factory, '工厂里没有取回动作，懒加载已经不在了')
+        self.assertIn("classList.add('is-revealed')", factory)
         # 拆节点才能造成的破坏，逐个禁掉。innerHTML 不在此列：懒加载分区的内容
         # 只能整段取回、整段塞入，禁掉它这个功能就不存在了。它只允许出现在唯一
         # 一处——取回成功那一跳，多写一处就说明有人顺手改了别的地方的 DOM。
         for forbidden in ('.removeChild(', '.replaceChildren(', '.replaceWith(', '.outerHTML', '.insertAdjacentHTML('):
-            self.assertNotIn(forbidden, block, '分区内容不能拆节点：' + forbidden)
+            self.assertNotIn(forbidden, factory, '分区内容不能拆节点：' + forbidden)
         self.assertEqual(
-            block.count('.innerHTML ='), 1,
-            'innerHTML 只该出现在取回成功那一处，现在有 %d 处' % block.count('.innerHTML ='),
+            factory.count('.innerHTML ='), 1,
+            'innerHTML 只该出现在取回成功那一处，现在有 %d 处' % factory.count('.innerHTML ='),
         )
 
+    def test_each_page_configures_the_revealer_with_its_own_attributes(self):
+        # 工厂本身不带任何页面专属的属性名，三处配置都在调用点给。少给一个的
+        # 症状很安静：那一页的所有分区都不被识别成延后分区——CSS 照旧藏内容，
+        # JS 永远不揭，用户看到一片骨架，而两页各自的测试都还是绿的。
+        js = read_text(MAIN_JS_PATH)
+        expectations = (
+            (ops_js_block(js), [
+                "deferredSelector: '.ops-section[data-ops-deferred]'",
+                "srcAttr: 'data-ops-src'",
+                "failedAttr: 'data-ops-failed'",
+            ]),
+            (si_js_block(js), [
+                "deferredSelector: '.si-section[data-si-deferred]'",
+                "srcAttr: 'data-si-src'",
+                "failedAttr: 'data-si-failed'",
+            ]),
+        )
+        for block, needles in expectations:
+            for needle in needles:
+                self.assertIn(needle, block, '调用点少了这份配置：' + needle)
+
     def test_pages_outside_the_dashboard_never_carry_the_attribute(self):
-        # 这个属性只属于看板。别的页面上出现它，说明有人把规则复制到了不该用的地方。
+        # 这两个属性只属于看板和洞察页。别的页面上出现它，说明有人把规则复制到了
+        # 不该用的地方——而那两条 CSS 会连带着把别处的內容也藏掉。
         for path in (reverse('home'), reverse('item_list'), reverse('my_items')):
             body = self.client.get(path).content.decode('utf-8')
 
             self.assertNotIn('data-ops-deferred', body, '%s 上出现了只属于看板的属性' % path)
+            self.assertNotIn('data-si-deferred', body, '%s 上出现了只属于洞察页的属性' % path)
 
 class OperationsDashboardLazyLoadingTests(TestCase):
     """带着 ops_lazy cookie 打开看板时，服务端只渲染首屏四个分区。
@@ -296,8 +352,7 @@ class OperationsDashboardLazyLoadingTests(TestCase):
 # bug：把 target 之后的分区一起揭开，和只揭开 target 之前的分区，源码看起来同样
 # 合理，只有真跑一遍才知道谁对。所以这里把 main.js 里的帮手原样抽出来，用一堆假
 # 分区在 node 里执行，断言它到底揭开了哪些。
-NODE_HARNESS = r'''
-'use strict';
+NODE_HARNESS = r''''use strict';
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
 
@@ -326,41 +381,51 @@ function constFunctions(text) {
     return out;
 }
 
-const opsStart = src.indexOf("const opsPanels");
-const opsEnd = src.indexOf("const chat");
-if (opsStart < 0 || opsEnd < opsStart) {
-    process.stdout.write(JSON.stringify({ error: '找不到运营看板的 JS 代码块' }));
+// 揭开逻辑两页共用，住在文件顶部的 createSectionRevealer 工厂里。探针把工厂原样
+// 抽出来，用一堆假分区实例化一次，拿它返回的 revealThrough——只抽一个函数的话，
+// 另外两个会变成未定义引用，测到的是 ReferenceError 而不是真实行为。
+const factoryStart = src.indexOf('const createSectionRevealer = function');
+if (factoryStart < 0) {
+    process.stdout.write(JSON.stringify({ error: 'main.js 里找不到 createSectionRevealer 工厂' }));
     process.exit(2);
 }
-const region = src.slice(opsStart, opsEnd);
-
-// 懒加载之后是三个函数：isDeferredSection 判断分区在不在延后名单里，
-// loadSection 负责单个分区（取回或只换类），revealThrough 负责「连它上面的
-// 一起」。探针把三个都原样抽出来，拼进同一个 Function 再跑——只抽一个的话，
-// 另外两个会变成未定义引用，测到的是 ReferenceError 而不是真实行为。
-const wanted = ['isDeferredSection', 'loadSection', 'revealThrough'];
-const picked = {};
-for (const name of wanted) {
-    const found = constFunctions(region).filter(function (item) { return item.name === name; });
-    if (found.length !== 1) {
-        process.stdout.write(JSON.stringify({
-            error: '运营看板 JS 里 ' + name + ' 不是恰好一个，先人工确认再改这个测试',
-            names: found.map(function (item) { return item.name; }),
-        }));
-        process.exit(3);
-    }
-    picked[name] = found[0].body;
+const factoryEnd = balancedFrom(src, factoryStart);
+if (factoryEnd < 0) {
+    process.stdout.write(JSON.stringify({ error: 'createSectionRevealer 没有闭合的大括号' }));
+    process.exit(2);
 }
+const factory = src.slice(factoryStart, factoryEnd + 1);
+
+const opsStart = src.indexOf('const opsPanels');
+const siStart = src.indexOf('const siPanels');
+const tailStart = src.indexOf('const chat');
+if (opsStart < 0 || siStart < 0 || tailStart < 0 || !(opsStart < siStart && siStart < tailStart)) {
+    process.stdout.write(JSON.stringify({ error: '找不到运营看板或搜索洞察的 JS 代码块' }));
+    process.exit(2);
+}
+const opsRegion = src.slice(opsStart, siStart);
+const siRegion = src.slice(siStart, tailStart);
 
 // 揭开必须被两处共用：观察器负责「滚到附近就揭开」，跳转条负责「一步跳到很远」。
-// 任何一处自己加类，另一处就会漏，而且日常滚动看不出异常。
-const ioStart = region.indexOf('new IntersectionObserver');
-const ioEnd = ioStart < 0 ? -1 : balancedFrom(region, ioStart);
-const jump = constFunctions(region).filter(function (item) { return item.name === 'jumpTo'; })[0];
+// 任何一处自己加类，另一处就会漏，而且日常滚动看不出异常。没有观察器的旧浏览器
+// 走一次「全揭完」的兜底，那条也得在，否则整页停在骨架态。
+function observerCalls(region, helper) {
+    const start = region.indexOf('new IntersectionObserver');
+    if (start < 0) return false;
+    const end = balancedFrom(region, start);
+    return end > start && region.slice(start, end).indexOf(helper + '(') >= 0;
+}
+function functionBody(region, name) {
+    const found = constFunctions(region).filter(function (item) { return item.name === name; });
+    return found.length === 1 ? found[0].body : '';
+}
 const callers = {
-    observer: ioStart >= 0 && ioEnd > ioStart &&
-        region.slice(ioStart, ioEnd).indexOf('revealThrough(') >= 0,
-    jumpTo: !!jump && jump.body.indexOf('revealThrough(') >= 0,
+    observer: observerCalls(opsRegion, 'revealThrough'),
+    jumpTo: functionBody(opsRegion, 'jumpTo').indexOf('revealThrough(') >= 0,
+    opsFallback: opsRegion.indexOf('revealThrough(null)') >= 0,
+    siObserver: observerCalls(siRegion, 'siRevealThrough'),
+    siJumpTo: functionBody(siRegion, 'siJumpTo').indexOf('siRevealThrough(') >= 0,
+    siFallback: siRegion.indexOf('siRevealThrough(null)') >= 0,
 };
 
 // 假分区只记录自己身上发生的每一次调用，不掺任何真实逻辑。
@@ -368,12 +433,12 @@ const callers = {
 // 于是 loadSection 应该只换类、别的什么都不做。调用流水就是这条契约的证据。
 const revealed = [];
 const logs = [];
-const deferred = [];
+const sections = [];
 for (let i = 0; i < 6; i += 1) {
     const index = i;
     const calls = [];
     logs.push(calls);
-    deferred.push({
+    sections.push({
         id: 's' + index,
         getAttribute: function (name) { calls.push('getAttribute:' + name); return null; },
         hasAttribute: function (name) { calls.push('hasAttribute:' + name); return false; },
@@ -383,30 +448,50 @@ for (let i = 0; i < 6; i += 1) {
         classList: {
             add: function (cls) {
                 calls.push('classList.add:' + cls);
-                if (cls === 'is-revealed') revealed.push(index);
+                if (cls === 'is-revealed' && revealed.indexOf(index) < 0) revealed.push(index);
             },
-            remove: function (cls) { calls.push('classList.remove:' + cls); },
+            remove: function (cls) {
+                calls.push('classList.remove:' + cls);
+                const at = revealed.indexOf(index);
+                if (at >= 0) revealed.splice(at, 1);
+            },
             contains: function (cls) { calls.push('classList.contains:' + cls); return false; },
         },
     });
 }
-const revealThrough = new Function(
-    'deferred',
-    picked.isDeferredSection + '\n' + picked.loadSection + '\n' + picked.revealThrough + '\nreturn revealThrough;',
-)(deferred);
+
+const revealer = new Function(
+    'panels',
+    'options',
+    factory + '\nreturn createSectionRevealer(panels, options);'
+)(
+    { querySelectorAll: function () { return sections; } },
+    {
+        deferredSelector: '.probe-section[data-probe-deferred]',
+        srcAttr: 'data-ops-src',
+        failedAttr: 'data-ops-failed',
+    }
+);
+const revealThrough = revealer.revealThrough;
 
 const scenarios = [];
+let chain = Promise.resolve();
 [['first', 0], ['middle', 2], ['last', 5], ['none', null]].forEach(function (pair) {
-    revealed.length = 0;
-    logs.forEach(function (calls) { calls.length = 0; });
-    revealThrough(pair[1] === null ? null : deferred[pair[1]]);
-    scenarios.push({
-        label: pair[0],
-        revealed: revealed.slice(),
-        calls: logs.map(function (calls) { return calls.slice(); }),
+    chain = chain.then(function () {
+        revealed.length = 0;
+        logs.forEach(function (calls) { calls.length = 0; });
+        return revealThrough(pair[1] === null ? null : sections[pair[1]]).then(function () {
+            scenarios.push({
+                label: pair[0],
+                revealed: revealed.slice(),
+                calls: logs.map(function (calls) { return calls.slice(); }),
+            });
+        });
     });
 });
-process.stdout.write(JSON.stringify({ callers: callers, scenarios: scenarios }));
+chain.then(function () {
+    process.stdout.write(JSON.stringify({ callers: callers, scenarios: scenarios }));
+});
 '''
 
 
@@ -473,14 +558,32 @@ class OperationsDeferredRevealDirectionTests(TestCase):
                 )
 
     def test_both_the_observer_and_the_jump_bar_go_through_the_same_helper(self):
-        # 只有一处调用帮手的话，另一处就会留下永远不揭开的骨架分区。
+        # 只有一处调用帮手的话，另一处就会留下永远不揭开的骨架分区。两页各有自己
+        # 的观察器和直达入口，四条路都得通。
         result = self._probe()
+        callers = result['callers']
 
         self.assertTrue(
-            result['callers']['observer'],
+            callers['observer'],
             'IntersectionObserver 的回调没有调用揭开帮手，滚到的分区会一直停在骨架态',
         )
         self.assertTrue(
-            result['callers']['jumpTo'],
+            callers['jumpTo'],
             '跳转条没有调用揭开帮手，点 chip 会落在按骨架高度算错的偏移上',
         )
+        self.assertTrue(
+            callers['siObserver'],
+            '洞察页的 IntersectionObserver 没有调用揭开帮手，滚到的分区会一直停在骨架态',
+        )
+        self.assertTrue(
+            callers['siJumpTo'],
+            '洞察页的 hash 直达没有走揭开帮手，落点会按骨架高度算错',
+        )
+
+    def test_both_pages_keep_the_no_observer_fallback(self):
+        # 没有 IntersectionObserver 的旧浏览器只能靠一次揭完兜底。少了它，
+        # 那一屏用户看到的是整页骨架，而现有浏览器里一切正常。
+        result = self._probe()
+
+        self.assertTrue(result['callers']['opsFallback'], '看板少了旧浏览器兜底')
+        self.assertTrue(result['callers']['siFallback'], '洞察页少了旧浏览器兜底')

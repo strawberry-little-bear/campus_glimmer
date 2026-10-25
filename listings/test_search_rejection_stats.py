@@ -486,7 +486,7 @@ class RejectionPanelTests(TestCase):
 
         self.assertEqual(export.status_code, 200)
         content = export.content.decode('utf-8-sig')
-        self.assertIn('候选否决记录', content)
+        self.assertIn('候选否决分析', content)
         self.assertIn('被否决词对', content)
         self.assertIn('移动电源', content)
 

@@ -407,6 +407,7 @@ class TemplateStylesheetContractTests(SimpleTestCase):
         'message-select',            # inbox.html 内联脚本的消息多选
         'notification-bulk-submit',  # notifications.html 内联脚本的批量已读
         'operations-panels',         # main.js 懒加载看板分区
+        'search-insights-panels',    # main.js 懒加载搜索洞察分区
     })
     # 测试按这些类名截取页面片段，属于对外契约
     TEXT_ANCHORS = frozenset({

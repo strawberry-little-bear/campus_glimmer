@@ -307,7 +307,7 @@ class SearchSynonymFeedbackViewTests(TestCase):
         # 段落标题本身就是一行，按行首匹配才不会被正文里提到这两个词的地方干扰
         section_lines = [
             index for index, line in enumerate(content.splitlines())
-            if line.startswith('同义词效果回流') or line.startswith('同义词候选')
+            if line.startswith('同义词效果回流') or line.startswith('搜索同义词候选')
         ]
         self.assertEqual(len(section_lines), 2)
         # 第一个匹配到的就是回流段，它应该出现在候选段之前
