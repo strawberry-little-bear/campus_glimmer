@@ -111,7 +111,7 @@ campus_glimmer/
 | `notification_preference_usage.py` | 27 个通知类型开关各自的形状：开着、关掉、近期收到过，按「关掉它有没有交易后果」分四组（只报告，被挡掉的通知连一行都不建，所以不报开关的效果） | 只报告 |
 | `notification_quiet_hours_shape.py` | 免打扰时段的形状：默认窗口采用率、同日 / 跨午夜、时长档、开始与结束小时、逐分钟叠加成小时曲线 | 只读 |
 | `notification_aggregation_quality.py` | 通知聚合的质量：被聚合过的行 vs 从没被聚合过的行，阅读率与处理时长对照（只报告） | 只报告 |
-| `report_priority.py` | 商品举报队列的优先处理、较高关注、常规处理分层与具名解释信号，只排序不写回事实 | 只报告 |
+| `report_priority.py` | 商品举报队列的服务端分页、SQL 优先排序、全量开放积压统计与具名解释信号，只排序不写回事实 | 只报告 |
 | `report_resolution_quality.py` | 商品举报按原因的驳回率、审核意见填写情况、集中度、举报人分布与结果回访质量（只报告） | 只报告 |
 | `meeting_attendance.py` | 交付预约的实际到场情况：响应分档、迟到区间与缺席分母（只报告不改写） | 读写 |
 | `meeting_incident_quality.py` | 交付预约异常按类型的驳回率、处理意见填写情况、提交方向与提交人分布（只报告） | 只报告 |
@@ -423,6 +423,7 @@ campus_glimmer/
 
 - **`test_relist_freshness.py`**：重新上架新鲜度欠账的判据、分母、额度与无互动测试
 
+- **`test_governance_queue_pagination.py`**：举报与争议服务端分页、SQL 优先级一致性、稳定队列顺序、全量待办统计与越界页码
 - **`test_report_priority.py`**：举报优先级的具名信号、开放队列排序、管理页解释与治理工作台联动
 - **`test_report_resolution_quality.py`**：驳回率按 reason 拆、意见只读长度与空否、不把驳回率和处理人挂钩
 
@@ -507,7 +508,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（109 篇，持续更新）</summary>
+<summary>设计文档清单（116 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -556,6 +557,7 @@ campus_glimmer/
 - **`campus-location-service-exceptions-design.md`**：单日临时关闭、替换时段与跨午夜截断口径
 
 
+- **`governance-queue-pagination-design.md`**：举报与争议服务端分页、SQL 优先级排序、全量待办统计与只读边界
 - **`report-outcome-feedback-design.md`**：举报人侧的结果回访：三档结构化反馈、一次性提交与运营回访质量口径
 - **`report-priority-design.md`**：商品举报的可解释优先级：风险原因、在售曝光与多人交叉信号只影响人工查看顺序
 - **`report-resolution-quality-design.md`**：商品举报按 reason 拆驳回率，意见只读长度，不把驳回率和处理人挂钩

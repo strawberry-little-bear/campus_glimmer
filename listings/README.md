@@ -84,7 +84,7 @@ flowchart LR
 | 求购与失物 | [`demand_matching.py`](demand_matching.py)、[`demand_radar.py`](demand_radar.py)、[`lost_found_matching.py`](lost_found_matching.py) | 求购响应、需求机会和失物招领线索匹配 |
 | 订单与交付 | [`order_workflow.py`](order_workflow.py)、[`meeting_scheduling.py`](meeting_scheduling.py)、[`delivery_handshake.py`](delivery_handshake.py)、[`return_handshake.py`](return_handshake.py) | 预约、改期、签到、交付确认、借用归还与争议 |
 | 通知与摘要 | [`notifications.py`](notifications.py)、[`notification_kind_coverage.py`](notification_kind_coverage.py)、[`*_digest.py`](.) | 通知中心、偏好、免打扰、延后和周期摘要 |
-| 治理与安全 | [`report_priority.py`](report_priority.py)、[`governance_sla.py`](governance_sla.py)、[`dispute_resolution_quality.py`](dispute_resolution_quality.py) | 举报分级、处理时限、交付异常和争议结果 |
+| 治理与安全 | [`report_priority.py`](report_priority.py)、[`governance_sla.py`](governance_sla.py)、[`dispute_resolution_quality.py`](dispute_resolution_quality.py) | 举报优先级与分页、争议/交付异常处理时限和治理结果 |
 | 运营与数据质量 | [`analytics.py`](analytics.py)、[`dashboard_build_performance.py`](dashboard_build_performance.py)、[`task_runs.py`](task_runs.py) | 看板、导出、任务台账、趋势与样本质量 |
 
 完整模块与测试索引见[模块地图](../docs/module-map.md)。功能口径、指标分母和边缘情况以[功能手册](../docs/feature-handbook.md)为准。
@@ -106,6 +106,8 @@ flowchart LR
 | `/listings/saved-searches/` | 关注的搜索，支持每页 8 条、当前页命中统计和操作后回跳 |
 | `/listings/notifications/` | 通知中心 |
 | `/listings/notifications/activity/` | 通知与私信汇合的站内动态 |
+| `/listings/reports/` | 商品举报审核队列，每页 10 条并按可解释优先级排序 |
+| `/listings/disputes/` | 交易争议处理队列，每页 12 条并支持状态筛选 |
 | `/listings/operations/` | 运营看板，仅管理员可用 |
 | `/listings/governance/` | 治理工作台，仅管理员可用 |
 
