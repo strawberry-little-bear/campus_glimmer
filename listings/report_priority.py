@@ -9,7 +9,11 @@ read-only priority from facts a reviewer can check, and never writes it back.
 
 from collections import Counter
 
-from django.db.models import Count
+from django.core.paginator import Paginator
+from django.db.models import (
+    BooleanField, Case, Count, IntegerField, OuterRef, Q, Subquery, Value, When,
+)
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from .models import Report, ReportOutcomeFeedback
@@ -90,16 +94,128 @@ def open_report_counts():
 
 def build_report_priority_for_report(report, *, open_counts=None, now=None):
     now = now or timezone.now()
-    counts = open_counts if open_counts is not None else open_report_counts()
     is_open = report.status in OPEN_REPORT_STATUSES
+    if open_counts is not None:
+        open_count = open_counts.get(report.item_id, 1 if is_open else 0)
+    else:
+        open_count = getattr(report, 'open_report_count', None)
+        if open_count is None:
+            open_count = open_report_counts().get(report.item_id, 1 if is_open else 0)
     return build_report_priority(
         reason=report.reason,
         item_status=report.item.status,
         item_expires_at=report.item.expires_at,
-        open_report_count=counts.get(report.item_id, 1 if is_open else 0),
+        open_report_count=open_count,
         is_open=is_open,
         now=now,
     )
+
+
+def rank_report_queryset(queryset, *, now=None):
+    """Add the queue's explainable ordering fields in the database.
+
+    The annotations deliberately mirror ``build_report_priority``. Keeping the
+    sort in SQL means a paginated queue never has to materialize the whole
+    backlog just to find the first ten rows.
+    """
+    now = now or timezone.now()
+    open_count = (
+        Report.objects.filter(
+            item_id=OuterRef('item_id'),
+            status__in=OPEN_REPORT_STATUSES,
+        )
+        .order_by()
+        .values('item_id')
+        .annotate(total=Count('id'))
+        .values('total')
+    )
+    ranked = queryset.annotate(
+        open_report_count=Coalesce(
+            Subquery(open_count, output_field=IntegerField()),
+            Value(0),
+            output_field=IntegerField(),
+        ),
+        item_is_exposed=Case(
+            When(
+                Q(item__status='available') & (
+                    Q(item__expires_at__isnull=True)
+                    | Q(item__expires_at__gt=now)
+                ),
+                then=Value(True),
+            ),
+            default=Value(False),
+            output_field=BooleanField(),
+        ),
+    ).annotate(
+        report_open_rank=Case(
+            When(status__in=OPEN_REPORT_STATUSES, then=Value(0)),
+            default=Value(1),
+            output_field=IntegerField(),
+        ),
+        report_priority_rank=Case(
+            When(Q(item_is_exposed=True, reason='scam'), then=Value(0)),
+            When(Q(reason='scam'), then=Value(1)),
+            When(Q(item_is_exposed=True, reason='inappropriate'), then=Value(1)),
+            When(
+                Q(status__in=OPEN_REPORT_STATUSES, open_report_count__gte=2),
+                then=Value(1),
+            ),
+            default=Value(2),
+            output_field=IntegerField(),
+        ),
+    )
+    return ranked.order_by(
+        'report_open_rank', 'report_priority_rank', '-created_at', '-pk',
+    )
+
+
+def report_priority_summary(*, now=None):
+    """Count the complete open backlog without loading individual reports."""
+    ranked = rank_report_queryset(
+        Report.objects.filter(status__in=OPEN_REPORT_STATUSES), now=now,
+    ).order_by()
+    totals = ranked.values('report_priority_rank').annotate(total=Count('pk'))
+    by_rank = {row['report_priority_rank']: row['total'] for row in totals}
+    return {
+        'priority_counts': {
+            key: by_rank.get(rank, 0) for key, rank in PRIORITY_ORDER.items()
+        },
+        'open_total': sum(by_rank.values()),
+        'priority_labels': PRIORITY_LABELS,
+    }
+
+
+def build_report_rows(reports, *, now=None):
+    """Decorate just the already-paginated reports for the template."""
+    now = now or timezone.now()
+    rows = []
+    for report in reports:
+        priority = build_report_priority_for_report(report, now=now)
+        feedback = getattr(report, 'feedback', None)
+        rows.append({
+            'report': report,
+            **priority,
+            'outcome_feedback': feedback.choice if feedback else None,
+            'outcome_feedback_label': (
+                OUTCOME_FEEDBACK_LABELS.get(feedback.choice) if feedback else None
+            ),
+        })
+    return rows
+
+
+def build_report_page(queryset, *, page_number, per_page=10, now=None):
+    """Return a database-sorted page plus whole-backlog priority totals."""
+    now = now or timezone.now()
+    page_obj = Paginator(
+        rank_report_queryset(queryset, now=now),
+        per_page,
+    ).get_page(page_number)
+    summary = report_priority_summary(now=now)
+    return {
+        'page_obj': page_obj,
+        'rows': build_report_rows(page_obj.object_list, now=now),
+        **summary,
+    }
 
 
 def build_report_queue(queryset, *, now=None, summary_queryset=None):

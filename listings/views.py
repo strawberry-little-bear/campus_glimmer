@@ -74,7 +74,9 @@ from .notification_preference_usage import build_notification_preference_usage
 from .notification_preference_bypass_diagnosis import build_notification_preference_bypass_diagnosis
 from .notification_quiet_hours_shape import build_notification_quiet_hours_shape
 from .notification_aggregation_quality import build_notification_aggregation_quality
-from .report_priority import build_report_priority_for_report, build_report_queue
+from .report_priority import (
+    build_report_page, build_report_priority_for_report, build_report_queue,
+)
 from .report_resolution_quality import build_report_resolution_quality
 from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
@@ -2046,24 +2048,32 @@ def report_list(request):
         raise PermissionDenied
     all_reports = Report.objects.select_related(
         'item__seller', 'item__category', 'item__location', 'reporter', 'reviewer',
+        'feedback',
     )
     status_filter = request.GET.get('status', 'all')
     if status_filter in dict(Report.STATUS_CHOICES):
         reports = all_reports.filter(status=status_filter)
+        report_filter_query = urlencode({'status': status_filter})
     else:
         status_filter = 'all'
         reports = all_reports
-    priority_queue = build_report_queue(
-        reports, summary_queryset=all_reports,
+        report_filter_query = ''
+    report_page = build_report_page(
+        reports,
+        page_number=request.GET.get('page'),
     )
+    page_obj = report_page['page_obj']
     return render(request, 'listings/reports.html', {
-        'report_rows': priority_queue['rows'],
-        'priority_counts': priority_queue['priority_counts'],
-        'priority_labels': priority_queue['priority_labels'],
-        'open_priority_total': priority_queue['open_total'],
+        'report_rows': report_page['rows'],
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
+        'report_filter_query': report_filter_query,
+        'priority_counts': report_page['priority_counts'],
+        'priority_labels': report_page['priority_labels'],
+        'open_priority_total': report_page['open_total'],
         'status_filter': status_filter,
         'report_statuses': Report.STATUS_CHOICES,
-        'pending_report_count': Report.objects.filter(status__in={'pending', 'reviewing'}).count(),
+        'pending_report_count': report_page['open_total'],
         'title': '商品举报审核',
     })
 
@@ -2242,12 +2252,36 @@ def review_meeting_incident(request, incident_id):
 def dispute_list(request):
     if not request.user.is_staff:
         raise PermissionDenied
-    disputes = OrderDispute.objects.select_related(
+    all_disputes = OrderDispute.objects.select_related(
         'order__item', 'order__buyer', 'order__seller', 'opened_by', 'reviewer',
     )
+    status_filter = request.GET.get('status', 'all')
+    if status_filter in dict(OrderDispute.STATUS_CHOICES):
+        disputes = all_disputes.filter(status=status_filter)
+        dispute_filter_query = urlencode({'status': status_filter})
+    else:
+        status_filter = 'all'
+        disputes = all_disputes
+        dispute_filter_query = ''
+    disputes = disputes.annotate(
+        dispute_queue_rank=Case(
+            When(status='open', then=Value(0)),
+            When(status='reviewing', then=Value(1)),
+            default=Value(2),
+            output_field=IntegerField(),
+        ),
+    ).order_by('dispute_queue_rank', '-created_at', '-pk')
+    page_obj = Paginator(disputes, 12).get_page(request.GET.get('page'))
     return render(request, 'listings/disputes.html', {
-        'disputes': disputes,
-        'pending_dispute_count': disputes.filter(status__in={'open', 'reviewing'}).count(),
+        'disputes': page_obj.object_list,
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
+        'dispute_filter_query': dispute_filter_query,
+        'status_filter': status_filter,
+        'dispute_statuses': OrderDispute.STATUS_CHOICES,
+        'pending_dispute_count': all_disputes.filter(
+            status__in={'open', 'reviewing'},
+        ).count(),
         'title': '交易争议处理',
     })
 
