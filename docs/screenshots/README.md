@@ -4,7 +4,7 @@
 
 # screenshots · 系统界面预览
 
-**十三张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、治理和运营六类入口。**
+**十四张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、治理和运营六类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
@@ -64,6 +64,12 @@
 </tr>
 <tr>
 <td width="100%" valign="top">
+<a href="demands.png"><img src="demands.png" alt="求购广场，展示需求结果数、已启用条件、关键词和校园地点筛选与求购卡片" width="100%" /></a>
+<p align="center"><strong>求购广场 · 需求筛选工作台</strong><br /><sub>结果数与已启用条件可读，关键词、分类和地点支持逐项移除 · 本地演示数据</sub></p>
+</td>
+</tr>
+<tr>
+<td width="100%" valign="top">
 <a href="order-detail.png"><img src="order-detail.png" alt="订单详情交易工作台，展示订单状态、四步交易进度、下一步操作、交付安排和状态记录" width="100%" /></a>
 <p align="center"><strong>订单详情 · 交易工作台</strong><br /><sub>状态、语义化进度、下一步动作与交付安排形成同一条交易主线</sub></p>
 </td>
@@ -97,6 +103,7 @@
 | --- | --- | --- |
 | [`home.png`](home.png) | `1424 × 969` | 首页；品牌主视觉、导航和商品概览 |
 | [`discover.png`](discover.png) | `1424 × 969` | 发现页；关键词搜索、分类、校园地点、商品卡片和排序 |
+| [`demands.png`](demands.png) | `1424 × 969` | 求购广场；结果数、已启用条件、关键词、分类、地点、排序与求购卡片 |
 | [`login.png`](login.png) | `1424 × 969` | 登录页；品牌信息、认证表单与全局导航 |
 | [`item-detail.png`](item-detail.png) | `1424 × 969` | 详情页；图片、状态、价格、地点和价格参考 |
 | [`order-detail.png`](order-detail.png) | `1424 × 969` | 订单详情；交易状态、四步进度、下一步动作和交付安排 |

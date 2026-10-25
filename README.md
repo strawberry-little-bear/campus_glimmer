@@ -55,6 +55,12 @@
 </table>
 
 <p align="center">
+  <a href="docs/screenshots/demands.png"><img src="docs/screenshots/demands.png" alt="求购广场，展示需求结果数、已启用条件、关键词和校园地点筛选与求购卡片" width="100%" /></a>
+</p>
+
+<p align="center"><strong>求购广场 · 需求筛选工作台</strong><br /><sub>结果数与已启用条件可读，关键词、分类和地点支持逐项移除 · 本地演示数据</sub></p>
+
+<p align="center">
   <a href="docs/screenshots/order-detail.png"><img src="docs/screenshots/order-detail.png" alt="订单详情交易工作台，展示订单状态、四步交易进度、下一步操作、交付安排和状态记录" width="100%" /></a>
 </p>
 
