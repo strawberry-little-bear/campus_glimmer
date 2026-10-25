@@ -64,7 +64,7 @@
   <a href="docs/screenshots/my-items.png"><img src="docs/screenshots/my-items.png" alt="我的商品卖家工作台，展示生命周期诊断、批量专题与续期工具、状态页签和商品管理表格" width="100%" /></a>
 </p>
 
-<p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、专题与续期批量工具、状态页签和逐件操作集中管理 · 本地演示数据</sub></p>
+<p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、五类状态页签独立分页、专题与续期批量工具和逐件操作集中管理 · 本地演示数据</sub></p>
 
 <p align="center">
   <a href="docs/screenshots/my-orders.png"><img src="docs/screenshots/my-orders.png" alt="我的交易工作台，展示买入卖出计数、状态筛选、第二页订单、结果区间和分页控件" width="100%" /></a>

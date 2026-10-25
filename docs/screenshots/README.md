@@ -71,7 +71,7 @@
 <tr>
 <td width="100%" valign="top">
 <a href="my-items.png"><img src="my-items.png" alt="我的商品卖家工作台，展示生命周期诊断、批量专题与续期工具、状态页签和商品管理表格" width="100%" /></a>
-<p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、专题与续期批量工具、状态页签和逐件操作集中管理 · 本地演示数据</sub></p>
+<p align="center"><strong>我的商品 · 卖家工作台</strong><br /><sub>生命周期诊断、五类状态页签独立分页、专题与续期批量工具和逐件操作集中管理 · 本地演示数据</sub></p>
 </td>
 </tr>
 <tr>

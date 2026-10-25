@@ -322,6 +322,10 @@ campus_glimmer/
 
 - **`test_lifecycle_diagnostics.py`**：商品生命周期等级、刷新限流和卖家面板测试
 
+- **`test_my_items_workspace.py`**：卖家工作台五类服务端页签、状态隔离、全量计数、交易方式展示与空态测试
+
+- **`test_my_items_pagination.py`**：每页 12 件、非法与越界页码、页签分页保留、批量工具可见性、原页回跳与开放重定向防护
+
 - **`test_lifecycle_reminder_effect.py`**：提醒之后的触达、阅读与行动对照，含事件优先、混合来源、通知删除后事件保留、分类分层、本周期提醒负担、样本门槛、隐私边界与看板导出
 
 - **`test_lifecycle_reminder_action_trend.py`**：跨周期对比的窗口切分、样本门槛、`both` 桶不判方向、无提醒不报零
@@ -524,6 +528,7 @@ campus_glimmer/
 - **`graduation-bulk-listing-template-validation-design.md`**：批量发布 XLSX 模板输入约束，行内范围提示、空行容忍与服务端最终校验分层
 - **`graduation-bulk-listing-import-error-summary-design.md`**：批量发布导入错误摘要，重复问题分组、完整清单保留与只做阅读层的边界
 - **`graduation-bulk-listing-renewal-design.md`**：毕业季批量续期，统一新截止时间、可续期状态边界、整批失败与不触碰刷新额度
+- **`my-items-workspace-pagination-design.md`**：卖家工作台五类状态页签、服务端分页、全量统计与安全原页回跳
 - **`semester-bulk-listing-template-design.md`**：学期批量发布模板，共同设置私有保存、相对展示天数重算与不保存商品行边界
 
 - **`dispute-evidence-shape-design.md`**：证据文件的形状，attachment.name 与 size 第一次被数字读到
