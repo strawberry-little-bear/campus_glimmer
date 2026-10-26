@@ -9469,6 +9469,62 @@ def operations_dashboard_export(request):
                 row['intent_rate'],
                 row['intent_user_count'],
             ])
+    comparison = campaigns['comparison']
+    comparison_summary = comparison['summary']
+    writer.writerow([])
+    writer.writerow(['跨专题转化对比'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '已结束专题', comparison_summary['closed_campaign_count'],
+        '浏览样本达标', comparison_summary['viewer_sample_campaign_count'],
+        '预约样本达标', comparison_summary['order_sample_campaign_count'],
+        '浏览样本门槛', comparison['min_viewers'],
+        '预约样本门槛', comparison['min_orders'],
+    ])
+    writer.writerow([])
+    writer.writerow([
+        '专题', '结束时间', '浏览用户', '预约用户', '完成交易用户',
+        '浏览转预约（%）', '预约转完成（%）', '浏览转完成（%）',
+        '样本状态', '样本说明', '浏览转预约位次',
+        '预约转完成位次', '完整路径位次',
+    ])
+    if not comparison['rows']:
+        writer.writerow(['当前统计周期还没有已结束的校园专题。'])
+    else:
+        def rank_label(row, rank_key, tied_key):
+            rank = row[rank_key]
+            if rank is None:
+                return '不排名'
+            return f"并列第 {rank}" if row[tied_key] else f"第 {rank}"
+
+        for row in comparison['rows']:
+            writer.writerow([
+                row['title'],
+                timezone.localtime(row['ends_at']).strftime('%Y-%m-%d %H:%M'),
+                row['funnel_viewers'],
+                row['funnel_order_users'],
+                row['funnel_completed_users'],
+                ('样本不足' if row['viewer_to_order_rate'] is None
+                 else row['viewer_to_order_rate']),
+                ('样本不足' if row['order_to_complete_rate'] is None
+                 else row['order_to_complete_rate']),
+                ('样本不足' if row['viewer_to_complete_rate'] is None
+                 else row['viewer_to_complete_rate']),
+                row['status_label'],
+                row['status_note'],
+                rank_label(row, 'viewer_rate_rank', 'viewer_rate_rank_tied'),
+                rank_label(row, 'order_rate_rank', 'order_rate_rank_tied'),
+                rank_label(row, 'path_rank', 'path_rank_tied'),
+            ])
+    if comparison['is_truncated']:
+        writer.writerow([
+            '—',
+            f"对比 CSV 最多展示 {len(comparison['rows'])} 个已结束专题；"
+            '其余专题保留在统计结果中，未在本次导出展开',
+        ])
+    writer.writerow([])
+    writer.writerow(['跨专题结论'])
+    writer.writerow([comparison['conclusion']])
     writer.writerow([])
     writer.writerow(['需要关注的专题', '判断', '说明'])
     if campaigns['attention_rows']:
@@ -9501,6 +9557,11 @@ def operations_dashboard_export(request):
         '也不代表专题本身的质量：运营人员仍需结合商品质量和活动内容判断。',
     ])
     writer.writerow([
+        '跨专题对比只纳入统计周期内已结束的专题；浏览或预约样本低于门槛时'
+        '只报数字、不排名，也不输出跨专题方向。同分专题并列，排序仅作活动'
+        '复盘参考，不据此判断专题质量或自动调整投放。',
+    ])
+    writer.writerow([
         '报名表示用户关注专题，不会预约商品、占用库存或创建订单；'
         '当前活跃报名按尚未退出的参与区间计数，周期新增报名按加入时间归期。',
     ])
@@ -9514,6 +9575,11 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([
         '此处只报告，不调整专题的投放位置、不自动结束或续期任何专题。',
+    ])
+    writer.writerow([
+        '跨专题对比只纳入当前统计周期内已经结束的专题，进行中专题不参与排名；'
+        '浏览用户至少 12 人时才显示浏览转预约和完整路径率，预约用户至少 3 人时'
+        '才显示预约完成率。样本不足只报数字，同分专题并列，排序不代表专题质量。',
     ])
 
     phase_review = dashboard['campaign_phase_review']

@@ -94,8 +94,39 @@
         </tr>
         {% endfor %}
     </tbody></table></div>
-    {% else %}<div class="empty-inline mt-3">当前统计周期还没有专题行为数据。</div>{% endif %}
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i><strong>漏斗口径：</strong>浏览用户按报告窗口内最近一次浏览去重；预约用户是浏览用户中在同一窗口创建预约的去重买家；完成交易用户再要求其对应订单当前状态为 <code>completed</code>。收藏与报名是意向分支，不强行拼成连续漏斗。顶部漏斗汇总会把各专题用户数相加，同一用户参与多个专题会被重复计数，因此只适合看整体规模，不能当作全站去重用户数。<br><strong>目标口径：</strong>目标值实时从业务表重算，不保存快照；目标窗口独立于看板周期。节奏偏差等于完成率减去已流逝时间比例，低于 -10 个百分点标记为需要推进。<br><strong>报名与摘要：</strong>报名只表示用户关注专题，摘要订阅则表示用户额外同意接收上新提醒；两者都不锁定商品、不创建订单，也不进入预约率或成交率的分子、分母。合并摘要跨专题时，各专题行会各计一次同一条通知，顶部汇总按通知去重；摘要已读只代表触达被看到，不代表购买意向。</div>
+    {% else %}
+    <div class="empty-inline mt-3">当前统计周期还没有专题行为数据。</div>
+    {% endif %}
+    <div class="campaign-subheading mt-4">
+        <div><h3>跨专题转化对比</h3><p>只纳入当前统计周期内已经结束的专题；进行中专题不与完整周期混排。</p></div>
+        <span>至少 2 个专题达到同段样本门槛才给出参考位次</span>
+    </div>
+    <div class="campaign-comparison-summary">
+        <div><span>已结束专题</span><strong>{{ campaign_analytics.comparison.summary.closed_campaign_count }}</strong><small>当前统计周期内</small></div>
+        <div><span>浏览样本达标</span><strong>{{ campaign_analytics.comparison.summary.viewer_sample_campaign_count }}</strong><small>至少 {{ campaign_analytics.comparison.min_viewers }} 位浏览用户</small></div>
+        <div><span>预约样本达标</span><strong>{{ campaign_analytics.comparison.summary.order_sample_campaign_count }}</strong><small>至少 {{ campaign_analytics.comparison.min_orders }} 位预约用户</small></div>
+        <div><span>对比状态</span><strong>{% if campaign_analytics.comparison.summary.has_viewer_comparison %}可做阶段比较{% else %}只报数字{% endif %}</strong><small>不评价专题质量</small></div>
+    </div>
+    {% if campaign_analytics.comparison.rows %}
+    <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-comparison-table"><caption class="visually-hidden">校园专题表现 · 跨专题转化对比</caption><thead><tr><th>专题 / 结束</th><th>浏览用户</th><th>预约用户</th><th>完成交易用户</th><th>浏览 → 预约</th><th>预约 → 完成</th><th>浏览 → 完成</th><th>样本</th><th>阶段参考位次</th></tr></thead><tbody>
+        {% for row in campaign_analytics.comparison.rows %}
+        <tr>
+            <td><strong>{{ row.title }}</strong><small class="d-block text-muted">{{ row.ends_at|date:'Y-m-d H:i' }} 结束</small></td>
+            <td>{{ row.funnel_viewers }}<small class="d-block text-muted">浏览去重用户</small></td>
+            <td>{{ row.funnel_order_users }}<small class="d-block text-muted">浏览后预约</small></td>
+            <td>{{ row.funnel_completed_users }}<small class="d-block text-muted">预约后完成</small></td>
+            <td>{% if row.viewer_to_order_rate is not None %}<strong>{{ row.viewer_to_order_rate }}%</strong>{% else %}<span class="campaign-comparison-muted">样本不足</span>{% endif %}</td>
+            <td>{% if row.order_to_complete_rate is not None %}<strong>{{ row.order_to_complete_rate }}%</strong>{% else %}<span class="campaign-comparison-muted">样本不足</span>{% endif %}</td>
+            <td>{% if row.viewer_to_complete_rate is not None %}<strong>{{ row.viewer_to_complete_rate }}%</strong>{% else %}<span class="campaign-comparison-muted">样本不足</span>{% endif %}</td>
+            <td><span class="campaign-performance campaign-performance-{{ row.status_tone }}">{{ row.status_label }}</span><small class="d-block text-muted mt-1">{{ row.status_note }}</small></td>
+            <td><div class="campaign-comparison-ranks"><span>浏览→预约：{% if row.viewer_rate_rank %}{% if row.viewer_rate_rank_tied %}并列第 {{ row.viewer_rate_rank }}{% else %}第 {{ row.viewer_rate_rank }}{% endif %}{% else %}不排名{% endif %}</span><span>预约→完成：{% if row.order_rate_rank %}{% if row.order_rate_rank_tied %}并列第 {{ row.order_rate_rank }}{% else %}第 {{ row.order_rate_rank }}{% endif %}{% else %}不排名{% endif %}</span><span>完整路径：{% if row.path_rank %}{% if row.path_rank_tied %}并列第 {{ row.path_rank }}{% else %}第 {{ row.path_rank }}{% endif %}{% else %}不排名{% endif %}</span></div></td>
+        </tr>
+        {% endfor %}
+    </tbody></table></div>
+    {% if campaign_analytics.comparison.is_truncated %}<div class="empty-inline mt-2">对比表最多展示 {{ campaign_analytics.comparison.rows|length }} 个已结束专题；其余专题保留在统计结果中，未在本次页面展开。</div>{% endif %}
+    {% else %}<div class="empty-inline mt-3">当前统计周期还没有已结束的专题；进行中和未设置结束时间的专题不会进入跨专题对比。</div>{% endif %}
+    <div class="campaign-phase-cross-summary mt-3"><i class="bi bi-bar-chart-line me-1"></i>{{ campaign_analytics.comparison.conclusion }}</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i><strong>漏斗口径：</strong>浏览用户按报告窗口内最近一次浏览去重；预约用户是浏览用户中在同一窗口创建预约的去重买家；完成交易用户再要求其对应订单当前状态为 <code>completed</code>。收藏与报名是意向分支，不强行拼成连续漏斗。顶部漏斗汇总会把各专题用户数相加，同一用户参与多个专题会被重复计数，因此只适合看整体规模，不能当作全站去重用户数。<br><strong>目标口径：</strong>目标值实时从业务表重算，不保存快照；目标窗口独立于看板周期。节奏偏差等于完成率减去已流逝时间比例，低于 -10 个百分点标记为需要推进。<br><strong>报名与摘要：</strong>报名只表示用户关注专题，摘要订阅则表示用户额外同意接收上新提醒；两者都不锁定商品、不创建订单，也不进入预约率或成交率的分子、分母。合并摘要跨专题时，各专题行会各计一次同一条通知，顶部汇总按通知去重；摘要已读只代表触达被看到，不代表购买意向。<br><strong>跨专题对比：</strong>浏览用户达到 {{ campaign_analytics.comparison.min_viewers }} 人、预约用户达到 {{ campaign_analytics.comparison.min_orders }} 人时才显示对应阶段的率值；不足门槛只报数字，不排名也不判断方向。同分专题并列，排序只作活动复盘参考。</div>
 </section>
 <section class="content-card ops-panel mb-4 campaign-phase-review-panel">
     <div class="ops-panel-heading">

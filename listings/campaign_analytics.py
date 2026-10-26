@@ -10,10 +10,202 @@ from .models import (
 
 
 GOAL_ROW_LIMIT = 12
+COMPARISON_ROW_LIMIT = 8
+MIN_COMPARISON_VIEWERS = 12
+MIN_COMPARISON_ORDERS = 3
 
 
 def _rate(numerator, denominator):
     return round(numerator / denominator * 100, 1) if denominator else 0
+
+
+def _assign_comparison_rank(rows, *, rate_key, sample_key, rank_key):
+    """Rank by the one-decimal rate shown in the page and CSV.
+
+    Ranking on a hidden exact fraction would let two campaigns that both render
+    as 25.0% receive different positions, which users cannot reproduce from the
+    report. The visible rate is therefore the comparison contract.
+    """
+    for row in rows:
+        row[rank_key] = None
+        row[f'{rank_key}_tied'] = False
+
+    eligible = [row for row in rows if row[sample_key]]
+    if len(eligible) < 2:
+        return
+
+    eligible.sort(key=lambda row: (-row[rate_key], row['title']))
+    current_rate = None
+    current_rank = 0
+    for position, row in enumerate(eligible, start=1):
+        rate = row[rate_key]
+        if rate != current_rate:
+            current_rank = position
+            current_rate = rate
+        row[rank_key] = current_rank
+
+    rank_counts = {}
+    for row in eligible:
+        rank = row[rank_key]
+        rank_counts[rank] = rank_counts.get(rank, 0) + 1
+    for row in eligible:
+        row[f'{rank_key}_tied'] = rank_counts[row[rank_key]] > 1
+
+
+def _comparison_range(rows, rate_key):
+    values = [row[rate_key] for row in rows if row[rate_key] is not None]
+    if not values:
+        return None, None
+    return min(values), max(values)
+
+
+def _build_campaign_comparison(rows, *, now):
+    """Compare strict funnel rates across campaign rows already closed by now.
+
+    A campaign only enters a stage comparison when that stage's denominator
+    passes the minimum sample. Rates below the threshold are hidden rather than
+    presented as a direction. The end-to-end rate uses the viewing cohort as its
+    denominator, so a sufficient viewing sample makes it readable even when the
+    order-stage sample is still thin.
+    """
+    comparison_rows = []
+    for source in rows:
+        if source['ends_at'] is None or source['ends_at'] > now:
+            continue
+
+        viewers = source['funnel_viewers']
+        ordered_viewers = source['funnel_order_users']
+        completed_viewers = source['funnel_completed_users']
+        viewer_sample_ok = viewers >= MIN_COMPARISON_VIEWERS
+        order_sample_ok = ordered_viewers >= MIN_COMPARISON_ORDERS
+
+        if viewer_sample_ok and order_sample_ok:
+            status_label = '两段可读'
+            status_tone = 'success'
+            status_note = '浏览和预约样本均达标'
+        elif viewer_sample_ok:
+            status_label = '预约样本不足'
+            status_tone = 'muted'
+            status_note = f'预约用户不足 {MIN_COMPARISON_ORDERS}，不看预约完成率'
+        elif order_sample_ok:
+            status_label = '浏览样本不足'
+            status_tone = 'muted'
+            status_note = f'浏览用户不足 {MIN_COMPARISON_VIEWERS}，不看前置转化率'
+        else:
+            status_label = '样本不足'
+            status_tone = 'muted'
+            status_note = (
+                f'浏览不足 {MIN_COMPARISON_VIEWERS} 且预约不足 '
+                f'{MIN_COMPARISON_ORDERS}，只报数字'
+            )
+
+        comparison_rows.append({
+            'id': source['id'],
+            'title': source['title'],
+            'ends_at': source['ends_at'],
+            'funnel_viewers': viewers,
+            'funnel_order_users': ordered_viewers,
+            'funnel_completed_users': completed_viewers,
+            'viewer_to_order_rate': (
+                source['viewer_to_order_user_rate'] if viewer_sample_ok else None
+            ),
+            'order_to_complete_rate': (
+                source['order_to_complete_user_rate'] if order_sample_ok else None
+            ),
+            'viewer_to_complete_rate': (
+                _rate(completed_viewers, viewers) if viewer_sample_ok else None
+            ),
+            'viewer_sample_ok': viewer_sample_ok,
+            'order_sample_ok': order_sample_ok,
+            'status_label': status_label,
+            'status_tone': status_tone,
+            'status_note': status_note,
+        })
+
+    _assign_comparison_rank(
+        comparison_rows,
+        rate_key='viewer_to_order_rate',
+        sample_key='viewer_sample_ok',
+        rank_key='viewer_rate_rank',
+    )
+    _assign_comparison_rank(
+        comparison_rows,
+        rate_key='order_to_complete_rate',
+        sample_key='order_sample_ok',
+        rank_key='order_rate_rank',
+    )
+    _assign_comparison_rank(
+        comparison_rows,
+        rate_key='viewer_to_complete_rate',
+        sample_key='viewer_sample_ok',
+        rank_key='path_rank',
+    )
+
+    comparison_rows.sort(key=lambda row: (
+        row['path_rank'] is None,
+        row['path_rank'] if row['path_rank'] is not None else 999,
+        -row['funnel_viewers'],
+        row['title'],
+    ))
+
+    viewer_sample_rows = [
+        row for row in comparison_rows if row['viewer_sample_ok']
+    ]
+    order_sample_rows = [
+        row for row in comparison_rows if row['order_sample_ok']
+    ]
+    view_to_order_min, view_to_order_max = _comparison_range(
+        viewer_sample_rows, 'viewer_to_order_rate',
+    )
+    path_min, path_max = _comparison_range(
+        viewer_sample_rows, 'viewer_to_complete_rate',
+    )
+    complete_min, complete_max = _comparison_range(
+        order_sample_rows, 'order_to_complete_rate',
+    )
+
+    if not comparison_rows:
+        conclusion = (
+            '当前统计周期没有已结束的校园专题；进行中专题不参与跨专题对比。'
+        )
+    elif len(viewer_sample_rows) < 2:
+        conclusion = (
+            f'已结束专题 {len(comparison_rows)} 个，但浏览用户达到 '
+            f'{MIN_COMPARISON_VIEWERS} 人的不足 2 个；本期只报数字，'
+            '不输出跨专题方向。'
+        )
+    else:
+        if len(order_sample_rows) >= 2:
+            completion_sentence = (
+                f'预约→完成率范围 {complete_min}%—{complete_max}%。'
+            )
+        else:
+            completion_sentence = '预约样本达标的专题不足 2 个，不比较预约完成率。'
+        conclusion = (
+            f'已结束专题 {len(comparison_rows)} 个，其中 '
+            f'{len(viewer_sample_rows)} 个浏览样本达标、'
+            f'{len(order_sample_rows)} 个预约样本达标。'
+            f'浏览→预约率范围 {view_to_order_min}%—{view_to_order_max}%，'
+            f'浏览→完成率范围 {path_min}%—{path_max}%。'
+            f'{completion_sentence}'
+            '排序仅作活动复盘参考，不据此判断专题质量或自动调整投放。'
+        )
+
+    return {
+        'rows': comparison_rows[:COMPARISON_ROW_LIMIT],
+        'all_rows': comparison_rows,
+        'is_truncated': len(comparison_rows) > COMPARISON_ROW_LIMIT,
+        'min_viewers': MIN_COMPARISON_VIEWERS,
+        'min_orders': MIN_COMPARISON_ORDERS,
+        'summary': {
+            'closed_campaign_count': len(comparison_rows),
+            'viewer_sample_campaign_count': len(viewer_sample_rows),
+            'order_sample_campaign_count': len(order_sample_rows),
+            'has_viewer_comparison': len(viewer_sample_rows) >= 2,
+            'has_order_comparison': len(order_sample_rows) >= 2,
+        },
+        'conclusion': conclusion,
+    }
 
 
 def _campaign_period(campaign, start, end):
@@ -382,12 +574,14 @@ def build_campaign_analytics(days=30, *, now=None):
         is_read=True,
         read_at__isnull=False,
     ).count()
+    comparison = _build_campaign_comparison(rows, now=now)
     return {
         'rows': rows[:8],
         'attention_rows': attention_rows[:3],
         'goal_rows': goal_rows[:GOAL_ROW_LIMIT],
         'all_goal_rows': goal_rows,
         'goal_rows_truncated': len(goal_rows) > GOAL_ROW_LIMIT,
+        'comparison': comparison,
         'period_days': days,
         'summary': {
             'campaign_count': len(rows),

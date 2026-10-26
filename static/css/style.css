@@ -1592,7 +1592,16 @@ a { color: inherit; text-decoration: none; }
 .campaign-phase-review-table tr.campaign-phase-peak td { background: #f7fcf8; }
 .campaign-phase-review-table tr.campaign-phase-peak td:first-child { box-shadow: inset 3px 0 0 #75a97d; }
 .campaign-phase-cross-summary { padding: 12px 14px; border: 1px solid #dfece2; border-radius: 12px; color: #587562; background: #f7fbf7; font-size: .76rem; line-height: 1.65; }
-@media (max-width: 767px) { .campaign-funnel-grid { grid-template-columns: 1fr; }.campaign-subheading { align-items: flex-start; flex-direction: column; }.campaign-subheading > span { text-align: left; } }
+.campaign-comparison-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 12px; }
+.campaign-comparison-summary > div { display: flex; flex-direction: column; gap: 7px; min-height: 78px; padding: 12px 13px; border: 1px solid #e1ece4; border-radius: 13px; background: linear-gradient(145deg, #fbfdfb, #fff); }
+.campaign-comparison-summary span { color: var(--muted); font-size: .7rem; }
+.campaign-comparison-summary strong { color: #315946; font-size: 1.3rem; line-height: 1; }
+.campaign-comparison-summary small { color: var(--muted); font-size: .65rem; }
+.campaign-comparison-table td:first-child { min-width: 175px; }
+.campaign-comparison-table td { min-width: 90px; }
+.campaign-comparison-muted { color: var(--muted); font-size: .7rem; font-weight: 600; }
+.campaign-comparison-ranks { display: grid; gap: 3px; color: #5f7468; font-size: .68rem; white-space: nowrap; }
+@media (max-width: 767px) { .campaign-funnel-grid, .campaign-comparison-summary { grid-template-columns: 1fr; }.campaign-subheading { align-items: flex-start; flex-direction: column; }.campaign-subheading > span { text-align: left; } }
 @media (max-width: 575px) { .campaign-analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.campaign-analytics-summary > div { min-height: 72px; padding: 11px; }.campaign-analytics-panel .ops-table { min-width: 980px; }.campaign-phase-review-panel .ops-table { min-width: 980px; }.campaign-funnel-block { padding: 12px; } }
 
 
