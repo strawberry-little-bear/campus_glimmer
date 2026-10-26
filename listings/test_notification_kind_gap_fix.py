@@ -278,17 +278,25 @@ class MeetingIncidentExposureTests(TestCase):
         self.assertFalse(preference.meeting_incident)
 
     def test_the_summary_count_covers_the_newly_exposed_switch(self):
-        """偏好页那句「已开启 X / Y 类提醒」的 Y 要跟着表单走。
+        """偏好页那句「已开启 X / Y 类提醒」的 Y 只数真正的通知开关。
 
-        页面上数的是 ``len(form.fields)``，表单多一行，这句话就得多一个——
-        否则用户看到的分母和实际摆出来的开关数不一致。
+        表单还包含免打扰总闸和起止时间三个配置字段；它们不是可开关的通知类型，
+        不能进入分子或分母。新增通知开关时，这句话的分母仍要跟着表单走。
         """
         self.client.force_login(self.user)
         NotificationPreference.objects.get_or_create(user=self.user)
 
         response = self.client.get(reverse('notification_preferences'))
-        self.assertEqual(response.context['notification_kind_count'],
-                         len(NotificationPreferenceForm.Meta.fields))
+        notification_fields = [
+            field_name
+            for field_name in NotificationPreferenceForm.Meta.fields
+            if not field_name.startswith('quiet_hours_')
+        ]
+        self.assertIn('meeting_incident', notification_fields)
+        self.assertEqual(
+            response.context['notification_kind_count'],
+            len(notification_fields),
+        )
 
 
 class CoverageAlignmentTests(TestCase):
