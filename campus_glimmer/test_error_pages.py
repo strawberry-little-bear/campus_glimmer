@@ -17,7 +17,11 @@ class BrandedErrorPageTests(SimpleTestCase):
         self.assertEqual(response.status_code, status)
         html = response.content.decode('utf-8')
         self.assertIn('拾光校园', html)
-        self.assertIn('css/error-pages.css', html)
+        # 生产环境启用 Manifest 静态文件存储，文件名会带内容哈希。
+        self.assertRegex(
+            html,
+            r'css/error-pages(?:\.[0-9a-f]{12})?\.css',
+        )
         self.assertIn(f'error-code">{code}<', html)
         self.assertIn(heading, html)
         self.assertIn('href="/listings/"', html)
