@@ -397,7 +397,10 @@ class TemplateStylesheetContractTests(SimpleTestCase):
 
     TEMPLATES_DIR = PROJECT_ROOT / 'templates'
     VENDOR_DIR = PROJECT_ROOT / 'static' / 'vendor'
-    STYLESHEET = PROJECT_ROOT / 'static' / 'css' / 'style.css'
+    STYLESHEETS = (
+        PROJECT_ROOT / 'static' / 'css' / 'style.css',
+        PROJECT_ROOT / 'static' / 'css' / 'error-pages.css',
+    )
 
     # 这些类名不承担样式，是行为钩子：JS 或测试按它们定位元素，
     # 删掉不会改变观感，却会直接搞坏功能。
@@ -432,9 +435,11 @@ class TemplateStylesheetContractTests(SimpleTestCase):
             cls.vendored.update(
                 re.findall(r'\.([a-zA-Z][\w-]*)', css.read_text(encoding='utf-8'))
             )
-        cls.ours = set(
-            re.findall(r'\.([a-zA-Z][\w-]*)', cls.STYLESHEET.read_text(encoding='utf-8'))
-        )
+        cls.ours = set()
+        for stylesheet in cls.STYLESHEETS:
+            cls.ours.update(
+                re.findall(r'\.([a-zA-Z][\w-]*)', stylesheet.read_text(encoding='utf-8'))
+            )
         cls.allowed = cls.BEHAVIOUR_HOOKS | cls.TEXT_ANCHORS | cls.DOCUMENTED_NAMES
 
     def test_vendored_stylesheets_are_readable(self):
@@ -463,7 +468,7 @@ class TemplateStylesheetContractTests(SimpleTestCase):
 
         self.assertEqual(
             missing, [],
-            '以下类名在模板里用了，但 style.css 没有对应规则（不会有任何效果）：\n'
+            '以下类名在模板里用了，但已加载的样式表没有对应规则（不会有任何效果）：\n'
             + '\n'.join('  ' + item for item in sorted(missing)),
         )
 

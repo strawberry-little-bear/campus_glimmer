@@ -1,0 +1,54 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <meta name="description" content="拾光校园页面提示">
+    <title>{% block title %}页面暂时无法访问 · 拾光校园{% endblock %}</title>
+    <link href="{% static 'vendor/bootstrap-icons.min.css' %}" rel="stylesheet">
+    <link href="{% static 'css/error-pages.css' %}" rel="stylesheet">
+</head>
+<body>
+    <a class="error-skip-link" href="#main-content">跳到主要内容</a>
+    <header class="error-header">
+        <a class="error-brand" href="/" aria-label="拾光校园首页">
+            <span class="error-brand-mark" aria-hidden="true"><i class="bi bi-stars"></i></span>
+            <span><strong>拾光校园</strong><small>Campus Glimmer</small></span>
+        </a>
+        <span class="error-header-note"><i class="bi bi-shield-check" aria-hidden="true"></i>安全、清晰地说明问题</span>
+    </header>
+
+    <main class="error-shell" id="main-content" tabindex="-1">
+        <section class="error-card" aria-labelledby="error-title">
+            <div class="error-visual" aria-hidden="true">
+                <span class="error-code">{% block error_code %}注意{% endblock %}</span>
+                <span class="error-icon"><i class="bi {% block error_icon %}bi-exclamation-circle{% endblock %}"></i></span>
+                <span class="error-orbit error-orbit-one"></span>
+                <span class="error-orbit error-orbit-two"></span>
+            </div>
+            <div class="error-copy">
+                <span class="error-kicker">{% block error_kicker %}页面提示{% endblock %}</span>
+                <h1 id="error-title">{% block error_heading %}这里暂时不能访问{% endblock %}</h1>
+                <p class="error-lead">{% block error_lead %}请求没有按预期完成，请按下方建议继续。{% endblock %}</p>
+                {% block error_detail %}{% endblock %}
+                <div class="error-actions">
+                    <a class="error-button error-button-primary" href="/"><i class="bi bi-house-door" aria-hidden="true"></i>回到首页</a>
+                    <a class="error-button error-button-secondary" href="/listings/"><i class="bi bi-grid" aria-hidden="true"></i>发现好物</a>
+                </div>
+                <p class="error-help">{% block error_help %}如果问题持续出现，请记录访问时间与当前地址，反馈给站点维护者。{% endblock %}</p>
+            </div>
+        </section>
+        <aside class="error-footer-card" aria-label="处理建议">
+            <span class="error-footer-icon"><i class="bi bi-compass" aria-hidden="true"></i></span>
+            <div><strong>从熟悉的入口重新开始</strong><p>首页、发现好物和账户中心仍然可用；不必重复提交刚刚的操作。</p></div>
+        </aside>
+    </main>
+
+    <footer class="error-page-footer">
+        <span>拾光校园 · 让闲置流转，让好物遇见对的人。</span>
+        <span>© 2026 Campus Glimmer</span>
+    </footer>
+</body>
+</html>

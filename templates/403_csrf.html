@@ -1,0 +1,9 @@
+{% extends 'errors/base_error.html' %}
+{% block title %}安全校验未通过 · 拾光校园{% endblock %}
+{% block error_code %}403{% endblock %}
+{% block error_icon %}bi-fingerprint{% endblock %}
+{% block error_kicker %}安全校验未通过{% endblock %}
+{% block error_heading %}这次提交需要重新确认{% endblock %}
+{% block error_lead %}页面可能停留过久、登录状态已经变化，或浏览器阻止了安全校验。你的操作没有继续执行。{% endblock %}
+{% block error_detail %}<div class="error-hint"><i class="bi bi-arrow-clockwise" aria-hidden="true"></i><span>返回上一页刷新后重新提交；如果刚切换网络或浏览器，请重新登录再试。</span></div>{% endblock %}
+{% block error_help %}不要重复刷新并连续提交同一个表单；先回到原页面确认当前内容仍然存在。{% endblock %}

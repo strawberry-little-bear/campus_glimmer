@@ -1,0 +1,9 @@
+{% extends 'errors/base_error.html' %}
+{% block title %}无权访问 · 拾光校园{% endblock %}
+{% block error_code %}403{% endblock %}
+{% block error_icon %}bi-shield-lock{% endblock %}
+{% block error_kicker %}访问权限受限{% endblock %}
+{% block error_heading %}当前账号不能打开这里{% endblock %}
+{% block error_lead %}这是一个受保护页面。请确认使用的是拥有相应权限的账号，或返回站内公开页面继续浏览。{% endblock %}
+{% block error_detail %}<div class="error-hint"><i class="bi bi-person-check" aria-hidden="true"></i><span>管理入口仅对已授权工作人员开放；个人内容仍需从对应账户入口访问。</span></div>{% endblock %}
+{% block error_help %}如果你确认权限应当已经开通，请附上账号与访问路径联系站点维护者。{% endblock %}

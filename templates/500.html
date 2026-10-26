@@ -1,0 +1,9 @@
+{% extends 'errors/base_error.html' %}
+{% block title %}服务暂时不可用 · 拾光校园{% endblock %}
+{% block error_code %}500{% endblock %}
+{% block error_icon %}bi-cloud-slash{% endblock %}
+{% block error_kicker %}服务暂时开了小差{% endblock %}
+{% block error_heading %}这次请求没有完成{% endblock %}
+{% block error_lead %}站点遇到了意外情况。当前页面不展示技术细节，你可以稍等片刻后重新尝试。{% endblock %}
+{% block error_detail %}<div class="error-hint"><i class="bi bi-clock-history" aria-hidden="true"></i><span>先返回首页或发现页；若刚提交表单，请确认结果后再决定是否重试，避免重复操作。</span></div>{% endblock %}
+{% block error_help %}如果问题持续出现，请把访问路径和大致发生时间反馈给维护者。{% endblock %}

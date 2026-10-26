@@ -1,0 +1,9 @@
+{% extends 'errors/base_error.html' %}
+{% block title %}请求无法识别 · 拾光校园{% endblock %}
+{% block error_code %}400{% endblock %}
+{% block error_icon %}bi-signpost-split{% endblock %}
+{% block error_kicker %}请求格式有误{% endblock %}
+{% block error_heading %}这个请求没能被识别{% endblock %}
+{% block error_lead %}地址或提交的数据可能不完整。返回上一页检查后，再重新发起操作。{% endblock %}
+{% block error_detail %}<div class="error-hint"><i class="bi bi-link-45deg" aria-hidden="true"></i><span>请勿手动删改链接中的参数；从站内入口重新进入通常最稳妥。</span></div>{% endblock %}
+{% block error_help %}如果是从站内按钮进入此页，请反馈出现问题的页面与操作步骤。{% endblock %}
