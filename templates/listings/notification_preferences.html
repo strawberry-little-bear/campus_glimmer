@@ -17,7 +17,7 @@
         <div class="notification-preference-summary-icon"><i class="bi bi-sliders2"></i></div>
         <div>
             <strong>当前已开启 {{ enabled_notification_count }} / {{ notification_kind_count }} 类提醒</strong>
-            <p>交易进展、互动消息和运营反馈可以分别管理，之后也能随时恢复。</p>
+            <p>免打扰时段：{% if quiet_hours_enabled %}已开启{% else %}已关闭{% endif %}。交易进展、互动消息和运营反馈可以分别管理，之后也能随时恢复。</p>
         </div>
     </div>
 

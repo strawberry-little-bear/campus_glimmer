@@ -5,6 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from .forms import NotificationPreferenceForm
 from .models import Notification, NotificationPreference
 from .notifications import active_unread_notifications, quiet_hours_active
 
@@ -72,6 +73,33 @@ class NotificationQuietHoursTests(TestCase):
         preference.save(update_fields=['quiet_hours_enabled'])
         active_summary = self.client.get(reverse('unread_summary')).json()
         self.assertEqual(active_summary['notifications'], 1)
+
+    def test_summary_counts_only_notification_switches_and_tracks_quiet_hours(self):
+        notification_fields = [
+            field_name
+            for field_name in NotificationPreferenceForm.base_fields
+            if not field_name.startswith('quiet_hours_')
+        ]
+        self.assertEqual(len(notification_fields), 27)
+
+        self.client.force_login(self.user)
+        response = self.client.post(reverse('notification_preferences'), {
+            'quiet_hours_enabled': 'on',
+            'quiet_hours_start': '22:00',
+            'quiet_hours_end': '08:00',
+        })
+        self.assertRedirects(response, reverse('notification_preferences'))
+
+        preference = NotificationPreference.objects.get(user=self.user)
+        self.assertTrue(preference.quiet_hours_enabled)
+        self.assertFalse(any(getattr(preference, field_name) for field_name in notification_fields))
+
+        response = self.client.get(reverse('notification_preferences'))
+        self.assertEqual(response.context['notification_kind_count'], 27)
+        self.assertEqual(response.context['enabled_notification_count'], 0)
+        self.assertTrue(response.context['quiet_hours_enabled'])
+        self.assertContains(response, '当前已开启 0 / 27 类提醒')
+        self.assertContains(response, '免打扰时段：已开启')
 
     def test_preference_form_rejects_identical_enabled_times(self):
         preference = NotificationPreference.objects.create(user=self.user)

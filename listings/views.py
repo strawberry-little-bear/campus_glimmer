@@ -14373,13 +14373,19 @@ def notification_preferences(request):
             return redirect('notification_preferences')
     else:
         form = NotificationPreferenceForm(instance=preference)
+    notification_field_names = [
+        field_name
+        for field_name in form.fields
+        if not field_name.startswith('quiet_hours_')
+    ]
     return render(request, 'listings/notification_preferences.html', {
         'form': form,
         'enabled_notification_count': sum(
             bool(getattr(preference, field_name))
-            for field_name in form.fields
+            for field_name in notification_field_names
         ),
-        'notification_kind_count': len(form.fields),
+        'notification_kind_count': len(notification_field_names),
+        'quiet_hours_enabled': preference.quiet_hours_enabled,
     })
 
 
