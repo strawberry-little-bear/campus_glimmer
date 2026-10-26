@@ -34,12 +34,14 @@ by_id，第二次出现会被静默折叠，上面几类检查对它完全免疫
 """
 
 import re
+from datetime import timedelta
 from html.parser import HTMLParser
 from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
 from listings.models import (
@@ -52,7 +54,11 @@ from listings.models import (
     Item,
     LostFoundLead,
     LostFoundPost,
+    MeetingAppointment,
+    MeetingIncident,
     Order,
+    OrderDispute,
+    Report,
     SavedSearch,
 )
 
@@ -524,6 +530,32 @@ class SemanticsChecksMixin:
                     continue
                 yield label, name, response.content.decode('utf-8')
 
+    def _assert_accessible_error_summary(self, label, response, field_id):
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        builder = _parse(html)
+        summaries = [
+            node for node in _iter_nodes(builder.root, {'div'})
+            if 'data-form-error-summary' in node.attrs
+        ]
+        self.assertEqual(len(summaries), 1, f'{label} 缺少或重复渲染错误摘要')
+        summary = summaries[0]
+        self.assertEqual(summary.attrs.get('role'), 'alert')
+        self.assertEqual(summary.attrs.get('tabindex'), '-1')
+        summary_links = [
+            link.attrs.get('href') for link in _iter_nodes(summary, {'a'})
+        ]
+        self.assertIn(f'#{field_id}', summary_links)
+        self.assertIn(field_id, builder.by_id)
+        duplicates, dangling = _id_reference_problems(html)
+        self.assertEqual(duplicates, [])
+        self.assertEqual(dangling, [])
+        self.assertIn('aria-invalid="true"', html)
+        field = builder.by_id.get(field_id)
+        self.assertIsNotNone(field, f'{label} 缺少字段 #{field_id}')
+        describedby = field.attrs.get('aria-describedby', '').split()
+        self.assertIn(f'{field_id}_error', describedby)
+
     def test_pages_have_a_single_top_level_heading_without_skips(self):
         problems = []
         for label, name, html in self._rendered_pages():
@@ -669,32 +701,6 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
     SELLER_PAGES = (
         ('求购详情（卖家视角）', 'demand_detail'),
     )
-
-    def _assert_accessible_error_summary(self, label, response, field_id):
-        self.assertEqual(response.status_code, 200)
-        html = response.content.decode('utf-8')
-        builder = _parse(html)
-        summaries = [
-            node for node in _iter_nodes(builder.root, {'div'})
-            if 'data-form-error-summary' in node.attrs
-        ]
-        self.assertEqual(len(summaries), 1, f'{label} 缺少或重复渲染错误摘要')
-        summary = summaries[0]
-        self.assertEqual(summary.attrs.get('role'), 'alert')
-        self.assertEqual(summary.attrs.get('tabindex'), '-1')
-        summary_links = [
-            link.attrs.get('href') for link in _iter_nodes(summary, {'a'})
-        ]
-        self.assertIn(f'#{field_id}', summary_links)
-        self.assertIn(field_id, builder.by_id)
-        duplicates, dangling = _id_reference_problems(html)
-        self.assertEqual(duplicates, [])
-        self.assertEqual(dangling, [])
-        self.assertIn('aria-invalid="true"', html)
-        field = builder.by_id.get(field_id)
-        self.assertIsNotNone(field, f'{label} 缺少字段 #{field_id}')
-        describedby = field.attrs.get('aria-describedby', '').split()
-        self.assertIn(f'{field_id}_error', describedby)
 
     def test_invalid_forms_focus_an_accessible_error_summary(self):
         # GET 页面没有错误态，BoundField 不会输出 aria-invalid / aria-describedby。
@@ -901,6 +907,63 @@ class StaffPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
         ('运营看板', 'operations_dashboard'),
         ('搜索洞察', 'search_insights'),
     )
+
+    def test_governance_review_forms_focus_an_accessible_error_summary(self):
+        # 三类治理队列共用同一套处置形态：先看上下文，再提交结论和说明。
+        # 这些页面过去只有字段旁的小字错误，键盘和读屏用户重新回到页面时
+        # 找不到错误入口；这里用真实无效 POST 守住共享摘要与字段关联。
+        report = Report.objects.create(
+            item=self.item,
+            reporter=self.buyer,
+            reason='spam',
+            detail='语义测试举报',
+        )
+        dispute = OrderDispute.objects.create(
+            order=self.order,
+            opened_by=self.buyer,
+            reason='mismatch',
+            detail='语义测试争议',
+        )
+        start_at = timezone.now() + timedelta(days=1)
+        appointment = MeetingAppointment.objects.create(
+            order=self.order,
+            proposed_by=self.seller,
+            location=self.location,
+            start_at=start_at,
+            end_at=start_at + timedelta(hours=1),
+            status='confirmed',
+        )
+        incident = MeetingIncident.objects.create(
+            appointment=appointment,
+            reported_by=self.buyer,
+            accused=self.seller,
+            reason='no_show',
+            detail='语义测试预约异常',
+        )
+        cases = (
+            (
+                '举报审核',
+                self.client.post(reverse('review_report', args=[report.id]), {}),
+                'id_status',
+            ),
+            (
+                '争议处理',
+                self.client.post(reverse('resolve_dispute', args=[dispute.id]), {}),
+                'id_status',
+            ),
+            (
+                '预约异常处理',
+                self.client.post(
+                    reverse('review_meeting_incident', args=[incident.id]), {},
+                ),
+                'id_status',
+            ),
+        )
+        for label, response, field_id in cases:
+            with self.subTest(page=label):
+                self._assert_accessible_error_summary(label, response, field_id)
+
+
 class TouchTargetTests(SimpleTestCase):
     """导航链接要够到 24x24 的最小触控目标。
 
