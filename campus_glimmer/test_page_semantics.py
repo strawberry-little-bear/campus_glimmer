@@ -162,6 +162,23 @@ def _iter_nodes(node, tags=None):
         yield from _iter_nodes(child, tags)
 
 
+def _nav_current_labels(html):
+    """Return the labels marked as the current page inside the global nav."""
+    builder = _parse(html)
+    nav = next(
+        (node for node in _iter_nodes(builder.root, {'nav'})
+         if 'site-nav' in (node.attrs.get('class') or '').split()),
+        None,
+    )
+    if nav is None:
+        return []
+    return [
+        _text_of(link)
+        for link in _iter_nodes(nav, {'a'})
+        if link.attrs.get('aria-current') == 'page'
+    ]
+
+
 def _is_hidden(node):
     attrs = node.attrs
     if 'hidden' in attrs:
@@ -680,6 +697,56 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         response = self.client.get(
             reverse('demand_detail', args=[self.demand.id]))
         self.assertIn('<label for="id_message"', response.content.decode('utf-8'))
+
+
+class NavigationSemanticsTests(DemoContentMixin, TestCase):
+    """Global navigation must identify the current section and remain skippable."""
+
+    CASES = (
+        ('首页', 'home', (), '首页'),
+        ('商品列表', 'item_list', (), '发现好物'),
+        ('商品搜索结果', 'search_items', (), '发现好物'),
+        ('商品详情', 'item_detail', ('item',), '发现好物'),
+        ('求购详情', 'demand_detail', ('demand',), '求购广场'),
+        ('失物招领详情', 'lost_found_detail', ('lost_found',), '失物招领'),
+        ('机会流', 'opportunity_feed', (), '互助机会'),
+        ('专题详情', 'campaign_detail', ('campaign',), '校园专题'),
+        ('账户中心', 'profile', (), None),
+    )
+
+    def _url(self, name, args):
+        values = [getattr(self, attr).id if attr != 'campaign' else self.campaign.slug for attr in args]
+        return reverse(name, args=values)
+
+    def test_skip_link_targets_a_focusable_main_region(self):
+        response = self.client.get(reverse('home'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        builder = _parse(html)
+
+        first_link = next(_iter_nodes(builder.root, {'a'}))
+        self.assertIn('skip-link', first_link.attrs.get('class', '').split())
+        self.assertEqual(first_link.attrs.get('href'), '#main-content')
+
+        main = builder.by_id.get('main-content')
+        self.assertIsNotNone(main, '<main> 必须提供 #main-content 跳转目标')
+        self.assertEqual(main.tag, 'main')
+        self.assertEqual(main.attrs.get('tabindex'), '-1')
+
+    def test_only_the_matching_top_level_section_is_marked_current(self):
+        problems = []
+        for label, name, args, expected in self.CASES:
+            with self.subTest(page=label):
+                url = self._url(name, args)
+                response = self.client.get(
+                    url, {'q': '台灯'} if name == 'search_items' else None, follow=True,
+                )
+                self.assertEqual(response.status_code, 200, '%s 未能渲染' % label)
+                actual = _nav_current_labels(response.content.decode('utf-8'))
+                wanted = [] if expected is None else [expected]
+                if actual != wanted:
+                    problems.append('%s：期望 %r，实际 %r' % (label, wanted, actual))
+        self.assertEqual(problems, [], '\n'.join('  ' + item for item in problems))
 
 
 class StaffPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):

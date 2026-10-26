@@ -79,6 +79,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'campus_glimmer.context_processors.unread_counts',
+                'campus_glimmer.context_processors.navigation_state',
             ],
         },
     },
