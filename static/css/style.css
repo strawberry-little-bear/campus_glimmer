@@ -7357,6 +7357,84 @@ a { color: inherit; text-decoration: none; }
     gap: 9px;
 }
 
+.moderation-active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 11px;
+    padding-top: 11px;
+    border-top: 1px dashed #e3ece6;
+}
+
+.moderation-active-filters-label {
+    color: #6f8378;
+    font-size: .64rem;
+    font-weight: 800;
+    letter-spacing: .02em;
+}
+
+.moderation-active-filter {
+    display: inline-flex;
+    max-width: min(100%, 290px);
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border: 1px solid #d8e8df;
+    border-radius: 999px;
+    color: #315f4c;
+    background: #f5fbf7;
+    font-size: .66rem;
+    line-height: 1.2;
+    text-decoration: none;
+    transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.moderation-active-filter span {
+    flex: 0 0 auto;
+    color: #778a80;
+}
+
+.moderation-active-filter strong {
+    overflow: hidden;
+    font-size: .69rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.moderation-active-filter i {
+    flex: 0 0 auto;
+    color: #7e9b8d;
+    font-size: .56rem;
+}
+
+.moderation-active-filter:hover,
+.moderation-active-filter:focus-visible {
+    border-color: #9fd0b9;
+    background: #eaf7ef;
+    box-shadow: 0 3px 10px rgba(31, 102, 77, .08);
+}
+
+.moderation-active-filter:focus-visible,
+.moderation-active-filters-clear:focus-visible {
+    outline: 3px solid rgba(24, 122, 91, .2);
+    outline-offset: 2px;
+}
+
+.moderation-active-filters-clear {
+    margin-left: 2px;
+    color: #788b81;
+    font-size: .64rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.moderation-active-filters-clear:hover {
+    color: var(--primary-dark);
+    text-decoration: underline;
+}
+
 .moderation-record-toolbar {
     flex-wrap: wrap;
     padding-bottom: 14px;
@@ -7491,6 +7569,14 @@ a { color: inherit; text-decoration: none; }
 
     .moderation-filter-grid {
         grid-template-columns: 1fr;
+    }
+
+    .moderation-active-filters-label {
+        width: 100%;
+    }
+
+    .moderation-active-filter {
+        max-width: 100%;
     }
 
     .moderation-filter-heading {

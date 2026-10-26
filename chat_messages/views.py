@@ -450,15 +450,32 @@ def moderation_queue(request):
         ).count()
         for tier in ('critical', 'elevated', 'caution')
     }
-    active_filter_count = sum((
-        status_filter != 'pending',
-        channel_filter != 'all',
-        risk_filter != 'all',
-        tier_filter != 'all',
-        appeal_filter != 'all',
-        release_filter != 'all',
-        bool(search_query),
-    ))
+    moderation_status_options = (
+        ('pending', '待复核'), ('confirmed', '确认违规'),
+        ('dismissed', '误判放行'), ('all', '全部记录'),
+    )
+    moderation_channel_options = (
+        ('all', '全部渠道'), ('comment', '商品留言'), ('private_message', '私信'),
+    )
+    moderation_risk_options = (
+        ('all', '全部风险等级'), ('high', '高风险'),
+        ('medium', '中风险'), ('low', '低风险'),
+    )
+    moderation_tier_options = (
+        ('all', '全部复核分级'), ('critical', '严重风险'),
+        ('elevated', '脱离平台联系'), ('caution', '低权重线索'),
+    )
+    moderation_appeal_options = (
+        ('all', '全部申诉状态'), ('pending', '待处理申诉'),
+        ('upheld', '维持原判'), ('accepted', '申诉成立并恢复'),
+        ('accepted_without_restore', '成立但未恢复'),
+    )
+    moderation_release_options = (
+        ('all', '全部放行状态'),
+        ('closed', '误判已恢复'),
+        ('unreleased', '误判未恢复'),
+        ('missing_material', '待复核缺材料'),
+    )
 
     # Keep pagination links readable by emitting only non-default conditions.
     # The form always submits every select, so copying request.GET would make
@@ -480,6 +497,38 @@ def moderation_queue(request):
         pagination_params['q'] = search_query
     moderation_filter_query = urlencode(pagination_params)
 
+    # 审核员需要随时看懂「为什么只剩这些记录」，并且能单独撤掉某个条件。
+    # 每个芯片都从当前分页参数里删除自己，因此其它条件与翻页口径保持一致。
+    active_filter_specs = (
+        ('q', '搜索', search_query, '', search_query),
+        ('status', '审核状态', status_filter, 'pending', dict(moderation_status_options)[status_filter]),
+        ('channel', '内容渠道', channel_filter, 'all', dict(moderation_channel_options)[channel_filter]),
+        ('risk', '风险等级', risk_filter, 'all', dict(moderation_risk_options)[risk_filter]),
+        ('tier', '复核分级', tier_filter, 'all', dict(moderation_tier_options)[tier_filter]),
+        ('appeal', '申诉状态', appeal_filter, 'all', dict(moderation_appeal_options)[appeal_filter]),
+        ('release', '放行状态', release_filter, 'all', dict(moderation_release_options)[release_filter]),
+    )
+    moderation_active_filters = []
+    for key, label, value, default, display_value in active_filter_specs:
+        if value == default:
+            continue
+        remaining_params = pagination_params.copy()
+        remaining_params.pop(key, None)
+        # 申诉与已恢复筛选会隐式把审核状态推成 all；撤销状态时显式落回
+        # pending，否则缺少 status 参数会被后端再次推导为 all，标签看似删不掉。
+        if key == 'status' and (
+            'appeal' in remaining_params
+            or remaining_params.get('release') in {'closed', 'unreleased'}
+        ):
+            remaining_params = {'status': 'pending', **remaining_params}
+        moderation_active_filters.append({
+            'key': key,
+            'label': label,
+            'value': display_value,
+            'remove_url': f"?{urlencode(remaining_params)}" if remaining_params else reverse('moderation_queue'),
+        })
+    active_filter_count = len(moderation_active_filters)
+
     page_obj = Paginator(events, 12).get_page(request.GET.get('page'))
     page_numbers = [
         None if number == Paginator.ELLIPSIS else number
@@ -495,6 +544,7 @@ def moderation_queue(request):
         'page_obj': page_obj,
         'page_numbers': page_numbers,
         'moderation_active_filter_count': active_filter_count,
+        'moderation_active_filters': moderation_active_filters,
         'moderation_pending_count': base_events.filter(status='pending').count(),
         'moderation_total_count': base_events.count(),
         'moderation_status_filter': status_filter,
@@ -522,32 +572,12 @@ def moderation_queue(request):
             | Q(channel='private_message', receiver__isnull=True)
         ).count(),
         'moderation_release_filter': release_filter,
-        'moderation_release_options': (
-            ('all', '全部放行状态'),
-            ('closed', '误判已恢复'),
-            ('unreleased', '误判未恢复'),
-            ('missing_material', '待复核缺材料'),
-        ),
-        'moderation_status_options': (
-            ('pending', '待复核'), ('confirmed', '确认违规'),
-            ('dismissed', '误判放行'), ('all', '全部记录'),
-        ),
-        'moderation_channel_options': (
-            ('all', '全部渠道'), ('comment', '商品留言'), ('private_message', '私信'),
-        ),
-        'moderation_risk_options': (
-            ('all', '全部风险等级'), ('high', '高风险'),
-            ('medium', '中风险'), ('low', '低风险'),
-        ),
-        'moderation_tier_options': (
-            ('all', '全部复核分级'), ('critical', '严重风险'),
-            ('elevated', '脱离平台联系'), ('caution', '低权重线索'),
-        ),
-        'moderation_appeal_options': (
-            ('all', '全部申诉状态'), ('pending', '待处理申诉'),
-            ('upheld', '维持原判'), ('accepted', '申诉成立并恢复'),
-            ('accepted_without_restore', '成立但未恢复'),
-        ),
+        'moderation_release_options': moderation_release_options,
+        'moderation_status_options': moderation_status_options,
+        'moderation_channel_options': moderation_channel_options,
+        'moderation_risk_options': moderation_risk_options,
+        'moderation_tier_options': moderation_tier_options,
+        'moderation_appeal_options': moderation_appeal_options,
         **{f'moderation_pending_{tier}_count': count for tier, count in tier_counts.items()},
         **{f'moderation_overdue_{tier}_count': count for tier, count in overdue_counts.items()},
     })

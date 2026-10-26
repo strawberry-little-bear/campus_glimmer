@@ -114,12 +114,80 @@ class ModerationQueuePaginationTests(TestCase):
             html=False,
         )
 
+    def test_active_filters_are_visible_and_remove_only_themselves(self):
+        events = self.create_events(
+            13,
+            author=None,
+            item=None,
+            content='关键词审核记录',
+            risk_level='high',
+            risk_tier='elevated',
+        )
+        ModerationAppeal.objects.bulk_create([
+            ModerationAppeal(
+                event=event,
+                appellant=self.buyer,
+                reason='missing_context',
+                statement='一条待处理申诉',
+            )
+            for event in events
+        ])
+        response = self.client.get(reverse('moderation_queue'), {
+            'status': 'all',
+            'channel': 'comment',
+            'risk': 'high',
+            'tier': 'elevated',
+            'appeal': 'pending',
+            'release': 'missing_material',
+            'q': '关键词',
+        })
+
+        active_filters = response.context['moderation_active_filters']
+        self.assertEqual(
+            [(item['key'], item['label'], item['value']) for item in active_filters],
+            [
+                ('q', '搜索', '关键词'),
+                ('status', '审核状态', '全部记录'),
+                ('channel', '内容渠道', '商品留言'),
+                ('risk', '风险等级', '高风险'),
+                ('tier', '复核分级', '脱离平台联系'),
+                ('appeal', '申诉状态', '待处理申诉'),
+                ('release', '放行状态', '待复核缺材料'),
+            ],
+        )
+        channel_chip = next(item for item in active_filters if item['key'] == 'channel')
+        self.assertEqual(
+            channel_chip['remove_url'],
+            '?status=all&risk=high&tier=elevated&appeal=pending&'
+            'release=missing_material&q=%E5%85%B3%E9%94%AE%E8%AF%8D',
+        )
+        status_chip = next(item for item in active_filters if item['key'] == 'status')
+        self.assertEqual(
+            status_chip['remove_url'],
+            '?status=pending&channel=comment&risk=high&tier=elevated&'
+            'appeal=pending&release=missing_material&'
+            'q=%E5%85%B3%E9%94%AE%E8%AF%8D',
+        )
+        status_removed = self.client.get(
+            reverse('moderation_queue') + status_chip['remove_url'],
+        )
+        self.assertEqual(status_removed.context['moderation_status_filter'], 'pending')
+        self.assertNotIn(
+            'status',
+            [item['key'] for item in status_removed.context['moderation_active_filters']],
+        )
+        self.assertContains(response, 'aria-label="当前筛选条件"')
+        self.assertContains(response, 'aria-label="移除内容渠道：商品留言"')
+        self.assertContains(response, 'class="moderation-active-filters-clear"')
+
     def test_default_filter_is_not_repeated_in_page_links(self):
         self.create_events(13)
         response = self.client.get(reverse('moderation_queue'))
 
         self.assertEqual(response.context['moderation_filter_query'], '')
+        self.assertEqual(response.context['moderation_active_filters'], [])
         self.assertContains(response, 'href="?page=2"', html=False)
+        self.assertNotContains(response, 'aria-label="当前筛选条件"')
 
     def test_pagination_is_hidden_when_queue_fits_on_one_page(self):
         self.create_events(12)

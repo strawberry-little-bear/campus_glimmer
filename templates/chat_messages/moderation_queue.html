@@ -108,6 +108,17 @@
             </label>
         </div>
     </form>
+    {% if moderation_active_filters %}
+    <div class="moderation-active-filters" aria-label="当前筛选条件">
+        <span class="moderation-active-filters-label"><i class="bi bi-funnel-fill me-1" aria-hidden="true"></i>当前条件</span>
+        {% for filter in moderation_active_filters %}
+        <a class="moderation-active-filter" href="{{ filter.remove_url }}" aria-label="移除{{ filter.label }}：{{ filter.value }}">
+            <span>{{ filter.label }}</span><strong>{{ filter.value }}</strong><i class="bi bi-x-lg" aria-hidden="true"></i>
+        </a>
+        {% endfor %}
+        <a class="moderation-active-filters-clear" href="{% url 'moderation_queue' %}">全部清除</a>
+    </div>
+    {% endif %}
 </section>
 
 <section class="content-card" aria-labelledby="moderation-record-title">
