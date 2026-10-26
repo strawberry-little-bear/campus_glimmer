@@ -1,0 +1,7 @@
+<div class="demand-filter-heading">
+    <div>
+        <strong id="{{ workspace_id }}-title">{{ filter_title }}</strong>
+        <span>当前显示 {{ result_count }} 条{% if active_count %} · 已启用 {{ active_count }} 个条件{% endif %}</span>
+    </div>
+    {% if active_count %}<a class="demand-filter-reset" href="{{ reset_url }}"><i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选</a>{% endif %}
+</div>

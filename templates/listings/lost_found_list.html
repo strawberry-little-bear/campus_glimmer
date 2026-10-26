@@ -6,14 +6,90 @@
     <div class="d-flex gap-2 flex-wrap"><a href="{% if is_mine %}{% url 'lost_found_list' %}{% else %}{% url 'my_lost_found' %}{% endif %}" class="btn btn-light">{% if is_mine %}浏览全部记录{% else %}我的记录{% endif %}</a><a href="{% url 'new_lost_found' %}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>发布记录</a></div>
 </div>
 <div class="lost-found-explain content-card mb-4"><div class="lost-found-explain-icon"><i class="bi bi-stars"></i></div><div><strong>系统会帮你寻找可能匹配</strong><p>匹配会综合比较记录类型、分类、地点、发生时间和描述关键词，并展示可解释的匹配依据；它只是线索推荐，最终仍需双方核验。</p></div></div>
-<div class="content-card lost-found-filter-card mb-4"><form method="get" class="row g-2 align-items-end">
-    <div class="col-lg-4"><label class="form-label small text-muted" for="lost-found-q">搜索记录</label><input class="form-control" name="q" id="lost-found-q" value="{{ lost_found_query }}" placeholder="例如：黑色水杯、校园卡、耳机"></div>
-    <div class="col-md-3 col-lg-2"><label class="form-label small text-muted" for="lost-found-type">类型</label><select class="form-select" name="type" id="lost-found-type"><option value="">全部</option><option value="lost" {% if lost_found_type == 'lost' %}selected{% endif %}>我丢失了</option><option value="found" {% if lost_found_type == 'found' %}selected{% endif %}>我捡到了</option></select></div>
-    <div class="col-md-3 col-lg-2"><label class="form-label small text-muted" for="lost-found-category">分类</label><select class="form-select" name="category" id="lost-found-category"><option value="">全部分类</option>{% for category in categories %}<option value="{{ category.id }}" {% if lost_found_category == category.id|stringformat:'s' %}selected{% endif %}>{{ category.name }}</option>{% endfor %}</select></div>
-    <div class="col-md-3 col-lg-2"><label class="form-label small text-muted" for="lost-found-location">地点</label><select class="form-select" name="location" id="lost-found-location"><option value="">全部地点</option>{% for location in locations %}<option value="{{ location.id }}" {% if lost_found_location == location.id|stringformat:'s' %}selected{% endif %}>{{ location.name }}</option>{% endfor %}</select></div>
-    <div class="col-md-3 col-lg-2"><label class="form-label small text-muted" for="lost-found-sort">排序</label><select class="form-select" name="sort" id="lost-found-sort"><option value="latest" {% if lost_found_sort == 'latest' %}selected{% endif %}>最新发布</option><option value="ending" {% if lost_found_sort == 'ending' %}selected{% endif %}>即将截止</option><option value="popular" {% if lost_found_sort == 'popular' %}selected{% endif %}>浏览最多</option></select></div>
-    <div class="col-12"><button class="btn btn-primary" type="submit"><i class="bi bi-search me-1"></i>筛选记录</button></div>
-</form></div>
-<div class="row g-4">{% for post in posts %}<div class="col-md-6 col-xl-4"><article class="lost-found-card h-100"><div class="lost-found-card-head"><span class="lost-found-type {% if post.post_type == 'lost' %}lost-found-type-lost{% else %}lost-found-type-found{% endif %}"><i class="bi {% if post.post_type == 'lost' %}bi-search{% else %}bi-hand-index-thumb{% endif %} me-1"></i>{{ post.get_post_type_display }}</span><small>{{ post.created_at|date:'m月d日 H:i' }}</small></div><h2><a href="{% url 'lost_found_detail' post.id %}">{{ post.title }}</a></h2><p>{{ post.description|truncatechars:92 }}</p><div class="lost-found-card-meta">{% if post.category %}<span><i class="bi bi-tag me-1"></i>{{ post.category.name }}</span>{% endif %}{% if post.location %}<span><i class="bi bi-geo-alt me-1"></i>{{ post.location.name }}</span>{% endif %}</div><div class="lost-found-card-footer"><span><i class="bi bi-clock me-1"></i>{{ post.occurred_at|date:'m月d日 H:i' }}</span><span><i class="bi bi-eye me-1"></i>{{ post.view_count }}</span></div></article></div>{% empty %}<div class="col-12"><div class="empty-state py-5"><i class="bi bi-search display-6 d-block mb-3"></i><h2 class="h3">暂时没有匹配记录</h2><p>可以调整筛选条件，或者发布一条新的失物招领记录。</p><a href="{% url 'new_lost_found' %}" class="btn btn-primary">发布记录</a></div></div>{% endfor %}</div>
-{% if page_obj.paginator.num_pages > 1 %}<nav class="mt-5" aria-label="失物招领分页"><ul class="pagination justify-content-center">{% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if lost_found_filter_query %}&{{ lost_found_filter_query }}{% endif %}">上一页</a></li>{% endif %}{% for num in page_numbers %}<li class="page-item {% if page_obj.number == num %}active{% endif %}">{% if num %}<a class="page-link" href="?page={{ num }}{% if lost_found_filter_query %}&{{ lost_found_filter_query }}{% endif %}">{{ num }}</a>{% else %}<span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span>{% endif %}</li>{% endfor %}{% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if lost_found_filter_query %}&{{ lost_found_filter_query }}{% endif %}">下一页</a></li>{% endif %}</ul></nav>{% endif %}
+
+<section class="content-card demand-filter-card lost-found-filter-card" aria-labelledby="lost-found-filter-title">
+    {% include 'listings/_filter_workspace_heading.html' with workspace_id='lost-found-filter' filter_title='筛选失物招领记录' result_count=page_obj.paginator.count active_count=lost_found_active_filter_count reset_url=request.path %}
+    <form method="get" class="demand-filter-form" role="search">
+        <div class="demand-filter-primary lost-found-filter-primary">
+            <label class="demand-filter-search">
+                <span class="visually-hidden">搜索失物招领记录</span>
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input name="q" id="lost-found-q" type="search" value="{{ lost_found_query }}" placeholder="例如：黑色水杯、校园卡、耳机" autocomplete="off">
+            </label>
+            <label class="demand-filter-field">
+                <span>记录类型</span>
+                <select name="type" id="lost-found-type" class="form-select form-select-sm">
+                    <option value="">全部类型</option>
+                    <option value="lost" {% if lost_found_type == 'lost' %}selected{% endif %}>我丢失了</option>
+                    <option value="found" {% if lost_found_type == 'found' %}selected{% endif %}>我捡到了</option>
+                </select>
+            </label>
+            <label class="demand-filter-field">
+                <span>物品分类</span>
+                <select name="category" id="lost-found-category" class="form-select form-select-sm">
+                    <option value="">全部分类</option>
+                    {% for category in categories %}<option value="{{ category.id }}" {% if lost_found_category == category.id|stringformat:'s' %}selected{% endif %}>{{ category.name }}</option>{% endfor %}
+                </select>
+            </label>
+            <label class="demand-filter-field">
+                <span>发生地点</span>
+                <select name="location" id="lost-found-location" class="form-select form-select-sm">
+                    <option value="">全部地点</option>
+                    {% for location in locations %}<option value="{{ location.id }}" {% if lost_found_location == location.id|stringformat:'s' %}selected{% endif %}>{{ location.name }}</option>{% endfor %}
+                </select>
+            </label>
+            <label class="demand-filter-field">
+                <span>排列方式</span>
+                <select name="sort" id="lost-found-sort" class="form-select form-select-sm">
+                    <option value="latest" {% if lost_found_sort == 'latest' %}selected{% endif %}>最新发布</option>
+                    <option value="ending" {% if lost_found_sort == 'ending' %}selected{% endif %}>即将截止</option>
+                    <option value="popular" {% if lost_found_sort == 'popular' %}selected{% endif %}>浏览最多</option>
+                </select>
+            </label>
+            <button class="btn btn-primary demand-filter-submit" type="submit"><i class="bi bi-funnel me-1"></i>应用</button>
+        </div>
+        {% include 'listings/_filter_workspace_chips.html' with active_filters=lost_found_active_filters %}
+    </form>
+</section>
+
+<div class="demand-results-heading">
+    <div><strong id="lost-found-results-title">{% if is_mine %}我的失物与拾到记录{% else %}校园失物线索{% endif %}</strong><span class="demand-results-count">{{ page_obj.paginator.count }} 条</span></div>
+    <span>按{{ lost_found_sort_label }}排序{% if page_obj.paginator.num_pages > 1 %} · 第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页{% endif %}</span>
+</div>
+
+<div class="row g-4" aria-labelledby="lost-found-results-title">
+    {% for post in posts %}
+    <div class="col-md-6 col-xl-4">
+        <article class="lost-found-card h-100">
+            <div class="lost-found-card-head"><span class="lost-found-type {% if post.post_type == 'lost' %}lost-found-type-lost{% else %}lost-found-type-found{% endif %}"><i class="bi {% if post.post_type == 'lost' %}bi-search{% else %}bi-hand-index-thumb{% endif %} me-1"></i>{{ post.get_post_type_display }}</span><small>{{ post.created_at|date:'m月d日 H:i' }}</small></div>
+            <h2><a href="{% url 'lost_found_detail' post.id %}">{{ post.title }}</a></h2>
+            <p>{{ post.description|truncatechars:92 }}</p>
+            <div class="lost-found-card-meta">{% if post.category %}<span><i class="bi bi-tag me-1"></i>{{ post.category.name }}</span>{% endif %}{% if post.location %}<span><i class="bi bi-geo-alt me-1"></i>{{ post.location.name }}</span>{% endif %}</div>
+            <div class="lost-found-card-footer"><span><i class="bi bi-clock me-1"></i>{{ post.occurred_at|date:'m月d日 H:i' }}</span><span><i class="bi bi-eye me-1"></i>{{ post.view_count }}</span></div>
+        </article>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="empty-state py-5">
+            <i class="bi bi-search display-6 d-block mb-3"></i>
+            <h2 class="h3">{% if lost_found_active_filter_count %}没有符合这组条件的记录{% elif is_mine %}你还没有发布过失物招领记录{% else %}还没有公开的失物招领记录{% endif %}</h2>
+            <p>{% if lost_found_active_filter_count %}可以逐项移除筛选条件，或换一个关键词、分类和地点再试。{% elif is_mine %}发布第一条记录，让校园里的线索更容易找到你。{% else %}发布一条记录，让丢失物品和拾到它的人更快相遇。{% endif %}</p>
+            <div class="demand-empty-actions">
+                {% if lost_found_active_filter_count %}<a href="{{ request.path }}" class="btn btn-light"><i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选</a>{% endif %}
+                <a href="{% url 'new_lost_found' %}" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>发布记录</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="mt-5" aria-label="失物招领分页">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if lost_found_filter_query %}&{{ lost_found_filter_query }}{% endif %}">上一页</a></li>{% endif %}
+        {% for num in page_numbers %}<li class="page-item {% if page_obj.number == num %}active{% endif %}">{% if num %}<a class="page-link" href="?page={{ num }}{% if lost_found_filter_query %}&{{ lost_found_filter_query }}{% endif %}">{{ num }}</a>{% else %}<span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span>{% endif %}</li>{% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if lost_found_filter_query %}&{{ lost_found_filter_query }}{% endif %}">下一页</a></li>{% endif %}
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}

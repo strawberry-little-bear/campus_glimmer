@@ -13583,11 +13583,17 @@ def lost_found_list(request, mine=False):
             return redirect('login')
         posts = posts.filter(reporter=request.user)
 
-    query = request.GET.get('q', '').strip()
+    query = request.GET.get('q', '').strip()[:120]
     post_type = request.GET.get('type', '').strip()
     category_id = request.GET.get('category', '').strip()
     location_id = request.GET.get('location', '').strip()
     sort = request.GET.get('sort', 'latest').strip()
+
+    categories = list(Category.objects.all())
+    locations = list(CampusLocation.objects.filter(is_active=True))
+    category_labels = {str(category.id): category.name for category in categories}
+    location_labels = {str(location.id): location.name for location in locations}
+
     if query:
         posts = posts.filter(
             Q(title__icontains=query)
@@ -13598,39 +13604,72 @@ def lost_found_list(request, mine=False):
         )
     if post_type in {'lost', 'found'}:
         posts = posts.filter(post_type=post_type)
-    if category_id.isdigit():
+    else:
+        post_type = ''
+    if category_id not in category_labels:
+        category_id = ''
+    if category_id:
         posts = posts.filter(category_id=category_id)
-    if location_id.isdigit():
+    if location_id not in location_labels:
+        location_id = ''
+    if location_id:
         posts = posts.filter(location_id=location_id)
+
+    sort_labels = {
+        'latest': '最新发布',
+        'ending': '即将截止',
+        'popular': '浏览最多',
+    }
+    if sort not in sort_labels:
+        sort = 'latest'
     if sort == 'ending':
         posts = posts.order_by('expires_at', '-created_at')
     elif sort == 'popular':
         posts = posts.order_by('-view_count', '-created_at')
     else:
-        sort = 'latest'
         posts = posts.order_by('-created_at')
 
-    paginator = Paginator(posts, 12)
-    page_obj = paginator.get_page(request.GET.get('page'))
-    filter_query = urlencode({
-        key: value for key, value in {
-            'q': query, 'type': post_type, 'category': category_id,
-            'location': location_id, 'sort': sort,
-        }.items() if value
-    })
+    page_obj = Paginator(posts, 12).get_page(request.GET.get('page'))
+    filter_values = {
+        'q': query,
+        'type': post_type,
+        'category': category_id,
+        'location': location_id,
+        'sort': sort,
+    }
+    type_labels = {'lost': '我丢失了', 'found': '我捡到了'}
+    active_filters = []
+    for parameter, label, value in (
+        ('q', '关键词', query),
+        ('type', '类型', type_labels.get(post_type)),
+        ('category', '分类', category_labels.get(category_id)),
+        ('location', '地点', location_labels.get(location_id)),
+    ):
+        if not value:
+            continue
+        remaining = {key: item for key, item in filter_values.items() if key != parameter and item}
+        active_filters.append({
+            'label': label,
+            'value': value,
+            'remove_query': urlencode(remaining),
+        })
+
     return render(request, 'listings/lost_found_list.html', {
         'posts': page_obj.object_list,
         'page_obj': page_obj,
         'page_numbers': _elided_page_numbers(page_obj),
-        'categories': Category.objects.all(),
-        'locations': CampusLocation.objects.filter(is_active=True),
+        'categories': categories,
+        'locations': locations,
         'is_mine': is_mine,
         'lost_found_query': query,
         'lost_found_type': post_type,
         'lost_found_category': category_id,
         'lost_found_location': location_id,
         'lost_found_sort': sort,
-        'lost_found_filter_query': filter_query,
+        'lost_found_sort_label': sort_labels[sort],
+        'lost_found_active_filters': active_filters,
+        'lost_found_active_filter_count': len(active_filters),
+        'lost_found_filter_query': urlencode({key: value for key, value in filter_values.items() if value}),
     })
 
 

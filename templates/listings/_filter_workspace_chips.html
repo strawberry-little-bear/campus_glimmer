@@ -1,0 +1,10 @@
+{% if active_filters %}
+<div class="demand-filter-chips" aria-label="已启用的筛选条件">
+    <span class="demand-filter-chips-label"><i class="bi bi-check2-circle me-1"></i>已启用</span>
+    {% for filter in active_filters %}
+    <a class="demand-filter-chip" href="?{{ filter.remove_query }}" title="移除{{ filter.label }}筛选">
+        <span>{{ filter.label }}：{{ filter.value }}</span><i class="bi bi-x-lg" aria-hidden="true"></i>
+    </a>
+    {% endfor %}
+</div>
+{% endif %}

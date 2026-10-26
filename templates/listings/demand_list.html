@@ -14,13 +14,7 @@
 </div>
 
 <section class="content-card demand-filter-card" aria-labelledby="demand-filter-title">
-    <div class="demand-filter-heading">
-        <div>
-            <strong id="demand-filter-title">筛选求购需求</strong>
-            <span>当前显示 {{ page_obj.paginator.count }} 条{% if demand_active_filter_count %} · 已启用 {{ demand_active_filter_count }} 个条件{% endif %}</span>
-        </div>
-        {% if demand_active_filter_count %}<a class="demand-filter-reset" href="{% if is_mine %}{% url 'my_demands' %}{% else %}{% url 'demand_list' %}{% endif %}"><i class="bi bi-arrow-counterclockwise me-1"></i>清除筛选</a>{% endif %}
-    </div>
+    {% include 'listings/_filter_workspace_heading.html' with workspace_id='demand-filter' filter_title='筛选求购需求' result_count=page_obj.paginator.count active_count=demand_active_filter_count reset_url=request.path %}
     <form method="get" class="demand-filter-form" role="search">
         <div class="demand-filter-primary">
             <label class="demand-filter-search">
@@ -52,16 +46,7 @@
             </label>
             <button class="btn btn-primary demand-filter-submit" type="submit"><i class="bi bi-funnel me-1"></i>应用</button>
         </div>
-        {% if demand_active_filters %}
-        <div class="demand-filter-chips" aria-label="已启用的筛选条件">
-            <span class="demand-filter-chips-label"><i class="bi bi-check2-circle me-1"></i>已启用</span>
-            {% for filter in demand_active_filters %}
-            <a class="demand-filter-chip" href="?{{ filter.remove_query }}" title="移除{{ filter.label }}筛选">
-                <span>{{ filter.label }}：{{ filter.value }}</span><i class="bi bi-x-lg" aria-hidden="true"></i>
-            </a>
-            {% endfor %}
-        </div>
-        {% endif %}
+        {% include 'listings/_filter_workspace_chips.html' with active_filters=demand_active_filters %}
     </form>
 </section>
 
