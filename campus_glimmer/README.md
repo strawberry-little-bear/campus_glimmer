@@ -54,7 +54,7 @@ flowchart LR
 | [`wsgi.py`](wsgi.py) / [`asgi.py`](asgi.py) | 部署入口 |
 | [`tests.py`](tests.py) | 根路由、探针与安全配置基线测试 |
 | [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验和存储端点测试 |
-| [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt` 与导航触控目标 |
+| [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、当前栏目、跳转主内容与导航触控目标 |
 
 ## 🚪 根路由
 

@@ -35,7 +35,7 @@ flowchart TD
 
 | 目录或文件 | 内容 |
 | --- | --- |
-| [`base.html`](base.html) | 全站导航、品牌、消息提示、未读角标、页脚和公共脚本 |
+| [`base.html`](base.html) | 全站导航、当前栏目状态、跳转主内容、品牌、消息提示、未读角标、页脚和公共脚本 |
 | [`accounts/`](accounts/) | 账户中心、登录、资料编辑、公开主页和校园认证 |
 | [`chat_messages/`](chat_messages/) | 消息工作台、会话、审核队列和申诉页面 |
 | [`chat_messages/moderation_appeals.html`](chat_messages/moderation_appeals.html) | 用户侧的内容申诉，与审核队列共用 `.mod-event-*` 组件 |
@@ -52,7 +52,7 @@ flowchart TD
 | `content` | 主内容区 | 页面主体结构 |
 | `extra_js` | 页面专属脚本 | 依赖当前页面 DOM 的逻辑 |
 
-全局导航、未读角标或页脚发生变化时，要同时检查 [`base.html`](base.html) 与 [`../static/js/main.js`](../static/js/main.js)。新增页面优先使用 `{% extends 'base.html' %}`、`{% url %}` 和 `{% static %}`，避免硬编码路径与资源地址。
+全局导航、未读角标或页脚发生变化时，要同时检查 [`base.html`](base.html) 与 [`../static/js/main.js`](../static/js/main.js)。`base.html` 的第一个可聚焦元素是“跳到主要内容”，指向 `#main-content`；主导航的 `aria-current="page"` 由 `campus_glimmer/context_processors.py` 的路由组映射生成。新增一级栏目或详情路由时，先更新那张映射表，再运行 `NavigationSemanticsTests`，避免只改了 href 却让当前栏目失效。新增页面优先使用 `{% extends 'base.html' %}`、`{% url %}` 和 `{% static %}`，避免硬编码路径与资源地址。
 
 ## 🛠️ 修改检查
 
