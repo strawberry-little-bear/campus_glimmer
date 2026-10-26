@@ -240,7 +240,7 @@ campus_glimmer/
 
 - **`test_campaign_phase_review.py`**：已结束专题的阶段边界、业务时间归段、薄样本门槛、跨专题总结、隐私与只读页面 / CSV 契约
 
-- **`test_campaign_registration.py`**：专题报名的幂等加入与退出、参与区间、数据库约束、页面权限、返回地址、个人足迹和后台入口
+- **`test_campaign_registration.py`**：专题报名的幂等加入与退出、参与区间、数据库约束、页面权限、返回地址、历史参与分页、安全锚点回跳和后台入口
 
 - **`test_campaign_updates.py`**：加入不自动订阅、命中幂等入队、关闭订阅与退出取消、发送前状态复核、日 / 周独立去重、多专题合并、免打扰、任务台账、权限和运营导出
 
@@ -531,7 +531,7 @@ campus_glimmer/
 - **`graduation-bulk-listing-import-error-summary-design.md`**：批量发布导入错误摘要，重复问题分组、完整清单保留与只做阅读层的边界
 - **`graduation-bulk-listing-renewal-design.md`**：毕业季批量续期，统一新截止时间、可续期状态边界、整批失败与不触碰刷新额度
 - **`my-items-workspace-pagination-design.md`**：卖家工作台五类状态页签、服务端分页、全量统计与安全原页回跳
-- **`personal-queue-pagination-design.md`**：浏览足迹 24 件分页、领取申请状态排序、全量待处理统计与安全原页回跳
+- **`personal-queue-pagination-design.md`**：浏览足迹 24 件分页、专题历史 12 段分页、领取申请状态排序、全量待处理统计与安全原页回跳
 - **`semester-bulk-listing-template-design.md`**：学期批量发布模板，共同设置私有保存、相对展示天数重算与不保存商品行边界
 
 - **`dispute-evidence-shape-design.md`**：证据文件的形状，attachment.name 与 size 第一次被数字读到
