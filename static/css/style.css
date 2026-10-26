@@ -1342,8 +1342,6 @@ a { color: inherit; text-decoration: none; }
 .demand-budget strong { color: #b3582e; font-size: 1.1rem; }
 .demand-description { margin-bottom: 24px; color: #50685c; line-height: 1.9; }
 .demand-side-card { padding: 22px; }
-.demand-form-tip { display: flex; align-items: flex-start; padding: 13px 15px; margin-bottom: 26px; border-radius: 12px; color: #547363; background: #f1f9f3; font-size: .78rem; line-height: 1.65; }
-.demand-form-tip i { color: #619c70; }
 @media (max-width: 991.98px) {
     .demand-filter-primary { grid-template-columns: 1fr 1fr; }
     .demand-filter-search { grid-column: 1 / -1; }
