@@ -261,6 +261,76 @@ class CampaignRegistrationPageTests(TestCase):
         registration.refresh_from_db()
         self.assertTrue(registration.is_active)
 
+    def test_history_paginates_without_hiding_active_footprint(self):
+        CampaignRegistration.objects.create(
+            campaign=self.campaign, user=self.user, joined_at=self.now,
+        )
+        for index in range(13):
+            history_campaign = self._campaign(
+                f'历史专题 {index + 1:02d}', f'history-campaign-{index + 1}',
+            )
+            CampaignRegistration.objects.create(
+                campaign=history_campaign,
+                user=self.user,
+                joined_at=self.now - timedelta(days=index + 2),
+                left_at=self.now - timedelta(days=index + 1),
+                is_active=False,
+            )
+        self.client.force_login(self.user)
+
+        first_page = self.client.get(reverse('my_campaigns'))
+        second_page = self.client.get(reverse('my_campaigns'), {'page': 2})
+
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(first_page.context['history_total'], 13)
+        self.assertEqual(first_page.context['history_page'].number, 1)
+        self.assertEqual(len(first_page.context['history_registrations']), 12)
+        self.assertContains(first_page, self.campaign.title)
+        self.assertContains(first_page, '历史专题 01')
+        self.assertNotContains(first_page, '历史专题 13')
+        self.assertContains(first_page, '?page=2#campaign-history')
+
+        self.assertEqual(second_page.status_code, 200)
+        self.assertEqual(second_page.context['history_page'].number, 2)
+        self.assertEqual(len(second_page.context['history_registrations']), 1)
+        self.assertContains(second_page, self.campaign.title)
+        self.assertContains(second_page, '历史专题 13')
+        history_return_url = second_page.context['history_return_url']
+        self.assertEqual(
+            history_return_url,
+            reverse('my_campaigns') + '?page=2#campaign-history',
+        )
+        subscribed = self.client.post(
+            reverse('update_campaign_subscription', args=[self.campaign.slug]),
+            {
+                'notify_updates': 'on',
+                'update_frequency': 'weekly',
+                'next': history_return_url,
+            },
+        )
+        self.assertEqual(subscribed.status_code, 302)
+        self.assertEqual(subscribed.url, history_return_url)
+
+    def test_history_pagination_normalizes_invalid_and_out_of_range_pages(self):
+        for index in range(13):
+            history_campaign = self._campaign(
+                f'历史专题 {index + 1:02d}', f'history-normalize-{index + 1}',
+            )
+            CampaignRegistration.objects.create(
+                campaign=history_campaign,
+                user=self.user,
+                joined_at=self.now - timedelta(days=index + 2),
+                left_at=self.now - timedelta(days=index + 1),
+                is_active=False,
+            )
+        self.client.force_login(self.user)
+
+        invalid = self.client.get(reverse('my_campaigns'), {'page': 'not-a-number'})
+        overrun = self.client.get(reverse('my_campaigns'), {'page': 999})
+
+        self.assertEqual(invalid.context['history_page'].number, 1)
+        self.assertEqual(overrun.context['history_page'].number, 2)
+
 
 class CampaignRegistrationAdminTests(TestCase):
     def setUp(self):
