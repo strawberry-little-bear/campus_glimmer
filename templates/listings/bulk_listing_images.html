@@ -2,117 +2,148 @@
 
 {% block title %}{{ title }} · 拾光校园{% endblock %}
 {% block content %}
-<div class="form-page-heading">
-    <a href="{% url 'my_items' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回我的商品</a>
-    <span class="eyebrow eyebrow-soft">批量发布收尾</span>
-    <h1>本批次补图</h1>
-    <p>每一行选择一张图；只想先补几件，就只给那几行选文件。</p>
-</div>
-
-<div class="row g-3 mb-4">
-    <div class="col-sm-4">
-        <div class="content-card text-center">
-            <span class="text-muted small d-block">本批次发布</span>
-            <strong class="display-6">{{ published_count }}</strong>
-            <span class="text-muted small d-block">{{ published_at|date:"Y-m-d H:i" }}</span>
-        </div>
+<div class="page-intro seller-desk-intro bulk-image-intro">
+    <div>
+        <a href="{% url 'my_items' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回我的商品</a>
+        <span class="eyebrow eyebrow-soft">批量发布收尾</span>
+        <h1>本批次补图</h1>
+        <p>给刚发布的商品补上第一张图。每一行只需选择一张图片，也可以先处理其中几件。</p>
     </div>
-    <div class="col-sm-4">
-        <div class="content-card text-center">
-            <span class="text-muted small d-block">已有图片</span>
-            <strong class="display-6 text-success">{{ completed_count }}</strong>
-            <span class="text-muted small d-block">不需要继续处理 {{ not_actionable_count }} 件</span>
-        </div>
-    </div>
-    <div class="col-sm-4">
-        <div class="content-card text-center">
-            <span class="text-muted small d-block">仍待补图</span>
-            <strong class="display-6 text-primary">{{ pending_count }}</strong>
-            <span class="text-muted small d-block">行内直接上传</span>
-        </div>
+    <div class="seller-desk-actions">
+        <a href="{% url 'bulk_create_items' %}" class="btn btn-outline-primary"><i class="bi bi-collection me-1"></i>继续批量发布</a>
+        <a href="{% url 'my_items' %}" class="btn btn-outline-secondary"><i class="bi bi-grid me-1"></i>查看全部商品</a>
     </div>
 </div>
 
-<div class="form-card content-card">
-    <div class="mb-4">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <h2 class="h6 mb-0">补图进度</h2>
-            <span class="small text-muted">{{ completed_count }} / {{ actionable_count }}</span>
+<section class="bulk-image-summary" aria-label="本批次补图概况">
+    <article class="bulk-image-stat">
+        <span class="bulk-image-stat-icon"><i class="bi bi-box-seam"></i></span>
+        <div class="bulk-image-stat-copy">
+            <span>本批次发布</span>
+            <strong>{{ published_count }}</strong>
+            <small>{{ published_at|date:"Y-m-d H:i" }} 完成发布</small>
         </div>
-        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress_percent }}">
+    </article>
+    <article class="bulk-image-stat is-success">
+        <span class="bulk-image-stat-icon"><i class="bi bi-image-fill"></i></span>
+        <div class="bulk-image-stat-copy">
+            <span>已有图片</span>
+            <strong>{{ completed_count }}</strong>
+            <small>{{ not_actionable_count }} 件无需继续处理</small>
+        </div>
+    </article>
+    <article class="bulk-image-stat is-pending">
+        <span class="bulk-image-stat-icon"><i class="bi bi-hourglass-split"></i></span>
+        <div class="bulk-image-stat-copy">
+            <span>仍待补图</span>
+            <strong>{{ pending_count }}</strong>
+            <small>可直接在下方逐件上传</small>
+        </div>
+    </article>
+</section>
+
+<section class="content-card bulk-image-progress-panel" aria-labelledby="bulk-image-progress-title">
+    <div class="bulk-image-progress-head">
+        <div>
+            <span class="eyebrow eyebrow-soft">Upload progress</span>
+            <h2 id="bulk-image-progress-title">补图进度</h2>
+            <p>已完成的商品会自动从待办中移除，未完成进度不会因离开页面而丢失。</p>
+        </div>
+        <strong class="bulk-image-progress-number" aria-hidden="true">{{ progress_percent }}%</strong>
+    </div>
+    <div class="bulk-image-progress-track">
+        <div class="progress" role="progressbar" aria-label="本批次补图进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ progress_percent }}" aria-valuetext="{{ completed_count }} 件已完成，{{ pending_count }} 件待补图">
             <div class="progress-bar" style="width: {{ progress_percent }}%"></div>
         </div>
+        <div class="bulk-image-progress-meta">
+            <span><i class="bi bi-check2-circle"></i>{{ completed_count }} / {{ actionable_count }} 件可处理商品已完成</span>
+            <span{% if pending_count %} class="is-attention"{% endif %}><i class="bi bi-{% if pending_count %}hourglass{% else %}check2-all{% endif %}"></i>{% if pending_count %}还有 {{ pending_count }} 件等待补图{% else %}本批次已全部完成{% endif %}</span>
+        </div>
+    </div>
+</section>
+
+<section class="content-card bulk-image-workbench" aria-labelledby="bulk-image-workbench-title">
+    <div class="bulk-image-workbench-head">
+        <div>
+            <span class="eyebrow eyebrow-soft">Next step</span>
+            <h2 id="bulk-image-workbench-title">{% if pending_items %}待补图清单{% else %}本批次已处理完成{% endif %}</h2>
+            <p>{% if pending_items %}文件与商品一一对应，提交前可以先核对标题、交易方式和当前状态。{% else %}没有需要继续补图的商品，你仍可回到商品列表管理其他信息。{% endif %}</p>
+        </div>
+        {% if pending_items %}<span class="bulk-image-count"><i class="bi bi-list-task me-1"></i>{{ pending_count }} 件待办</span>{% endif %}
     </div>
 
     {% if pending_items %}
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" class="bulk-image-form">
         {% csrf_token %}
-        <div class="alert alert-light border d-flex align-items-start" role="note">
-            <i class="bi bi-info-circle-fill text-primary me-2 mt-1"></i>
-            <div>
-                文件与商品的对应关系以这一页的表格为准。本次提交通过前，任何一张无效图片都会让整次选择不写入；需要继续加图或删图时，再进入单件编辑页。
-            </div>
+        <div class="bulk-image-form-note" role="note">
+            <i class="bi bi-info-circle" aria-hidden="true"></i>
+            <span><strong>整批校验后再保存。</strong>本次提交中只要有任意一张图片无法处理，所有选中文件都不会写入；需要继续加图或删图时，可进入单件编辑页。</span>
         </div>
-        <div class="table-responsive">
-            <table class="table table-sm align-middle seller-desk-table">
-            <caption class="visually-hidden">补图进度</caption>
-                <thead>
-                    <tr>
-                        <th>商品</th>
-                        <th>交易口径</th>
-                        <th>状态</th>
-                        <th>发布时间</th>
-                        <th>本行补图</th>
-                        <th class="text-end">更多操作</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in pending_items %}
-                    <tr>
-                        <td><a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></td>
-                        <td>
-                            {% if item.trade_mode == 'free' %}免费赠送
-                            {% elif item.trade_mode == 'borrow' %}押金 ¥{{ item.deposit_amount }} · {{ item.borrow_days }} 天
-                            {% else %}¥{{ item.price }}{% endif %}
-                        </td>
-                        <td>{{ item.get_status_display }}</td>
-                        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
-                        <td>
-                            <label class="visually-hidden" for="item-image-{{ item.id }}">{{ item.title }} 的补图文件</label>
+
+        <div class="bulk-image-task-list">
+            {% for item in pending_items %}
+            <article class="bulk-image-task" aria-labelledby="bulk-image-item-title-{{ item.id }}">
+                <span class="bulk-image-task-index" aria-hidden="true">{{ forloop.counter|stringformat:"02d" }}</span>
+                <div class="bulk-image-task-main">
+                    <div class="bulk-image-task-heading">
+                        <div>
+                            <h3 id="bulk-image-item-title-{{ item.id }}"><a href="{% url 'item_detail' item.id %}">{{ item.title }}</a></h3>
+                            <div class="bulk-image-task-meta">
+                                <span class="bulk-image-status"><i class="bi bi-circle-fill" aria-hidden="true"></i>{{ item.get_status_display }}</span>
+                                <span><i class="bi bi-tag" aria-hidden="true"></i>
+                                    {% if item.trade_mode == 'free' %}免费赠送
+                                    {% elif item.trade_mode == 'borrow' %}押金 ¥{{ item.deposit_amount }} · {{ item.borrow_days }} 天
+                                    {% else %}¥{{ item.price }}{% endif %}
+                                </span>
+                                <span><i class="bi bi-clock" aria-hidden="true"></i>{{ item.created_at|date:"Y-m-d H:i" }} 发布</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bulk-image-task-footer">
+                        <div class="bulk-image-upload">
+                            <label for="item-image-{{ item.id }}">
+                                <span><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i>为这件商品选择图片</span>
+                                <small id="item-image-hint-{{ item.id }}">支持常见图片格式，单张不超过 10 MB。</small>
+                            </label>
                             <input
                                 type="file"
                                 name="item_image_{{ item.id }}"
                                 id="item-image-{{ item.id }}"
                                 accept="image/*"
-                                aria-describedby="item-image-error-{{ item.id }}"
+                                aria-describedby="item-image-hint-{{ item.id }}{% if item.bulk_image_error %} item-image-error-{{ item.id }}{% endif %}"
+                                {% if item.bulk_image_error %}aria-invalid="true"{% endif %}
                                 class="form-control{% if item.bulk_image_error %} is-invalid{% endif %}"
                             >
                             {% if item.bulk_image_error %}
-                            <div class="invalid-feedback d-block" id="item-image-error-{{ item.id }}">
-                                {{ item.bulk_image_error }}
-                            </div>
+                            <div class="invalid-feedback d-block" id="item-image-error-{{ item.id }}"><i class="bi bi-exclamation-circle me-1" aria-hidden="true"></i>{{ item.bulk_image_error }}</div>
                             {% endif %}
-                        </td>
-                        <td class="text-end">
-                            <a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-secondary">单件编辑</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        </div>
+                        <a href="{% url 'edit_item' item.id %}" class="btn btn-outline-secondary bulk-image-edit"><i class="bi bi-pencil-square me-1"></i>单件编辑</a>
+                    </div>
+                </div>
+            </article>
+            {% endfor %}
         </div>
-        <div class="d-flex flex-wrap justify-content-end gap-2 pt-3">
-            <button type="submit" class="btn btn-primary">
+
+        <div class="bulk-image-form-actions">
+            <span><i class="bi bi-shield-check me-1"></i>提交后会立即更新本批次进度</span>
+            <button type="submit" class="btn btn-primary px-4">
                 <i class="bi bi-cloud-arrow-up me-2"></i>保存选中的补图
             </button>
         </div>
     </form>
     {% else %}
-    <div class="empty-state text-center py-5">
-        <i class="bi bi-check-circle-fill text-success display-6 d-block mb-3"></i>
-        <h2 class="h5">这一批不用再补了</h2>
-        <p class="text-muted mb-0">仍有展示价值且需要图片的商品已经处理完。</p>
+    <div class="bulk-image-complete">
+        <span class="bulk-image-complete-icon"><i class="bi bi-check2-circle"></i></span>
+        <div>
+            <h3>这一批不用再补了</h3>
+            <p>仍可展示且需要图片的商品都已经处理完。下一步可以继续发布，或回到商品列表检查详情。</p>
+        </div>
+        <div class="bulk-image-complete-actions">
+            <a href="{% url 'my_items' %}" class="btn btn-primary"><i class="bi bi-grid me-1"></i>返回我的商品</a>
+            <a href="{% url 'bulk_create_items' %}" class="btn btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>再发布一批</a>
+        </div>
     </div>
     {% endif %}
-</div>
+</section>
 {% endblock %}

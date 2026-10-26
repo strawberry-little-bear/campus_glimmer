@@ -123,6 +123,27 @@ class BulkListingImageQueueTests(TestCase):
         self.assertContains(queue, '数据结构教材')
         self.assertContains(queue, '台灯')
 
+    def test_queue_page_uses_workbench_summary_and_accessible_upload_controls(self):
+        item = self.make_item('需要补图的组织学教材')
+        self.set_queue([item])
+        self.client.force_login(self.seller)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'listings/bulk_listing_images.html')
+        self.assertContains(response, 'class="bulk-image-summary"')
+        self.assertContains(response, 'class="content-card bulk-image-workbench"')
+        self.assertContains(response, 'role="progressbar"')
+        self.assertContains(response, 'aria-valuenow="0"')
+        self.assertContains(response, f'for="item-image-{item.id}"')
+        self.assertContains(response, f'id="item-image-{item.id}"')
+        self.assertContains(
+            response,
+            f'aria-describedby="item-image-hint-{item.id}"',
+        )
+        self.assertNotContains(response, '<table')
+
     def test_anonymous_queue_page_is_redirected_to_login(self):
         response = self.client.get(self.url)
 
@@ -264,6 +285,11 @@ class BulkListingImageQueueTests(TestCase):
         self.assertEqual(ItemImage.objects.count(), 0)
         self.assertContains(response, '图片处理失败，请换一张清晰的图片再试。')
         self.assertContains(response, '本次选择的图片全部未保存')
+        self.assertContains(response, 'aria-invalid="true"')
+        self.assertContains(
+            response,
+            f'aria-describedby="item-image-hint-{invalid.id} item-image-error-{invalid.id}"',
+        )
 
     def test_empty_submission_does_not_write_images(self):
         item = self.make_item('未选择图片的教材')

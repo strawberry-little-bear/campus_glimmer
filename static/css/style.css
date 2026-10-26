@@ -9112,3 +9112,621 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
         padding-inline: 9px;
     }
 }
+
+/* --------------------------------------------------------------------------
+   批量发布后的补图工作台
+
+   这个页面接在“批量发布成功”之后，用户通常刚录完一整批商品，需要快速看清
+   还剩什么、每行该传哪张图。页面因此不再使用裸表格，而采用概况卡、总进度和
+   逐件任务卡：桌面上保持一屏可扫，窄屏下把上传控件和单件编辑入口完整堆叠，
+   不依赖横向滚动。所有颜色沿用站点 token，交互控件保留清晰焦点和 44px 触达。
+   -------------------------------------------------------------------------- */
+.bulk-image-intro {
+    align-items: flex-end;
+}
+
+.bulk-image-intro > div:first-child {
+    max-width: 760px;
+}
+
+.bulk-image-intro .back-link {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: 13px;
+}
+
+.bulk-image-intro h1 {
+    margin: 8px 0 9px;
+}
+
+.bulk-image-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.bulk-image-stat {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    padding: 20px 21px;
+    overflow: hidden;
+    border: 1px solid #dfeae3;
+    border-radius: 18px;
+    background: linear-gradient(145deg, #fff, #f8fbf9);
+    box-shadow: 0 8px 24px rgba(29, 77, 57, .045);
+}
+
+.bulk-image-stat.is-success {
+    border-color: #d7eadf;
+    background: linear-gradient(145deg, #fff, #f3faf5);
+}
+
+.bulk-image-stat.is-pending {
+    border-color: #ecdcc4;
+    background: linear-gradient(145deg, #fffdf8, #fff8ed);
+}
+
+.bulk-image-stat-icon {
+    display: grid;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    place-items: center;
+    border-radius: 15px;
+    color: #4b7e64;
+    background: #edf5f0;
+    font-size: 1.15rem;
+}
+
+.bulk-image-stat.is-success .bulk-image-stat-icon {
+    color: #287a57;
+    background: #e4f4e9;
+}
+
+.bulk-image-stat.is-pending .bulk-image-stat-icon {
+    color: #a56d2a;
+    background: #fff0d8;
+}
+
+.bulk-image-stat-copy {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.bulk-image-stat-copy > span {
+    color: var(--muted);
+    font-size: .75rem;
+    font-weight: 700;
+}
+
+.bulk-image-stat-copy strong {
+    color: #244b3a;
+    font-size: 1.9rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.08;
+}
+
+.bulk-image-stat.is-pending .bulk-image-stat-copy strong {
+    color: #9a6326;
+}
+
+.bulk-image-stat-copy small {
+    overflow: hidden;
+    color: var(--muted);
+    font-size: .68rem;
+    line-height: 1.5;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bulk-image-progress-panel {
+    margin-bottom: 18px;
+    padding: 22px 24px;
+    border-color: #dce9e1;
+    background:
+        radial-gradient(circle at 94% 8%, rgba(87, 158, 117, .11), transparent 26%),
+        linear-gradient(130deg, #fbfefc, #f4faf6);
+}
+
+.bulk-image-progress-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 22px;
+}
+
+.bulk-image-progress-head h2 {
+    margin: 7px 0 5px;
+    color: #294d3d;
+    font-size: 1.14rem;
+}
+
+.bulk-image-progress-head p {
+    max-width: 680px;
+    margin: 0;
+    color: var(--muted);
+    font-size: .77rem;
+    line-height: 1.65;
+}
+
+.bulk-image-progress-number {
+    flex: 0 0 auto;
+    color: #23724f;
+    font-size: 2rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.045em;
+    line-height: 1;
+}
+
+.bulk-image-progress-track {
+    margin-top: 17px;
+}
+
+.bulk-image-progress-track .progress {
+    height: 10px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #dfece4;
+}
+
+.bulk-image-progress-track .progress-bar {
+    border-radius: inherit;
+    background: linear-gradient(90deg, #287d59, #71b38c);
+    box-shadow: 0 0 16px rgba(40, 125, 89, .18);
+}
+
+.bulk-image-progress-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 18px;
+    margin-top: 10px;
+    color: #687b71;
+    font-size: .7rem;
+}
+
+.bulk-image-progress-meta i {
+    margin-right: 5px;
+    color: #559675;
+}
+
+.bulk-image-progress-meta .is-attention {
+    color: #8a642c;
+}
+
+.bulk-image-progress-meta .is-attention i {
+    color: #ba8137;
+}
+
+.bulk-image-workbench {
+    padding: 0;
+    overflow: hidden;
+    border-color: #dfe9e3;
+}
+
+.bulk-image-workbench-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 22px 24px;
+    border-bottom: 1px solid #e8efea;
+    background: linear-gradient(120deg, #fff, #fbfdfb);
+}
+
+.bulk-image-workbench-head h2 {
+    margin: 7px 0 5px;
+    color: #294d3d;
+    font-size: 1.16rem;
+}
+
+.bulk-image-workbench-head p {
+    max-width: 720px;
+    margin: 0;
+    color: var(--muted);
+    font-size: .77rem;
+    line-height: 1.65;
+}
+
+.bulk-image-count {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 7px 11px;
+    border: 1px solid #e7d7bd;
+    border-radius: 999px;
+    color: #8a6127;
+    background: #fff8eb;
+    font-size: .7rem;
+    font-weight: 700;
+}
+
+.bulk-image-form {
+    padding: 20px 24px 24px;
+}
+
+.bulk-image-form-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding: 13px 15px;
+    border: 1px solid #dce9e1;
+    border-radius: 13px;
+    color: #5d7467;
+    background: #f6faf7;
+    font-size: .76rem;
+    line-height: 1.65;
+}
+
+.bulk-image-form-note > i {
+    flex: 0 0 auto;
+    margin-top: 2px;
+    color: #4b916b;
+    font-size: .95rem;
+}
+
+.bulk-image-form-note strong {
+    color: #355a48;
+}
+
+.bulk-image-task-list {
+    display: grid;
+    gap: 12px;
+}
+
+.bulk-image-task {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 14px;
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #dfeae3;
+    border-radius: 17px;
+    background: #fff;
+    box-shadow: 0 5px 16px rgba(31, 74, 55, .035);
+    transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.bulk-image-task:hover {
+    border-color: #c6ddcf;
+    box-shadow: 0 9px 24px rgba(31, 74, 55, .065);
+    transform: translateY(-1px);
+}
+
+.bulk-image-task-index {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border-radius: 13px;
+    color: #4b8065;
+    background: #edf6f0;
+    font-size: .72rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .04em;
+}
+
+.bulk-image-task-main {
+    min-width: 0;
+}
+
+.bulk-image-task-heading {
+    display: flex;
+    min-width: 0;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.bulk-image-task-heading > div {
+    min-width: 0;
+}
+
+.bulk-image-task-heading h3 {
+    margin: 2px 0 7px;
+    overflow-wrap: anywhere;
+    color: #294a3a;
+    font-size: .96rem;
+    font-weight: 800;
+    line-height: 1.45;
+}
+
+.bulk-image-task-heading h3 a:hover,
+.bulk-image-task-heading h3 a:focus-visible {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.bulk-image-task-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 15px;
+    color: #6d7f75;
+    font-size: .69rem;
+}
+
+.bulk-image-task-meta i {
+    margin-right: 4px;
+    color: #87a295;
+}
+
+.bulk-image-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #347454;
+    background: #edf8f1;
+    font-weight: 700;
+}
+
+.bulk-image-status i {
+    color: #55a475;
+    font-size: .42rem;
+}
+
+.bulk-image-task-footer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 12px;
+    margin-top: 13px;
+    padding-top: 13px;
+    border-top: 1px dashed #e1ebe5;
+}
+
+.bulk-image-upload {
+    min-width: 0;
+}
+
+.bulk-image-upload label {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+    cursor: pointer;
+}
+
+.bulk-image-upload label > span {
+    color: #365e4b;
+    font-size: .74rem;
+    font-weight: 800;
+}
+
+.bulk-image-upload label > span i {
+    margin-right: 5px;
+    color: #4e956d;
+}
+
+.bulk-image-upload label small {
+    color: #839087;
+    font-size: .64rem;
+    line-height: 1.4;
+}
+
+.bulk-image-upload .form-control {
+    min-height: 42px;
+    padding-top: 7px;
+    padding-bottom: 7px;
+    color: #5f7067;
+    font-size: .73rem;
+}
+
+.bulk-image-upload .form-control::file-selector-button {
+    margin: -7px 11px -7px -12px;
+    padding: 8px 12px;
+    border: 0;
+    border-right: 1px solid var(--line);
+    color: #347554;
+    background: #f0f7f2;
+    font-size: .7rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.bulk-image-upload .invalid-feedback {
+    margin-top: 6px;
+    color: #a54f45;
+    font-size: .69rem;
+}
+
+.bulk-image-upload .form-control.is-invalid {
+    border-color: #d5a29a;
+}
+
+.bulk-image-edit {
+    min-height: 42px;
+    white-space: nowrap;
+}
+
+.bulk-image-task a:focus-visible,
+.bulk-image-form-actions .btn:focus-visible,
+.bulk-image-complete a:focus-visible,
+.bulk-image-intro .btn:focus-visible {
+    outline: 3px solid rgba(24, 122, 91, .24);
+    outline-offset: 3px;
+}
+
+.bulk-image-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 17px;
+    padding-top: 17px;
+    border-top: 1px solid #e8efea;
+}
+
+.bulk-image-form-actions > span {
+    color: #718177;
+    font-size: .69rem;
+}
+
+.bulk-image-form-actions > span i {
+    color: #4f936e;
+}
+
+.bulk-image-form-actions .btn {
+    min-height: 44px;
+}
+
+.bulk-image-complete {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 17px;
+    padding: 26px 24px;
+    background:
+        radial-gradient(circle at 92% 10%, rgba(84, 159, 113, .11), transparent 24%),
+        #fff;
+}
+
+.bulk-image-complete-icon {
+    display: grid;
+    width: 52px;
+    height: 52px;
+    place-items: center;
+    border-radius: 16px;
+    color: #267b57;
+    background: #e6f5eb;
+    font-size: 1.35rem;
+}
+
+.bulk-image-complete h3 {
+    margin: 0 0 5px;
+    color: #294d3d;
+    font-size: 1.04rem;
+}
+
+.bulk-image-complete p {
+    max-width: 650px;
+    margin: 0;
+    color: var(--muted);
+    font-size: .77rem;
+    line-height: 1.7;
+}
+
+.bulk-image-complete-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@media (max-width: 767.98px) {
+    .bulk-image-intro {
+        align-items: flex-start;
+    }
+
+    .bulk-image-intro .seller-desk-actions {
+        width: 100%;
+    }
+
+    .bulk-image-intro .seller-desk-actions .btn {
+        flex: 1 1 160px;
+    }
+
+    .bulk-image-summary {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .bulk-image-stat {
+        padding: 15px 16px;
+    }
+
+    .bulk-image-stat-copy strong {
+        font-size: 1.65rem;
+    }
+
+    .bulk-image-progress-panel {
+        padding: 18px;
+    }
+
+    .bulk-image-progress-head {
+        gap: 14px;
+    }
+
+    .bulk-image-progress-number {
+        font-size: 1.55rem;
+    }
+
+    .bulk-image-progress-meta {
+        display: grid;
+    }
+
+    .bulk-image-workbench-head {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+    }
+
+    .bulk-image-count {
+        justify-self: start;
+    }
+
+    .bulk-image-form {
+        padding: 16px 14px 18px;
+    }
+
+    .bulk-image-task {
+        grid-template-columns: 1fr;
+        gap: 10px;
+        padding: 14px;
+    }
+
+    .bulk-image-task:hover {
+        transform: none;
+    }
+
+    .bulk-image-task-index {
+        width: auto;
+        height: 28px;
+        justify-self: start;
+        padding: 0 9px;
+        border-radius: 9px;
+    }
+
+    .bulk-image-upload label {
+        display: grid;
+        gap: 3px;
+    }
+
+    .bulk-image-task-footer {
+        grid-template-columns: 1fr;
+    }
+
+    .bulk-image-edit {
+        width: 100%;
+    }
+
+    .bulk-image-form-actions {
+        display: grid;
+    }
+
+    .bulk-image-form-actions .btn {
+        width: 100%;
+    }
+
+    .bulk-image-complete {
+        grid-template-columns: 1fr;
+        padding: 22px 18px;
+    }
+
+    .bulk-image-complete-actions {
+        display: grid;
+        width: 100%;
+    }
+
+    .bulk-image-complete-actions .btn {
+        width: 100%;
+    }
+}
