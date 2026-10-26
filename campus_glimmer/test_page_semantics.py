@@ -670,6 +670,70 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         ('求购详情（卖家视角）', 'demand_detail'),
     )
 
+    def test_invalid_forms_focus_an_accessible_error_summary(self):
+        # GET 页面没有错误态，BoundField 不会输出 aria-invalid / aria-describedby。
+        # 这里专门提交无效数据，守住「页面重新渲染后，错误能被读屏和键盘用户找到」
+        # 这条路径：摘要可聚焦、链接能落到具体字段、字段引用的 id 都真实存在。
+        self.order.status = 'completed'
+        self.order.save(update_fields=['status'])
+        cases = (
+            (
+                '举报商品',
+                self.client.post(reverse('report_item', args=[self.item.id]), {}),
+                'id_reason',
+            ),
+            (
+                '发起交易',
+                self.client.post(
+                    reverse('create_order', args=[self.item.id]),
+                    {'meeting_location': 999999, 'buyer_note': ''},
+                ),
+                'id_meeting_location',
+            ),
+            (
+                '交易争议',
+                self.client.post(reverse('open_dispute', args=[self.order.id]), {}),
+                'id_reason',
+            ),
+            (
+                '交易评价',
+                self.client.post(reverse('rate_order', args=[self.order.id]), {}),
+                'id_score',
+            ),
+            (
+                '通知偏好',
+                self.client.post(
+                    reverse('notification_preferences'),
+                    {'quiet_hours_start': 'not-a-time', 'quiet_hours_end': '08:00'},
+                ),
+                'id_quiet_hours_start',
+            ),
+        )
+
+        for label, response, field_id in cases:
+            with self.subTest(page=label):
+                self.assertEqual(response.status_code, 200)
+                html = response.content.decode('utf-8')
+                builder = _parse(html)
+                summaries = [
+                    node for node in _iter_nodes(builder.root, {'div'})
+                    if 'data-form-error-summary' in node.attrs
+                ]
+                self.assertEqual(len(summaries), 1, f'{label} 缺少或重复渲染错误摘要')
+                summary = summaries[0]
+                self.assertEqual(summary.attrs.get('role'), 'alert')
+                self.assertEqual(summary.attrs.get('tabindex'), '-1')
+                summary_links = [
+                    link.attrs.get('href') for link in _iter_nodes(summary, {'a'})
+                ]
+                self.assertIn(f'#{field_id}', summary_links)
+                self.assertIn(field_id, builder.by_id)
+                duplicates, dangling = _id_reference_problems(html)
+                self.assertEqual(duplicates, [])
+                self.assertEqual(dangling, [])
+                self.assertIn('aria-invalid="true"', html)
+                self.assertIn(f'aria-describedby="{field_id}_error', html)
+
     def test_decorative_placeholder_images_are_not_read_as_content(self):
         # 无图商品的占位图必须是装饰性的（alt=""），同时给包着它的链接补上
         # aria-label。否则读屏软件会把「暂无图片」当成链接名称读出来，
