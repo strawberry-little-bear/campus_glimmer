@@ -723,15 +723,23 @@ def my_campaigns(request):
     history_queryset = registrations.filter(is_active=False).order_by(
         '-left_at', '-joined_at', '-id',
     )
-    history_total = history_queryset.count()
-    history_registrations = list(history_queryset[:30])
+    history_page = Paginator(history_queryset, 12).get_page(
+        request.GET.get('page'),
+    )
+    history_registrations = list(history_page.object_list)
     for registration in active_registrations + history_registrations:
         registration.campaign_is_live = registration.campaign.is_live(now)
+    history_return_url = reverse('my_campaigns')
+    if history_page.number > 1:
+        history_return_url += f'?page={history_page.number}#campaign-history'
     return render(request, 'listings/my_campaigns.html', {
         'active_registrations': active_registrations,
         'history_registrations': history_registrations,
-        'history_total': history_total,
-        'history_is_truncated': history_total > len(history_registrations),
+        'history_total': history_page.paginator.count,
+        'history_page': history_page,
+        'page_obj': history_page,
+        'page_numbers': _elided_page_numbers(history_page),
+        'history_return_url': history_return_url,
         'title': '我的专题足迹',
     })
 

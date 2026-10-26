@@ -39,7 +39,7 @@
                 {% if registration.campaign_is_live %}
                 <form method="post" action="{% url 'update_campaign_subscription' registration.campaign.slug %}" class="campaign-footprint-subscription-form">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{% url 'my_campaigns' %}">
+                    <input type="hidden" name="next" value="{{ history_return_url }}">
                     <label><input type="checkbox" name="notify_updates" {% if registration.notify_updates %}checked{% endif %}> 接收摘要</label>
                     <select name="update_frequency" aria-label="摘要频率">
                         <option value="daily" {% if registration.update_frequency == 'daily' %}selected{% endif %}>每日</option>
@@ -53,7 +53,7 @@
                     <a href="{% url 'campaign_detail' registration.campaign.slug %}" class="text-link">进入专题 <i class="bi bi-arrow-up-right"></i></a>
                     <form method="post" action="{% url 'leave_campaign' registration.campaign.slug %}">
                         {% csrf_token %}
-                        <input type="hidden" name="next" value="{% url 'my_campaigns' %}">
+                        <input type="hidden" name="next" value="{{ history_return_url }}">
                         <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-dash me-1"></i>退出专题</button>
                     </form>
                     {% else %}
@@ -68,7 +68,7 @@
     </div>
 </section>
 
-<section>
+<section id="campaign-history">
     <div class="d-flex align-items-center justify-content-between mb-3">
         <div><span class="eyebrow eyebrow-soft">History</span><h2 class="section-title mt-1">历史参与</h2></div>
         <span class="text-muted small">{{ history_total }} 段记录</span>
@@ -93,6 +93,6 @@
         <div class="content-card empty-state"><i class="bi bi-clock-history"></i><h2>还没有历史参与</h2><p>退出专题后，这里会保留加入与退出的时间区间。</p></div>
         {% endfor %}
     </div>
-    {% if history_is_truncated %}<p class="text-muted small mt-3 mb-0">这里显示最近 30 段历史；更早的记录仍保留在数据库中。</p>{% endif %}
+    {% include 'listings/_personal_queue_pagination.html' with page_obj=page_obj page_numbers=page_numbers pagination_label='专题历史参与分页' pagination_anchor='campaign-history' only %}
 </section>
 {% endblock %}
