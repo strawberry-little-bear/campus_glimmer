@@ -404,6 +404,9 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 - 管理员可以处理治理事项，但不能绕过服务端权限检查代替用户完成交易操作；
 - 项目默认启用 `nosniff`、`Referrer-Policy`、`Cross-Origin-Opener-Policy`、
   `X-Frame-Options` 和 HttpOnly Cookie；
+- 生产环境的 400、权限不足、CSRF 校验失败、404 与 500 页面使用同一套品牌化错误体验：
+  说明发生了什么、给出安全返回路径，不展示异常文本、堆栈或用户数据；500 页面使用独立静态外壳，
+  避免数据库或会话异常时再次级联失败；
 - 订单创建使用事务和锁，争议证据、通知读取、运营数据和订单操作均在服务端校验身份。
 
 详细边界见[当前取舍与边界](docs/product-boundaries.md)。
@@ -439,6 +442,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 | 备份内容、校验、保留与恢复演练 | [备份与恢复](docs/backup-restore.md) |
 | 专题目标、严格漏斗与跨专题样本口径 | [专题目标与转化漏斗](docs/campaign-goals-funnel-design.md) |
 | 举报与争议队列的分页、排序与全量统计 | [治理队列分页设计](docs/governance-queue-pagination-design.md) |
+| 400 / 403 / 404 / 500 与 CSRF 错误页的恢复路径和隐私边界 | [品牌化错误体验设计](docs/error-experience-design.md) |
 | 浏览足迹、专题历史与免费领取申请队列的分页边界 | [个人队列分页设计](docs/personal-queue-pagination-design.md) |
 | 学期阶段、统计快照与交易高峰 | [学期日历与交易高峰](docs/academic-calendar.md) |
 | 当前取舍、隐私边界与实现纪律 | [当前取舍与边界](docs/product-boundaries.md) |
