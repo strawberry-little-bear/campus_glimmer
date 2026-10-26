@@ -24,17 +24,17 @@
 
             <form method="post" class="mt-4">
                 {% csrf_token %}
-                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                {% include 'includes/form_error_summary.html' %}
                 <div class="mb-4">
-                    <label for="id_score" class="form-label">整体体验</label>
+                    <label for="{{ form.score.id_for_label }}" class="form-label">{{ form.score.label }}</label>
                     {{ form.score }}
-                    {% for error in form.score.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+                    {% if form.score.errors %}<div class="invalid-feedback d-block" id="{{ form.score.id_for_label }}_error">{{ form.score.errors|striptags }}</div>{% endif %}
                 </div>
                 <div class="mb-4">
-                    <label for="id_comment" class="form-label">评价内容 <span class="text-muted fw-normal">（可选）</span></label>
+                    <label for="{{ form.comment.id_for_label }}" class="form-label">{{ form.comment.label }} <span class="text-muted fw-normal">（可选）</span></label>
                     {{ form.comment }}
-                    {% for error in form.comment.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-                    <div class="form-text">可以分享沟通是否顺畅、描述是否准确、交付是否按约定完成等信息。</div>
+                    {% if form.comment.errors %}<div class="invalid-feedback d-block" id="{{ form.comment.id_for_label }}_error">{{ form.comment.errors|striptags }}</div>{% endif %}
+                    {% if form.comment.help_text %}<div class="form-text" id="{{ form.comment.id_for_label }}_helptext">{{ form.comment.help_text }}</div>{% endif %}
                 </div>
                 <div class="d-flex flex-wrap gap-2 justify-content-end">
                     <a href="{% url 'order_detail' order.id %}" class="btn btn-outline-secondary">暂不评价</a>

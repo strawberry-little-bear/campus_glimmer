@@ -23,7 +23,7 @@
 
     <form method="post" novalidate>
         {% csrf_token %}
-        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        {% include 'includes/form_error_summary.html' %}
         <div class="notification-preference-list">
             {% for field in form.visible_fields %}
             {% if field.name != 'quiet_hours_enabled' and field.name != 'quiet_hours_start' and field.name != 'quiet_hours_end' %}
@@ -31,7 +31,7 @@
                 <span class="notification-preference-copy">
                     <strong>{{ field.label }}</strong>
                     <small id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</small>
-                    {% for error in field.errors %}<em>{{ error }}</em>{% endfor %}
+                    {% if field.errors %}<em id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</em>{% endif %}
                 </span>
                 <span class="notification-switch">
                     {{ field }}
@@ -54,10 +54,9 @@
                 </span>
             </div>
             <div class="notification-quiet-hours-fields">
-                <label for="{{ form.quiet_hours_start.id_for_label }}"><span>{{ form.quiet_hours_start.label }}</span>{{ form.quiet_hours_start }}{% for error in form.quiet_hours_start.errors %}<em>{{ error }}</em>{% endfor %}</label>
-                <label for="{{ form.quiet_hours_end.id_for_label }}"><span>{{ form.quiet_hours_end.label }}</span>{{ form.quiet_hours_end }}{% for error in form.quiet_hours_end.errors %}<em>{{ error }}</em>{% endfor %}</label>
+                <label for="{{ form.quiet_hours_start.id_for_label }}"><span>{{ form.quiet_hours_start.label }}</span>{{ form.quiet_hours_start }}{% if form.quiet_hours_start.errors %}<em id="{{ form.quiet_hours_start.id_for_label }}_error">{{ form.quiet_hours_start.errors|striptags }}</em>{% endif %}</label>
+                <label for="{{ form.quiet_hours_end.id_for_label }}"><span>{{ form.quiet_hours_end.label }}</span>{{ form.quiet_hours_end }}{% if form.quiet_hours_end.errors %}<em id="{{ form.quiet_hours_end.id_for_label }}_error">{{ form.quiet_hours_end.errors|striptags }}</em>{% endif %}</label>
             </div>
-            {% for error in form.non_field_errors %}<p class="notification-quiet-hours-error">{{ error }}</p>{% endfor %}
         </section>
         <div class="notification-preference-actions">
             <a href="{% url 'notification_list' %}" class="btn btn-light">取消</a>

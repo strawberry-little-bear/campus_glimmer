@@ -636,6 +636,7 @@ class RatingForm(StyledModelFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self._style_fields()
         self.fields['score'].widget.attrs['class'] = 'form-select'
+        self.fields['comment'].help_text = '可以分享沟通是否顺畅、描述是否准确、交付是否按约定完成等信息。'
 
 
 class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):

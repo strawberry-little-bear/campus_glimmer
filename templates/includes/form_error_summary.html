@@ -1,0 +1,18 @@
+{% if form.errors %}
+<div class="form-error-summary" role="alert" tabindex="-1" data-form-error-summary>
+    <div class="form-error-summary-heading">
+        <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+        <strong>请检查以下内容</strong>
+    </div>
+    <ul>
+        {% for error in form.non_field_errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+        {% for field in form %}
+        {% for error in field.errors %}
+        <li>{% if field.id_for_label %}<a href="#{{ field.id_for_label }}">{{ field.label }}：{{ error }}</a>{% else %}{{ field.label }}：{{ error }}{% endif %}</li>
+        {% endfor %}
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}

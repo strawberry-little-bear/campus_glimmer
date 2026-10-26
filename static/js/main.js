@@ -97,6 +97,10 @@ const createSectionRevealer = function (panels, options) {
     };
 };
 document.addEventListener('DOMContentLoaded', function () {
+    // 服务端校验失败时把焦点交给错误摘要。role="alert" 负责即时播报，
+    // tabindex="-1" 让读屏和键盘用户可以直接落到摘要并跳到具体字段。
+    const formErrorSummary = document.querySelector('[data-form-error-summary]');
+    if (formErrorSummary) formErrorSummary.focus({ preventScroll: true });
     document.querySelectorAll('input[type="file"]').forEach(function (input) {
         input.addEventListener('change', function () {
             const preview = this.closest('.upload-card')?.querySelector('img') || document.getElementById('avatar-preview');

@@ -84,6 +84,11 @@ a { color: inherit; text-decoration: none; }
    散落在业务页里的 .form-label / .form-text 还是 Bootstrap 默认的灰色小字。 */
 .form-label { margin-bottom: 6px; color: var(--ink-soft); font-size: .82rem; font-weight: 700; }
 .form-text { margin-top: 6px; color: var(--muted); font-size: .72rem; line-height: 1.6; }
+.form-error-summary { margin-bottom: 24px; padding: 17px 19px; border: 1px solid #efc9c3; border-left: 4px solid #b9564d; border-radius: 13px; color: #7d3932; background: #fff8f6; }
+.form-error-summary:focus { outline: 3px solid rgba(185, 86, 77, .2); outline-offset: 3px; }
+.form-error-summary-heading { display: flex; align-items: center; gap: 8px; font-size: .88rem; }
+.form-error-summary ul { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; color: #8e4c45; font-size: .76rem; line-height: 1.65; }
+.form-error-summary a { color: inherit; font-weight: 700; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 
 /* 成功色与深色描边按钮：站内“保存更改”“发布新商品”等主操作一直用 Bootstrap 的
    #198754，和品牌绿 #187a5b 明显不是一个色系；运营看板还残留一个 btn-outline-dark。
