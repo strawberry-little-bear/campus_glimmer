@@ -2,31 +2,254 @@
 {% load static %}
 {% block title %}{{ title }} · 拾光校园{% endblock %}
 {% block content %}
-<div class="form-page-heading"><a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'item_list' %}{% endif %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回</a><span class="eyebrow eyebrow-soft">分享你的闲置</span><h1>{{ title }}</h1><p>把商品信息写清楚，好物更容易遇见合适的新主人。</p></div>
-<div class="form-card content-card"><form method="post" enctype="multipart/form-data">{% csrf_token %}{% include 'includes/form_error_summary.html' with extra_errors=formset.non_form_errors %}<div class="form-section"><h2><span>01</span>商品信息</h2><p class="text-muted small">标记交易地点，方便同学快速判断是否适合当面交易。</p><div class="row g-3">{% for field in form %}<div class="{% if field.name == 'description' %}col-12{% else %}col-md-6{% endif %}"><label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}{% if field.help_text %}<div class="form-text" id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</div>{% endif %}</div>{% endfor %}</div></div><div class="form-section"><h2><span>02</span>商品图片</h2><p class="text-muted small">最多上传 5 张图片，第一张会作为封面。建议使用光线充足、主体清晰的照片；单张不超过 10 MB 或 2000 万像素，超大图会自动压缩为适合网页展示的尺寸。</p>{{ formset.management_form }}<div class="row g-3">{% for image_form in formset %}<div class="col-sm-4"><div class="upload-card"><img id="preview-{{ forloop.counter }}" src="{% if image_form.instance.image %}{{ image_form.instance.image.url }}{% else %}{% static 'img/no-image.png' %}{% endif %}" alt="图片预览"><label for="{{ image_form.image.id_for_label }}">{% if image_form.instance.image %}<i class="bi bi-arrow-repeat"></i> 更换图片{% else %}<i class="bi bi-cloud-arrow-up"></i> 上传图片{% endif %}</label>{{ image_form.image }}{% if image_form.image.errors %}<div class="text-danger small mt-2" id="{{ image_form.image.id_for_label }}_error">{{ image_form.image.errors|striptags }}</div>{% endif %}{% if image_form.DELETE %}<div class="form-check mt-2">{{ image_form.DELETE }}<label class="form-check-label small" for="{{ image_form.DELETE.id_for_label }}">删除这张图片</label></div>{% endif %}</div></div>{% endfor %}</div></div><div class="form-actions"><a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'item_list' %}{% endif %}" class="btn btn-light">取消</a><button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2 me-2"></i>保存商品</button></div></form></div>
+<div class="page-intro item-editor-intro">
+    <div class="item-editor-intro-copy">
+        <a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'item_list' %}{% endif %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>{% if item %}返回商品详情{% else %}返回商品集{% endif %}</a>
+        <span class="eyebrow eyebrow-soft">{% if item %}继续完善你的商品{% else %}分享你的闲置{% endif %}</span>
+        <h1>{{ title }}</h1>
+        <p>{% if item %}修改会立即同步到商品详情；图片和展示时间也可以在这里一起调整。{% else %}把信息写清楚、把交易方式说明白，好物更容易遇见合适的新主人。{% endif %}</p>
+    </div>
+    <div class="item-editor-progress-card" aria-label="填写进度">
+        <span class="item-editor-progress-kicker">填写进度</span>
+        <strong data-progress-label>0 / 0 项</strong>
+        <div class="item-editor-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-progress-track>
+            <span data-progress-bar></span>
+        </div>
+        <small>带“必填”的信息完成后即可保存</small>
+    </div>
+</div>
+
+<div class="item-editor-layout">
+    <div class="item-editor-main">
+        <form method="post" enctype="multipart/form-data" class="item-editor-form" data-item-editor>
+            {% csrf_token %}
+            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% include 'includes/form_error_summary.html' with extra_errors=formset.non_form_errors %}
+
+            <section class="item-editor-section" aria-labelledby="item-editor-basic-title">
+                <header class="item-editor-section-heading">
+                    <span class="item-editor-step">01</span>
+                    <div>
+                        <h2 id="item-editor-basic-title">先介绍这件商品</h2>
+                        <p>标题和成色决定第一印象，描述则帮助同学判断它是否适合自己。</p>
+                    </div>
+                </header>
+                <div class="item-editor-grid">
+                    {% include 'includes/editor_form_field.html' with field=form.title field_class='item-editor-field--wide' %}
+                    {% include 'includes/editor_form_field.html' with field=form.category %}
+                    {% include 'includes/editor_form_field.html' with field=form.condition %}
+                    {% include 'includes/editor_form_field.html' with field=form.description field_class='item-editor-field--wide' %}
+                </div>
+            </section>
+
+            <section class="item-editor-section" aria-labelledby="item-editor-trade-title">
+                <header class="item-editor-section-heading">
+                    <span class="item-editor-step">02</span>
+                    <div>
+                        <h2 id="item-editor-trade-title">选择交易方式</h2>
+                        <p>价格字段会随交易方式调整；免费赠送和限期借用不会显示为 0 元商品。</p>
+                    </div>
+                </header>
+                <div class="item-editor-trade-note">
+                    <i class="bi bi-lightbulb" aria-hidden="true"></i>
+                    <span data-trade-mode-note>出售：填写心理价位，买家可以直接预约。</span>
+                </div>
+                <div class="item-editor-grid">
+                    {% include 'includes/editor_form_field.html' with field=form.trade_mode field_class='item-editor-field--wide' %}
+                    <div class="item-editor-trade-field" data-trade-field="price">
+                        {% include 'includes/editor_form_field.html' with field=form.price %}
+                    </div>
+                    <div class="item-editor-trade-field" data-trade-field="deposit_amount">
+                        {% include 'includes/editor_form_field.html' with field=form.deposit_amount %}
+                    </div>
+                    <div class="item-editor-trade-field" data-trade-field="borrow_days">
+                        {% include 'includes/editor_form_field.html' with field=form.borrow_days %}
+                    </div>
+                </div>
+            </section>
+
+            <section class="item-editor-section" aria-labelledby="item-editor-visibility-title">
+                <header class="item-editor-section-heading">
+                    <span class="item-editor-step">03</span>
+                    <div>
+                        <h2 id="item-editor-visibility-title">约在哪里、展示多久</h2>
+                        <p>地点和专题能帮助商品被更合适的人看见；展示截止时间可以留空。</p>
+                    </div>
+                </header>
+                <div class="item-editor-grid">
+                    {% include 'includes/editor_form_field.html' with field=form.location %}
+                    {% include 'includes/editor_form_field.html' with field=form.campaign %}
+                    {% include 'includes/editor_form_field.html' with field=form.expires_at field_class='item-editor-field--wide' %}
+                </div>
+            </section>
+
+            <section class="item-editor-section item-editor-section--images" aria-labelledby="item-editor-images-title">
+                <header class="item-editor-section-heading">
+                    <span class="item-editor-step">04</span>
+                    <div>
+                        <h2 id="item-editor-images-title">补上真实图片</h2>
+                        <p>最多 5 张，第一张会作为封面。建议使用光线充足、主体清晰的照片。</p>
+                    </div>
+                </header>
+                <div class="item-editor-image-note">
+                    <i class="bi bi-image" aria-hidden="true"></i>
+                    <div>
+                        <strong>单张不超过 10 MB 或 2000 万像素</strong>
+                        <span>超大图片会自动压缩为适合网页展示的尺寸；替换图片后，保存时才会生效。</span>
+                    </div>
+                </div>
+                {{ formset.management_form }}
+                <div class="item-editor-image-grid">
+                    {% for image_form in formset %}
+                    {% for hidden in image_form.hidden_fields %}{{ hidden }}{% endfor %}
+                    <article class="item-editor-upload{% if image_form.instance.image %} has-image{% endif %}" data-image-card>
+                        <div class="item-editor-upload-preview">
+                            <img id="preview-{{ forloop.counter }}" data-image-preview src="{% if image_form.instance.image %}{{ image_form.instance.image.url }}{% else %}{% static 'img/no-image.png' %}{% endif %}" alt="第 {{ forloop.counter }} 张商品图片预览">
+                            <span class="item-editor-upload-index">图片 {{ forloop.counter }}</span>
+                        </div>
+                        <div class="item-editor-upload-copy">
+                            <strong data-image-status>{% if image_form.instance.image %}已上传{% else %}等待选择图片{% endif %}</strong>
+                            <small>JPG、PNG 或 WebP</small>
+                        </div>
+                        <label for="{{ image_form.image.id_for_label }}" class="item-editor-upload-button">
+                            <i class="bi {% if image_form.instance.image %}bi-arrow-repeat{% else %}bi-cloud-arrow-up{% endif %}" aria-hidden="true"></i>
+                            <span>{% if image_form.instance.image %}更换图片{% else %}选择图片{% endif %}</span>
+                        </label>
+                        {{ image_form.image }}
+                        {% if image_form.image.errors %}
+                        <div class="item-editor-error" id="{{ image_form.image.id_for_label }}_error">{{ image_form.image.errors|striptags }}</div>
+                        {% endif %}
+                        {% if image_form.instance.pk and image_form.DELETE %}
+                        <label class="item-editor-upload-delete" for="{{ image_form.DELETE.id_for_label }}">
+                            {{ image_form.DELETE }}
+                            <span>删除这张图片</span>
+                        </label>
+                        {% endif %}
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <div class="item-editor-actions">
+                <a href="{% if item %}{% url 'item_detail' item.id %}{% else %}{% url 'item_list' %}{% endif %}" class="btn btn-light">取消</a>
+                <div class="item-editor-actions-submit">
+                    <span><i class="bi bi-shield-check" aria-hidden="true"></i>保存前仍可继续修改</span>
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2 me-2" aria-hidden="true"></i>保存商品</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <aside class="item-editor-aside" aria-label="发布提示">
+        <section class="item-editor-tip-card">
+            <span class="item-editor-tip-kicker">发布清单</span>
+            <h2>让同学更快做决定</h2>
+            <ul class="item-editor-checklist">
+                <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span><strong>说明真实成色</strong>把划痕、缺件和使用时间写清楚。</span></li>
+                <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span><strong>留下交易线索</strong>选择校园地点，减少来回确认。</span></li>
+                <li><i class="bi bi-check2-circle" aria-hidden="true"></i><span><strong>上传清晰照片</strong>第一张封面会出现在商品卡片上。</span></li>
+            </ul>
+        </section>
+        <section class="item-editor-tip-card item-editor-tip-card--warm">
+            <span class="item-editor-tip-kicker">交易方式</span>
+            <div class="item-editor-mode-guide">
+                <div><i class="bi bi-tag" aria-hidden="true"></i><span><strong>出售</strong>设置价格，等待预约</span></div>
+                <div><i class="bi bi-gift" aria-hidden="true"></i><span><strong>免费赠送</strong>接收领取申请</span></div>
+                <div><i class="bi bi-arrow-repeat" aria-hidden="true"></i><span><strong>限期借用</strong>设置押金和天数</span></div>
+            </div>
+        </section>
+        <a href="{% url 'my_items' %}" class="item-editor-side-link"><i class="bi bi-grid" aria-hidden="true"></i><span><strong>查看我的商品</strong><small>批量续期、补图和专题管理</small></span><i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </aside>
+</div>
 {% endblock %}
 {% block extra_js %}
 <script>
 (function () {
+    const form = document.querySelector('[data-item-editor]');
+    if (!form) return;
+
     const mode = document.getElementById('id_trade_mode');
     const price = document.getElementById('id_price');
     const deposit = document.getElementById('id_deposit_amount');
     const borrowDays = document.getElementById('id_borrow_days');
-    if (!mode || !price) return;
-    const priceColumn = price.closest('.col-md-6');
-    const depositColumn = deposit ? deposit.closest('.col-md-6') : null;
-    const borrowDaysColumn = borrowDays ? borrowDays.closest('.col-md-6') : null;
+    const modeNote = document.querySelector('[data-trade-mode-note]');
+    const progressLabel = document.querySelector('[data-progress-label]');
+    const progressTrack = document.querySelector('[data-progress-track]');
+    const progressBar = document.querySelector('[data-progress-bar]');
+
     const syncTradeMode = function () {
+        if (!mode || !price) return;
         const isFree = mode.value === 'free';
         const isBorrow = mode.value === 'borrow';
-        if (priceColumn) priceColumn.hidden = isFree || isBorrow;
-        if (depositColumn) depositColumn.hidden = !isBorrow;
-        if (borrowDaysColumn) borrowDaysColumn.hidden = !isBorrow;
+        const priceField = form.querySelector('[data-trade-field="price"]');
+        const depositField = form.querySelector('[data-trade-field="deposit_amount"]');
+        const borrowDaysField = form.querySelector('[data-trade-field="borrow_days"]');
+        if (priceField) priceField.hidden = isFree || isBorrow;
+        if (depositField) depositField.hidden = !isBorrow;
+        if (borrowDaysField) borrowDaysField.hidden = !isBorrow;
         if (isFree || isBorrow) price.value = '0.00';
         if (!isBorrow && deposit) deposit.value = '0.00';
+        if (modeNote) {
+            modeNote.textContent = isFree
+                ? '免费赠送：商品会进入领取申请流程，由你选择最终领取人。'
+                : isBorrow
+                    ? '限期借用：可以记录押金和默认借用天数，归还确认后商品重新开放。'
+                    : '出售：填写心理价位，买家可以直接预约。';
+        }
+        updateProgress();
     };
-    mode.addEventListener('change', syncTradeMode);
+
+    const visibleRequired = function () {
+        return Array.from(form.querySelectorAll('input[required], select[required], textarea[required]')).filter(function (control) {
+            return control.type !== 'hidden' && !control.disabled && !control.closest('[hidden]');
+        });
+    };
+
+    const updateProgress = function () {
+        if (!progressLabel || !progressTrack || !progressBar) return;
+        const controls = visibleRequired();
+        const complete = controls.filter(function (control) {
+            return String(control.value || '').trim() !== '';
+        }).length;
+        const percent = controls.length ? Math.round((complete / controls.length) * 100) : 0;
+        progressLabel.textContent = complete + ' / ' + controls.length + ' 项';
+        progressTrack.setAttribute('aria-valuenow', String(percent));
+        progressBar.style.width = percent + '%';
+        progressBar.parentElement.classList.toggle('is-complete', percent === 100);
+    };
+
+    if (mode) mode.addEventListener('change', syncTradeMode);
+    form.addEventListener('input', updateProgress);
+    form.addEventListener('change', updateProgress);
+
+    form.querySelectorAll('[data-image-card]').forEach(function (card) {
+        const input = card.querySelector('input[type="file"]');
+        const preview = card.querySelector('[data-image-preview]');
+        const status = card.querySelector('[data-image-status]');
+        let objectUrl = null;
+
+        if (input) {
+            input.addEventListener('change', function () {
+                const file = input.files && input.files[0];
+                if (!file || !preview) return;
+                if (objectUrl) URL.revokeObjectURL(objectUrl);
+                objectUrl = URL.createObjectURL(file);
+                preview.src = objectUrl;
+                card.classList.add('has-image', 'has-new-image');
+                if (status) status.textContent = file.name;
+            });
+        }
+
+        const remove = card.querySelector('input[type="checkbox"][name$="-DELETE"]');
+        if (remove) {
+            remove.addEventListener('change', function () {
+                card.classList.toggle('is-marked-delete', remove.checked);
+            });
+        }
+    });
+
     syncTradeMode();
+    updateProgress();
 })();
 </script>
 {% endblock %}

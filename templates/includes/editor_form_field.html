@@ -1,0 +1,12 @@
+<div class="item-editor-field {{ field_class }}{% if field.errors %} has-error{% endif %}">
+    <label class="item-editor-label" for="{{ field.id_for_label }}">
+        {{ field.label }}{% if field.field.required %}<span class="item-editor-required">必填</span>{% endif %}
+    </label>
+    {{ field }}
+    {% if field.errors %}
+    <div class="item-editor-error" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>
+    {% endif %}
+    {% if field.help_text %}
+    <div class="item-editor-help" id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</div>
+    {% endif %}
+</div>
