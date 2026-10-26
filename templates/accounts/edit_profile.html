@@ -24,6 +24,7 @@
 
     <form method="POST" enctype="multipart/form-data" class="profile-edit-form">
         {% csrf_token %}
+        {% include 'includes/form_error_summary.html' with form=u_form secondary_form=p_form %}
         <div class="row g-4 align-items-start">
             <div class="col-lg-7">
                 <section class="account-panel">
@@ -38,7 +39,7 @@
                         {% for field in u_form %}
                         <div class="profile-field">
                             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                            {{ field.errors }}
+                            {% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}
                             {{ field }}
                             {% if field.help_text %}<div class="form-text" id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</div>{% endif %}
                         </div>
@@ -57,7 +58,7 @@
                         {% if field.name == 'avatar' %}
                         <div class="profile-field">
                             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                            {{ field.errors }}
+                            {% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}
                             {{ field }}
                             {% if field.help_text %}<div class="form-text" id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</div>{% endif %}
                         </div>
@@ -83,7 +84,7 @@
                 {% if field.name == 'bio' %}
                 <div class="profile-field">
                     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {{ field.errors }}
+                    {% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}
                     {{ field }}
                     {% if field.help_text %}<div class="form-text" id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</div>{% endif %}
                 </div>
@@ -95,7 +96,7 @@
                 {% if field.name != 'avatar' and field.name != 'bio' %}
                 <div class="profile-field">
                     <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-                    {{ field.errors }}
+                    {% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}
                     {{ field }}
                     {% if field.help_text %}<div class="form-text" id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</div>{% endif %}
                 </div>

@@ -26,7 +26,7 @@
 
     <form method="POST">
         {% csrf_token %}
-        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        {% include 'includes/form_error_summary.html' %}
         <div class="form-section">
             <h2><span>01</span>消息内容</h2>
             <p class="text-muted small">可以先问成色、发货方式或面交时间；不要在私信里直接转账。</p>

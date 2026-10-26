@@ -13,7 +13,7 @@
                 <div class="verification-success mt-4"><i class="bi bi-patch-check-fill"></i><div><strong>认证已完成</strong><p class="mb-0 mt-1">{{ verification.domain_name }} · {{ verification.campus_email }}</p><small>认证时间：{{ verification.verified_at|date:'Y年m月d日 H:i' }}</small></div></div>
             {% else %}
                 {% if verification and verification.status == 'pending' %}<div class="alert alert-info mt-4">验证邮件已发送到 <strong>{{ verification.campus_email }}</strong>。如果没有收到，请确认邮箱地址或重新发送。</div>{% endif %}
-                <form method="post" class="mt-4">{% csrf_token %}
+                <form method="post" class="mt-4">{% csrf_token %}{% include 'includes/form_error_summary.html' %}
                     {% for field in form %}<div class="mb-3"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="form-text" id="{{ field.id_for_label }}_helptext">{{ field.help_text }}</div>{% endif %}{% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}
                     <button class="btn btn-primary"><i class="bi bi-envelope-check me-1"></i>{% if verification %}重新发送验证邮件{% else %}发送验证邮件{% endif %}</button>
                     <a href="{% url 'profile' %}" class="btn btn-link">返回个人资料</a>
