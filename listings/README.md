@@ -81,7 +81,7 @@ flowchart LR
 | 商品与供给 | [`item_lifecycle.py`](item_lifecycle.py)、[`availability.py`](availability.py)、[`image_processing.py`](image_processing.py) | 出售、赠送、借用、多图、有效期、刷新额度与批量发布 |
 | 搜索与发现 | [`recommendations.py`](recommendations.py)、[`saved_searches.py`](saved_searches.py)、[`price_insights.py`](price_insights.py) | 组合筛选、搜索建议、收藏搜索、价格轨迹和推荐反馈 |
 | 校园专题与参与 | [`campaign_registration.py`](campaign_registration.py)、[`campaign_updates.py`](campaign_updates.py)、[`campaign_analytics.py`](campaign_analytics.py) | 专题浏览、加入与退出、参与区间、可选的新上架摘要、聚合报名人数和运营导出 |
-| 求购与失物 | [`demand_matching.py`](demand_matching.py)、[`demand_radar.py`](demand_radar.py)、[`lost_found_matching.py`](lost_found_matching.py) | 求购响应、需求机会和失物招领线索匹配 |
+| 求购与失物 | [`demand_matching.py`](demand_matching.py)、[`demand_radar.py`](demand_radar.py)、[`lost_found_matching.py`](lost_found_matching.py) | 求购响应、需求机会、失物招领线索匹配，以及共用筛选工作台 |
 | 订单与交付 | [`order_workflow.py`](order_workflow.py)、[`meeting_scheduling.py`](meeting_scheduling.py)、[`delivery_handshake.py`](delivery_handshake.py)、[`return_handshake.py`](return_handshake.py) | 预约、改期、签到、交付确认、借用归还与争议 |
 | 通知与摘要 | [`notifications.py`](notifications.py)、[`notification_kind_coverage.py`](notification_kind_coverage.py)、[`*_digest.py`](.) | 通知中心、偏好、免打扰、延后和周期摘要 |
 | 治理与安全 | [`report_priority.py`](report_priority.py)、[`governance_sla.py`](governance_sla.py)、[`dispute_resolution_quality.py`](dispute_resolution_quality.py) | 举报优先级与分页、争议/交付异常处理时限和治理结果 |
@@ -97,8 +97,8 @@ flowchart LR
 | `/listings/search/` | 搜索结果与组合筛选 |
 | `/listings/campaigns/` | 校园专题列表与聚合报名人数 |
 | `/listings/campaigns/mine/` | 当前用户的专题参与记录与历史 |
-| `/listings/demands/` | 求购广场 |
-| `/listings/lost-found/` | 失物招领 |
+| `/listings/demands/` | 求购广场，展示结果数、已启用条件和逐项移除入口 |
+| `/listings/lost-found/` | 失物招领，支持类型、分类、地点、排序和可撤销筛选条件 |
 | `/listings/item/<item_id>/` | 商品详情与交易入口 |
 | `/listings/my_items/` | 我的商品与卖家工作台 |
 | `/listings/orders/` | 我的交易工作台，汇总买卖订单，支持阶段筛选与分页 |
