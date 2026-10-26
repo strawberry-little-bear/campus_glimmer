@@ -670,6 +670,32 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         ('求购详情（卖家视角）', 'demand_detail'),
     )
 
+    def _assert_accessible_error_summary(self, label, response, field_id):
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        builder = _parse(html)
+        summaries = [
+            node for node in _iter_nodes(builder.root, {'div'})
+            if 'data-form-error-summary' in node.attrs
+        ]
+        self.assertEqual(len(summaries), 1, f'{label} 缺少或重复渲染错误摘要')
+        summary = summaries[0]
+        self.assertEqual(summary.attrs.get('role'), 'alert')
+        self.assertEqual(summary.attrs.get('tabindex'), '-1')
+        summary_links = [
+            link.attrs.get('href') for link in _iter_nodes(summary, {'a'})
+        ]
+        self.assertIn(f'#{field_id}', summary_links)
+        self.assertIn(field_id, builder.by_id)
+        duplicates, dangling = _id_reference_problems(html)
+        self.assertEqual(duplicates, [])
+        self.assertEqual(dangling, [])
+        self.assertIn('aria-invalid="true"', html)
+        field = builder.by_id.get(field_id)
+        self.assertIsNotNone(field, f'{label} 缺少字段 #{field_id}')
+        describedby = field.attrs.get('aria-describedby', '').split()
+        self.assertIn(f'{field_id}_error', describedby)
+
     def test_invalid_forms_focus_an_accessible_error_summary(self):
         # GET 页面没有错误态，BoundField 不会输出 aria-invalid / aria-describedby。
         # 这里专门提交无效数据，守住「页面重新渲染后，错误能被读屏和键盘用户找到」
@@ -708,31 +734,74 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
                 ),
                 'id_quiet_hours_start',
             ),
+            (
+                '编辑资料',
+                self.client.post(
+                    reverse('edit_profile'),
+                    {'username': '', 'email': 'semantics@example.com'},
+                ),
+                'id_username',
+            ),
+            (
+                '校园认证',
+                self.client.post(
+                    reverse('campus_verification'),
+                    {'campus_email': 'not-an-email'},
+                ),
+                'id_campus_email',
+            ),
+            (
+                '发布商品',
+                self.client.post(reverse('new_item'), {}),
+                'id_title',
+            ),
+            (
+                '发布求购',
+                self.client.post(reverse('new_demand'), {}),
+                'id_title',
+            ),
+            (
+                '发布失物招领',
+                self.client.post(reverse('new_lost_found'), {}),
+                'id_title',
+            ),
+            (
+                '发送消息',
+                self.client.post(
+                    reverse('send_message_item', args=[self.seller.id, self.item.id]),
+                    {},
+                ),
+                'id_content',
+            ),
+            (
+                '会话内发送消息',
+                self.client.post(reverse('conversation', args=[self.seller.id]), {}),
+                'id_content',
+            ),
+            (
+                '提交失物招领线索',
+                self.client.post(
+                    reverse('submit_lost_found_lead', args=[self.lost_found.id]),
+                    {},
+                ),
+                'id_message',
+            ),
         )
 
         for label, response, field_id in cases:
             with self.subTest(page=label):
-                self.assertEqual(response.status_code, 200)
-                html = response.content.decode('utf-8')
-                builder = _parse(html)
-                summaries = [
-                    node for node in _iter_nodes(builder.root, {'div'})
-                    if 'data-form-error-summary' in node.attrs
-                ]
-                self.assertEqual(len(summaries), 1, f'{label} 缺少或重复渲染错误摘要')
-                summary = summaries[0]
-                self.assertEqual(summary.attrs.get('role'), 'alert')
-                self.assertEqual(summary.attrs.get('tabindex'), '-1')
-                summary_links = [
-                    link.attrs.get('href') for link in _iter_nodes(summary, {'a'})
-                ]
-                self.assertIn(f'#{field_id}', summary_links)
-                self.assertIn(field_id, builder.by_id)
-                duplicates, dangling = _id_reference_problems(html)
-                self.assertEqual(duplicates, [])
-                self.assertEqual(dangling, [])
-                self.assertIn('aria-invalid="true"', html)
-                self.assertIn(f'aria-describedby="{field_id}_error', html)
+                self._assert_accessible_error_summary(label, response, field_id)
+
+    def test_public_account_forms_focus_an_accessible_error_summary(self):
+        # 登录和注册没有现成的登录态，单独跑无效提交，避免被上面的页面清单漏掉。
+        self.client.logout()
+        cases = (
+            ('登录', self.client.post(reverse('login'), {}), 'id_username'),
+            ('注册', self.client.post(reverse('register'), {}), 'id_username'),
+        )
+        for label, response, field_id in cases:
+            with self.subTest(page=label):
+                self._assert_accessible_error_summary(label, response, field_id)
 
     def test_decorative_placeholder_images_are_not_read_as_content(self):
         # 无图商品的占位图必须是装饰性的（alt=""），同时给包着它的链接补上
