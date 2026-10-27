@@ -77,6 +77,44 @@ class CampusCampaignTests(TestCase):
         self.assertNotContains(response, '已售教材')
         self.assertNotContains(response, '普通商品')
 
+    def test_campaign_detail_paginates_items_and_keeps_the_full_count(self):
+        titles = {f'专题商品 {index:02d}' for index in range(13)}
+        for title in titles:
+            self._item(campaign=self.campaign, title=title)
+        url = reverse('campaign_detail', args=[self.campaign.slug])
+        self.client.force_login(self.user)
+
+        first = self.client.get(url)
+        second = self.client.get(url, {'page': 2})
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.context['page_obj'].paginator.count, 13)
+        self.assertEqual(first.context['page_obj'].number, 1)
+        self.assertEqual(second.context['page_obj'].number, 2)
+        first_titles = {item.title for item in first.context['items']}
+        second_titles = {item.title for item in second.context['items']}
+        self.assertEqual(len(first_titles), 12)
+        self.assertEqual(len(second_titles), 1)
+        self.assertFalse(first_titles & second_titles)
+        self.assertEqual(first_titles | second_titles, titles)
+        self.assertContains(first, '13 件当前在售')
+        self.assertContains(second, '13 件当前在售')
+        self.assertContains(first, '第 1 / 2 页')
+        self.assertContains(second, '第 2 / 2 页')
+        self.assertContains(second, 'value="/listings/campaigns/graduation-clearance/?page=2"')
+
+    def test_campaign_detail_clamps_invalid_and_out_of_range_pages(self):
+        for index in range(13):
+            self._item(campaign=self.campaign, title=f'分页商品 {index:02d}')
+        url = reverse('campaign_detail', args=[self.campaign.slug])
+
+        invalid = self.client.get(url, {'page': 'not-a-number'})
+        beyond = self.client.get(url, {'page': 999})
+
+        self.assertEqual(invalid.context['page_obj'].number, 1)
+        self.assertEqual(beyond.context['page_obj'].number, 2)
+
     def test_item_form_can_attach_an_active_campaign(self):
         form = ItemForm(data={
             'title': '加入专题的教材',

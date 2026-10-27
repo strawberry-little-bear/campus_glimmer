@@ -13,7 +13,7 @@
         <div class="campaign-hero-meta">
             <span><i class="bi bi-calendar3 me-1"></i>{{ campaign.starts_at|date:'Y年m月d日' }} 开始</span>
             {% if campaign.ends_at %}<span><i class="bi bi-hourglass-split me-1"></i>至 {{ campaign.ends_at|date:'Y年m月d日' }}</span>{% endif %}
-            <span><i class="bi bi-box-seam me-1"></i>{{ items|length }} 件当前在售</span>
+            <span><i class="bi bi-box-seam me-1"></i>{{ page_obj.paginator.count }} 件当前在售</span>
             <span><i class="bi bi-people me-1"></i>{{ campaign.active_registration_count }} 人已加入</span>
         </div>
     </div>
@@ -23,13 +23,13 @@
                 <span class="campaign-registration-status"><i class="bi bi-check2-circle me-1"></i>已加入专题</span>
                 <form method="post" action="{% url 'leave_campaign' campaign.slug %}">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <input type="hidden" name="next" value="{{ campaign_return_path }}">
                     <button type="submit" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-dash me-1"></i>退出专题</button>
                 </form>
             {% else %}
                 <form method="post" action="{% url 'join_campaign' campaign.slug %}">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <input type="hidden" name="next" value="{{ campaign_return_path }}">
                     <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-person-plus me-1"></i>加入专题</button>
                 </form>
             {% endif %}
@@ -53,7 +53,7 @@
     </div>
     <form method="post" action="{% url 'update_campaign_subscription' campaign.slug %}" class="campaign-update-form">
         {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.path }}">
+        <input type="hidden" name="next" value="{{ campaign_return_path }}">
         <label class="campaign-update-toggle" for="campaign-notify-updates">
             <span><strong>接收合并摘要</strong><small>同一周期最多一条站内通知</small></span>
             <input type="checkbox" name="notify_updates" id="campaign-notify-updates" {% if active_registration.notify_updates %}checked{% endif %}>
@@ -69,7 +69,7 @@
 </section>
 {% endif %}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3 mt-4" id="campaign-items">
     <div><span class="eyebrow eyebrow-soft">Featured listings</span><h2 class="section-title mt-1">专题商品</h2></div>
     <a href="{% url 'campaign_list' %}" class="text-link small">返回专题列表 <i class="bi bi-arrow-left"></i></a>
 </div>
@@ -80,4 +80,19 @@
     <div class="col-12"><div class="content-card empty-state"><i class="bi bi-box-seam"></i><h2>专题里还没有在售商品</h2><p>你可以发布一件闲置，并在发布时选择这个专题。</p>{% if user.is_authenticated %}<a href="{% url 'new_item' %}" class="btn btn-primary mt-2">发布第一件商品</a>{% endif %}</div></div>
     {% endfor %}
 </div>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="mt-5" aria-label="专题商品分页">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}#campaign-items">上一页</a></li>{% endif %}
+        {% for num in page_numbers %}
+        <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+            {% if num %}<a class="page-link" href="?page={{ num }}#campaign-items">{{ num }}</a>{% else %}<span class="page-link page-link-gap"><span class="visually-hidden">跳过的页码</span>&hellip;</span>{% endif %}
+        </li>
+        {% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}#campaign-items">下一页</a></li>{% endif %}
+    </ul>
+    <p class="text-center text-muted small mb-0">第 {{ page_obj.number }} / {{ page_obj.paginator.num_pages }} 页 · 每页 12 件</p>
+</nav>
+{% endif %}
 {% endblock %}

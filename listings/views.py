@@ -611,7 +611,8 @@ def campaign_detail(request, slug):
     )
     items = Item.objects.available().filter(campaign=campaign).select_related(
         'category', 'seller', 'location',
-    ).prefetch_related('images')
+    ).prefetch_related('images').order_by('-created_at', '-pk')
+    page_obj = Paginator(items, 12).get_page(request.GET.get('page'))
     active_registration = None
     if request.user.is_authenticated:
         active_registration = CampaignRegistration.objects.filter(
@@ -621,7 +622,10 @@ def campaign_detail(request, slug):
         ).first()
     return render(request, 'listings/campaign_detail.html', {
         'campaign': campaign,
-        'items': items,
+        'items': page_obj.object_list,
+        'page_obj': page_obj,
+        'page_numbers': _elided_page_numbers(page_obj),
+        'campaign_return_path': request.get_full_path(),
         'favorite_ids': _favorite_ids(request),
         'active_registration': active_registration,
         'update_frequency_choices': (
