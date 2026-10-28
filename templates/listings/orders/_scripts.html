@@ -1,0 +1,21 @@
+<script>
+(() => {
+    const locationField = document.getElementById('id_location');
+    const startField = document.getElementById('id_start_at');
+    const endField = document.getElementById('id_end_at');
+    document.querySelectorAll('[data-recommendation-location]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (locationField) {
+                locationField.value = button.dataset.recommendationLocation;
+                locationField.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+    });
+    document.querySelectorAll('[data-recommendation-start]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (startField) startField.value = button.dataset.recommendationStart;
+            if (endField) endField.value = button.dataset.recommendationEnd;
+        });
+    });
+})();
+</script>

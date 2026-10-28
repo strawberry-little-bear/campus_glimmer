@@ -186,6 +186,7 @@ from .saved_searches import (
 )
 from .saved_search_digest import deliver_buffered_saved_search_matches
 from .transaction_safety import build_transaction_safety, transaction_safety_fingerprint
+from .order_presentation import order_next_step
 from .transaction_safety_acknowledgement_quality import (
     build_transaction_safety_acknowledgement_quality,
 )
@@ -1323,6 +1324,7 @@ def order_detail(request, order_id):
     events = order.events.select_related('actor').all()
     dispute = getattr(order, 'dispute', None)
     dispute_evidence = dispute.evidence.select_related('uploaded_by').all() if dispute else []
+    next_step = order_next_step(order, request.user)
     dispute_evidence_form = (
         DisputeEvidenceForm()
         if dispute and dispute.status in {'open', 'reviewing'}
@@ -1355,6 +1357,7 @@ def order_detail(request, order_id):
         'dispute': dispute,
         'dispute_evidence': dispute_evidence,
         'dispute_evidence_form': dispute_evidence_form,
+        'next_step': next_step,
         'now': timezone.now(),
     })
 

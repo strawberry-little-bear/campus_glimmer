@@ -1,0 +1,36 @@
+"""\u8ba2\u5355\u8be6\u60c5\u9875\u7684\u5c55\u793a\u5c42\u884d\u751f\u6570\u636e\u3002
+
+\u201c\u4e0b\u4e00\u6b65\u8be5\u505a\u4ec0\u4e48\u201d\u4ee5\u524d\u662f\u6a21\u724f\u91cc\u4e00\u6761\u957f\u94fe\u7684 {% if order.status == ... %}，
+\u6bcf\u4e2a\u5206\u652f\u5404\u5199\u4e00\u53e5\u6b63\u6587\uff0c\u6807\u9898\u53ea\u5269\u4e00\u4e2a\u201c\u4e0b\u4e00\u6b65\u201d\u773c\u955c\u6807\u7b7e\uff0b
+\u6240\u4ee5\u4fa7\u680f\u90a3\u5f20\u5361\u7247\u662f\u5168\u9875\u552f\u4e00\u6ca1\u6709\u6807\u9898\u7684\u5361\u7247\u3002\u628a\u5b83\u62bd\u6210\u7ed3\u6784\u5316\u6570\u636e\uff0c
+\u89c6\u56fe\u76f4\u63a5\u7528\uff0c\u6d4b\u8bd5\u4e5f\u80fd\u9010\u6761\u5206\u652f\u76d1\u89c6\u3002
+"""
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class OrderNextStep:
+    """\u4fa7\u680f\u201c\u4e0b\u4e00\u6b65\u201d\u5361\u7247\u7684\u6807\u9898\u4e0e\u56fe\u6807\uff0c\u7531\u8ba2\u5355\u72b6\u6001\u548c\u67e5\u770b\u8005\u89d2\u8272\u5171\u540c\u51b3\u5b9a\u3002"""
+
+    title: str
+    icon: str
+
+
+# \u4e0e order_detail.html \u91cc\u884c\u52a8\u5361\u7247\u7684\u5206\u652f\u4e00\u4e00\u5bf9\u5e94\uff1a\u8ba2\u5355\u72b6\u6001\u76f8\u540c\u3001\u89d2\u8272\u4e0d\u540c\u65f6\uff0c
+# \u4e70\u5bb6\u548c\u5356\u5bb6\u770b\u5230\u7684\u201c\u4e0b\u4e00\u6b65\u201d\u5e76\u4e0d\u76f8\u540c\uff08\u4e00\u4e2a\u7b49\u786e\u8ba4\uff0c\u4e00\u4e2a\u7b49\u5bf9\u65b9\u786e\u8ba4\uff09\u3002
+def order_next_step(order, viewer):
+    if order.status == 'pending' and viewer == order.seller:
+        return OrderNextStep('\u7b49\u5f85\u4f60\u786e\u8ba4\u9884\u7ea6', 'bi-hourglass-split')
+    if order.status == 'confirmed' and viewer == order.seller:
+        return OrderNextStep('\u7ea6\u5b9a\u89c1\u9762\u65f6\u95f4', 'bi-calendar2-week')
+    if order.status == 'meeting':
+        return OrderNextStep('\u5f53\u9762\u4ea4\u4ed8\u786e\u8ba4', 'bi-hand-thumbs-up')
+    if order.status == 'borrowed':
+        return OrderNextStep('\u501f\u7528\u8fdb\u884c\u4e2d', 'bi-arrow-repeat')
+    if order.status == 'returned':
+        return OrderNextStep('\u501f\u7528\u5df2\u5f52\u8fd8', 'bi-check-circle')
+    if order.status == 'confirmed':
+        return OrderNextStep('\u7ea6\u5b9a\u89c1\u9762\u65f6\u95f4', 'bi-calendar2-week')
+    if order.status in {'completed', 'cancelled'}:
+        return OrderNextStep('\u8ba2\u5355\u5df2\u7ed3\u675f', 'bi-flag')
+    return OrderNextStep('\u7b49\u5f85\u5356\u5bb6\u786e\u8ba4', 'bi-hourglass-split')

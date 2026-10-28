@@ -1,0 +1,19 @@
+{% comment %}
+交易反馈分区：订单结束后给自己那一边的评价入口与自己已写下的评价。
+{% endcomment %}{% if order.status == 'completed' or order.status == 'returned' %}
+<div class="rating-panel">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+        <div>
+            <span class="eyebrow eyebrow-soft">交易反馈</span>
+            <h3 class="mt-2 mb-1">评价 {{ rating_target.username }}</h3>
+            <p class="mb-0 text-muted">完成交易后留下真实体验，让校园交易更有参考。</p>
+        </div>
+        {% if my_rating %}
+        <span class="rating-score-badge"><span class="rating-stars" aria-label="{{ my_rating.score }} 星">{% for star in '12345' %}{% if forloop.counter <= my_rating.score %}★{% else %}☆{% endif %}{% endfor %}</span> {{ my_rating.score }}.0</span>
+        {% else %}
+        <a href="{% url 'rate_order' order.id %}" class="btn btn-primary"><i class="bi bi-star me-2"></i>去评价</a>
+        {% endif %}
+    </div>
+    {% if my_rating.comment %}<p class="rating-own-comment mt-3 mb-0">“{{ my_rating.comment|linebreaksbr }}”</p>{% endif %}
+</div>
+{% endif %}

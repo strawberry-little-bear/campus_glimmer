@@ -1,0 +1,15 @@
+{% comment %}
+双方评价分区：买卖双方互相留下的评价列表。
+{% endcomment %}{% if ratings %}
+<section class="content-card order-ratings-card">
+    <div class="card-section-heading"><h2><i class="bi bi-chat-square-heart me-2"></i>双方评价</h2><span>{{ ratings|length }} 条</span></div>
+    <div class="rating-list mt-3">
+        {% for rating in ratings %}
+        <article class="rating-card">
+            <div class="d-flex justify-content-between align-items-start gap-2"><div><strong>{{ rating.rater.username }}</strong><small class="d-block text-muted mt-1">评价给 {{ rating.ratee.username }}</small></div><span class="rating-stars" aria-label="{{ rating.score }} 星">{% for star in '12345' %}{% if forloop.counter <= rating.score %}★{% else %}☆{% endif %}{% endfor %}</span></div>
+            {% if rating.comment %}<p class="mb-0 mt-3">{{ rating.comment|linebreaksbr }}</p>{% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}

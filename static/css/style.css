@@ -556,6 +556,7 @@ a { color: inherit; text-decoration: none; }
     box-shadow: 0 16px 38px rgba(126, 85, 37, .08);
 }
 .order-action-card .eyebrow { color: #b2632e; }
+.order-action-card-icon { color: #b2632e; font-size: 1.35rem; }
 .order-action-card > p { color: #52655b; font-size: .84rem; line-height: 1.65; }
 .order-action-card .btn { min-height: 40px; }
 .order-action-card .handoff-code-panel { background: rgba(255, 255, 255, .78); }

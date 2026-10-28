@@ -1,0 +1,39 @@
+{% comment %}
+交易保障分区：争议详情、补充证据与发起争议入口。
+{% endcomment %}{% if order.status == 'confirmed' or order.status == 'meeting' or order.status == 'completed' or order.status == 'borrowed' or order.status == 'returned' %}
+<section class="content-card mt-4 dispute-summary-card">
+    <span class="eyebrow eyebrow-soft">交易保障</span>
+    {% if dispute %}
+        <h2 class="mt-2">争议：{{ dispute.get_status_display }}</h2>
+        <p class="small text-muted mb-2">{{ dispute.get_reason_display }} · {{ dispute.created_at|date:'Y-m-d H:i' }}</p>
+        <p class="small mb-0">{{ dispute.detail|linebreaksbr }}</p>
+        {% if dispute_evidence %}
+        <div class="mt-4">
+            <div class="card-section-heading"><h3><i class="bi bi-paperclip me-2"></i>补充证据</h3><span>{{ dispute_evidence|length }} 份</span></div>
+            <div class="dispute-evidence-list mt-3">
+                {% for evidence in dispute_evidence %}
+                <div class="dispute-evidence-row">
+                    <a href="{% url 'download_dispute_evidence' evidence.id %}"><i class="bi bi-file-earmark-arrow-down me-1"></i>{{ evidence.filename }}</a>
+                    {% if evidence.note %}<p class="dispute-evidence-note">{{ evidence.note }}</p>{% endif %}
+                    <small>{{ evidence.uploaded_by.username }} · {{ evidence.created_at|date:'Y-m-d H:i' }}</small>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}<p class="small text-muted mt-3 mb-0">暂未补充附件证据。</p>{% endif %}
+        {% if dispute_evidence_form %}
+        <form method="post" enctype="multipart/form-data" action="{% url 'add_dispute_evidence' dispute.id %}" class="dispute-evidence-form mt-4">
+            {% csrf_token %}
+            <div class="mb-2"><label class="form-label" for="{{ dispute_evidence_form.attachment.id_for_label }}">补充文件</label>{{ dispute_evidence_form.attachment }}<div class="form-text" id="{{ dispute_evidence_form.attachment.id_for_label }}_helptext">{{ dispute_evidence_form.attachment.help_text }}</div></div>
+            <div class="mb-3"><label class="form-label" for="{{ dispute_evidence_form.note.id_for_label }}">说明（可选）</label>{{ dispute_evidence_form.note }}</div>
+            <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-upload me-1"></i>补充证据</button>
+        </form>
+        {% endif %}
+        {% if dispute.resolution_note %}<div class="dispute-resolution-note mt-3"><strong>平台处理意见</strong><p class="mb-0 mt-1">{{ dispute.resolution_note|linebreaksbr }}</p></div>{% endif %}
+    {% else %}
+        <h2 class="mt-2">遇到交易问题？</h2>
+        <p class="small text-muted">如商品未收到、与描述不符或存在安全问题，可以提交争议让平台介入核实。</p>
+        <a class="btn btn-sm btn-outline-danger" href="{% url 'open_dispute' order.id %}"><i class="bi bi-shield-exclamation me-1"></i>发起交易争议</a>
+    {% endif %}
+</section>
+{% endif %}

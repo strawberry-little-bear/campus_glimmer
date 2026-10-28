@@ -1,0 +1,49 @@
+{% comment %}
+订单概览分区：状态标题、四步进度条和订单信息表。
+拆分自 order_detail.html，只负责「这笔订单现在是什么状态」这一层。
+{% endcomment %}<section class="content-card order-detail-overview">
+    <div class="order-detail-status-head">
+        <div>
+            <span class="eyebrow eyebrow-soft">订单状态</span>
+            <h2>{{ order.get_status_display }}</h2>
+            <p class="order-detail-status-note">关键节点在站内确认，完成情况会同步写入状态记录。</p>
+        </div>
+        <span class="order-status order-status-{{ order.status }}">{{ order.get_status_display }}</span>
+    </div>
+
+    <div class="order-detail-progress-panel">
+        <div class="order-detail-progress-heading">
+            <strong>交易进度</strong>
+            <small>共 4 个节点</small>
+        </div>
+        {% if order.item.trade_mode == 'borrow' %}
+        <ol class="order-progress" aria-label="借用订单进度">
+            <li class="progress-step {% if order.status != 'cancelled' %}is-done{% endif %} {% if order.status == 'pending' %}is-current{% endif %} {% if order.status in 'confirmed meeting borrowed returned' %}is-linked{% endif %}"><span>1</span><small>提交申请</small></li>
+            <li class="progress-step {% if order.status in 'confirmed meeting borrowed returned' %}is-done{% endif %} {% if order.status == 'confirmed' %}is-current{% endif %} {% if order.status in 'meeting borrowed returned' %}is-linked{% endif %}"><span>2</span><small>发布者确认</small></li>
+            <li class="progress-step {% if order.status in 'meeting borrowed returned' %}is-done{% endif %} {% if order.status in 'meeting borrowed' %}is-current{% endif %} {% if order.status == 'returned' %}is-linked{% endif %}"><span>3</span><small>借用开始</small></li>
+            <li class="progress-step {% if order.status == 'returned' %}is-done{% endif %} {% if order.status == 'returned' %}is-current{% endif %}"><span>4</span><small>归还完成</small></li>
+        </ol>
+        {% else %}
+        <ol class="order-progress" aria-label="交易订单进度">
+            <li class="progress-step {% if order.status != 'cancelled' %}is-done{% endif %} {% if order.status == 'pending' %}is-current{% endif %} {% if order.status in 'confirmed meeting completed' %}is-linked{% endif %}"><span>1</span><small>提交预约</small></li>
+            <li class="progress-step {% if order.status in 'confirmed meeting completed' %}is-done{% endif %} {% if order.status == 'confirmed' %}is-current{% endif %} {% if order.status in 'meeting completed' %}is-linked{% endif %}"><span>2</span><small>卖家确认</small></li>
+            <li class="progress-step {% if order.status in 'meeting completed' %}is-done{% endif %} {% if order.status == 'meeting' %}is-current{% endif %} {% if order.status == 'completed' %}is-linked{% endif %}"><span>3</span><small>当面交付</small></li>
+            <li class="progress-step {% if order.status == 'completed' %}is-done{% endif %} {% if order.status == 'completed' %}is-current{% endif %}"><span>4</span><small>交易完成</small></li>
+        </ol>
+        {% endif %}
+    </div>
+
+    <dl class="order-info-list">
+        <dt>商品</dt><dd><a href="{% url 'item_detail' order.item.id %}">{{ order.item.title }}</a></dd>
+        <dt>交易方式</dt><dd>{% if order.item.trade_mode == 'free' %}<span class="text-success">免费领取</span>{% elif order.item.trade_mode == 'borrow' %}<span class="text-primary">限期借用 · {{ order.item.borrow_days }} 天</span>{% else %}出售 · ¥{{ order.agreed_price|floatformat:2 }}{% endif %}</dd>
+        {% if order.item.trade_mode == 'borrow' %}<dt>借用押金</dt><dd>{% if order.deposit_amount %}¥{{ order.deposit_amount|floatformat:2 }}{% else %}无押金{% endif %}<small class="d-block text-muted">押金由双方线下处理，平台只记录约定</small></dd>{% endif %}
+        <dt>买家</dt><dd>{{ order.buyer.username }}</dd>
+        <dt>卖家</dt><dd>{{ order.seller.username }}</dd>
+        <dt>交付地点</dt><dd>{% if order.meeting_location %}{{ order.meeting_location.name }}{% if order.meeting_location.address %} · {{ order.meeting_location.address }}{% endif %}{% else %}待双方沟通{% endif %}</dd>
+        {% if appointment %}<dt>交付时间</dt><dd>{{ appointment.start_at|date:'Y年m月d日 H:i' }} – {{ appointment.end_at|date:'H:i' }} <span class="appointment-status appointment-status-{{ appointment.status }}">{{ appointment.get_status_display }}</span></dd>{% endif %}
+        {% if order.buyer_note %}<dt>买家备注</dt><dd>{{ order.buyer_note|linebreaksbr }}</dd>{% endif %}
+        {% if order.status == 'pending' and order.confirmation_deadline %}<dt>确认截止</dt><dd><span class="order-deadline"><i class="bi bi-hourglass-split me-1"></i>{{ order.confirmation_deadline|date:'Y年m月d日 H:i' }} 前</span></dd>{% endif %}
+        {% if order.item.trade_mode == 'borrow' and order.return_due_at %}<dt>预计归还</dt><dd><span class="{% if order.status == 'borrowed' and order.return_due_at < now %}text-danger{% endif %}"><i class="bi bi-calendar2-check me-1"></i>{{ order.return_due_at|date:'Y年m月d日 H:i' }}</span></dd>{% endif %}
+        {% if order.item.trade_mode == 'borrow' and order.returned_at %}<dt>实际归还</dt><dd>{{ order.returned_at|date:'Y年m月d日 H:i' }}</dd>{% endif %}
+    </dl>
+</section>
