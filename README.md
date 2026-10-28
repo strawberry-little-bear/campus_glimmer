@@ -375,6 +375,10 @@ python manage.py test
 git diff --check
 ```
 
+除完整测试集外，仓库里还有一批「页面不报错、只有截图才看得出来」的守卫测试：
+标题层级与表单标签看 `campus_glimmer/test_page_semantics.py`，页内跳转落点是否让出吸顶导航
+看 `campus_glimmer/test_anchor_scroll_margin.py`。改动模板、样式或表单时，这两个文件要一起跑。
+
 GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查、Django check、
 迁移一致性检查和完整测试集。四个任务分工不同：`quality` 在 SQLite 下跑完整业务测试，
 `production-deps` 用 PostgreSQL 16 与 Redis 7 再跑一遍，`object-storage` 在 runner 上启动

@@ -94,6 +94,23 @@ Django 的 `RadioSelect` 与 `CheckboxSelectMultiple` 继承 `ChoiceWidget`，
 - **模板的 `style` 属性里不写颜色**。行内色值是唯一同时躲过 token 扫描和静态对比度扫描的位置：`test_deployment.py` 的 `InlineStyleColourTests` 会把 `color` / `background` / `border-color` / `box-shadow` 这类属性里的字面值直接判失败，只放行 `var(...)`。几何属性（`width` / `height` / `min-width`）不在此列，按比例增长的条形图必须由视图算好后注入。真实踩过的坑：运营看板一条建议文案在模板里写了 `color:#6a7d73`，盖掉了已有的 token 规则，落在 `#fbfdfb` 上只有 4.29:1。
 - **校验要用浏览器里的真实背景**。同一个色值落在不同面板的渐变底上结果并不相同，指“最深浅底”一刀切的静态扫描会同时漏报和误报：白字落在深色 hero 上会被判失失败，装饰性圆点的 `color` 也会被算进去。可靠的判法是渲染后逐元素取计算色与合成后的祖先背景，并跳过 `background-image` 为渐变的元素。
 
+## 🧭 页内跳转的避让量
+
+吸顶导航高 84px，页内跳转的落点如果不预留空间，目标元素会正好停在导航底下：用户点了链接，却看不到自己跳到了哪里。全站统一用一个数——**104px = 84px 导航 + 20px 间隙**——由 `campus_glimmer/test_anchor_scroll_margin.py` 逐条盯住。
+
+会踩到这件事的四类落点：
+
+| 落点 | 写法 | 避让规则 |
+|---|---|---|
+| skip-link 的 `#main-content` | `<main class="page-shell" id="main-content">` | `.page-shell` |
+| 专题商品区分页 | `?page=2#campaign-items`、`pagination_anchor='campaign-history'` | `#campaign-items, #campaign-history, #submit-lead` |
+| 运营看板 / 搜索洞察分区 | `<section class="ops-section" id="ops-*">` | `.ops-section, .si-section` 用 140px——它还要避开自己上方那条吸顶跳转条 |
+| 表单字段 | `<a href="#{{ field.id_for_label }}">`（错误摘要，被 17 个模板 include） | `.form-control` / `.form-select` / `.form-check-input` / `.form-range` / `.choice-card-group` |
+
+新增页内跳转时，给落点补一条 `scroll-margin-top`，或者让落点带上表中已有的类名。运行时才拼出 hash 的模板（`href="#{{ ... }}"`）必须登记进 `DYNAMIC_HASH_PAGES` 并写清落点凭什么安全，否则测试直接失败。错误页（`errors/base_error.html`）不进检查——它没有吸顶导航，再预留只会在页首留一片空白。
+
+表单控件的默认类名由 `StyledModelFormMixin._style_fields` 按控件类型分配：`Select` 给 `form-select`，其余给 `form-control`。字段写在表单体里、没走 `Meta.widgets` 时最容易漏——`SavedSearchForm.notify_frequency` 就是这么挂成 `form-control` 的，渲染出来是个没有下拉箭头的下拉框。
+
 ## 📦 第三方依赖本地化
 
 Bootstrap 与 Bootstrap Icons 不再走 CDN，而是以原样文件放在 [`vendor/`](vendor/) 下，由 `templates/base.html` 通过 `{% static %}` 引用。
@@ -223,6 +240,7 @@ flowchart LR
 - 大段样式要带用途说明，避免无法判断归属的规则继续堆积；
 - 修改未读数轮询时，确认隐藏标签页不会持续请求，且 99+ 显示仍然正确；
 - 交互元素要保留清晰的 `:focus-visible` 状态，并检查键盘操作顺序。
+- 新增页内跳转（锚点、分页锚点、错误摘要字段链接）时，落点必须让出 104px，见「页内跳转的避让量」一节；跑 `python manage.py test campus_glimmer.test_anchor_scroll_margin`；
 - 新增单选 / 多选组用 `RadioCardGroup` / `CheckboxCardGroup`，不要往 widget attrs 写 class（类名会漏到每个选项上，见上文）；
 - 动分区懒加载时，记住「没有取回地址的分区只换类、绝不碰 DOM」这条线，以及「每条规则写成一行两个选择器」——`test_operations_deferred_sections.py` 是按行正则校验 `html.js` 前缀的，拆成多行会让第二个选择器逃过检查。改 `loadSection` / `createSectionRevealer` 之前先跑 `python manage.py test listings.test_operations_deferred_sections listings.test_operations_fragments listings.test_search_insights_fragments`——第一个盯着这条边界，第二个盯着取回结果与全量渲染逐字节一致，第三个盯着搜索洞察的分区登记表和导出同构；
 

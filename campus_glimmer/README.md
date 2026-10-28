@@ -55,6 +55,7 @@ flowchart LR
 | [`tests.py`](tests.py) | 根路由、探针与安全配置基线测试 |
 | [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验和存储端点测试 |
 | [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、当前栏目、跳转主内容与导航触控目标 |
+| [`test_anchor_scroll_margin.py`](test_anchor_scroll_margin.py) | 页内跳转落点避让守卫：锚点、分页锚点、运营看板分区与表单控件都必须让出吸顶导航高度 |
 
 ## 🚪 根路由
 
@@ -88,6 +89,19 @@ sequenceDiagram
 ```
 
 本地文件存储模式不会执行对象存储检查。Docker 的 `HEALTHCHECK` 调用 `/readyz/`；修改探针字段、依赖集合或容器入口时，要同步更新部署文档和测试。
+
+## 🧭 页内跳转必须让出吸顶导航
+
+吸顶导航高 84px，页内跳转的落点不预留空间，目标元素就会停在导航底下。全站统一用 **104px = 84px 导航 + 20px 间隙**：
+
+| 落点 | 避让规则 |
+| --- | --- |
+| `<main class="page-shell" id="main-content">` | `.page-shell` |
+| `?page=2#campaign-items`、`pagination_anchor='campaign-history'` | `#campaign-items, #campaign-history, #submit-lead` |
+| `<section class="ops-section" id="ops-*">` | `.ops-section, .si-section`（140px，还要避开上方吸顶跳转条） |
+| 表单字段（错误摘要里的字段链接） | `.form-control` / `.form-select` / `.form-check-input` / `.form-range` / `.choice-card-group` |
+
+运行时才拼出 hash 的模板要登记进 `DYNAMIC_HASH_PAGES` 并写清落点凭什么安全，否则 `test_anchor_scroll_margin.py` 直接失败。错误页（`errors/base_error.html`）不进检查——它没有吸顶导航。
 
 ## ⚙️ 本地与生产配置
 
