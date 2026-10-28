@@ -13,7 +13,11 @@
 body { min-height: 100vh; display: flex; flex-direction: column; background: var(--cream); color: var(--ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
              'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif; }
 a { color: inherit; text-decoration: none; }
-.page-shell { flex: 1; scroll-margin-top: 6rem; }
+/* 跳转目标的统一避让量：104px = 84px 吸顶导航 + 20px 间隙。
+   全站所有页内跳转目标（skip-link 的 #main-content、表单字段、专题分区、
+   运营/搜索洞察分区）都用这一个数，campus_glimmer/test_anchor_scroll_margin.py
+   会逐个盯住，新增锚点忘了避让会在测试里点名。 */
+.page-shell { flex: 1; scroll-margin-top: 104px; }
 .page-shell:focus { outline: none; }
 .skip-link { position: fixed; top: .75rem; left: 1rem; z-index: 1100; padding: .65rem 1rem; border-radius: 10px; color: #fff; background: var(--ink); box-shadow: 0 12px 30px rgba(21, 37, 31, .22); transform: translateY(calc(-100% - 1rem)); transition: transform .16s ease; }
 .skip-link:focus, .skip-link:focus-visible { transform: translateY(0); outline: 3px solid var(--warm); outline-offset: 3px; }
@@ -102,6 +106,12 @@ a { color: inherit; text-decoration: none; }
    默认灰边（例如收藏分组、保存关注）。这里补一条低优先级基线，各作用域仍可继续覆写。 */
 .form-control, .form-select { border-color: var(--line); border-radius: 11px; color: var(--ink); font-size: .84rem; }
 .form-control:focus, .form-select:focus { border-color: #9ed4bc; box-shadow: 0 0 0 4px rgba(24, 122, 91, .08); }
+
+/* 表单字段也要让出吸顶导航：表单错误摘要里的每条错误都是指向字段 id 的页内链接，
+   校验失败后点“标题：此项为必填”，输入框会正好停在导航底下，用户看不到该改哪一栅。
+   104px = 84px 吸顶导航 + 20px 间隙，与 #campaign-items 等页内锚点保持一致。 */
+.form-control, .form-select, .form-check-input, .form-range,
+.choice-card-group { scroll-margin-top: 104px; }
 
 /* 输入组附加件、下拉分隔线与表格悬停：Bootstrap 默认的浅灰底和半透明分隔线
    落在米白底上会发灰，统一到品牌的中性色板。 */

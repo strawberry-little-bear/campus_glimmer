@@ -20,7 +20,19 @@ class StyledModelFormMixin:
         for field in self.fields.values():
             if isinstance(field.widget, self._container_choice_widgets):
                 continue
-            field.widget.attrs.setdefault('class', 'form-control')
+            # Select 的默认类是 form-select，不是 form-control：Bootstrap 5 把下拉
+            # 箭头画在 form-select 上，挂成 form-control 就是一个没有箭头的下拉框，
+            # 用户看不出来这里可以点开。SavedSearchForm.notify_frequency 就是这么
+            # 漏的——字段在表单体里声明，没走 Meta.widgets，也就没人记得补类名。
+            default = 'form-select' if isinstance(field.widget, forms.Select) else 'form-control'
+            field.widget.attrs.setdefault('class', default)
+
+    def __init__(self, *args, **kwargs):
+        # 样式统一由 mixin 自己负责：以前每个子类都要在 __init__ 里手抄一句
+        # self._style_fields()，漏抄的那个（DemandResponseForm）就让整个表单
+        # 退回 Bootstrap 默认外观，而页面不报错，只有截图才看得出来。
+        super().__init__(*args, **kwargs)
+        self._style_fields()
 
 
 class ChoiceGroupMixin:
@@ -168,7 +180,6 @@ class MutualAidFeedbackForm(StyledModelFormMixin, forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
 
     def clean_tags(self):
         return list(self.cleaned_data.get('tags') or [])
@@ -203,7 +214,6 @@ class ItemForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         # 批量发布的“共同设置”和“商品行”会继承这份表单，但各字段子集不同；
         # 初始化时按实际存在的字段处理，避免子类碰到 KeyError。
         for field_name in ('trade_mode', 'category', 'location', 'campaign'):
@@ -414,7 +424,6 @@ class ItemImageForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
 
 
 class ReportForm(StyledModelFormMixin, forms.ModelForm):
@@ -428,7 +437,6 @@ class ReportForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['reason'].widget.attrs['class'] = 'form-select'
 
 
@@ -451,7 +459,6 @@ class ReportReviewForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['status'].widget.attrs['class'] = 'form-select'
 
 
@@ -466,7 +473,6 @@ class OrderForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['meeting_location'].widget.attrs['class'] = 'form-select'
         self.fields['meeting_location'].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields['meeting_location'].empty_label = '沿用商品交易地点'
@@ -513,7 +519,6 @@ class MeetingAppointmentForm(StyledModelFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.service_hours_notice = ''
-        self._style_fields()
         self.fields['start_at'].input_formats = ['%Y-%m-%dT%H:%M']
         self.fields['end_at'].input_formats = ['%Y-%m-%dT%H:%M']
         location_queryset = CampusLocation.objects.filter(is_active=True)
@@ -586,7 +591,6 @@ class MeetingIncidentForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['detail'].help_text = '请尽量提供客观时间线，不要填写密码或其他敏感信息。'
         self.fields['detail'].min_length = 10
 
@@ -613,7 +617,6 @@ class MeetingIncidentReviewForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         # 与争议处理保持一致：前台只做结论，不提供"转处理中"这种中间态，
         # 避免同一个事项在不同队列出现不同的状态流转规则。
         self.fields['status'].choices = [
@@ -634,7 +637,6 @@ class RatingForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['score'].widget.attrs['class'] = 'form-select'
         self.fields['comment'].help_text = '可以分享沟通是否顺畅、描述是否准确、交付是否按约定完成等信息。'
 
@@ -677,7 +679,6 @@ class SavedSearchForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['category'].queryset = Category.objects.all()
         self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
 
@@ -714,7 +715,6 @@ class DisputeForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['reason'].widget.attrs['class'] = 'form-select'
 
 
@@ -736,7 +736,6 @@ class DisputeEvidenceForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
 
 
 class DisputeResolutionForm(StyledModelFormMixin, forms.ModelForm):
@@ -753,7 +752,6 @@ class DisputeResolutionForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['status'].choices = [
             choice for choice in self.fields['status'].choices
             if choice[0] in {'resolved', 'rejected'}
@@ -792,7 +790,6 @@ class LostFoundPostForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         # Django 给「必填又没有默认值」的选择字段自动补一个空选项，单选渲染出来
         # 就是一条孤零零的「---------」，看起来像没选东西；这里已经是必填单选，
         # 空选项只会添乱。
@@ -848,7 +845,6 @@ class LostFoundLeadForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, post=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         queryset = LostFoundPost.objects.filter(status='active').select_related('reporter')
         if post is not None:
             queryset = queryset.filter(post_type='found' if post.post_type == 'lost' else 'lost').exclude(pk=post.pk)
@@ -876,7 +872,6 @@ class DemandPostForm(StyledModelFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._style_fields()
         self.fields['category'].queryset = Category.objects.all()
         self.fields['category'].empty_label = '请选择分类（可选）'
         self.fields['location'].queryset = CampusLocation.objects.filter(is_active=True)
