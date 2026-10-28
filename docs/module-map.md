@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，136 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，138 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -42,11 +42,11 @@ campus_glimmer/
 | `.github/` | [持续集成](../.github/CI.md) | GitHub Actions 与本地等价检查 |
 | `docs/screenshots/` | [系统界面预览](screenshots/README.md) | 首页截图的来源与维护方式 |
 
-## listings/ 的业务模块（136 个）
+## listings/ 的业务模块（138 个）
 
 
 <details>
-<summary>业务模块清单（136 个，按业务链路归组）</summary>
+<summary>业务模块清单（138 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -120,6 +120,7 @@ campus_glimmer/
 | `lost_found_matched_outcome.py` | 失物招领确认匹配之后的四种终局、截止时间已过的时长、匹配双向性与按终局拆的反馈提交（只报告） | 只报告 |
 | `moderation_notice_preference.py` | 内容审核结果通知的开关状态、触达成因、已读率与关闭后的发言对照（只报告） | 只报告 |
 | `order_stage_flow.py` | 订单全链路阶段时长与瓶颈分析 | 读写 |
+| `order_presentation.py` | 订单详情页「下一步」卡片的标题与图标，按订单状态和查看者角色给出 | 只读 |
 | `handoff_code_usage.py` | 当面交付取件码的生成与使用：签发到首次尝试的间隔、尝试次数与用不上的码（只报告不改写） | 读写 |
 | `item_lifecycle.py` | 到期商品的过期处理：从公开商品流和推荐里隐藏并回写状态 | 读写 |
 | `lifecycle_diagnostics.py` | 商品生命周期等级、刷新节奏与卖家侧诊断 | 读写 |
@@ -192,10 +193,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（157 个）
+## 业务链路的测试模块（155 个）
 
 <details>
-<summary>业务链路测试清单（157 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（155 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -399,6 +400,8 @@ campus_glimmer/
 - **`test_order_deadline_reminders.py`**：确认时长只认 confirmed 事件、四种结局分开、自动释放与取消分开、借用侧单独取数、台账拆开、只报告不改写与空态导出测试
 
 - **`test_order_stage_flow.py`**：订单全链路阶段时长与瓶颈定位
+
+- **`test_order_detail_presentation.py`**：订单详情「下一步」卡片的分支标题、渲染出的侧栏 h2 与模板拆分形状
 
 - **`test_price_insights.py`**：同类价格分位数与参考可信度，样本不足时降低提示强度
 

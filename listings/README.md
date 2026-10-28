@@ -125,6 +125,8 @@ flowchart LR
 | [`urls.py`](urls.py) | `/listings/` 下的全部路由 |
 | [`forms.py`](forms.py) | 商品、搜索、订单、通知偏好等表单 |
 | [`admin.py`](admin.py) | Django 后台维护入口 |
+| [`order_presentation.py`](order_presentation.py) | 订单详情页「下一步」卡片的标题与图标，按订单状态和查看者角色给出 |
+| [`../templates/listings/orders/`](../templates/listings/orders/) | 订单详情页拆分出的分区片段，主模板只负责拼接 |
 | [`management/commands/`](management/commands/) | 定时任务与数据回填命令 |
 | [`test_*.py`](.) | 按能力拆分的回归测试，不是一个大而全的测试文件 |
 
@@ -152,12 +154,15 @@ flowchart LR
 - 指标要明确分母、时间窗口、样本门槛和缺失值语义，样本不足时不强行下结论；
 - 新能力优先拆成独立领域模块与对应 `test_*.py`，不要继续把职责堆进单一视图；
 - 图片处理统一复用 `image_processing.py`，避免每个页面各写一套压缩和方向修正。
+- 卡片要有标题层级，不能只挂一个眉标：读屏软件靠标题分区，侧栏行动卡这种「现在该做什么」的区块最不能断档；
+- 大页面模板按分区拆成片段，主模板只负责拼接；拆分后的形状由测试盯着，防止有人把分区又粘回一个文件；
 
 ## ✅ 验证
 
 ```powershell
 python manage.py test listings
 python manage.py test listings.test_order_stage_flow
+python manage.py test listings.test_order_detail_presentation
 python manage.py test listings.test_campaign_registration listings.test_campaign_updates listings.test_campaign_analytics listings.test_campaigns
 python manage.py makemigrations --check --dry-run
 python manage.py check
