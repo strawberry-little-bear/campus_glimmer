@@ -12,7 +12,7 @@ h1 之后直接跳了五级；卡片标题用 h3，让整个列表页从 h1 跳�
 这里用 Django test client 渲染同一批页面，再配一个 stdlib 的轻量 DOM 做同样的
 检查。没有新依赖，跑起来是秒级，可以挂在每次提交上。
 
-五类检查各有分工：
+六类检查各有分工：
 
 1. TemplateHeadingOrderTests 只读模板文件，不渲染。它能在没有数据、没有请求的
    情况下发现标题跳级，覆盖浏览器审计够不到的分支（空状态、他人视角）。
@@ -28,6 +28,10 @@ h1 之后直接跳了五级；卡片标题用 h3，让整个列表页从 h1 跳�
    当前页带 aria-current="page"。分页按钮长得都一样——一个图标或一串数字，
    同页出现多个分页器时更是完全无法分辨；而它只在数据够多页时才渲染出来，
    演示数据不特意造够页数就照不到，只能静态扫。
+6. GridFirstCellTests 约束窄首列网格的首格内容。第一轨写成
+   42px / 72px / 89.6px 这类固定长度时，首格自然是图标、时间戳、序号这类一两个字的东西；
+   模板长大后有人往同一行塞九字标签，轨道放不下就折行，行高从 20px 涨到 59px。
+   浏览器审计要逐页逐宽度量才抓得到，这里改成扫样式表 + 模板源。
 
 第 2 类里的 id 引用完整性是后来补的，起因是一次真实的线上缺陷：Django 的
 BoundField.aria_describedby 会自动拼出 `id_<字段名>_helptext` /
@@ -1219,3 +1223,367 @@ class PaginationAccessibleNameTests(SimpleTestCase):
             '而不是一串数字：\n'
             + '\n'.join('  ' + item for item in offenders),
         )
+
+
+class GridFirstCellTests(SimpleTestCase):
+    """窄首列网格的首格内容契约：固定宽度的第一轨只放得了很短的内容。
+
+    这类缺陷长得很有规律，而且页面上一眼看不出病因：一条 grid 规则把第一轨写成
+    42px / 72px / 89.6px 这样的固定长度，首格自然是图标、时间戳、序号这类一两个
+    字的东西。可模板是会长大的——有人往同一行塞一个九字标签，轨道放不下就折行，
+    行高从 20px 涨到 59px，整张卡片跟着错位；或者反过来，把只有三格内容的行套进
+    四轨模板，最后一轨永远空着，数字和单位脱节。运营看板那张「仍未真正收到的卖家」
+    两个毛病一起犯过，修完之后才决定把它钉成契约。
+
+    浏览器审计当然抓得到，但代价是逐页逐宽度量，跑一轮以小时计，而且只有数据恰好
+    渲染出那一行时才照得到。这里改成约束样式表和模板源，秒级跑完：
+
+    1. 注册表守卫。把样式表里所有「首轨是固定长度且不超过 170px」的
+       grid-template-columns 规则都列出来，要求每条都在契约表里登记过。新增一条
+       窄首列规则而没人想过首格放什么，这一步就红。
+    2. 内容契约。对登记过的选择器扫全部模板源，断言匹配元素的首个子元素落在允许
+       集合里。允许条目同时约束行上的修饰类——.activity-row 的首格可以是 <span>，
+       但只在带 .activity-row--wide-label（首轨改宽）的那行上成立。
+    3. 伪元素契约。卖家工作台那张表窄屏时首格是
+       ::before{content:attr(data-label)}，DOM 里根本没有子元素可查，只能反过来
+       约束属性文本的长度。
+
+    模板源要先内联 {% include %}：.seller-desk-table--stacked 挂在 _my_items_table.html
+    的 <table> 上，.seller-desk-row td[data-label] 却在被 include 的 _my_item_row.html
+    里。跨文件的选择器单文件扫，一条都匹配不到——契约会悄悄变成空转。
+
+    还有一条教训写在最后一项检查里：运营看板和搜索洞察的分区默认是懒加载的，
+    html.js 下 .ops-section[data-ops-deferred] > * { display: none }。整轮浏览器
+    溢出扫描曾经一次都没量到过它们，34 + 13 个分区全是盲区。谁把标记去掉，
+    谁就把下一个审审美的人送回盲区。
+    """
+
+    STYLESHEET = PROJECT_ROOT / 'static' / 'css' / 'style.css'
+    MAIN_JS = PROJECT_ROOT / 'static' / 'js' / 'main.js'
+    CSS_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+    GRID_COLUMNS = re.compile(r'grid-template-columns\s*:\s*([^;]+);')
+    FIXED_TRACK = re.compile(r'^(\d*\.?\d+)(px|rem|em|pt)$')
+    UNIT_TO_PX = {'px': 1.0, 'rem': 16.0, 'em': 16.0, 'pt': 96.0 / 72.0}
+    MAX_FIRST_TRACK_PX = 170
+    INCLUDE = re.compile(r"{%\s*include\s+['\"]([^'\"]+)['\"]")
+    MAX_INCLUDE_DEPTH = 6
+    SIMPLE_SELECTOR = re.compile(
+        r'\.([\w-]+)'                       # .class
+        r'|^([a-zA-Z][\w-]*)'               # 标签名，只在片段开头算
+        r'|\[([\w-]+)(?:=(?:"([^"]*)"|\'([^\']*)\'|([^\]]*)))?\]'   # [attr] / [attr=val]
+        r'|:not\(([^)]*)\)'                 # :not(简单选择器)
+    )
+    LAZY_HIDE_RULE = re.compile(
+        r'html\.js\s+\.ops-section\[data-ops-deferred\]:not\(\.is-revealed\)\s*>\s*\*'
+        r'[^{}]*\{\s*display:\s*none')
+
+    # 首格是真实 DOM 子元素的选择器。
+    # 每条 = ((首格标签, 首格必须带的 class), (行上必须同时出现的 class))
+    GRID_FIRST_CELL_CONTRACTS = {
+        '.auth-benefit-list li': (
+            (('i', ()), ()),
+        ),
+        '.search-weekday-row': (
+            (('span', ()), ()),
+        ),
+        '.ops-alert': (
+            (('div', ('ops-alert-icon',)), ()),
+        ),
+        '.activity-row': (
+            # 默认 42px 首轨只放得下 <time>；宽标签行必须自己把首轨改宽，
+            # 否则「处于免打扰时段」这类长标签会折行把行高顶起来。
+            (('time', ()), ()),
+            (('span', ('text-muted',)), ('activity-row--wide-label',)),
+        ),
+        '.contribution-trend-chart .activity-row': (
+            (('time', ()), ()),
+        ),
+        '.bulk-image-task': (
+            (('span', ('bulk-image-task-index',)), ()),
+        ),
+        '.bulk-image-complete': (
+            (('span', ('bulk-image-complete-icon',)), ()),
+        ),
+        '.chat-response-buckets li': (
+            (('span', ('chat-response-bucket-label',)), ()),
+        ),
+        '.notification-response-buckets li': (
+            (('span', ('notification-response-bucket-label',)), ()),
+        ),
+        '.supply-lifecycle-level': (
+            (('span', ('supply-lifecycle-level-label',)), ()),
+        ),
+        '.trade-order-card': (
+            (('a', ('trade-order-thumb',)), ()),
+        ),
+        '.order-info-list': (
+            (('dt', ()), ()),
+        ),
+    }
+
+    # 首格是 ::before{content:attr(...)} 的选择器：DOM 里没有子元素可查，
+    # 改成约束属性文本的字符数。值 = (属性名, 最多几个字)
+    GRID_FIRST_CELL_PSEUDO_CONTRACTS = {
+        '.seller-desk-table--stacked .seller-desk-row '
+        'td[data-label]:not([data-label="商品"]):not(.seller-desk-check)':
+            ('data-label', 4),
+    }
+
+    # (模板, 懒加载属性, 分区样式类, JS 里对应的选择器)
+    LAZY_SECTIONS = (
+        ('listings/operations_dashboard.html', 'data-ops-deferred', 'ops-section',
+         '.ops-section[data-ops-deferred]'),
+        ('listings/search_insights.html', 'data-si-deferred', 'si-section',
+         '.si-section[data-si-deferred]'),
+    )
+
+    # ---------------------------------------------------------------- 样式表
+
+    @classmethod
+    def _rules(cls):
+        """产出全部 (选择器, 声明体)，@media / @supports 里的规则一起收进来。
+
+        注释先按等长空白替换掉：注释里的字符会打乱 { } 配平，偏移量跟着全漂。
+        @keyframes / @font-face 整块跳过，里面的 0% / from 不是选择器。
+        """
+        css = cls.CSS_COMMENT.sub(
+            lambda match: ''.join('\n' if ch == '\n' else ' ' for ch in match.group(0)),
+            cls.STYLESHEET.read_text(encoding='utf-8'))
+
+        def walk(text):
+            found = []
+            cursor = 0
+            while True:
+                brace = text.find('{', cursor)
+                if brace < 0:
+                    return found
+                prelude = text[cursor:brace].strip()
+                depth, index = 1, brace + 1
+                while index < len(text) and depth:
+                    if text[index] == '{':
+                        depth += 1
+                    elif text[index] == '}':
+                        depth -= 1
+                    index += 1
+                body = text[brace + 1:index - 1]
+                if prelude.startswith('@'):
+                    if prelude.startswith('@media') or prelude.startswith('@supports'):
+                        found.extend(walk(body))
+                else:
+                    found.append((prelude, body))
+                cursor = index
+
+        return walk(css)
+
+    @classmethod
+    def _narrow_first_tracks(cls):
+        """产出 {归一化选择器: [首轨像素值, ...]}，只留固定长度的窄首轨。"""
+        found = {}
+        for selector, body in cls._rules():
+            match = cls.GRID_COLUMNS.search(body)
+            if not match:
+                continue
+            tracks = match.group(1).split()
+            fixed = cls.FIXED_TRACK.match(tracks[0]) if tracks else None
+            if not fixed:
+                continue
+            pixels = float(fixed.group(1)) * cls.UNIT_TO_PX[fixed.group(2)]
+            if pixels > cls.MAX_FIRST_TRACK_PX:
+                continue
+            found.setdefault(' '.join(selector.split()), []).append(pixels)
+        return found
+
+    # ---------------------------------------------------------------- 模板源
+
+    @classmethod
+    def _template_sources(cls):
+        """产出 (相对路径, 已内联 include 的模板源)。"""
+        for template in sorted(TEMPLATES_DIR.rglob('*.html')):
+            relative = template.relative_to(TEMPLATES_DIR).as_posix()
+            yield relative, cls._with_includes(
+                template.read_text(encoding='utf-8'), frozenset(), 0)
+
+    @classmethod
+    def _with_includes(cls, text, seen, depth):
+        if depth >= cls.MAX_INCLUDE_DEPTH:
+            return text
+
+        def inline(match):
+            name = match.group(1)
+            if name in seen:
+                return ''
+            target = TEMPLATES_DIR / name
+            if not target.is_file():
+                return ''
+            return cls._with_includes(
+                target.read_text(encoding='utf-8'), seen | {name}, depth + 1)
+
+        return cls.INCLUDE.sub(inline, text)
+
+    # ------------------------------------------------------------ 选择器匹配
+
+    def _compound_matches(self, node, compound):
+        tests = []
+        for match in self.SIMPLE_SELECTOR.finditer(compound):
+            name, tag, attr, double, single, bare, negated = match.groups()
+            if name:
+                tests.append(lambda n, v=name: v in (n.attrs.get('class') or '').split())
+            elif tag:
+                tests.append(lambda n, v=tag: n.tag == v)
+            elif attr:
+                expected = double if double is not None else (
+                    single if single is not None else bare)
+                if expected is None:
+                    tests.append(lambda n, v=attr: v in n.attrs)
+                else:
+                    tests.append(
+                        lambda n, v=attr, e=expected.strip():
+                            (n.attrs.get(v) or '').strip() == e)
+            elif negated:
+                tests.append(lambda n, v=negated: not self._compound_matches(n, v))
+        if not tests:
+            return False
+        return all(test(node) for test in tests)
+
+    def _selector_matches(self, node, selector):
+        compounds = selector.split()
+        if not self._compound_matches(node, compounds[-1]):
+            return False
+        ancestor, index = node.parent, len(compounds) - 2
+        while index >= 0:
+            if ancestor is None or ancestor.tag == '#root':
+                return False
+            if self._compound_matches(ancestor, compounds[index]):
+                index -= 1
+            ancestor = ancestor.parent
+        return True
+
+    @staticmethod
+    def _first_element(node):
+        for child in node.children:
+            if not isinstance(child, str):
+                return child
+        return None
+
+    def _describe(self, node):
+        first = self._first_element(node)
+        if first is None:
+            return '没有子元素'
+        return '<%s class="%s">' % (first.tag, (first.attrs.get('class') or '').strip())
+
+    # ------------------------------------------------------------------ 检查
+
+    def test_every_narrow_first_track_rule_is_registered(self):
+        registered = (set(self.GRID_FIRST_CELL_CONTRACTS)
+                      | set(self.GRID_FIRST_CELL_PSEUDO_CONTRACTS))
+        found = self._narrow_first_tracks()
+        self.assertGreater(
+            len(found), 0, '一条窄首列规则都没扫到，解析大概失效了')
+        unregistered = sorted(
+            '%s（首轨 %gpx）' % (selector, min(tracks))
+            for selector, tracks in found.items() if selector not in registered)
+        self.assertEqual(
+            unregistered, [],
+            '这些 grid 规则的第一轨是固定窄宽度，首格放什么必须先登记进契约表'
+            '（GRID_FIRST_CELL_CONTRACTS / GRID_FIRST_CELL_PSEUDO_CONTRACTS）：\n'
+            + '\n'.join('  ' + item for item in unregistered))
+
+    def test_narrow_first_track_cells_only_hold_expected_content(self):
+        problems = []
+        matched = {}
+        parsed = [(relative, _parse(text).root) for relative, text in self._template_sources()]
+        for selector, allowed in self.GRID_FIRST_CELL_CONTRACTS.items():
+            for relative, root in parsed:
+                for node in _iter_nodes(root):
+                    if not self._selector_matches(node, selector):
+                        continue
+                    matched[selector] = matched.get(selector, 0) + 1
+                    if self._cell_allowed(node, allowed):
+                        continue
+                    problems.append('%s：%s 的首格是 %s' % (relative, selector, self._describe(node)))
+
+        for selector in sorted(self.GRID_FIRST_CELL_CONTRACTS):
+            self.assertIn(
+                selector, matched,
+                '契约表里的 %s 在模板里一次都没匹配到，检查已经空转了' % selector)
+        self.assertEqual(
+            problems, [],
+            '窄首列里放了放不下的内容，要么换内容，要么给行加修饰类把首轨改宽：\n'
+            + '\n'.join('  ' + item for item in sorted(problems)))
+
+    def _cell_allowed(self, node, allowed):
+        first = self._first_element(node)
+        if first is None:
+            return False
+        row_classes = (node.attrs.get('class') or '').split()
+        first_classes = (first.attrs.get('class') or '').split()
+        for (tag, required), row_required in allowed:
+            if first.tag != tag:
+                continue
+            if not set(required) <= set(first_classes):
+                continue
+            if not set(row_required) <= set(row_classes):
+                continue
+            return True
+        return False
+
+    def test_pseudo_element_first_cells_stay_short_enough(self):
+        problems = []
+        matched = set()
+        for selector, (attribute, limit) in self.GRID_FIRST_CELL_PSEUDO_CONTRACTS.items():
+            # ::before 那条规则的选择器是同一个前缀加 ::before，用前缀匹配一起收进来。
+            bodies = [body for sel, body in self._rules()
+                      if ' '.join(sel.split()).startswith(selector)]
+            self.assertTrue(
+                bodies, '契约表里的 %s 在样式表里已经不存在了' % selector)
+            self.assertTrue(
+                any('attr(%s)' % attribute in body for body in bodies),
+                '%s 的首格不再是 ::before 伪元素，契约该换个登记方式了' % selector)
+            for relative, text in self._template_sources():
+                for node in _iter_nodes(_parse(text).root):
+                    if not self._selector_matches(node, selector):
+                        continue
+                    matched.add(selector)
+                    value = (node.attrs.get(attribute) or '').strip()
+                    if len(value) > limit:
+                        problems.append(
+                            '%s：%s="%s" 有 %d 个字，%dpx 首轨放不下'
+                            % (relative, attribute, value, len(value), limit))
+        self.assertTrue(
+            matched, '伪元素契约一条都没匹配到，检查已经空转了')
+        self.assertEqual(
+            problems, [],
+            '窄屏时这些标签要挤进 ::before 伪元素，超长就会把内容顶出轨道：\n'
+            + '\n'.join('  ' + item for item in sorted(problems)))
+
+    def test_lazy_loaded_sections_stay_marked_for_forced_reveal(self):
+        """懒加载分区必须留着标记，否则任何静态/渲染审计都会整片漏掉它们。
+
+        运营看板 34 个分区、搜索洞察 13 个分区，在 html.js 下默认
+        display:none，靠 IntersectionObserver 滚到才展开。浏览器审计不显式
+        去掉 data-ops-deferred / data-si-deferred 再补 is-revealed，量到的
+        就是一个空壳页面——上一轮整整两轮扫描都是这么白跑的。
+        """
+        problems = []
+        css = self.STYLESHEET.read_text(encoding='utf-8')
+        js = self.MAIN_JS.read_text(encoding='utf-8')
+        for relative, attribute, section_class, selector in self.LAZY_SECTIONS:
+            text = (TEMPLATES_DIR / relative).read_text(encoding='utf-8')
+            deferred = len(re.findall(re.escape(attribute), text))
+            sections = len(re.findall(r'\b%s\b' % re.escape(section_class), text))
+            if deferred == 0:
+                problems.append('%s：一个 %s 都没有' % (relative, attribute))
+            if deferred > sections:
+                problems.append(
+                    '%s：%s 有 %d 个，比 %s 分区总数 %d 还多'
+                    % (relative, attribute, deferred, section_class, sections))
+            if selector not in js:
+                problems.append('%s：JS 里找不到 %s' % (relative, selector))
+        if not self.LAZY_HIDE_RULE.search(css):
+            problems.append('样式表里没有 html.js 下懒加载分区的 display:none 规则')
+
+        self.assertEqual(
+            problems, [],
+            '懒加载分区改坏了。这些分区无 JS 时不可见，任何溢出/视觉审计都必须'
+            '先强制展开，标记一掉就会整片漏测：\n'
+            + '\n'.join('  ' + item for item in problems))
