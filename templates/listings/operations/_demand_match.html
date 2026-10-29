@@ -52,7 +52,7 @@
     <div class="row g-3 mb-4">
         <div class="col-md-3"><div class="ops-mini-stat"><span>已决断响应</span><strong>{{ demand_match_quality.metrics.decided_responses }}</strong><small>采纳 {{ demand_match_quality.metrics.accepted_count }} · 未采纳 {{ demand_match_quality.metrics.rejected_count }}</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>整体采纳率</span><strong>{{ demand_match_quality.metrics.acceptance_rate }}%</strong><small>平均匹配分 {{ demand_match_quality.metrics.average_score|default:"—" }}</small></div></div>
-        <div class="col-md-3"><div class="ops-mini-stat"><span>打分与采纳的关系</span><strong style="font-size:1rem;">{{ demand_match_quality.monotonicity.kind_label }}</strong><small>{{ demand_match_quality.metrics.measured_bands }} 个分段达到样本门槛</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>打分与采纳的关系</span><strong class="is-compact">{{ demand_match_quality.monotonicity.kind_label }}</strong><small>{{ demand_match_quality.metrics.measured_bands }} 个分段达到样本门槛</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>高分被拒</span><strong>{% if demand_match_quality.over_promised.has_sample %}{{ demand_match_quality.over_promised.rejection_rate }}%{% else %}&mdash;{% endif %}</strong><small>{{ demand_match_quality.metrics.high_score_floor }} 分以上响应中被拒的比例</small></div></div>
     </div>
     <p class="search-rhythm-note mb-3"><i class="bi bi-lightbulb me-1"></i>{{ demand_match_quality.summary }}</p>
