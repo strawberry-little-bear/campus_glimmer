@@ -5069,7 +5069,8 @@ a { color: inherit; text-decoration: none; }
 
 .inbox-status-field {
     display: flex;
-    flex: 0 0 190px;
+    flex: 0 1 190px;
+    min-width: 0;
     flex-direction: column;
     gap: 5px;
     color: var(--muted);
