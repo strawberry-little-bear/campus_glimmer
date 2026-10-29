@@ -512,7 +512,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（117 篇，持续更新）</summary>
+<summary>设计文档清单（118 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
@@ -632,6 +632,7 @@ campus_glimmer/
 - **`moderation-appeal-design.md`**：确认违规后的单次申诉、改判留痕与恢复闭环
 - **`moderation-appeal-quality-design.md`**：内容申诉的提交线与处理线分窗、积压等待、成立与恢复缺口
 
+- **`narrow-grid-first-cell-contract-design.md`**：固定宽度第一轨为什么只能放图标和时间戳，以及懒加载分区为什么会让整轮溢出审计失效
 - **`notification-aggregation-quality-design.md`**：被聚合过的行与从没被聚合过的行，阅读率与时长对照
 
 - **`notification-kind-coverage-design.md`**：通知类型、偏好开关与表单字段三张表的对齐情况
