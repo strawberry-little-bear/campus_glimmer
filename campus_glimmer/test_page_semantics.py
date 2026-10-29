@@ -1587,3 +1587,120 @@ class GridFirstCellTests(SimpleTestCase):
             '懒加载分区改坏了。这些分区无 JS 时不可见，任何溢出/视觉审计都必须'
             '先强制展开，标记一掉就会整片漏测：\n'
             + '\n'.join('  ' + item for item in problems))
+
+
+class FilterPanelFlexTests(SimpleTestCase):
+    """横向筛选行里的表单控件必须允许收缩，否则行会在中间视口溢出面板。
+
+    通知中心的筛选行是四个控件一排：搜索框、两个下拉、一个提交按钮。搜索框写的是
+    flex: 1 1 auto，两个下拉写的是 flex: 0 0 190px——刚性地钉在 190px。窄于 768px
+    时有 flex-wrap: wrap 兜底，一行放不下就折行；可 768px 到 1023px 这一段既没折行、
+    控件又都不肯让宽度，四个控件加三个间距需要 708px，而面板内容盒只有 672px，
+    「应用筛选」按钮就整颗探到圆角边框外面 24px。页面上看不出病因：容器
+    overflow-x 是 visible，页面本身不出现横向滚动条，只有按钮超出了自己的面板。
+
+    私信页用的是同一个 .inbox-filter-panel，但只有一个下拉，放得下，所以同一个
+    样式表在两个页面上一个出事一个不出事——这类缺陷只有把页面真的拉到那个宽度
+    才照得到，而那一宽度落在常用笔记本和桌面之间，很容易整轮漏掉。
+
+    这里改成约束样式表，秒级跑完：
+
+    1. 收缩系数。筛选行里的表单控件不能是 flex: 0 0 <长度>，必须带 shrink，
+       窄到放不下时自己让宽度，而不是把同一行的兄弟控件顶出容器。
+    2. min-width: 0。<select> 的 min-content 宽度由最长的那条 option 决定，
+       只给 flex-shrink 也会被 min-width:auto 挡死，必须显式置 0。
+    3. 折行兜底。窄屏那条 flex-wrap: wrap 的媒体查询不能删，它是收缩也不够时的
+       最后一道防线；断点也必须留在 768px 附近，不能被人随手抬上去。
+    """
+
+    STYLESHEET = PROJECT_ROOT / 'static' / 'css' / 'style.css'
+    CSS_COMMENT = re.compile(r'/\*.*?\*/', re.S)
+    FLEX_SHORTHAND = re.compile(r'flex\s*:\s*(-?[\d.]+)\s+(-?[\d.]+)\s+([^;]+);')
+    FLEX_SHRINK_ONLY = re.compile(r'flex-shrink\s*:\s*(-?[\d.]+)')
+    MIN_WIDTH_ZERO = re.compile(r'min-width\s*:\s*0(?:\s*;|\s*$)')
+    MEDIA_QUERY = re.compile(
+        r'@media\s+\(max-width:\s*([\d.]+)px\)\s*\{([\s\S]*?)\n\}')
+    # 竖着叠放的兜底：控件占满一整行，flex 自然换行。
+    STACK_BASIS = re.compile(r'flex-basis\s*:\s*100%')
+
+    # 筛选行里的表单控件：必须允许收缩。
+    SHRINKABLE_FILTER_CONTROLS = ('.inbox-status-field',)
+    # 折行兜底所在的媒体查询上界。
+    WRAP_BREAKPOINT_PX = 768
+    WRAP_SELECTOR = '.inbox-filter-panel'
+
+    @classmethod
+    def _base_rules(cls, selector):
+        """只取基础层（不在任何 @media 里）的规则。"""
+        css = cls.CSS_COMMENT.sub(
+            lambda match: ''.join('\n' if ch == '\n' else ' ' for ch in match.group(0)),
+            cls.STYLESHEET.read_text(encoding='utf-8'))
+        found, cursor = [], 0
+        while True:
+            brace = css.find('{', cursor)
+            if brace < 0:
+                return found
+            prelude = css[cursor:brace].strip()
+            depth, index = 1, brace + 1
+            while index < len(css) and depth:
+                if css[index] == '{':
+                    depth += 1
+                elif css[index] == '}':
+                    depth -= 1
+                index += 1
+            if not prelude.startswith('@') and ' '.join(prelude.split()) == selector:
+                found.append(css[brace + 1:index - 1])
+            cursor = index
+
+    def test_filter_controls_can_shrink(self):
+        problems = []
+        for selector in self.SHRINKABLE_FILTER_CONTROLS:
+            bodies = self._base_rules(selector)
+            self.assertTrue(
+                bodies, '样式表里找不到 %s 的基础规则' % selector)
+            for body in bodies:
+                shorthand = self.FLEX_SHORTHAND.search(body)
+                if shorthand:
+                    shrink = float(shorthand.group(2))
+                else:
+                    only = self.FLEX_SHRINK_ONLY.search(body)
+                    shrink = float(only.group(1)) if only else 1.0
+                if shrink < 1:
+                    problems.append(
+                        '%s 的 flex 收缩系数是 %g：放不下时不肯让宽度，'
+                        '会把同一行的兄弟控件顶出容器' % (selector, shrink))
+                if not self.MIN_WIDTH_ZERO.search(body):
+                    problems.append(
+                        '%s 没有 min-width: 0：<select> 的 min-content 宽度由最长 '
+                        'option 决定，flex-shrink 会被 min-width:auto 挡死' % selector)
+        self.assertEqual(
+            problems, [],
+            '筛选行的表单控件改坏了。中间视口（768–1023px）既没折行兜底、'
+            '控件又都不肯收缩，整行会溢出面板边框：\n'
+            + '\n'.join('  ' + item for item in problems))
+
+    def test_filter_panel_keeps_a_wrapping_fallback(self):
+        """窄屏必须还能整行折起来，收缩到底也放不下时靠它兜底。"""
+        problems = []
+        saw_panel = False
+        for match in self.MEDIA_QUERY.finditer(
+                self.STYLESHEET.read_text(encoding='utf-8')):
+            limit, body = float(match.group(1)), match.group(2)
+            if self.WRAP_SELECTOR not in body:
+                continue
+            saw_panel = True
+            # 断行有两条正当路子：整行开 flex-wrap，或者把每个控件按 100%
+            #  basis 竖着叠起来。两条都没有，就等于这一档屏幕没有任何兜底。
+            if 'flex-wrap: wrap' not in body and not self.STACK_BASIS.search(body):
+                problems.append('%gpx 的断点里筛选行既不折行也不叠放' % limit)
+            if limit > self.WRAP_BREAKPOINT_PX:
+                problems.append(
+                    '折行断点被抬到 %gpx：768–1023px 这段会连折行兜底一起失去'
+                    % limit)
+        self.assertTrue(
+            saw_panel,
+            '一条 @media 都没碰到 %s，这项检查空转了' % self.WRAP_SELECTOR)
+        self.assertEqual(
+            problems, [],
+            '筛选行的折行兜底被改坏了：\n'
+            + '\n'.join('  ' + item for item in problems))
