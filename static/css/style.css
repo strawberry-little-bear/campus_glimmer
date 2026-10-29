@@ -1101,6 +1101,19 @@ a { color: inherit; text-decoration: none; }
 .search-hour-bar.has-zero-result { background: linear-gradient(180deg, #e2a161, #c57948); }
 .search-hour-column b { position: absolute; top: -16px; color: var(--muted); font-size: .62rem; font-weight: 700; }
 .search-hour-column small { position: absolute; bottom: -21px; color: var(--muted); font-size: .58rem; white-space: nowrap; }
+
+/* 24 列 + 5px 间距在 390px 上要 407px，容器只有 330px，最后几个小时会被
+   overflow-x:auto 裁掉——高峰正好落在尾部时就整段看不见。窄屏把间距收到
+   2px、轨道下限放到 0，24 列收进 326px 的内容盒；列上的数字和小时标签都是
+   绝对定位，且标签每 3 小时才出一个，收窄后依然不会互相压到。 */
+@media (max-width: 575px) {
+    .search-hour-chart {
+        gap: 2px;
+        grid-template-columns: repeat(24, minmax(0, 1fr));
+    }
+
+    .search-hour-column { min-width: 0; }
+}
 .search-weekday-list { display: grid; gap: 12px; margin-top: 12px; }
 .search-weekday-row { display: grid; grid-template-columns: 35px minmax(0, 1fr) 28px; align-items: center; gap: 8px; color: var(--muted); font-size: .72rem; }
 .search-weekday-row > div { height: 8px; overflow: hidden; border-radius: 999px; background: #edf4ef; }
@@ -2494,6 +2507,24 @@ a { color: inherit; text-decoration: none; }
     font-size: 0.82rem;
 }
 
+/* 提醒效果面板的「仍未真正收到」三行没有进度条，只有 标签/数量/单位。
+   直接套用上面的四轨会把最后一轨空出来，数字也被推到中间 1fr 里和「件」脱节；
+   而「关闭了生命周期提醒」这类 9 字标签更会在 5.6rem 首轨里折成两三行，
+   行高从 20px 涨到 39~59px，三行互相错位。所以单独收成三轨，首轨交给内容
+   自适应，标签单行。选择器多带一层 .supply-lifecycle-levels 是为了把特异性
+   抬到 (0,2,0)，窄屏媒体查询里那条四轨规则就不会误伤这个变体。 */
+.supply-lifecycle-levels .supply-lifecycle-level--compact {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.supply-lifecycle-levels .supply-lifecycle-level--compact .supply-lifecycle-level-label {
+    white-space: nowrap;
+}
+
+.supply-lifecycle-levels .supply-lifecycle-level--compact strong {
+    text-align: right;
+}
+
 .supply-lifecycle-level-label {
     display: inline-flex;
     align-items: center;
@@ -3534,6 +3565,15 @@ a { color: inherit; text-decoration: none; }
 .rewrite-candidate-table tr.is-current td { font-weight: 700; }
 .rewrite-candidate-table tr.is-current .rewrite-candidate-confidence { margin-left: 8px; }
 .chat-response-trend-panel .chat-response-trend-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+
+/* 四张汇总卡在 390px 上每列只剩 73px，而 <strong> 是 1.45rem、<span> 是
+   6 个汉字，双双溢出内容盒（实测 sw=85 / cw=73），卡片被撑到 147px 高。
+   窄屏改 2 列，每列 130px 内容宽就够放。 */
+@media (max-width: 575px) {
+    .chat-response-trend-panel .chat-response-trend-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
 .chat-response-trend-panel .chat-response-trend-summary > div { display: flex; flex-direction: column; gap: 6px; min-height: 82px; padding: 13px 14px; border: 1px solid #e7efe9; border-radius: 14px; background: #fbfdfb; }
 .chat-response-trend-panel .chat-response-trend-summary span { color: var(--muted); font-size: .71rem; }
 .chat-response-trend-panel .chat-response-trend-summary small { color: var(--muted); font-size: .69rem; }

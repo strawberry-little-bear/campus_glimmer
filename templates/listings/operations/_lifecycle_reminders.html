@@ -49,7 +49,7 @@
                 {% if lifecycle_reminder_effect.blocked_rows %}
                 <ul class="supply-lifecycle-levels">
                     {% for row in lifecycle_reminder_effect.blocked_rows %}
-                    <li class="supply-lifecycle-level"><span class="supply-lifecycle-level-label"><i></i>{{ row.label }}</span><strong>{{ row.items }}</strong><small>件</small></li>
+                    <li class="supply-lifecycle-level supply-lifecycle-level--compact"><span class="supply-lifecycle-level-label"><i></i>{{ row.label }}</span><strong>{{ row.items }}</strong><small>件</small></li>
                     {% endfor %}
                 </ul>
                 {% else %}<div class="empty-inline">没有被偏好或免打扰挡住的卖家。</div>{% endif %}
