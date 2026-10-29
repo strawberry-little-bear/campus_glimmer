@@ -47,7 +47,7 @@
             <h3 class="h6 mb-3">反馈标签分布</h3>
             {% if mutual_aid_feedback_insights.tag_rows %}
             <div class="activity-chart">
-                {% for row in mutual_aid_feedback_insights.tag_rows %}<div class="activity-row"><span class="text-muted" style="min-width: 7rem">{{ row.label }}</span><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio row.count mutual_aid_feedback_insights.feedback_count 100 %}%" title="{{ row.count }} 次"></span></div><strong>{{ row.count }}</strong><small class="text-muted">{{ row.share }}%</small></div>{% endfor %}
+                {% for row in mutual_aid_feedback_insights.tag_rows %}<div class="activity-row activity-row--wide-label"><span class="text-muted">{{ row.label }}</span><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio row.count mutual_aid_feedback_insights.feedback_count 100 %}%" title="{{ row.count }} 次"></span></div><strong>{{ row.count }}</strong><small class="text-muted">{{ row.share }}%</small></div>{% endfor %}
             </div>
             {% else %}<div class="empty-inline">反馈标签会在结果提交后显示。</div>{% endif %}
         </div>

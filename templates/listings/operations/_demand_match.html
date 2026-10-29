@@ -18,7 +18,7 @@
             <h3 class="h6 mb-3">转化漏斗</h3>
             <div class="activity-chart" aria-label="求购匹配转化漏斗">
                 {% for stage in demand_match_insights.funnel %}
-                <div class="activity-row"><span class="small text-muted" style="min-width: 7em">{{ stage.label }}</span><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio stage.count demand_match_insights.funnel_max 100 %}%" title="{{ stage.count }} 条"></span></div><strong>{{ stage.count }}</strong><small class="text-muted">{{ stage.rate }}%</small></div>
+                <div class="activity-row activity-row--wide-label"><span class="small text-muted">{{ stage.label }}</span><div class="activity-bars"><span class="activity-bar activity-bar-items" style="width: {% widthratio stage.count demand_match_insights.funnel_max 100 %}%" title="{{ stage.count }} 条"></span></div><strong>{{ stage.count }}</strong><small class="text-muted">{{ stage.rate }}%</small></div>
                 <div class="small text-muted mb-2 ms-2">{{ stage.note }}</div>
                 {% empty %}<p class="empty-inline mb-0">当前周期还没有匹配转化数据。</p>{% endfor %}
             </div>

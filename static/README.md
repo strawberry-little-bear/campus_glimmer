@@ -34,6 +34,12 @@
 
 样式入口是 [`css/style.css`](css/style.css)。新组件优先复用 `:root` 变量和现有 Bootstrap 组件，不要另起一套主题。
 
+## 📊 运营图表的行网格
+
+运营看板里「标签 + 条形 + 数值」的横向小图表共用 `.activity-row`，首列固定 `42px`，平时放日期（`<time>`）。需要放文字标签的两类行——求购匹配转化漏斗、互助反馈标签分布——改用修饰类 `.activity-row--wide-label`，首列改为 `minmax(7em,auto)`，标签因此拿到真实列宽；窄屏（≤575px）收窄到 `5.5em` 并隐藏尾部占比，与 `.contribution-trend-chart` 的既有做法一致。
+
+改动前这两行靠行内 `style="min-width: 7em"` 撑标签，而行内 `min-width` 只作用在被塞进 `42px` 首列的那个 `<span>` 自己身上，网格轨道并没有变宽，标签直接压在绿色进度条上。这类故障浏览器里一眼可见、静态检查却完全看不出来，所以固定尺寸的排版参数一律收敛成修饰类，行内只留必须由视图算的比例（`width: {% widthratio ... %}%`）。
+
 ## 🧩 Bootstrap 兼容层
 
 站内仍有一批历史模板直接使用 Bootstrap 的组件类（次级按钮、徽章、表单标签、提示条、分页等）。
@@ -91,7 +97,7 @@ Django 的 `RadioSelect` 与 `CheckboxSelectMultiple` 继承 `ChoiceWidget`，
 - **`.eyebrow` 有两种形态**。基色是 `var(--primary)`，供 `page-intro` 一类浅色页面使用；深色 hero 里的反色标签由 `.hero-panel .eyebrow` 单独给 `#bdebd2`。早前基色直接写成 `#bdebd2`，而 `.eyebrow` 在 88 个模板里共出现 228 次，其中 28 次在 `page-intro` 这类浅色区块里，白底上只有 1.31:1，基本等于看不见。
 - **面板脚注走 `--panel-footnote`**。`[class*="-panel"] .rewrite-candidate-footnote` 取 `var(--panel-footnote, #61726a)`；各面板在自己的规则里覆写这个变量以匹配自身渐变底。回落值故意写成字面色而不是 `var(--muted)`：那样测试才能断言“面板外也有确切默认值”，而不是一个可能被继承色覆盖的引用。它与 `--muted` 同值，改 `--muted` 时要同步（`PanelFootnoteColourTests` 会盯这件事）。
 - **徽章内的图标继承徽章色**。`.campus-verified-badge i { color: inherit }`：金色变体的底色是 `#f9d8a8`，原先写死的绿色图标只有 2.42:1，继承后跟随徽章自身的 `#684a20`（5.95:1）。
-- **模板的 `style` 属性里不写颜色**。行内色值是唯一同时躲过 token 扫描和静态对比度扫描的位置：`test_deployment.py` 的 `InlineStyleColourTests` 会把 `color` / `background` / `border-color` / `box-shadow` 这类属性里的字面值直接判失败，只放行 `var(...)`。几何属性（`width` / `height` / `min-width`）不在此列，按比例增长的条形图必须由视图算好后注入。真实踩过的坑：运营看板一条建议文案在模板里写了 `color:#6a7d73`，盖掉了已有的 token 规则，落在 `#fbfdfb` 上只有 4.29:1。
+- **模板的 `style` 属性里不写颜色**。行内色值是唯一同时躲过 token 扫描和静态对比度扫描的位置：`test_deployment.py` 的 `InlineStyleColourTests` 会把 `color` / `background` / `border-color` / `box-shadow` 这类属性里的字面值直接判失败，只放行 `var(...)`。几何属性（`width` / `height`）不在色值检查之列，但静态几何值仍要收敛成样式类（见「运营图表的行网格」），行内只保留必须由视图算出的比例宽度。真实踩过的坑：运营看板一条建议文案在模板里写了 `color:#6a7d73`，盖掉了已有的 token 规则，落在 `#fbfdfb` 上只有 4.29:1。
 - **校验要用浏览器里的真实背景**。同一个色值落在不同面板的渐变底上结果并不相同，指“最深浅底”一刀切的静态扫描会同时漏报和误报：白字落在深色 hero 上会被判失失败，装饰性圆点的 `color` 也会被算进去。可靠的判法是渲染后逐元素取计算色与合成后的祖先背景，并跳过 `background-image` 为渐变的元素。
 
 ## 🧭 页内跳转的避让量
