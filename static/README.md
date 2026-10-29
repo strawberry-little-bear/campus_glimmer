@@ -193,7 +193,7 @@ flowchart LR
 只会让一部分人用不了——所以它们需要常驻守卫，而不是上线前人工抽查一遍。
 
 守卫是 [`campus_glimmer/test_page_semantics.py`](../campus_glimmer/test_page_semantics.py)：
-24 个测试，约 25 秒跑完，只依赖标准库（`html.parser` + 正则），不引入新依赖。它走两条路线——
+29 个测试，约 25 秒跑完，只依赖标准库（`html.parser` + 正则），不引入新依赖。它走两条路线——
 静态扫全部模板，再用 Django test client 真实渲染 53 个页面（普通用户视角 + 运营视角）后复核。
 
 | 维度 | 规则 | 为什么容易坏 |
@@ -208,6 +208,7 @@ flowchart LR
 | 当前栏目 | 主导航按路由组只给一个栏目加 `aria-current="page"`，并给出可见选中态 | 搜索、详情和“我的”子页面很容易漏掉，多个栏目同时高亮又会误导当前位置 |
 | 跳转主内容 | 页面第一个可聚焦元素是“跳到主要内容”，目标 `<main>` 带稳定 id 和 `tabindex="-1"` | 键盘用户不应在每一页先穿过整条导航；没有焦点目标时跳转只会改变地址 |
 | 表格可访问名称 | 每张 `<table>` 都要有 `<caption class="visually-hidden">` 或 `aria-label` / `aria-labelledby` | 运营看板一屏三十张表，肉眼分不出谁是谁，读屏软件更是只能念列头 |
+| 分页链接可访问名称 | 每个分页链接都要有文字或 `aria-label`，当前页指示器带 `aria-current="page"` | 翻页按钮多是纯图标（`<i class="bi ...">`），同页出现多个分页器时完全分不清是谁的 |
 
 几条踩过的坑，写在这里省得重复：
 
@@ -222,7 +223,8 @@ flowchart LR
 9. **caption 上的 `.visually-hidden` 不会把表格布局带崩。** Bootstrap 专门给 caption 开了口子：只有 `.visually-hidden:not(caption)` 才绝对定位。所以可以放心用视觉隐藏把 caption 藏起来；换成 `display:none` 反而连读屏软件一起屏蔽，等于没写。项目里 `.visually-hidden` 由 `static/vendor/bootstrap.min.css` 提供，`style.css` 里没有定义。
 10. **caption 文本要带面板前缀。** 运营看板 38 个分区挤一页，只写子标题（比如「字段与结构」）读屏软件念出来不知道属于哪一块。约定是「面板 · 子标题」，同一面板下无子标题时只写面板名。标题本身是模板表达式（`{{ group.kind_label }}`）的循环表格，改用 `aria-labelledby` 直接引用可见标题，文案只有一份、不会漂。
 11. **当前栏目是语义，不只是颜色。** 当前栏目由 context processor 按路由组集中映射，模板只读 `active_nav_section`；`aria-current="page"` 同时驱动读屏播报和选中样式。新增栏目或详情路由时，要把路由名补进 `campus_glimmer/context_processors.py`，运行 `NavigationSemanticsTests`，不要在各模板里复制条件判断。
-11. **页面清单漏掉表单页，等于那一页的语义检查从来没跑过。** 新增守卫维度后第一次反向验证就发现：`lost_found_form.html` 的缺陷在 264 个页面的开发期审计里能抓到，在守卫测试里抓不到——因为 `PAGES` 里根本没有「发布失物招领」。现在补齐了发布商品、发布/编辑失物招领、发布/编辑求购、批量创建、举报、发起交易。新增表单页时请顺手加进 `PAGES`。
+12. **页面清单漏掉表单页，等于那一页的语义检查从来没跑过。** 新增守卫维度后第一次反向验证就发现：`lost_found_form.html` 的缺陷在 264 个页面的开发期审计里能抓到，在守卫测试里抓不到——因为 `PAGES` 里根本没有「发布失物招领」。现在补齐了发布商品、发布/编辑失物招领、发布/编辑求购、批量创建、举报、发起交易。新增表单页时请顺手加进 `PAGES`。
+13. **纯图标的分页链接必须自己带 `aria-label`。** 翻页按钮里只有一个 <i class="bi bi-chevron-left">，`_accessible_name` 取不到任何文字，读屏软件只会念「链接」；同页出现多个分页器时（收件箱的「收到的消息」和「发出的消息」）四个图标链接更是完全无法分辨。现在由 `PaginationAccessibleNameTests` 静态兜底，约定是链接上写 `aria-label="上一页"` / `"下一页"`、图标本身加 `aria-hidden="true"`，当前页的 `<span class="page-link">` 再加 `aria-current="page"`——只渲染「2 / 5」时读屏软件并不知道这就是当前页。`aria-hidden="true"` 的省略号会被 `_is_hidden` 跳过，不算缺陷。
 
 ## 🛠️ 修改检查
 
@@ -236,7 +238,7 @@ flowchart LR
   `clamp(90px, 10vw, 124px)` 的账户头像位出现，导航栏里更是只有 30px，因此固定输出 256×256（覆盖 2x 视网膜）；
   它挂在每个登录页的导航栏上，之前用 749×750 的 200KB 原图，压到 256×256 后是 37KB。
   `static/img/no-image.png` 是简单占位图形，转 64 色自适应调色板后从 34KB 降到 11KB，观感无损；
-- 标题层级、表单标签、可访问名称、表格名称、`alt`、触控目标、当前栏目和跳转主内容按上面「语义与可访问性」一节的规则先自查，再跑 `python manage.py test campus_glimmer.test_page_semantics`；
+- 标题层级、表单标签、可访问名称、表格名称、分页链接名称、`alt`、触控目标、当前栏目和跳转主内容按上面「语义与可访问性」一节的规则先自查，再跑 `python manage.py test campus_glimmer.test_page_semantics`；
 - 大段样式要带用途说明，避免无法判断归属的规则继续堆积；
 - 修改未读数轮询时，确认隐藏标签页不会持续请求，且 99+ 显示仍然正确；
 - 交互元素要保留清晰的 `:focus-visible` 状态，并检查键盘操作顺序。
