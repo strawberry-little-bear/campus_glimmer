@@ -137,6 +137,9 @@ class MessageNotificationTests(TestCase):
         self.assertEqual(response.context['message_filter_query']['q'], '分页')
         self.assertEqual(response.context['message_filter_query']['status'], 'unread')
         self.assertContains(response, '收到的消息分页')
+        # 分页链接不能只放图标：读屏软件念不出上一页/下一页，同页两个分页器更是分不清是谁的。
+        self.assertContains(response, 'aria-label="收到的消息下一页"')
+        self.assertContains(response, 'aria-current="page"')
 
     def test_conversation_paginates_history_and_marks_all_unread(self):
         for index in range(31):

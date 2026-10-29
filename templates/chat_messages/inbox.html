@@ -144,9 +144,9 @@
                             {% if received_page.has_other_pages %}
                             <nav class="mailbox-pagination" aria-label="收到的消息分页">
                                 <ul class="pagination pagination-sm justify-content-center mb-0">
-                                    {% if received_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.previous_page_number }}"><i class="bi bi-chevron-left"></i></a></li>{% endif %}
-                                    <li class="page-item active"><span class="page-link">{{ received_page.number }} / {{ received_page.paginator.num_pages }}</span></li>
-                                    {% if received_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.next_page_number }}"><i class="bi bi-chevron-right"></i></a></li>{% endif %}
+                                    {% if received_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.previous_page_number }}" aria-label="收到的消息上一页"><i class="bi bi-chevron-left" aria-hidden="true"></i></a></li>{% endif %}
+                                    <li class="page-item active"><span class="page-link" aria-current="page" aria-label="收到的消息第 {{ received_page.number }} 页，共 {{ received_page.paginator.num_pages }} 页">{{ received_page.number }} / {{ received_page.paginator.num_pages }}</span></li>
+                                    {% if received_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;received_page={{ received_page.next_page_number }}" aria-label="收到的消息下一页"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></li>{% endif %}
                                 </ul>
                             </nav>
                             {% endif %}
@@ -179,9 +179,9 @@
                         {% if sent_page.has_other_pages %}
                         <nav class="mailbox-pagination" aria-label="发出的消息分页">
                             <ul class="pagination pagination-sm justify-content-center mb-0">
-                                {% if sent_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.previous_page_number }}"><i class="bi bi-chevron-left"></i></a></li>{% endif %}
-                                <li class="page-item active"><span class="page-link">{{ sent_page.number }} / {{ sent_page.paginator.num_pages }}</span></li>
-                                {% if sent_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.next_page_number }}"><i class="bi bi-chevron-right"></i></a></li>{% endif %}
+                                {% if sent_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.previous_page_number }}" aria-label="发出的消息上一页"><i class="bi bi-chevron-left" aria-hidden="true"></i></a></li>{% endif %}
+                                <li class="page-item active"><span class="page-link" aria-current="page" aria-label="发出的消息第 {{ sent_page.number }} 页，共 {{ sent_page.paginator.num_pages }} 页">{{ sent_page.number }} / {{ sent_page.paginator.num_pages }}</span></li>
+                                {% if sent_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ message_filter_query.urlencode }}&amp;sent_page={{ sent_page.next_page_number }}" aria-label="发出的消息下一页"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></li>{% endif %}
                             </ul>
                         </nav>
                         {% endif %}

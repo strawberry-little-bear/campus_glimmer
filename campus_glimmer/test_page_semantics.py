@@ -1,4 +1,4 @@
-"""页面语义守卫：标题层级、表单标签、可访问名称、表格名称、图片替代文本。
+"""页面语义守卫：标题层级、表单标签、可访问名称、表格名称、分页名称、图片替代文本。
 
 这一层以前靠浏览器审计兜。浏览器审计有两个绕不开的代价：一是要起真实服务、
 装驱动、逐页访问，跑一轮以小时计；二是它只看得到当前数据恰好渲染出来的分支，
@@ -12,7 +12,7 @@ h1 之后直接跳了五级；卡片标题用 h3，让整个列表页从 h1 跳�
 这里用 Django test client 渲染同一批页面，再配一个 stdlib 的轻量 DOM 做同样的
 检查。没有新依赖，跑起来是秒级，可以挂在每次提交上。
 
-四类检查各有分工：
+五类检查各有分工：
 
 1. TemplateHeadingOrderTests 只读模板文件，不渲染。它能在没有数据、没有请求的
    情况下发现标题跳级，覆盖浏览器审计够不到的分支（空状态、他人视角）。
@@ -24,6 +24,10 @@ h1 之后直接跳了五级；卡片标题用 h3，让整个列表页从 h1 跳�
 4. TableAccessibleNameTests 扫模板源，要求每张 <table> 都有可访问名称。三百多
    张表里运营看板占了大半，且大量挂在 {% if has_data %} 分支上，渲染态检查只能
    点亮演示数据恰好命中的一百多张，只有静态扫才覆盖得到空状态和他人视角。
+5. PaginationAccessibleNameTests 扫模板源，要求每个分页链接都读得出名字、
+   当前页带 aria-current="page"。分页按钮长得都一样——一个图标或一串数字，
+   同页出现多个分页器时更是完全无法分辨；而它只在数据够多页时才渲染出来，
+   演示数据不特意造够页数就照不到，只能静态扫。
 
 第 2 类里的 id 引用完整性是后来补的，起因是一次真实的线上缺陷：Django 的
 BoundField.aria_describedby 会自动拼出 `id_<字段名>_helptext` /
@@ -1128,5 +1132,90 @@ class TableAccessibleNameTests(SimpleTestCase):
         self.assertEqual(
             offenders, [],
             'caption 要加 visually-hidden；display:none 不行，读屏软件会一起忽略：\n'
+            + '\n'.join('  ' + item for item in offenders),
+        )
+
+class PaginationAccessibleNameTests(SimpleTestCase):
+    """分页链接要读得出名字，当前页还要标明 aria-current。
+
+    分页器是「一个图标或一串数字」的组合，天生缺可访问名称：翻页按钮里只有
+    一个 <i class="bi">，读屏软件念出来就是一句干巴巴的「链接」，听不出是上一页
+    还是下一页。同页出现多个分页器时更糟——收件箱页同时有「收到的消息」和
+    「发出的消息」两个分页器，四个图标链接在辅助技术里长得完全一样。
+
+    这不是假想。templates/chat_messages/inbox.html 的四个翻页链接就是这么裸奔的，
+    而站内其他分页器早就按 aria-label 的约定写好了；本类检查就是让这个约定不再
+    靠人眼维持，新增分页器时漏了名字会直接红灯。
+
+    另外要求当前页指示器带 aria-current="page"。只渲染「2 / 5」这段文本时，读屏
+    软件知道有数字，不知道这就是当前所在页；aria-current 是唯一能把「当前位置」
+    讲出来的属性。
+
+    纯装饰的省略号（<span class="page-link" aria-hidden="true">…</span>）不进可访问
+    名称计算，按 _is_hidden 跳过，不算缺陷。
+    """
+
+    HTML_COMMENT = re.compile(r'<!--.*?-->', re.S)
+
+    def _sources(self):
+        for template in sorted(TEMPLATES_DIR.rglob('*.html')):
+            relative = template.relative_to(TEMPLATES_DIR).as_posix()
+            text = self.HTML_COMMENT.sub(' ', template.read_text(encoding='utf-8'))
+            yield relative, text
+
+    def _page_links(self, text):
+        """产出 (节点, 解析结果)；解析结果要留着，_accessible_name 要用它的 by_id。"""
+        builder = _parse(text)
+        for node in _iter_nodes(builder.root):
+            if 'page-link' in (node.attrs.get('class') or '').split():
+                yield node, builder
+
+    def _in_active_item(self, node):
+        parent = node.parent
+        while parent is not None and parent.tag != '#root':
+            classes = (parent.attrs.get('class') or '').split()
+            if 'page-item' in classes:
+                return 'active' in classes
+            parent = parent.parent
+        return False
+
+    def test_every_page_link_has_an_accessible_name(self):
+        offenders = []
+        total = 0
+        for relative, text in self._sources():
+            for node, builder in self._page_links(text):
+                if _is_hidden(node):
+                    continue
+                total += 1
+                if not _accessible_name(node, builder.by_id):
+                    offenders.append(
+                        '%s: <%s class="page-link"> 没有可访问名称'
+                        % (relative, node.tag))
+
+        self.assertGreater(total, 0, '一个 page-link 都没扫到，检查逻辑失效了')
+        self.assertEqual(
+            offenders, [],
+            '分页链接要读得出名字（WCAG 2.4.4 / 4.1.2）。纯图标链接补 '
+            'aria-label，图标本身加 aria-hidden="true"：\n'
+            + '\n'.join('  ' + item for item in offenders),
+        )
+
+    def test_current_page_is_marked_as_current(self):
+        offenders = []
+        total = 0
+        for relative, text in self._sources():
+            for node, _builder in self._page_links(text):
+                if not self._in_active_item(node):
+                    continue
+                total += 1
+                if (node.attrs.get('aria-current') or '').strip() != 'page':
+                    offenders.append(
+                        '%s: 当前页指示器缺 aria-current="page"' % relative)
+
+        self.assertGreater(total, 0, '一个当前页指示器都没扫到，检查逻辑失效了')
+        self.assertEqual(
+            offenders, [],
+            '当前页要标明 aria-current="page"，读屏软件才念得出「当前页」'
+            '而不是一串数字：\n'
             + '\n'.join('  ' + item for item in offenders),
         )

@@ -185,7 +185,7 @@
     <nav class="mailbox-pagination" aria-label="通知分页">
         <ul class="pagination justify-content-center mb-0">
             {% if notifications.has_previous %}<li class="page-item"><a class="page-link" href="?{% if notification_filter_query %}{{ notification_filter_query }}&{% endif %}page={{ notifications.previous_page_number }}">上一页</a></li>{% endif %}
-            <li class="page-item active"><span class="page-link">{{ notifications.number }} / {{ notifications.paginator.num_pages }}</span></li>
+            <li class="page-item active"><span class="page-link" aria-current="page">{{ notifications.number }} / {{ notifications.paginator.num_pages }}</span></li>
             {% if notifications.has_next %}<li class="page-item"><a class="page-link" href="?{% if notification_filter_query %}{{ notification_filter_query }}&{% endif %}page={{ notifications.next_page_number }}">下一页</a></li>{% endif %}
         </ul>
     </nav>
