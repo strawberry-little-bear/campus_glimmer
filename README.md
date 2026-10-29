@@ -29,7 +29,7 @@
   <a href="docs/screenshots/home.png"><img src="docs/screenshots/home.png" alt="拾光校园首页，展示品牌主视觉、导航与在售商品概览" width="100%" /></a>
 </p>
 
-<p align="center"><strong>首页 · 从校园场景进入交易与互助</strong><br /><sub>品牌主视觉、全局入口、未读提醒和正在流转的好物 · 本地演示数据</sub></p>
+<p align="center"><strong>首页 · 从校园场景进入交易与互助</strong><br /><sub>品牌主视觉、全局入口与正在流转的好物 · 本地演示数据</sub></p>
 
 <table>
 <tr>
