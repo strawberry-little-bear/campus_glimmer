@@ -225,6 +225,22 @@ flowchart LR
 11. **当前栏目是语义，不只是颜色。** 当前栏目由 context processor 按路由组集中映射，模板只读 `active_nav_section`；`aria-current="page"` 同时驱动读屏播报和选中样式。新增栏目或详情路由时，要把路由名补进 `campus_glimmer/context_processors.py`，运行 `NavigationSemanticsTests`，不要在各模板里复制条件判断。
 12. **页面清单漏掉表单页，等于那一页的语义检查从来没跑过。** 新增守卫维度后第一次反向验证就发现：`lost_found_form.html` 的缺陷在 264 个页面的开发期审计里能抓到，在守卫测试里抓不到——因为 `PAGES` 里根本没有「发布失物招领」。现在补齐了发布商品、发布/编辑失物招领、发布/编辑求购、批量创建、举报、发起交易。新增表单页时请顺手加进 `PAGES`。
 13. **纯图标的分页链接必须自己带 `aria-label`。** 翻页按钮里只有一个 <i class="bi bi-chevron-left">，`_accessible_name` 取不到任何文字，读屏软件只会念「链接」；同页出现多个分页器时（收件箱的「收到的消息」和「发出的消息」）四个图标链接更是完全无法分辨。现在由 `PaginationAccessibleNameTests` 静态兜底，约定是链接上写 `aria-label="上一页"` / `"下一页"`、图标本身加 `aria-hidden="true"`，当前页的 `<span class="page-link">` 再加 `aria-current="page"`——只渲染「2 / 5」时读屏软件并不知道这就是当前页。`aria-hidden="true"` 的省略号会被 `_is_hidden` 跳过，不算缺陷。
+14. **样式表少一个右花括号，会让它后面的规则全部静默失效。** `style.css` 在命中率分层那段漏了一个 `}`，浏览器从出错位置开始把后面的内容整体丢弃——新写的认证页、导航菜单和搜索条全都没生效，而页面不报错、控制台不警告，只能靠逐张截图比对才发现。`manage.py check` 和 `collectstatic` 只确认文件存在、能搬走，类名契约测试又是用正则从原文里刮类名的，语法坏掉反而更容易「刮得到」，所以这条线只能靠直接解析样式表来守。现在由 `StylesheetSyntaxTests` 覆盖 `static/css/` 下的每个文件，检查注释闭合、字符串闭合、花括号配平、没有游离声明块；改动 `style.css` 后跑 `python manage.py test campus_glimmer.test_deployment.StylesheetSyntaxTests`。
+
+## 🧱 样式表语法守卫
+
+样式层的问题分两种：规则写错了，浏览器会告诉你；语法不完整，浏览器安静地把后面的规则全丢掉。后者没有任何信号，只能靠解析样式表本身来发现。
+
+守卫是 [`campus_glimmer/test_deployment.py`](../campus_glimmer/test_deployment.py) 里的 `StylesheetSyntaxTests`，覆盖 `static/css/` 下自己维护的每个文件：
+
+| 检查 | 拦住的故障 |
+| --- | --- |
+| 注释闭合 | `/*` 没有配对的 `*/`，其后所有规则都变成注释 |
+| 字符串闭合 | `content: "..."` 少一个引号，把后面的规则吞进字符串 |
+| 花括号配平 | 多余的右花括号，以及左花括号没有配对的右花括号（报错给出左花括号所在行） |
+| 无游离声明块 | `{` 前面没有选择器，说明前一条规则被提前闭合了 |
+
+实现上是一个逐字符的状态机：注释和字符串整段跳过，所以 `url("data:image/svg+xml,...")` 和 `content: "}"` 里的花括号不会被误计。vendor 下的第三方样式表不在覆盖范围内——那是上游产物，语法问题应该回到上游，而不是在这里报警。
 
 ## 🛠️ 修改检查
 
@@ -239,6 +255,7 @@ flowchart LR
   它挂在每个登录页的导航栏上，之前用 749×750 的 200KB 原图，压到 256×256 后是 37KB。
   `static/img/no-image.png` 是简单占位图形，转 64 色自适应调色板后从 34KB 降到 11KB，观感无损；
 - 标题层级、表单标签、可访问名称、表格名称、分页链接名称、`alt`、触控目标、当前栏目和跳转主内容按上面「语义与可访问性」一节的规则先自查，再跑 `python manage.py test campus_glimmer.test_page_semantics`；
+- 改完 `static/css/` 下的样式表，跑 `python manage.py test campus_glimmer.test_deployment.StylesheetSyntaxTests`；少一个右花括号不会报错，只会让它之后的规则全部失效，见「样式表语法守卫」一节；
 - 大段样式要带用途说明，避免无法判断归属的规则继续堆积；
 - 修改未读数轮询时，确认隐藏标签页不会持续请求，且 99+ 显示仍然正确；
 - 交互元素要保留清晰的 `:focus-visible` 状态，并检查键盘操作顺序。

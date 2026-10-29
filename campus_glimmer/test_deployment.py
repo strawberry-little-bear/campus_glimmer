@@ -657,3 +657,105 @@ class PanelFootnoteColourTests(SimpleTestCase):
             stale, [],
             '以下回落色与 --muted 不一致，面板外的脚注会用到过期色值：\n'
             + '\n'.join('  ' + item for item in stale))
+
+
+class StylesheetSyntaxTests(SimpleTestCase):
+    """样式表自身必须语法完好：一个字符的错位会让它之后的规则全部静默失效。
+
+    真实事故：`static/css/style.css` 在命中率分层那段少了一个右花括号，
+    浏览器从出错位置开始把后面的内容整体丢弃——新写的认证页、导航菜单和
+    搜索条全都没有生效。页面不报错、控制台不警告，也没有任何视觉线索，
+    只能靠逐张截图比对才发现。
+
+    现有的检查都拦不住这一类问题：Django 的 `check` 和 `collectstatic`
+    只确认文件存在、能搬走；`TemplateStylesheetContractTests` 比对类名时
+    是用正则从原文里刮出来的，语法坏掉反而更容易「刮得到」。所以这条线
+    只能靠直接解析样式表来守。
+
+    这里只覆盖自己维护的 `static/css/`。vendor 下的第三方样式表是上游产物，
+    体积大且不由本项目修改，语法问题应该回到上游而不是在这里报警。
+
+    检查五类问题：
+
+    1. 未闭合的注释：`/*` 没有配对的 `*/`，其后所有规则都变成注释；
+    2. 未闭合的字符串：`content: "..."` 少一个引号，会把后面的规则吞进字符串；
+    3. 多余的右花括号：顶层出现没有对应左花括号的 `}`；
+    4. 左花括号没有配对的右花括号：报错时给出左花括号所在行，因为那才是
+       需要补括号的位置；
+    5. 游离的声明块：`{` 前面没有选择器，说明前一条规则被提前闭合了。
+    """
+
+    CSS_DIR = PROJECT_ROOT / 'static' / 'css'
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.stylesheets = sorted(cls.CSS_DIR.rglob('*.css'))
+        cls.assertTrue(cls.stylesheets, 'static/css/ 下没有找到样式表，检查路径是否搬走了')
+
+    @staticmethod
+    def _problems(text):
+        """返回 [(问题类型, 行号)]，以及未闭合左花括号的行号栈。"""
+        problems = []
+        stack = []
+        block_start = 0
+        line = 1
+        i, size = 0, len(text)
+        while i < size:
+            char = text[i]
+            if char == '\n':
+                line += 1
+                i += 1
+            elif char == '/' and text.startswith('/*', i):
+                close = text.find('*/', i + 2)
+                if close < 0:
+                    problems.append(('未闭合的注释', line))
+                    return problems, stack
+                line += text.count('\n', i, close + 2)
+                i = close + 2
+            elif char in ('"', "'"):
+                # CSS 字符串里可以合法出现花括号和注释起始符，
+                # 先整段跳过，否则 url("data:...") 会把计数搅乱。
+                j = i + 1
+                while j < size and text[j] != char:
+                    if text[j] == '\\':
+                        j += 2
+                        continue
+                    if text[j] == '\n':
+                        line += 1
+                    j += 1
+                if j >= size:
+                    problems.append(('未闭合的字符串', line))
+                    return problems, stack
+                line += text.count('\n', i, j + 1)
+                i = j + 1
+            elif char == '{':
+                if not text[block_start:i].strip():
+                    problems.append(('游离的声明块，左花括号前没有选择器', line))
+                stack.append(line)
+                i += 1
+            elif char == '}':
+                if not stack:
+                    problems.append(('多余的右花括号', line))
+                else:
+                    stack.pop()
+                    block_start = i + 1
+                i += 1
+            else:
+                i += 1
+        return problems, stack
+
+    def test_stylesheets_have_no_syntax_breaks(self):
+        found = []
+        for stylesheet in self.stylesheets:
+            text = stylesheet.read_text(encoding='utf-8')
+            problems, unclosed = self._problems(text)
+            for kind, line in problems:
+                found.append('%s:%d %s' % (stylesheet.name, line, kind))
+            for line in unclosed:
+                found.append('%s:%d 左花括号没有配对的右花括号' % (stylesheet.name, line))
+
+        self.assertEqual(
+            found, [],
+            '样式表语法不完整，浏览器会从出错位置开始静默丢弃后续规则：\n'
+            + '\n'.join('  ' + item for item in found))

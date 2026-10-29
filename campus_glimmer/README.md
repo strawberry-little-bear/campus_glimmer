@@ -53,7 +53,7 @@ flowchart LR
 | [`health.py`](health.py) | 提供存活探针与数据库、缓存、对象存储就绪探针 |
 | [`wsgi.py`](wsgi.py) / [`asgi.py`](asgi.py) | 部署入口 |
 | [`tests.py`](tests.py) | 根路由、探针与安全配置基线测试 |
-| [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验和存储端点测试 |
+| [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验、存储端点测试，以及 `static/css/` 样式表的语法守卫（注释、字符串、花括号配平） |
 | [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、表格与分页链接名称、当前栏目、跳转主内容与导航触控目标 |
 | [`test_anchor_scroll_margin.py`](test_anchor_scroll_margin.py) | 页内跳转落点避让守卫：锚点、分页锚点、运营看板分区与表单控件都必须让出吸顶导航高度 |
 

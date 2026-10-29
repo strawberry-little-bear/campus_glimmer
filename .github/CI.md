@@ -56,6 +56,9 @@ python manage.py test
 
 如果只改了某一组能力，可以先跑对应测试文件，但推送前仍应至少完成系统检查、迁移检查和全量测试。
 
+> [!NOTE]
+> 本地 `manage.py test` 末尾的 `Ran N tests` 通常会比开头的 `Found N test(s)` 少 10 项，这不是丢测试。对象存储的三个测试类（`ObjectStorageAccessTests`、`ObjectStorageBackupRestoreTests`、`ObjectStorageRoundTripTests`，共 10 个方法）在 `setUpClass` 里整体跳过——本地没有配置 `DJANGO_S3_ENDPOINT_URL`。unittest 对类级跳过只记 1 条跳过、不把这些方法计入 `testsRun`，所以两个数字对不上。它们在 `object-storage` 任务里配好 MinIO 后完整运行；日志里对应的是一行 `setUpClass (...) ... skipped '对象存储端点不可达：未配置 DJANGO_S3_ENDPOINT_URL'`。
+
 ## 🔐 修改约定
 
 - 不把令牌、生产密钥或真实用户数据写进 workflow；
@@ -77,6 +80,7 @@ python manage.py test
 | Django 检查 | 环境变量、URL、应用注册和模板配置 |
 | 迁移检查 | 模型改动后是否忘记提交迁移 |
 | 测试 | 先看第一个失败用例，再判断是否是共享状态或数据库问题 |
+| `Ran` 比 `Found` 少 10 项 | 不是丢测试：对象存储三个测试类在本地因缺少 `DJANGO_S3_ENDPOINT_URL` 被 `setUpClass` 整体跳过，unittest 不计入 `testsRun`；去 `object-storage` 任务里看真实结果 |
 | 整个 run 0 个 job 秒失败 | 几乎一定是 workflow 本身没通过解析：先查 job 级 `env` 里的 `${{ runner.* }}`，再用 `npx @action-validator/cli` 过一遍 |
 
 ## 📚 继续阅读
