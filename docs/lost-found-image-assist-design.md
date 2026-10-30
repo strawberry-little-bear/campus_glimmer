@@ -94,6 +94,6 @@ Mixin 里有一处必须按 `type(self)` 取行：`_existing_image_name()` 判�
   超像素上限、非图片文件、编码失败兜底文案、编辑保留/替换/移除三条路径，以及列表与详情页的真实渲染；
 - `listings.test_lost_found`、`listings.test_lost_found_filter_workspace`、`listings.test_item_thumbnails`
   共 30 项既有测试全绿，确认重构 mixin 没有动到商品图片和失物招领的既有行为；
-- `campus_glimmer.test_page_semantics` 35 项页面语义契约全绿；
+- `campus_glimmer.test_page_semantics` 43 项页面语义契约全绿；
 - Chrome 无头模式 9 张真实截图（列表、详情大图/方图/无图、发布、编辑 × 1424px 与 390px）均无横向溢出；
 - `manage.py check` 与 `makemigrations --check --dry-run` 无问题。

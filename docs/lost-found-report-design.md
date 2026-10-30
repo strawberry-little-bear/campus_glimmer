@@ -108,7 +108,7 @@
   （匿名跳登录 / 非 staff 403 / 举报人不能审自己）、队列筛选与分页、审核落库与「只通知举报人」、
   以及详情页举报入口与已举报提示的渲染；
 - `listings.test_lost_found`、`listings.test_lost_found_filter_workspace`、`listings.test_lost_found_image`、
-  `listings.test_report_outcome_feedback`、`campus_glimmer.test_page_semantics` 共 79 项既有测试全绿，
+  `listings.test_report_outcome_feedback`、`campus_glimmer.test_page_semantics` 共 87 项既有测试全绿，
   确认新表没有动到既有失物招领行为和页面语义契约；
 - `manage.py check` 0 issues，`makemigrations --check --dry-run` 无漂移（本轮只加只读统计，
   没有新迁移——`LostFoundReport` 上一轮已在 0081 落库）；

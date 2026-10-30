@@ -52,6 +52,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from chat_messages.models import PrivateMessage
+from listings.views import BULK_LISTING_IMAGE_QUEUE_SESSION_KEY
 from listings.models import (
     CampusCampaign,
     CampusLocation,
@@ -62,6 +63,7 @@ from listings.models import (
     Item,
     LostFoundLead,
     LostFoundPost,
+    LostFoundReport,
     MeetingAppointment,
     MeetingIncident,
     Order,
@@ -510,10 +512,47 @@ class DemoContentMixin:
         PrivateMessage.objects.create(
             sender=self.buyer, receiver=self.seller, item=self.item, content='还在吗',
         )
+        # 订单推到已完成，评价表单才会出现在评价页；争议、面谈预约与异常
+        # 挂在另一笔订单上，免得抢走 open_dispute / report_item 的无效提交用例。
+        self.completed_order = Order.objects.create(
+            item=self.item, buyer=self.buyer, seller=self.seller,
+            agreed_price='45.00', status='completed',
+        )
+        self.report = Report.objects.create(
+            item=self.gift_item, reporter=self.buyer, reason='spam',
+            detail='语义测试举报',
+        )
+        self.dispute = OrderDispute.objects.create(
+            order=self.completed_order, opened_by=self.buyer, reason='mismatch',
+            detail='语义测试争议',
+        )
+        review_start = timezone.now() + timedelta(days=1)
+        self.appointment = MeetingAppointment.objects.create(
+            order=self.completed_order, proposed_by=self.seller, location=self.location,
+            start_at=review_start, end_at=review_start + timedelta(hours=1),
+            status='confirmed',
+        )
+        self.incident = MeetingIncident.objects.create(
+            appointment=self.appointment, reported_by=self.buyer, accused=self.seller,
+            reason='no_show', detail='语义测试预约异常',
+        )
+        self.lost_found_report = LostFoundReport.objects.create(
+            post=self.lost_found, reporter=self.buyer, reason='impersonation',
+            detail='语义测试举报',
+        )
         if self.STAFF:
             self.buyer.is_staff = True
             self.buyer.save(update_fields=['is_staff'])
         self.client.force_login(self.buyer)
+        # 批量补图队列是一份短生命周期的会话状态，没有它那一页只会 302 到
+        # 「我的商品」，语义检查会静默少覆盖一个真实页面。
+        session = self.client.session
+        session[BULK_LISTING_IMAGE_QUEUE_SESSION_KEY] = {
+            'seller_id': self.seller.id,
+            'item_ids': [self.item.id],
+            'published_at': timezone.now().isoformat(),
+        }
+        session.save()
 
 
 class SemanticsChecksMixin:
@@ -526,12 +565,21 @@ class SemanticsChecksMixin:
         args = self.ARGS.get(label, lambda self: [])(self)
         return reverse(name, args=args)
 
+    def _seller_url(self, label, name):
+        args = self.SELLER_ARGS.get(label, lambda self: [])(self)
+        return reverse(name, args=args)
+
     def _rendered_pages(self, pages=None, as_user=None):
         for label, name in (self.PAGES if pages is None else pages):
             with self.subTest(page=label):
                 if as_user is not None:
                     self.client.force_login(as_user)
-                response = self.client.get(self._url(label, name))
+                seller = getattr(self, 'seller', None)
+                if as_user is not None and as_user is seller:
+                    url = self._seller_url(label, name)
+                else:
+                    url = self._url(label, name)
+                response = self.client.get(url)
                 if response.status_code != 200:
                     # 需要特定权限或特定状态的页面交给对应的用例覆盖；
                     # 这里只对能渲染出来的页面负责。
@@ -634,7 +682,7 @@ class SemanticsChecksMixin:
 class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
     """普通用户视角：登录后能走通的每一类页面。"""
 
-    MIN_RENDERED = 36
+    MIN_RENDERED = 44
 
     PAGES = (
         ('首页', 'home'),
@@ -682,9 +730,12 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         ('编辑资料', 'edit_profile'),
         ('公开档案', 'public_profile'),
         ('校园认证', 'campus_verification'),
+        ('我的失物举报', 'my_lost_found_reports'),
+        ('评价订单', 'rate_order'),
     )
 
     ARGS = {
+        '评价订单': lambda self: [self.completed_order.id],
         '分类商品列表': lambda self: [self.category.id],
         '商品详情': lambda self: [self.item.id],
         '求购详情': lambda self: [self.demand.id],
@@ -708,7 +759,18 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
     # 卖家那套表单永远渲染不出来，所以单独列一份、单独登录取证。
     SELLER_PAGES = (
         ('求购详情（卖家视角）', 'demand_detail'),
+        ('编辑商品', 'edit_item'),
+        ('删除商品', 'delete_item'),
+        ('标记已售', 'mark_sold'),
+        ('批量补图', 'bulk_listing_image_queue'),
     )
+
+    SELLER_ARGS = {
+        '求购详情（卖家视角）': lambda self: [self.demand.id],
+        '编辑商品': lambda self: [self.item.id],
+        '删除商品': lambda self: [self.item.id],
+        '标记已售': lambda self: [self.item.id],
+    }
 
     def test_invalid_forms_focus_an_accessible_error_summary(self):
         # GET 页面没有错误态，BoundField 不会输出 aria-invalid / aria-describedby。
@@ -827,6 +889,29 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         self.assertNotIn('alt="暂无图片"', html)
         self.assertIn('aria-label="查看 语义测试台灯 的详情"', html)
 
+    def test_seller_owned_pages_pass_every_semantics_check(self):
+        # 编辑商品、删除商品、标记已售、批量补图只对发布者本人渲染，主清单以
+        # 买家身份登录时它们全是 302，于是长期落在六类断言之外——这些页面烂掉
+        # 了也没有人会收到通知。这里单独以卖家身份把同一套检查跑一遍。
+        problems = []
+        pages = self._rendered_pages(self.SELLER_PAGES, as_user=self.seller)
+        for label, name, html in pages:
+            unlabelled, nameless, altless = _semantics_problems(html)
+            for item in unlabelled:
+                problems.append('%s（%s）：%s 没有关联标签' % (label, name, item))
+            for item in nameless:
+                problems.append('%s（%s）：%s 没有可访问名称' % (label, name, item))
+            for item in altless:
+                problems.append('%s（%s）：%s 缺少 alt' % (label, name, item))
+            for problem in _heading_problems(html):
+                problems.append('%s（%s）：%s' % (label, name, problem))
+            duplicates, dangling = _id_reference_problems(html)
+            for item in duplicates:
+                problems.append('%s（%s）：重复 id %s' % (label, name, item))
+            for item in dangling:
+                problems.append('%s（%s）：id 引用悬空 %s' % (label, name, item))
+        self.assertEqual(problems, [], '\n'.join('  ' + item for item in problems))
+
     def test_seller_side_demand_forms_are_labelled_and_named(self):
         # 见 SELLER_PAGES 上的说明：这个表单只对「拥有匹配商品、且还没响应过这条
         # 求购」的卖家出现。少了这条用例，它的标签关联坏了也没人知道。
@@ -904,7 +989,7 @@ class StaffPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
     """
 
     STAFF = True
-    MIN_RENDERED = 5
+    MIN_RENDERED = 12
 
     PAGES = (
         ('内容审核队列', 'moderation_queue'),
@@ -914,7 +999,19 @@ class StaffPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
         ('治理工作台', 'governance_workbench'),
         ('运营看板', 'operations_dashboard'),
         ('搜索洞察', 'search_insights'),
+        ('失物举报记录', 'lost_found_report_list'),
+        ('失物举报审核', 'review_lost_found_report'),
+        ('举报审核', 'review_report'),
+        ('争议处理', 'resolve_dispute'),
+        ('预约异常处理', 'review_meeting_incident'),
     )
+
+    ARGS = {
+        '失物举报审核': lambda self: [self.lost_found_report.id],
+        '举报审核': lambda self: [self.report.id],
+        '争议处理': lambda self: [self.dispute.id],
+        '预约异常处理': lambda self: [self.incident.id],
+    }
 
     def test_governance_review_forms_focus_an_accessible_error_summary(self):
         # 三类治理队列共用同一套处置形态：先看上下文，再提交结论和说明。
@@ -970,6 +1067,26 @@ class StaffPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
         for label, response, field_id in cases:
             with self.subTest(page=label):
                 self._assert_accessible_error_summary(label, response, field_id)
+
+
+class AnonymousPageSemanticsTests(SemanticsChecksMixin, TestCase):
+    """未登录视角：注册、登录、退出。
+
+    这三个页面是每天被最多新用户看到的入口，却也是唯一一批 DemoContentMixin
+    "一登录就关在门外"的页面；之前只有无效 POST 被覆盖，GET 的结构没人管。
+    """
+
+    MIN_RENDERED = 3
+
+    PAGES = (
+        ('注册', 'register'),
+        ('登录', 'login'),
+        ('退出', 'logout'),
+    )
+
+    def setUp(self):
+        super().setUp()
+        self.client.logout()
 
 
 class TouchTargetTests(SimpleTestCase):
