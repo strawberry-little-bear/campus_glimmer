@@ -454,6 +454,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [备份脚本边界设计](backup-script-boundary-design.md) | 想了解备份脚本的失败分支为什么值得离线测试，以及哪些部分仍然只能人工演练 |
 | [对象存储 CI 集成设计](object-storage-ci-integration-design.md) | 想了解 MinIO 集成任务覆盖了什么，以及为什么宁可失败也不静默跳过 |
 | [搜索洞察懒加载与导出同构](search-insights-lazy-loading-design.md) | 想了解搜索洞察分区为什么比运营看板多一列裁剪，以及 CSV 导出与页面同构是怎么守住的 |
+| [联系方式的形状](profile-contact-shape-design.md) | 想了解四个手写字段为什么按全量口径算、长度档为什么不取分位数，以及为什么只报相关性不讲因果 |
 | [窄首列网格首格契约](narrow-grid-first-cell-contract-design.md) | 想了解固定宽度第一轨为什么只能放图标和时间戳，以及懒加载分区为什么会让整轮溢出审计失效 |
 | [核心数据模型](data-model.md) | 想理解模型分组、关键字段和约束 |
 | [模块与测试地图](module-map.md) | 想找代码模块、测试以及设计文档索引 |
