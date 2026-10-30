@@ -145,6 +145,9 @@ from .availability import notify_item_available
 from .borrow_days_shape import build_borrow_days_shape
 from .dispute_evidence_shape import build_dispute_evidence_shape
 from .profile_contact_shape import build_profile_contact_shape
+# 复核分级的三档节奏。它读的是 moderation_rule_quality 故意没读的那两列：
+# risk_tier 本身，以及复核时长相对各自目标（而不是绝对时长）的比值。
+from .moderation_risk_tier_shape import build_moderation_risk_tier_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
@@ -3674,6 +3677,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('borrow_days_shape', '默认借用天数形状', build_borrow_days_shape),
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
     ('profile_contact_shape', '联系方式的形状', build_profile_contact_shape),
+    ('moderation_risk_tier_shape', '复核分级的形状', build_moderation_risk_tier_shape),
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
     ('recommendation_impression_quality', '推荐曝光日志质量', build_recommendation_impression_quality),
     ('opportunity_impression_quality', '机会流曝光日志质量', build_opportunity_impression_quality),
@@ -10362,6 +10366,177 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([
         '此处只报告，不把相关性讲成因果。不输出任何字段值、不列用户名、不读 bio 正文。',
+    ])
+    tier_shape = dashboard['moderation_risk_tier_shape']
+    writer.writerow([])
+    writer.writerow(['复核分级的形状'])
+    writer.writerow([
+        '口径与门槛', tier_shape['summary'],
+        '副标题：三档复核节奏，第一次被数字读到',
+        '窗口按 created_at 切、分母含 pending；节奏按各自目标归一化，不按绝对时长；'
+        'pending 是右删失样本，单独数不进分布；不读 content 正文、不输出用户名、'
+        '不改 _RULES、不改权重、不改分档阈值、不改 RISK_TIER_REVIEW_TARGETS、'
+        '不自动确认或放行',
+    ])
+    writer.writerow([
+        '周期内拦截', tier_shape['measured_count'],
+        '当前待复核', tier_shape['pending_total'],
+        '已超各自目标', tier_shape['overdue_total'],
+        '一档最小样本', tier_shape['min_tier_events'],
+        '噪声线（百分点）', tier_shape['noise_points'],
+    ])
+
+    writer.writerow([])
+    writer.writerow(['一、三档各自的规模与结局'])
+    writer.writerow([
+        '分级', '复核目标（小时）', '条数', '占窗口（%）', '组内均分',
+        '确认违规', '误判放行', '待复核', '确认率（%）', '样本',
+    ])
+    for row in tier_shape['tier_rows']:
+        writer.writerow([
+            row['label'], '' if row['target_hours'] is None else row['target_hours'],
+            row['count'],
+            '' if row['share'] is None else row['share'],
+            '' if row['mean_score'] is None else row['mean_score'],
+            row['confirmed_count'], row['dismissed_count'], row['pending_count'],
+            '' if row['confirmed_rate'] is None else row['confirmed_rate'],
+            '不足 %d 条，只作参考' % tier_shape['min_tier_events']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '', '', '',
+        '分母是窗口内全部记录，包含还挂着的 pending：「还没有结局」是结局的一种，'
+        '剔掉它每一档的规模都会少一块',
+        '窗口按 created_at 切，不按 reviewed_at 切——分级是拦截那一刻写下的。'
+        'moderation_rule_quality 按 reviewed_at 切，两张表不能直接相加',
+        '确认率的分母是已复核的那部分：把 pending 摊进去，一档的确认率会随积压量漂移，'
+        '而那和规则准不准没有关系',
+        '三档全列，包括 0 样本档：一档一条都没有本身是结论，不是表格的缺口',
+        '档位取值落在三档之外的单独一行，只在真有的时候出现，不静默并进任何一档',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['二、复核节奏相对各自的目标'])
+    writer.writerow([
+        '分级', '复核目标（小时）', '已复核条数',
+        '目标内', '一到两倍', '两到四倍', '超过四倍',
+        '目标内占比（%）', '中位复核（秒）', 'P90 复核（秒）', '样本',
+    ])
+    for row in tier_shape['rhythm_rows']:
+        writer.writerow([
+            row['label'], row['target_hours'], row['reviewed_count'],
+        ] + [band['count'] for band in row['bands']] + [
+            '' if row['within_share'] is None else row['within_share'],
+            '' if row['median_seconds'] is None else int(row['median_seconds']),
+            '' if row['p90_seconds'] is None else int(row['p90_seconds']),
+            '不足 %d 条，只作参考' % tier_shape['min_tier_events']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '',
+        '分档按「复核时长 ÷ 该档自己的目标」的倍数切，不按绝对时长切：caution 的目标'
+        '本身就是 48 小时，按绝对时长切会把达标读成积压',
+        '恰好等于目标算「目标内」：踩着目标线复核完的那一条是达标的',
+        '只收 confirmed / dismissed 且 reviewed_at 非空的记录',
+        '四档互斥、全列，包括 0 样本档',
+        '中位数与 P90 按秒报，页面同一行显示成小时和天',
+        '没有复核目标的档位取值不进任何一档——除不出一个倍数来',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['二之二、当前待复核里已超过各自目标的'])
+    writer.writerow([
+        '分级', '当前待复核', '已超目标', '占比（%）', '最久已等待',
+    ])
+    for row in tier_shape['pending_rows']:
+        writer.writerow([
+            row['label'], row['pending_count'], row['overdue_count'],
+            '' if row['overdue_share'] is None else row['overdue_share'],
+            row['longest_wait_label'],
+        ])
+    writer.writerow([
+        '说明', '',
+        '右删失样本，不进上面任何一档分布：它们的复核时刻还不存在，此刻的超期数随时间'
+        '增长，报进分布就等于报一个会自己变的数',
+        '按窗口取，不按全量取：分母和第一节一样是「窗口内拦截的记录」。要看全量积压，'
+        '审核队列页那个数是全量的',
+        '超期判据是各自的目标：一条躺了 30 小时的 caution 还没超期，同一条 30 小时对'
+        'critical 早就超了',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['三、两套尺子的交叉表'])
+    writer.writerow(
+        ['风险等级'] + tier_shape['cross_columns'] + ['合计'],
+    )
+    for row in tier_shape['cross_rows']:
+        writer.writerow(
+            [row['label']] + row['cells'] + [row['total']],
+        )
+    writer.writerow(
+        ['合计'] + tier_shape['cross']['column_totals']
+        + [tier_shape['cross']['grand_total']],
+    )
+    writer.writerow([
+        '说明', '',
+        'risk_level 由 risk_score 切（30 / 60），risk_tier 由命中的最高规则档位决定，'
+        '两者故意分开：不让一条普通链接变成 critical 事件',
+        '3×3 全列，包括 0 样本格：「高风险里一条严重风险都没有」是结论，不是表格的缺口',
+        '落在三档或三个等级之外的取值单独成行成列，只在真有的时候出现',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['三之二、两套尺子分开得有多远'])
+    writer.writerow(['方向', '条数', '占窗口（%）', '说明'])
+    for row in tier_shape['mismatch_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '' if row['share'] is None else row['share'], row['note'],
+        ])
+    writer.writerow([
+        '说明', '',
+        '不是 bug 报告：两个方向的不一致都是设计的结果，本模块只报它们分开得有多远',
+        '不给方向、不标红、不建议改任何一边，也不把两套尺子合成一个数',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['四、每条规则参与产出的事件落在哪一档'])
+    writer.writerow([
+        '规则', '自带档位', '权重', '命中次数',
+        '产出严重风险', '产出脱离平台联系', '产出低权重线索', '样本',
+    ])
+    for row in tier_shape['rule_rows']:
+        writer.writerow([
+            row['rule_name'], row['own_tier_label'],
+            '' if row['weight'] is None else row['weight'],
+            row['hit_count'],
+        ] + [
+            '%d（%s%%）' % (item['count'], item['share'])
+            if item['share'] is not None else ''
+            for item in row['tier_counts']
+        ] + [
+            '不足 %d 条，只作参考' % tier_shape['min_tier_events']
+            if row['is_small_sample'] else '可读数',
+        ])
+    if tier_shape['rule_row_total'] > tier_shape['rule_row_limit']:
+        writer.writerow([
+            '清单最多列出', tier_shape['rule_row_limit'], '条',
+            '共 %d 条' % tier_shape['rule_row_total'],
+        ])
+    writer.writerow([
+        '说明', '',
+        '按「参与」计数，不按独占计数：一条记录同时命中多条规则时 risk_tier 取最高档，'
+        '它同时是那几条规则共同的产出',
+        '所以各行相加大于周期内拦截总数，这是故意的；elevated 规则那一行出现 critical，'
+        '正是「取最高档」这件事的直接证据',
+        '排序按自带档位从高到低、再按命中次数从多到少：这一节要读的是「最急的那条规则'
+        '产出过什么」',
+        '表外规则标签也报出来，不静默丢掉',
+    ])
+    writer.writerow([
+        '此处只报告，不改 _RULES、不改权重、不改 60 / 30 的分档阈值、不改 '
+        'RISK_TIER_REVIEW_TARGETS、不自动确认或放行任何审核、不读 content 正文、'
+        '不输出用户名。',
     ])
     response_quality = dashboard['notification_response']
     writer.writerow([])

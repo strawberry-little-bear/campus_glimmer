@@ -69,7 +69,8 @@ OPERATIONS_SECTION_FRAGMENTS = (
     ('ops-price-signal', '_price_signal.html', False, ('category_price_reference', 'price_change_quality', 'price_response', 'refresh_response', 'relist_freshness')),
     ('ops-contribution', '_contribution.html', False, ('contribution_milestone_coverage', 'contribution_milestone_phase_rhythm', 'contribution_tier_shape')),
     ('ops-audit-shapes', '_audit_shapes.html', False,
-     ('borrow_days_shape', 'dispute_evidence_shape', 'profile_contact_shape')),
+     ('borrow_days_shape', 'dispute_evidence_shape', 'profile_contact_shape',
+      'moderation_risk_tier_shape')),
     ('ops-build-performance', '_build_performance.html', True, ALL_SHARED_PANELS),
     ('ops-locations', '_locations.html', False, ('location_maintenance_decision_review', 'location_maintenance_queue', 'location_registry_quality')),
 )

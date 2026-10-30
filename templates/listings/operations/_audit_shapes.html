@@ -358,3 +358,172 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何字段。</strong>不加迁移、不加字段、不改任何一个 <code>max_length</code>。<strong>不输出任何字段值</strong>：不列用户名、不列手机号、不列微信号、不列学号，<strong>不读 <code>bio</code> 的正文</strong>——它是自由文本，读它会牵出「谁写了什么」，本模块只报它的长度。<strong>不按用户排名、不输出任何名单。</strong><strong>不判断「微信号是不是真的」「电话格式对不对」</strong>：<code>phone</code> 是 <code>CharField</code>，站内没有任何电话格式校验器，一个填到 15 字的用户只是刚好撞上 <code>max_length</code>，不代表那串数字能打通。<strong>不报「改过几次」</strong>——<code>Profile</code> 上没有 <code>updated_at</code>，也没有字段变更历史表，这个数不知道，不编。<strong>不自动补全、不提醒任何人填写、不因为某个字段填写率低就去改表单。</strong></div>
     {% endif %}
 </section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Tier shape</span><h2>复核分级的形状</h2></div>
+        <span class="ops-panel-hint">三档复核节奏，第一次被数字读到</span>
+    </div>
+    <p class="mb-3"><i class="bi bi-shield-lock me-1"></i><code>ModerationEvent.risk_tier</code> 和 <code>RISK_TIER_REVIEW_TARGETS</code> 是站内唯一一对「写进去了、读者却只有一个数」的规则：<code>moderation.py</code> 的四条规则各带一个档位——高风险交易 critical、微信导流和手机号 elevated、外部链接 caution——<code>risk_tier_for_labels</code> 取其中的最高档写进记录；<code>models.py</code> 再给三档各配一个复核目标：<strong>严重风险 4 小时、脱离平台联系 12 小时、低权重线索 48 小时</strong>。而全站读这两个常量的地方只有一处：审核队列页，用它算「此刻超期几条」，显示在三级复核时限那几个角标上。那是一个实时工单视图，报的是此刻的积压，不是形状——<strong>三档各自拦下过多少、拦下来的东西复核之后是不是真的违规、复核到底有没有按自己那一档的目标走、两套风险尺度在什么地方对不上</strong>，一个问题都没被回答过。</p>
+    {% if not moderation_risk_tier_shape.has_data %}
+    <div class="empty-inline">{{ moderation_risk_tier_shape.summary }}</div>
+    {% endif %}
+    {% if moderation_risk_tier_shape.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内拦截</span><strong>{{ moderation_risk_tier_shape.measured_count }}</strong><small>分母含还挂着的 pending</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>当前待复核</span><strong>{{ moderation_risk_tier_shape.pending_total }}</strong><small>窗口内拦截、还没复核的</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已超各自目标</span><strong>{{ moderation_risk_tier_shape.overdue_total }}</strong><small>按各自目标判，不按同一把尺</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>两把尺子对不上</span><strong>{{ moderation_risk_tier_shape.mismatch_rows.1.count|add:moderation_risk_tier_shape.mismatch_rows.2.count }}</strong><small>分数档与复核档分开，是设计不是 bug</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>一、三档各自的规模与结局</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">复核分级的形状 · 一、三档各自的规模与结局</caption>
+                <thead><tr><th>分级</th><th>复核目标（小时）</th><th>条数</th><th>占窗口（%）</th><th>组内均分</th><th>确认违规</th><th>误判放行</th><th>待复核</th><th>确认率（%）</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in moderation_risk_tier_shape.tier_rows %}
+                    <tr>
+                        <td>{{ row.label }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{% if row.target_hours is None %}—{% else %}{{ row.target_hours }}{% endif %}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td>{% if row.mean_score is None %}—{% else %}{{ row.mean_score }}{% endif %}</td>
+                        <td>{{ row.confirmed_count }}</td>
+                        <td>{{ row.dismissed_count }}</td>
+                        <td>{{ row.pending_count }}</td>
+                        <td>{% if row.confirmed_rate is None %}—{% else %}{{ row.confirmed_rate }}{% endif %}</td>
+                        <td class="ops-hint">{% if row.is_small_sample %}不足 {{ moderation_risk_tier_shape.min_tier_events }} 条，只作参考{% else %}可读数{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分母是窗口内<strong>全部</strong>审核记录，包含还挂着的 pending：这一节问的是「三档各自拦下了多少、结局如何」，而「还没有结局」本身就是结局的一种，剔掉它会让每一档的规模凭空少一块。窗口按 <code>created_at</code> 切，不按 <code>reviewed_at</code> 切——分级是拦截那一刻写下的，要数的是「这段时间里拦下来的内容被分成了哪几档」；<code>moderation_rule_quality</code> 按 <code>reviewed_at</code> 切，因为它问的是「这段时间复核掉的记录判得准不准」，<strong>两个模块的终点不同，两张表不能直接相加</strong>。确认率的分母是已复核的那部分，不是整组：把 pending 摊进分母，一档的「确认率」会随积压量漂移，而那和规则准不准没有关系。<strong>三档全列，包括 0 样本档</strong>：一档一条都没有，本身是结论——要么那条规则从来没命中过，要么这一档的目标定得没人够得着。档位取值落在三档之外的，单独一行，不静默并进任何一档。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>二、复核节奏相对各自的目标</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">复核分级的形状 · 二、复核节奏相对各自的目标</caption>
+                <thead><tr><th>分级</th><th>复核目标（小时）</th><th>已复核条数</th><th>目标内</th><th>一到两倍</th><th>两到四倍</th><th>超过四倍</th><th>目标内占比（%）</th><th>中位复核</th><th>P90 复核</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in moderation_risk_tier_shape.rhythm_rows %}
+                    <tr>
+                        <td>{{ row.label }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{{ row.target_hours }}</td>
+                        <td>{{ row.reviewed_count }}</td>
+                        {% for band in row.bands %}
+                        <td>{{ band.count }}</td>
+                        {% endfor %}
+                        <td>{% if row.within_share is None %}—{% else %}{{ row.within_share }}{% endif %}</td>
+                        <td>{{ row.median_label }}</td>
+                        <td>{{ row.p90_label }}</td>
+                        <td class="ops-hint">{% if row.is_small_sample %}不足 {{ moderation_risk_tier_shape.min_tier_events }} 条，只作参考{% else %}可读数{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分档按「复核时长 ÷ 该档<strong>自己</strong>的目标」的倍数切，不按绝对时长切：caution 的目标本身就是 48 小时，按绝对时长切会把达标读成积压——一条躺了 30 小时的 caution 是<strong>达标</strong>的，同一条 30 小时放到 critical 头上就是彻底失守。这样三档才第一次可以放在同一列里比。<strong>恰好等于目标算「目标内」</strong>：踩着目标线复核完的那一条是达标的，把它推到下一档会让「目标内」这一列系统性少算一条，而那一列正是这一节唯一要报的数。只收 confirmed / dismissed 且 <code>reviewed_at</code> 非空的记录；四档互斥、全列，包括 0 样本档。中位数与 P90 按秒计算、页面按小时和天显示。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>二之二、当前待复核里已超过各自目标的</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">复核分级的形状 · 二之二、当前待复核里已超过各自目标的</caption>
+                <thead><tr><th>分级</th><th>当前待复核</th><th>已超目标</th><th>占比（%）</th><th>最久已等待</th></tr></thead>
+                <tbody>
+                    {% for row in moderation_risk_tier_shape.pending_rows %}
+                    <tr>
+                        <td>{{ row.label }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{{ row.pending_count }}</td>
+                        <td>{{ row.overdue_count }}</td>
+                        <td>{% if row.overdue_share is None %}—{% else %}{{ row.overdue_share }}{% endif %}</td>
+                        <td>{{ row.longest_wait_label }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">pending 是<strong>右删失样本</strong>，不进上面任何一档分布：它们的复核时刻还不存在，此刻的相对倍数还在随时间增长，报进分布就等于报一个会自己变的数。按窗口取，不按全量取——分母和第一节一样是「窗口内拦截的记录」；窗口之前拦截、现在还挂着的，拦截时刻不属于这个周期，任何一节都不收它。<strong>要看全量积压，审核队列页那个数是全量的</strong>。超期判据是各自的目标：一条躺了 30 小时的 caution 还没超期，同一条 30 小时对 critical 早就超了。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>三、两套尺子的交叉表</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">复核分级的形状 · 三、两套尺子的交叉表</caption>
+                <thead><tr><th>风险等级</th>{% for column in moderation_risk_tier_shape.cross_columns %}<th>{{ column }}</th>{% endfor %}<th>合计</th></tr></thead>
+                <tbody>
+                    {% for row in moderation_risk_tier_shape.cross_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        {% for cell in row.cells %}
+                        <td>{{ cell }}</td>
+                        {% endfor %}
+                        <td>{{ row.total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot><tr><td><strong>合计</strong></td>{% for cell in moderation_risk_tier_shape.cross.column_totals %}<td>{{ cell }}</td>{% endfor %}<td><strong>{{ moderation_risk_tier_shape.cross.grand_total }}</strong></td></tr></tfoot>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><code>risk_level</code> 由 <code>risk_score</code> 切（30 / 60），<code>risk_tier</code> 由命中的最高规则档位决定，<strong>两者故意分开</strong>：<code>moderation.py</code> 的注释写着，<code>risk_tier</code> 是复核节奏，<code>risk_score</code> 是可解释的加权和，分开正是为了「不让一条普通链接变成 critical 事件」。这张表第一次把两把尺子放进同一个坐标系。<strong>3×3 全列，包括 0 样本格</strong>：「高风险里一条严重风险都没有」是结论，不是表格的缺口。落在三档或三个等级之外的取值单独成行成列，不静默并进任何一格。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>三之二、两套尺子分开得有多远</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">复核分级的形状 · 三之二、两套尺子分开得有多远</caption>
+                <thead><tr><th>方向</th><th>条数</th><th>占窗口（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in moderation_risk_tier_shape.mismatch_rows %}
+                    <tr>
+                        <td>{{ row.label }}{% if row.is_mismatch %} <span class="badge text-bg-warning">两套尺子分开</span>{% endif %}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{{ row.note }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><strong>这不是 bug 报告</strong>：两个方向的不一致都是设计的结果，本模块只报它们在这批数据上分开得有多远。<strong>不给方向、不标红、不建议改任何一边</strong>，也不把两套尺子合成一个数——它回答的是「为将来讨论要不要合并时，手里有没有数」。分数高、档位没到严重风险，是多条中档规则叠加把分数推过了 60；档位是严重风险、分数没到高风险，是单条高风险交易 50 分够不着 60 的高风险线。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>四、每条规则参与产出的事件落在哪一档</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">复核分级的形状 · 四、每条规则参与产出的事件落在哪一档</caption>
+                <thead><tr><th>规则</th><th>自带档位</th><th>权重</th><th>命中次数</th><th>产出严重风险</th><th>产出脱离平台联系</th><th>产出低权重线索</th><th>样本</th></tr></thead>
+                <tbody>
+                    {% for row in moderation_risk_tier_shape.rule_rows %}
+                    <tr>
+                        <td>{{ row.rule_name }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{{ row.own_tier_label }}</td>
+                        <td>{% if row.weight is None %}—{% else %}{{ row.weight }}{% endif %}</td>
+                        <td>{{ row.hit_count }}</td>
+                        {% for item in row.tier_counts %}
+                        <td>{{ item.count }}{% if item.share is not None %}（{{ item.share }}%）{% endif %}</td>
+                        {% endfor %}
+                        <td class="ops-hint">{% if row.is_small_sample %}不足 {{ moderation_risk_tier_shape.min_tier_events }} 条，只作参考{% else %}可读数{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if moderation_risk_tier_shape.rule_row_total > moderation_risk_tier_shape.rule_row_limit %}
+        <p class="small text-muted mt-2 mb-0">清单最多列出 {{ moderation_risk_tier_shape.rule_row_limit }} 条，共 {{ moderation_risk_tier_shape.rule_row_total }} 条。</p>
+        {% endif %}
+        <p class="small text-muted mt-2 mb-0">按<strong>「参与」</strong>计数，不按独占计数：一条记录同时命中多条规则时 <code>risk_tier</code> 取最高档，它同时是那几条规则共同的产出，所以<strong>各行相加大于周期内拦截总数，这是故意的</strong>——elevated 规则那一行出现 critical，正是「取最高档」这件事的直接证据。排序按自带档位从高到低、再按命中次数从多到少：这一节要读的是「最急的那条规则产出过什么」，不是「哪条规则最闲」。表外规则标签也报出来，不静默丢掉。权重与档位抄自 <code>_RULES</code> 的常量，这里只把运营要对照的那两列摆出来，<strong>不复制正则</strong>。</p>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何一条审核记录。</strong>不改 <code>_RULES</code>、不改权重、不改 60 / 30 的分档阈值、不改 <code>RISK_TIER_REVIEW_TARGETS</code>——规则和档位是发版本的代码，不是运营可以随手调的参数。<strong>不自动确认或放行任何审核</strong>、不按 <code>risk_tier</code> 做任何自动处置：分级只影响人工排序，这个模块只让它被看见。<strong>不读 <code>content</code> 正文、不输出用户名、不输出任何名单。</strong><strong>不判断规则准不准</strong>——那是 <code>moderation_rule_quality</code> 的事，那边按规则报误判率和漏判率；本模块只报分级本身的形状，以及两套尺子的分歧。</div>
+    {% endif %}
+</section>
