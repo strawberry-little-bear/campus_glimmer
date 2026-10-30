@@ -337,6 +337,8 @@ campus_glimmer/
 
 - **`test_lost_found.py`**：失物招领、匹配和线索流转测试
 
+- **`test_lost_found_image.py`**：一条记录一张可选照片的模型约束、变体生成与回退、表单字段显隐、发布 / 编辑 / 移除三条路径与页面渲染测试
+
 - **`test_lost_found_lead_quality.py`**：线索量分档、确认率指向分离、确认率按 post_type 拆与看板导出测试
 
 - **`test_lost_found_matched_outcome.py`**：确认匹配之后的四种终局照实报、双向性只数认账那一侧、清单不带标题与用户名
@@ -615,6 +617,7 @@ campus_glimmer/
 
 - **`lost-found-lead-quality-design.md`**：失物线索的提交量、确认率指向分离与反馈填写率
 
+- **`lost-found-image-assist-design.md`**：一条记录为什么只放一张照片、变体管线为什么复用商品那一套，以及哪些信息必须留在镜头外
 - **`lost-found-matched-outcome-design.md`**：确认匹配之后的四种终局照实报，双向性只数认账那一侧
 
 - **`meeting-incident-quality-design.md`**：预约异常的驳回率按类型拆，提交方向取不到身份归未知
