@@ -4,7 +4,7 @@
 
 # screenshots · 系统界面预览
 
-**十六张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、治理和运营六类入口。**
+**十九张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、失物招领、治理和运营七类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
@@ -97,6 +97,25 @@
 <table>
 <tr>
 <td width="50%" valign="top">
+<a href="lost-found-list.png"><img src="lost-found-list.png" alt="失物招领列表，展示物品照片、记录类型、分类地点和筛选工作台" width="100%" /></a>
+<p align="center"><strong>失物招领 · 列表</strong><br /><sub>可选物品照片、丢失 / 拾到类型与筛选工作台同屏 · 本地演示数据</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="lost-found-detail.png"><img src="lost-found-detail.png" alt="失物招领详情，展示物品照片、辨识特征、线索说明与发布者信息" width="100%" /></a>
+<p align="center"><strong>失物招领 · 详情</strong><br /><sub>照片按原比例完整展示，常驻说明仅用于辅助辨认 · 本地演示数据</sub></p>
+</td>
+</tr>
+<tr>
+<td width="100%" valign="top">
+<a href="lost-found-form.png"><img src="lost-found-form.png" alt="发布失物招领表单，展示分区填写、物品照片字段与隐私提示" width="100%" /></a>
+<p align="center"><strong>失物招领 · 发布</strong><br /><sub>分区工作台、可选照片字段与「不要拍到证件与正脸」的明确提示 · 本地演示数据</sub></p>
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%" valign="top">
 <a href="moderation-queue.png"><img src="moderation-queue.png" alt="内容审核值班台，展示四项待办、三级复核时限、组合筛选和审核记录" width="100%" /></a>
 <p align="center"><strong>内容审核值班台</strong><br /><sub>待办入口、分级时限、当前筛选结果与审核操作同屏 · 本地演示数据</sub></p>
 </td>
@@ -129,6 +148,9 @@
 | [`operations.png`](operations.png) | `1424 × 969` | 运营看板；管理员指标、告警和构建耗时 |
 | [`my-items.png`](my-items.png) | `1424 × 969` | 我的商品；生命周期诊断、批量专题与续期、状态页签和商品操作 |
 | [`my-orders.png`](my-orders.png) | `1424 × 969` | 我的交易；买卖计数、状态筛选、结果区间、第二页订单与分页控件 |
+| [`lost-found-list.png`](lost-found-list.png) | `1424 × 1200` | 失物招领列表；物品照片、记录类型、分类地点与筛选工作台 |
+| [`lost-found-detail.png`](lost-found-detail.png) | `1424 × 1200` | 失物招领详情；物品照片按原比例展示、辨识特征与线索说明 |
+| [`lost-found-form.png`](lost-found-form.png) | `1424 × 1200` | 发布失物招领；分区填写、可选照片字段与隐私提示 |
 
 ## 🔄 更新截图时
 
