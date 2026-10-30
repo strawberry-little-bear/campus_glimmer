@@ -1783,6 +1783,19 @@ a { color: inherit; text-decoration: none; }
 .lost-found-matched-outcome-panel .ops-mini-stat strong { color: #6b5433; }
 .lost-found-matched-outcome-panel .badge { font-weight: 600; }
 .lost-found-matched-outcome-panel .lost-found-outcome-note { color: #6b5c46; }
+.lost-found-report-quality-panel .ops-table td { vertical-align: top; }
+/* 失物招领举报处理质量面板自成一组色相（深蓝灰）。它问的是「举报交上来之后，
+   有没有人看、多久看、看完有没有告诉举报人」，发生在提交之后、处理结论之前，和同一条
+   失物招领链路上的终局面板报的不是同一件事：那个报「确认匹配之后没人收尾」，这个报
+   「有人可能被冒充，平台隔了多久回应」。色相取偏冷的深蓝，而不是失物招领其余面板的暖
+   褐——暖褐那一组讲的是「一张被忘在公告栏上的纸」，这一栏讲的是「有人正在等一个回应」，
+   冷暖分开，滚动时才不会把两件事读成一件。不用红：驳回多是正常治理，不是故障。 */
+.lost-found-report-quality-panel { padding: 14px; border: 1px solid #c9d6e4; border-radius: 14px; background: linear-gradient(135deg, #eef4fa, #fbfdff); color: #45566b; }
+.lost-found-report-quality-panel p { color: #5f7089; }
+.lost-found-report-quality-panel .ops-mini-stat { background: #fff; }
+.lost-found-report-quality-panel .ops-mini-stat strong { color: #2f5378; }
+.lost-found-report-quality-panel .badge { font-weight: 600; }
+.lost-found-report-quality-panel .search-rhythm-note { color: #4f6178; }
 .campus-verification-friction-panel .ops-table td { vertical-align: top; }
 /* 认证摩擦面板自成一组色相（紫灰）。它问的是「一封邮件发出去，用户隔了多久回来点」，
    发生在注册之后、拿到可信标识之前，和搜索之后的命中时延、心动之后的考虑窗口
@@ -3459,6 +3472,8 @@ a { color: inherit; text-decoration: none; }
 .governance-case-kind-dispute { color: #a1543e; background: #fff0eb; }
 .governance-case-kind-incident { color: #8e6c2a; background: #fff8e8; }
 .governance-case-kind-borrow { color: #2f6f5e; background: #e9f6f1; }
+/* 失物招领举报：前面四个色相已经占满，取一个偏蓝的冷色——它和商品举报是两条不同的举报通道，色相必须分得开，否则队列筛选时会看混。 */
+.governance-case-kind-lost_found_report { color: #35618f; background: #e9f1f9; }
 
 .governance-case-sla {
     text-align: right;

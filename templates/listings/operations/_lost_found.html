@@ -114,3 +114,131 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-archive me-1"></i>本模块只报告，<strong>不改写任何一条记录、任何一条线索、任何一份反馈</strong>：不替任何人关闭一条 <code>matched</code> 记录、不清空 <code>matched_post</code>、不重发通知、不把统计写回任何记录。真正该改的是收尾路径本身——而那是需求，不是统计。</div>
     {% endif %}
 </section>
+<section class="content-card ops-panel mb-4 lost-found-report-quality-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Lost &amp; found report quality</span><h2>失物招领举报处理质量，第一次被运营读到</h2></div>
+        <span class="ops-panel-hint">提交、处理与当前积压分成三条时间线</span>
+    </div>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-shield-exclamation me-1"></i>失物招领是站内唯一一个要求陌生人凭一段描述交出物品的地方，所以它有自己独立的举报目标 <code>LostFoundReport</code>——不是商品举报加一个可空外键。提交按 <code>created_at</code> 归期，处理按 <code>reviewed_at</code> 归期，待处理举报没有处理时刻，按当前时刻单独报等待年龄，不混进任何处理时长分布。</p>
+    {% if not lost_found_report_quality.has_data %}
+    <div class="empty-inline">{{ lost_found_report_quality.summary }}</div>
+    {% else %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内提交举报</span><strong>{{ lost_found_report_quality.submission.submitted_count }}</strong><small>{{ lost_found_report_quality.submission.reporter_count }} 位举报人</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>指向仍在架的记录</span><strong>{{ lost_found_report_quality.submission.exposed_count }}</strong><small>占 {{ lost_found_report_quality.submission.exposed_share }}%，多等一小时多一分危险</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>当前待处理</span><strong>{{ lost_found_report_quality.pending.measured_count }}</strong><small>最久 {{ lost_found_report_quality.pending.oldest_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>周期内已处理</span><strong>{{ lost_found_report_quality.outcome.measured_count }}</strong><small>驳回 {{ lost_found_report_quality.outcome.counts.rejected }} 条</small></div></div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">举报人为什么提交</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领举报处理质量，第一次被运营读到 · 举报人为什么提交</caption>
+                    <thead><tr><th>理由</th><th>举报</th><th>占比（%）</th><th>其中记录仍在架</th><th>样本</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_report_quality.reason_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td>{{ row.exposed_count }}</td><td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">样本不足</span>{% else %}可看方向{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">占比的分母是周期内提交的举报总数。<strong>「举报」和「其中记录仍在架」是两个分母</strong>：后者回答「有多少危险窗口还开着」，前者回答「运营收到了多少信号」；记录已关闭或已过期的，伤害窗口已经关上。<strong>补充说明只数字数</strong>：中位 {{ lost_found_report_quality.submission.detail.median }} 字，P90 {{ lost_found_report_quality.submission.detail.p90 }} 字，不读内容。理由只说明举报人的主张，不判断主张是否成立。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">处理结论：成立与驳回</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领举报处理质量，第一次被运营读到 · 处理结论：成立与驳回</caption>
+                    <thead><tr><th>结论</th><th>数量</th><th>已处理占比（%）</th><th>口径</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_report_quality.outcome.rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">按 reviewed_at 归期</td></tr>
+                        {% empty %}
+                        <tr><td colspan="4">当前周期还没有处理完的举报。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>驳回率不叫「举报准确率」</strong>：它的分母是已处理举报，而「该有多少举报被提交」在观测数据里没有分母——没人举报的冒充记录不会留下任何痕迹。已处理样本低于 {{ lost_found_report_quality.min_direction_sample }} 条时，比例只作参考。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">从提交到处理完成，隔了多久</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领举报处理质量，第一次被运营读到 · 从提交到处理完成，隔了多久</caption>
+                    <thead><tr><th>处理时长</th><th>条数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_report_quality.handling.buckets %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="4">当前周期还没有处理完的举报。</td></tr>
+                        {% endfor %}
+                        <tr><td>中位 / P90 / 平均</td><td>{{ lost_found_report_quality.handling.median_label }}</td><td>{{ lost_found_report_quality.handling.p90_label }}</td><td class="small text-muted">三列依次是中位、P90、平均，单位见左列</td></tr>
+                        <tr><td>超过 1 天时限</td><td>{{ lost_found_report_quality.handling.over_sla_count }}</td><td>{{ lost_found_report_quality.handling.over_sla_rate }}%</td><td class="small text-muted">与治理工作台同口径：24 小时</td></tr>
+                        <tr><td>处理备注字数（中位 / P90）</td><td>{{ lost_found_report_quality.handling.note.median }}</td><td>{{ lost_found_report_quality.handling.note.p90 }}</td><td class="small text-muted">两列依次是中位、P90；填写率 {{ lost_found_report_quality.handling.note.fill_rate }}%，只数长度不读内容</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">待处理举报不计入：它们没有 <code>reviewed_at</code>，是右删失样本，按 0 秒算会把「处理很快」这个结论直接写错。<strong>处理备注只数字数，不读内容</strong>——备注是给下一个处理人看的内部说明，不是给举报人的结论。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">待处理举报的等待年龄分档</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领举报处理质量，第一次被运营读到 · 待处理举报的等待年龄分档</caption>
+                    <thead><tr><th>等待时长</th><th>条数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_report_quality.pending.buckets %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td><td class="small text-muted">{{ row.hint }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="4">当前没有待处理的失物招领举报。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">当前待处理 {{ lost_found_report_quality.pending.measured_count }} 条，最久等了 {{ lost_found_report_quality.pending.oldest_label }}，超过一天 {{ lost_found_report_quality.pending.over_one_day_count }} 条；其中 {{ lost_found_report_quality.pending.exposed_count }} 条指向的记录仍挂在公开列表里。<strong>等待年龄按当前时刻算，不进任何处理时长分布</strong>。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">「举报人对发布者不可见」，这条边界现在成立吗</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领举报处理质量，第一次被运营读到 · 举报人对发布者不可见，这条边界现在成立吗</caption>
+                    <thead><tr><th>口径</th><th>人数</th><th>说明</th></tr></thead>
+                    <tbody>
+                        <tr><td>收到过举报进展通知的人</td><td>{{ lost_found_report_quality.boundary.channel_recipient_count }}</td><td class="small text-muted">全站唯一入口是 review_lost_found_report，跳转地址固定</td></tr>
+                        <tr><td>提交过举报的人</td><td>{{ lost_found_report_quality.boundary.reporter_count }}</td><td class="small text-muted">通知本来就该发给他们</td></tr>
+                        <tr><td>发布了被举报记录的人</td><td>{{ lost_found_report_quality.boundary.publisher_count }}</td><td class="small text-muted">这些人不该收到举报人的通知</td></tr>
+                        <tr><td>既不是举报人、也不是发布者</td><td>{{ lost_found_report_quality.boundary.unexpected_recipient_count }}</td><td class="small text-muted">正常应为 0，非 0 即边界破损</td></tr>
+                        <tr><td>是发布者、同时自己也举报过</td><td>{{ lost_found_report_quality.boundary.ambiguous_recipient_count }}</td><td class="small text-muted">光看通知表分不清他收的是哪一条，单独数，不计进泄漏</td></tr>
+                        <tr><td>处理完了却没收到通知的举报人</td><td>{{ lost_found_report_quality.handled_without_notice }}</td><td class="small text-muted">正常应为 0；通知随用户级联删除，所以这是下界</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0"><strong>报的是集合之间的差集，不是任何一条通知的内容</strong>——通知正文里带着记录标题，而标题是自由文本。通知和举报之间没有外键，只能按人比集合，所以这一栏只能证明「有泄漏」，不能证明「没有泄漏」。</p>
+        </div>
+        <div class="col-lg-6">
+            <h3 class="h6 mb-3">当前待处理举报清单</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">失物招领举报处理质量，第一次被运营读到 · 当前待处理举报清单</caption>
+                    <thead><tr><th>举报</th><th>理由</th><th>提交于</th><th>等待</th><th>说明字数</th><th>记录仍在架</th></tr></thead>
+                    <tbody>
+                        {% for row in lost_found_report_quality.pending.rows|slice:":20" %}
+                        <tr><td>#{{ row.report_id }}</td><td>{{ row.reason_label }}</td><td>{{ row.submitted_at|date:'Y-m-d H:i' }}</td><td>{{ row.wait_label }}</td><td>{{ row.detail_length }}</td><td>{% if row.post_is_exposed %}在架{% else %}—{% endif %}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="6">当前没有待处理的失物招领举报。</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if lost_found_report_quality.pending.row_total > lost_found_report_quality.pending.row_limit %}
+            <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>待处理举报共 {{ lost_found_report_quality.pending.row_total }} 条，以上只列最久的 {{ lost_found_report_quality.pending.row_limit }} 条，完整的在导出里。</p>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0">按等待时长降序，<strong>最该核实的排最前</strong>。<strong>举报编号可以报，它是数字不是身份</strong>；举报人和被举报记录的标题都不报——谁在什么时候举报了哪条失物招领是用户的私事。</p>
+        </div>
+    </div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-lock me-2"></i>本面板只报告：不改状态、不发通知、不关记录、不读补充说明和审核备注的任何一个字符，只数长度；不展示用户名和被举报记录的标题。<strong>「只有一条写入路径」是后台用 readonly_fields 守下来的</strong>——后台改不了状态，只有运营页面的表单能写，哪天「处理完了却没收到通知」出现非 0，先查有没有人为脚本放开过字段。</div>
+    {% endif %}
+</section>

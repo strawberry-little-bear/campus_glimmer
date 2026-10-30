@@ -55,7 +55,9 @@ OPERATIONS_SECTION_FRAGMENTS = (
     ('ops-handover-codes', '_handover_codes.html', False, ('handoff_code_usage', 'return_handshake')),
     ('ops-delivery-confirm', '_delivery_confirm.html', False, ('delivery_handshake', 'order_deadline_reminders', 'transaction_safety_acknowledgement_quality')),
     ('ops-saved-search', '_saved_search.html', False, ('first_viewed', 'saved_search_latency', 'saved_search_limit_shape', 'saved_search_quiet_window')),
-    ('ops-lost-found', '_lost_found.html', False, ('lost_found_matched_outcome',)),
+    ('ops-lost-found', '_lost_found.html', False, (
+        'lost_found_matched_outcome', 'lost_found_report_quality',
+    )),
     ('ops-campus-verify', '_campus_verify.html', False, ('campus_verification_friction',)),
     ('ops-queues', '_free_claims.html', False, ('gift_application_queue',)),
     ('ops-item-images', '_item_images.html', False, ('item_image_coverage',)),

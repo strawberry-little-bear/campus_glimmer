@@ -105,6 +105,7 @@ from .saved_search_latency import build_saved_search_latency
 from .saved_search_limit_shape import build_saved_search_limit_shape
 from .saved_search_quiet_window import build_saved_search_quiet_window
 from .lost_found_matched_outcome import build_lost_found_matched_outcome
+from .lost_found_report_quality import build_lost_found_report_quality
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
@@ -2182,12 +2183,15 @@ def review_report(request, report_id):
 
 @login_required
 def governance_workbench(request):
-    """One workbench for the three moderation queues.
+    """One workbench for every queue a human is waiting behind.
 
     Reports, disputes and incidents used to live on three separate pages with
     three different vocabularies, and incidents had no staff page at all. The
     workbench normalises them onto one shape and adds the dimension none of
     them had: how long each case has been waiting against its own deadline.
+    Two more queues joined later - overdue borrows escalated to level three, and
+    reports raised against lost-and-found records - and neither changed the
+    shape, only the deadline.
 
     The borrow queue is the only one without a staff action page, and that is
     deliberate: the platform records and notifies an overdue borrow but never
@@ -2205,7 +2209,9 @@ def governance_workbench(request):
     days = _operations_period_days(request)
     kind_filter = request.GET.get('kind', 'all')
     status_filter = request.GET.get('status', 'open')
-    if kind_filter not in {'all', 'report', 'dispute', 'incident', 'borrow'}:
+    if kind_filter not in {
+        'all', 'report', 'lost_found_report', 'dispute', 'incident', 'borrow',
+    }:
         kind_filter = 'all'
     if status_filter not in {'all', 'open', 'closed'}:
         status_filter = 'open'
@@ -2235,6 +2241,7 @@ def governance_workbench(request):
             ('report', '商品举报'),
             ('dispute', '交易争议'),
             ('incident', '交付预约异常'),
+            ('lost_found_report', '失物招领举报'),
             ('borrow', '借用逾期催收'),
         ),
         'status_choices': (
@@ -3634,6 +3641,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('saved_search_quiet_window', '关注搜索静默窗口', build_saved_search_quiet_window),
     ('saved_search_limit_shape', '关注搜索上限形状', build_saved_search_limit_shape),
     ('lost_found_matched_outcome', '失物匹配结果', build_lost_found_matched_outcome),
+    ('lost_found_report_quality', '失物招领举报处理质量', build_lost_found_report_quality),
     ('campus_verification_friction', '校园认证等待', build_campus_verification_friction),
     ('gift_application_queue', '赠送申请队列', build_gift_application_queue),
     ('item_image_coverage', '商品图片覆盖', build_item_image_coverage),
@@ -7246,6 +7254,144 @@ def operations_dashboard_export(request):
         u'说明', '', '', '', '',
         u'清单是给「现在去核实」用的，不是给归档用的',
         u'记录编号可以报，它是数字不是身份；标题和发布者都不报',
+    ])
+
+    writer.writerow([])
+    report_quality = dashboard['lost_found_report_quality']
+    writer.writerow([
+        '失物招领举报处理质量，第一次被运营读到', '数值', '说明',
+    ])
+    writer.writerow([
+        '口径与门槛', report_quality['summary'],
+        '提交按 created_at、处理按 reviewed_at、待处理按当前时刻分三条线；'
+        '不改状态、不发通知、不关记录，不读补充说明与审核备注内容，只数长度',
+    ])
+    writer.writerow([
+        '周期内提交举报', report_quality['submission']['submitted_count'], '',
+        f"{report_quality['submission']['reporter_count']} 位举报人；其中 "
+        f"{report_quality['submission']['exposed_count']} 条指向的记录仍挂在公开列表里",
+    ])
+    writer.writerow([
+        '当前待处理', report_quality['pending']['measured_count'], '',
+        f"最久等待 {report_quality['pending']['oldest_label']}，"
+        f"超过一天 {report_quality['pending']['over_one_day_count']} 条",
+    ])
+    writer.writerow([
+        '周期内已处理', report_quality['outcome']['measured_count'], '',
+        f"驳回 {report_quality['outcome']['counts']['rejected']} 条；"
+        f"样本不足 {report_quality['min_direction_sample']} 条时比例只作参考",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['举报人为什么提交'])
+    writer.writerow(['理由', '举报', '占比（%）', '其中记录仍在架', '样本'])
+    for row in report_quality['reason_rows']:
+        writer.writerow([
+            row['label'], row['count'], row['share'], row['exposed_count'],
+            '样本不足' if row['is_small_sample'] else '可看方向',
+        ])
+    writer.writerow([
+        '补充说明字数（中位 / P90 / 平均 / 最大）', '', '',
+        f"{report_quality['submission']['detail']['median']} / "
+        f"{report_quality['submission']['detail']['p90']} / "
+        f"{report_quality['submission']['detail']['mean']} / "
+        f"{report_quality['submission']['detail']['max']}",
+        '只数长度，不读内容',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['处理结论：成立与驳回'])
+    writer.writerow(['结论', '数量', '已处理占比（%）', '口径'])
+    for row in report_quality['outcome']['rows']:
+        writer.writerow([row['label'], row['count'], row['share'], '按 reviewed_at 归期'])
+    writer.writerow([
+        '说明', '', '',
+        '驳回率不叫「举报准确率」：「该有多少举报被提交」在观测数据里没有分母，'
+        '没人举报的冒充记录不会留下任何痕迹',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['从提交到处理完成，隔了多久'])
+    writer.writerow(['处理时长', '条数', '占比（%）', '说明'])
+    for row in report_quality['handling']['buckets']:
+        writer.writerow([row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '中位 / P90 / 平均', report_quality['handling']['median_label'],
+        report_quality['handling']['p90_label'], report_quality['handling']['mean_label'],
+    ])
+    writer.writerow([
+        '超过 1 天时限', report_quality['handling']['over_sla_count'],
+        report_quality['handling']['over_sla_rate'],
+        '治理时限与治理工作台同口径：24 小时',
+    ])
+    writer.writerow([
+        '处理备注填写率（%）', report_quality['handling']['note']['fill_rate'],
+        report_quality['handling']['note']['filled_count'],
+        f"中位 {report_quality['handling']['note']['median']} 字，只数长度不读内容",
+    ])
+
+    writer.writerow([])
+    writer.writerow(['待处理举报的等待年龄分档'])
+    writer.writerow(['等待时长', '条数', '占比（%）', '说明'])
+    for row in report_quality['pending']['buckets']:
+        writer.writerow([row['label'], row['count'], row['share'], row['hint']])
+    writer.writerow([
+        '指向仍在架记录的待处理举报', report_quality['pending']['exposed_count'], '',
+        '记录已关闭或已过期的，伤害窗口已经关上，时限要求松一档',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['当前待处理举报清单'])
+    writer.writerow(['举报', '理由', '提交于', '等待', '说明字数', '记录仍在架'])
+    for row in report_quality['pending']['rows']:
+        writer.writerow([
+            f"#{row['report_id']}", row['reason_label'],
+            row['submitted_at'].strftime('%Y-%m-%d %H:%M'), row['wait_label'],
+            row['detail_length'], '在架' if row['post_is_exposed'] else '—',
+        ])
+    if not report_quality['pending']['rows']:
+        writer.writerow(['—', '当前没有待处理的失物招领举报', '', '', '', ''])
+    if report_quality['pending']['row_total'] > report_quality['pending']['row_limit']:
+        writer.writerow([
+            '—',
+            f"页面最多列 {report_quality['pending']['row_limit']} 条，"
+            f"当前共 {report_quality['pending']['row_total']} 条，CSV 输出完整清单",
+            '', '', '', '',
+        ])
+    writer.writerow([
+        '说明', '', '', '', '',
+        '按等待时长降序；举报编号是数字不是身份，举报人和被举报记录标题都不报',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['「举报人对发布者不可见」，这条边界现在成立吗'])
+    writer.writerow(['口径', '人数', '说明'])
+    boundary = report_quality['boundary']
+    writer.writerow([
+        '收到过举报进展通知的人', boundary['channel_recipient_count'],
+        '全站唯一入口是 review_lost_found_report，跳转地址固定',
+    ])
+    writer.writerow(['提交过举报的人', boundary['reporter_count'], '通知本来就该发给他们'])
+    writer.writerow([
+        '发布了被举报记录的人', boundary['publisher_count'],
+        '这些人不该收到举报人的通知',
+    ])
+    writer.writerow([
+        '既不是举报人、也不是发布者', boundary['unexpected_recipient_count'],
+        '正常应为 0，非 0 即边界破损',
+    ])
+    writer.writerow([
+        '是发布者、同时自己也举报过', boundary['ambiguous_recipient_count'],
+        '光看通知表分不清他收的是哪一条，单独数，不计进泄漏',
+    ])
+    writer.writerow([
+        '处理完了却没收到通知的举报人', report_quality['handled_without_notice'],
+        '正常应为 0；通知随用户级联删除，所以这是下界',
+    ])
+    writer.writerow([
+        '说明', '',
+        '报的是集合之间的差集，不是任何一条通知的内容；通知和举报之间没有外键，'
+        '这一栏只能证明「有泄漏」，不能证明「没有泄漏」',
     ])
 
     writer.writerow([])

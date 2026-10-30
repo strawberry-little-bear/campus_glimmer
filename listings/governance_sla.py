@@ -8,14 +8,17 @@ count, so it cannot say whether a report waited ten minutes or ten days, cannot
 compare one queue against another, and cannot tell which cases have crossed the
 point where a user is still waiting for an answer.
 
-A fourth queue was added later, and it is not another model: a borrow that has
-been escalated to level three is a case waiting on an operator, and it already
-carries everything a case needs - when it entered the queue, how long the item
-has been overdue, and when it closed. Reading it here rather than building a
-mirror table keeps a single write path: the escalation module still owns the
-record, this module only reports on it.
+A fourth and a fifth queue were added later, and neither is a model this module
+owns. The fourth is a borrow escalated to level three: that is a case waiting on
+an operator, and it already carries everything a case needs - when it entered
+the queue, how long the item has been overdue, and when it closed. Reading it
+here rather than building a mirror table keeps a single write path: the
+escalation module still owns the record, this module only reports on it. The
+fifth is a report raised against a lost-and-found record, which is a real model
+of its own but the same shape: a reporter, a subject, a reason, a status and a
+closing timestamp.
 
-This module normalises the three models onto one comparable shape and measures
+This module normalises the queues onto one comparable shape and measures
 the dimension none of them had: handling latency. It deliberately does not add
 a storage table. All three models already carry a created_at and a closing
 timestamp, so a mirror table would only introduce a second write path and a
@@ -36,7 +39,9 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-from .models import BorrowReturnEscalation, MeetingIncident, OrderDispute, Report
+from .models import (
+    BorrowReturnEscalation, LostFoundReport, MeetingIncident, OrderDispute, Report,
+)
 from .report_priority import build_report_priority, open_report_counts
 
 
@@ -54,6 +59,12 @@ SLA_TARGETS = {
     # at two weeks of a classmate's item being gone, which is long enough for a
     # dispute to be opened anyway but short enough to still be recoverable.
     'borrow': timedelta(days=7),
+    # 失物招领举报和交付预约异常同为 24 小时，但理由完全不同，写下来是因为
+    # 两个数字一样不代表可以合并成一条规则。预约异常等的是"这一次见面还能不能
+    # 改成不白跑"；失物招领等的是"会不会有人已经拿着假身份去把东西认走了"。
+    # 前者过了时限损失的是一次见面的时间，后者过了时限可能连东西都没了，所以
+    # 不能因为商品举报能等两天，就默认失物举报也能等两天。
+    'lost_found_report': timedelta(hours=24),
 }
 
 # How long before the deadline a case is flagged as approaching it. Used to
@@ -75,6 +86,7 @@ QUEUE_LABELS = {
     'dispute': '交易争议',
     'incident': '交付预约异常',
     'borrow': '借用逾期催收',
+    'lost_found_report': '失物招领举报',
 }
 
 # Statuses that mean a case is still waiting for a human. Everything else has
@@ -270,6 +282,40 @@ def _borrow_cases(queryset):
     return rows
 
 
+def _lost_found_report_cases(queryset):
+    """Read lost-and-found reports as governance cases.
+
+    Unlike ``Report``, this model is not keyed to a listing: the subject is the
+    lost-and-found record, and the counterparty is whoever published it. The
+    closing timestamp is ``reviewed_at`` because that is the only moment the
+    platform records that a human has looked at the report - opening the queue
+    is not a response.
+    """
+    rows = []
+    for row in queryset.values(
+        'id', 'status', 'created_at', 'reviewed_at', 'reviewer_id', 'reason',
+        'post__title', 'post__status', 'post__expires_at',
+        'post__reporter__username', 'reporter__username',
+    ):
+        rows.append(normalise_case(
+            case_id=row['id'],
+            kind='lost_found_report',
+            status=row['status'],
+            created_at=row['created_at'],
+            closed_at=row['reviewed_at'],
+            reviewer_id=row['reviewer_id'],
+            reason=row['reason'],
+            reason_label=dict(LostFoundReport.REASON_CHOICES).get(row['reason'], row['reason']),
+            subject=row['post__title'],
+            counterparty=row['post__reporter__username'],
+            reporter=row['reporter__username'],
+            post_status=row['post__status'],
+            post_expires_at=row['post__expires_at'],
+            url=f"/listings/lost-found/reports/{row['id']}/review/",
+        ))
+    return rows
+
+
 def _fetch_cases(*, days, now):
     """Load every case created in the period, whatever queue it came from."""
     start = now - timedelta(days=days)
@@ -277,6 +323,9 @@ def _fetch_cases(*, days, now):
     cases += _report_cases(Report.objects.filter(created_at__gte=start, created_at__lte=now), now)
     cases += _dispute_cases(OrderDispute.objects.filter(created_at__gte=start, created_at__lte=now))
     cases += _incident_cases(MeetingIncident.objects.filter(created_at__gte=start, created_at__lte=now))
+    cases += _lost_found_report_cases(LostFoundReport.objects.filter(
+        created_at__gte=start, created_at__lte=now,
+    ))
     cases += _borrow_cases(BorrowReturnEscalation.objects.filter(
         escalation_level__gte=3, last_escalated_at__gte=start, last_escalated_at__lte=now,
     ))
@@ -294,6 +343,7 @@ def _fetch_open_cases(*, now):
     cases += _report_cases(Report.objects.filter(status__in=OPEN_STATUSES), now=now)
     cases += _dispute_cases(OrderDispute.objects.filter(status__in=OPEN_STATUSES))
     cases += _incident_cases(MeetingIncident.objects.filter(status__in=OPEN_STATUSES))
+    cases += _lost_found_report_cases(LostFoundReport.objects.filter(status__in=OPEN_STATUSES))
     cases += _borrow_cases(BorrowReturnEscalation.objects.filter(
         escalation_level__gte=3, resolved_at__isnull=True,
     ))
@@ -416,10 +466,13 @@ def build_governance_sla(*, days=30, now=None):
     open_cases = _fetch_open_cases(now=now)
 
     queues = []
-    for kind in ('report', 'dispute', 'incident', 'borrow'):
+    for kind in ('report', 'lost_found_report', 'dispute', 'incident', 'borrow'):
         # The borrow queue is listed last on purpose. It is the only one whose
         # deadline is not a moderation target but the tail of an escalation
         # ladder, so it belongs after the queues an operator can act on directly.
+        # 失物招领举报紧跟商品举报：两者都是"有人举报了一条内容"，处理动作也
+        # 一样（看记录、下结论、通知举报人），放在一起才看得出两者的时限差一倍，
+        # 而这个差是本模块唯一想让人看见的事。
         kind_period = [case for case in period_cases if case['kind'] == kind]
         kind_open = [case for case in open_cases if case['kind'] == kind]
         # Merge so the queue row shows both the period's throughput and the

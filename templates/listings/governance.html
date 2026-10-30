@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}治理工作台 - 拾光校园{% endblock %}
 {% block content %}
-<div class="page-intro operations-heading"><div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h1 class="mt-2">治理工作台</h1><p class="text-muted mb-0">把举报、交易争议、交付预约异常和借用逾期催收放进同一个队列，用「等待了多久」而不是「有多少」来决定先处理哪一件。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
+<div class="page-intro operations-heading"><div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h1 class="mt-2">治理工作台</h1><p class="text-muted mb-0">把商品举报、失物招领举报、交易争议、交付预约异常和借用逾期催收放进同一个队列，用「等待了多久」而不是「有多少」来决定先处理哪一件。</p></div><a class="btn btn-outline-primary" href="{% url 'operations_dashboard' %}"><i class="bi bi-bar-chart-line me-1"></i>返回运营看板</a></div>
 
 <div class="governance-summary mb-4">
     <div class="governance-summary-item"><span>待处理</span><strong>{{ governance.total_open }}</strong><small>各队列合计</small></div>
@@ -25,7 +25,7 @@
 {% for queue in governance.queues %}
     <div class="content-card governance-queue-card{% if queue.overdue %} is-alert{% endif %}">
         <div class="governance-queue-heading"><strong>{{ queue.label }}</strong><span>处理时限 {{ queue.sla_label }}</span></div>
-        {% if queue.kind == 'borrow' %}<p class="governance-queue-hint">进入本队列的借用已经走完三级催收，时限从三级发出时起算。</p>{% endif %}
+        {% if queue.kind == 'lost_found_report' %}<p class="governance-queue-hint">时限比商品举报短一半：一条失物招领挂着的时候，冒充失主的人不会等我们审完。举报人看不到被举报记录的发布者，发布者也永远看不到举报人。</p>{% endif %}{% if queue.kind == 'borrow' %}<p class="governance-queue-hint">进入本队列的借用已经走完三级催收，时限从三级发出时起算。</p>{% endif %}
         <div class="governance-queue-stats">
             <div><span>周期内</span><strong>{{ queue.total }}</strong></div>
             <div><span>已处理</span><strong>{{ queue.closed }}</strong></div>
@@ -74,5 +74,5 @@
 {% empty %}<div class="content-card empty-state py-5"><i class="bi bi-shield-check"></i><h2>当前筛选下没有治理事项</h2><p>各队列都清空了，或者换个筛选条件看看。</p></div>{% endfor %}
 </section>
 
-<div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>四类队列的处理时限不同：交付预约异常会阻塞一次线下交付，因此时限最短；交易争议涉及双方举证，时限居中；借用逾期催收的时限从三级催收发出那一刻起算，因为那之前平台已经在走自己的阶梯，不该记在治理账上。响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。</div>
+<div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>五类队列的处理时限不同：交付预约异常和失物招领举报同处最短的一档，都是一天，但等的不是一回事——前者等的是这一次见面还能不能改成不白跑，后者等的是冒充者会不会已经把东西领走；商品举报是离线复核，可以等两天；交易争议涉及双方举证，时限居中；借用逾期催收的时限从三级催收发出那一刻起算，因为那之前平台已经在走自己的阶梯，不该记在治理账上。响应时长按处理人写进记录的那一刻计算，打开队列页不算响应。</div>
 {% endblock %}
