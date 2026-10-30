@@ -783,35 +783,21 @@ class LifecycleReminderEvent(models.Model):
         return f'{self.item_id} · {self.get_kind_display()} · {self.sent_at:%Y-%m-%d %H:%M}'
 
 
-class ItemImage(models.Model):
-    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='images')
-    image = models.ImageField('图片', upload_to='items/')
-    thumbnail = models.ImageField(
-        '列表缩略图', upload_to='items/thumbnails/', null=True, blank=True,
-        editable=False,
-    )
-    preview = models.ImageField(
-        '大图预览', upload_to='items/previews/', null=True, blank=True,
-        editable=False,
-    )
-    image_width = models.PositiveIntegerField(
-        '原图宽度', null=True, blank=True, editable=False,
-    )
-    image_height = models.PositiveIntegerField(
-        '原图高度', null=True, blank=True, editable=False,
-    )
-    thumbnail_width = models.PositiveIntegerField(
-        '列表缩略图宽度', null=True, blank=True, editable=False,
-    )
-    thumbnail_height = models.PositiveIntegerField(
-        '列表缩略图高度', null=True, blank=True, editable=False,
-    )
-    preview_width = models.PositiveIntegerField(
-        '大图预览宽度', null=True, blank=True, editable=False,
-    )
-    preview_height = models.PositiveIntegerField(
-        '大图预览高度', null=True, blank=True, editable=False,
-    )
+class StoredImageVariantsMixin:
+    """The photo-variant pipeline shared by every photo-bearing model.
+
+    ``ItemImage`` and ``LostFoundImage`` store the same three files under the
+    same field names, so every "which variant does this page ask for" and
+    "when does a variant get rebuilt" rule lives here once. A rule that only
+    exists on one of the two models is a rule the other one will eventually
+    violate, and the violation shows up as a page silently falling back to a
+    phone-sized original.
+
+    The read paths are plain properties so templates never have to know
+    whether a variant file exists; the write path is deliberately tolerant:
+    a variant that cannot be encoded is cleared rather than raised, so a
+    valid photo stays saveable and the page falls back to the original.
+    """
 
     @property
     def list_image_url(self):
@@ -885,7 +871,7 @@ class ItemImage(models.Model):
     def _existing_image_name(self):
         if not self.pk:
             return None
-        return ItemImage.objects.filter(pk=self.pk).values_list(
+        return type(self).objects.filter(pk=self.pk).values_list(
             'image', flat=True,
         ).first()
 
@@ -1001,6 +987,37 @@ class ItemImage(models.Model):
         super().save(*args, **kwargs, update_fields=update_fields)
         self._thumbnail_touched = False
         self._preview_touched = False
+
+
+class ItemImage(StoredImageVariantsMixin, models.Model):
+    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='images')
+    image = models.ImageField('图片', upload_to='items/')
+    thumbnail = models.ImageField(
+        '列表缩略图', upload_to='items/thumbnails/', null=True, blank=True,
+        editable=False,
+    )
+    preview = models.ImageField(
+        '大图预览', upload_to='items/previews/', null=True, blank=True,
+        editable=False,
+    )
+    image_width = models.PositiveIntegerField(
+        '原图宽度', null=True, blank=True, editable=False,
+    )
+    image_height = models.PositiveIntegerField(
+        '原图高度', null=True, blank=True, editable=False,
+    )
+    thumbnail_width = models.PositiveIntegerField(
+        '列表缩略图宽度', null=True, blank=True, editable=False,
+    )
+    thumbnail_height = models.PositiveIntegerField(
+        '列表缩略图高度', null=True, blank=True, editable=False,
+    )
+    preview_width = models.PositiveIntegerField(
+        '大图预览宽度', null=True, blank=True, editable=False,
+    )
+    preview_height = models.PositiveIntegerField(
+        '大图预览高度', null=True, blank=True, editable=False,
+    )
 
     def __str__(self):
         return f'{self.item.title}的图片'
@@ -2845,6 +2862,62 @@ class LostFoundLead(models.Model):
 
     def __str__(self):
         return f'{self.post.title} · {self.respondent.username} · {self.get_status_display()}'
+
+
+
+class LostFoundImage(StoredImageVariantsMixin, models.Model):
+    """The single optional photo behind a lost-and-found record.
+
+    The record itself stays text-first. A photo helps a stranger recognise an
+    object, but it is also the easiest way to leak the owner's identity by
+    accident - a campus card, a student ID or a dorm door plate sitting in the
+    same frame. So the field is optional, the form says out loud what must stay
+    out of frame, and the publisher can take the photo down at any time without
+    touching the record.
+
+    One record, one photo. The recognition question is "is this the same
+    object", not "which of these six angles is the convincing one"; a second
+    image would only double the review surface without answering it better.
+    """
+
+    post = models.OneToOneField(
+        LostFoundPost, on_delete=models.CASCADE, related_name='image',
+        verbose_name='失物招领记录',
+    )
+    image = models.ImageField('图片', upload_to='lost-found/')
+    thumbnail = models.ImageField(
+        '列表缩略图', upload_to='lost-found/thumbnails/', null=True, blank=True,
+        editable=False,
+    )
+    preview = models.ImageField(
+        '大图预览', upload_to='lost-found/previews/', null=True, blank=True,
+        editable=False,
+    )
+    image_width = models.PositiveIntegerField(
+        '原图宽度', null=True, blank=True, editable=False,
+    )
+    image_height = models.PositiveIntegerField(
+        '原图高度', null=True, blank=True, editable=False,
+    )
+    thumbnail_width = models.PositiveIntegerField(
+        '列表缩略图宽度', null=True, blank=True, editable=False,
+    )
+    thumbnail_height = models.PositiveIntegerField(
+        '列表缩略图高度', null=True, blank=True, editable=False,
+    )
+    preview_width = models.PositiveIntegerField(
+        '大图预览宽度', null=True, blank=True, editable=False,
+    )
+    preview_height = models.PositiveIntegerField(
+        '大图预览高度', null=True, blank=True, editable=False,
+    )
+
+    def __str__(self):
+        return f'{self.post.title}的照片'
+
+    class Meta:
+        verbose_name = '失物招领图片'
+        verbose_name_plural = '失物招领图片'
 
 
 class DemandResponse(models.Model):

@@ -147,7 +147,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -13641,7 +13641,7 @@ def _notify_lost_found_matches(post):
 def _lost_found_queryset(*, mine=False):
     expire_lost_found_posts()
     queryset = LostFoundPost.objects.select_related(
-        'reporter', 'category', 'location', 'matched_post',
+        'reporter', 'category', 'location', 'matched_post', 'image',
     )
     if not mine:
         queryset = queryset.filter(status='active')
@@ -13746,14 +13746,38 @@ def lost_found_list(request, mine=False):
     })
 
 
+def _apply_lost_found_photo(post, form):
+    """Create, replace or drop the single photo behind a lost-and-found record.
+
+    Three outcomes, one rule each: a new file replaces whatever was there (and
+    the variant pipeline then deletes the files it replaces), an explicit
+    remove with no new file drops the row, and neither leaves the photo alone.
+    Doing nothing must never be the outcome of "the user did not touch the
+    field" on an edit - so the remove path is a separate checkbox rather than
+    an empty file input, which an untouched form also submits.
+    """
+    photo = form.cleaned_data.get('photo')
+    wants_removal = form.cleaned_data.get('remove_photo')
+    existing = LostFoundImage.objects.filter(post=post).first()
+    if photo is None:
+        if wants_removal and existing:
+            existing.delete()
+        return
+    if existing is None:
+        existing = LostFoundImage(post=post)
+    existing.image = photo
+    existing.save()
+
+
 @login_required
 def new_lost_found(request):
     if request.method == 'POST':
-        form = LostFoundPostForm(request.POST)
+        form = LostFoundPostForm(request.POST, request.FILES)
         if form.is_valid():
             post = form.save(commit=False)
             post.reporter = request.user
             post.save()
+            _apply_lost_found_photo(post, form)
             _notify_lost_found_matches(post)
             messages.success(request, '失物招领记录已发布，系统会根据地点、时间和描述为你寻找可能匹配。')
             return redirect('lost_found_detail', post.id)
@@ -13770,9 +13794,10 @@ def edit_lost_found(request, post_id):
     if post.reporter_id != request.user.id:
         raise PermissionDenied
     if request.method == 'POST':
-        form = LostFoundPostForm(request.POST, instance=post)
+        form = LostFoundPostForm(request.POST, request.FILES, instance=post)
         if form.is_valid():
             post = form.save()
+            _apply_lost_found_photo(post, form)
             if post.status == 'expired':
                 post.status = 'active'
                 post.save(update_fields=['status', 'updated_at'])
@@ -13798,7 +13823,7 @@ def close_lost_found(request, post_id):
 
 def lost_found_detail(request, post_id):
     post = get_object_or_404(
-        LostFoundPost.objects.select_related('reporter', 'category', 'location', 'matched_post'),
+        LostFoundPost.objects.select_related('reporter', 'category', 'location', 'matched_post', 'image'),
         pk=post_id,
     )
     if post.status == 'active' and post.expires_at and post.expires_at <= timezone.now():

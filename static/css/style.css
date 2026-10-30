@@ -1676,7 +1676,18 @@ a { color: inherit; text-decoration: none; }
 .lost-found-lead-card { padding: 18px 20px; }
 .lost-found-form-tip { display: flex; gap: 8px; margin: 18px 0; padding: 12px 14px; color: var(--muted); border-radius: 11px; background: #f4f8f3; font-size: .76rem; line-height: 1.6; }
 .lost-found-form-tip i { color: #4d9868; }
-@media (max-width: 575.98px) { .lost-found-detail-card { padding: 20px; }.lost-found-explain { padding: 14px; }.lost-found-filter-card { padding: 14px; }.lost-found-card { padding: 17px; } }
+/* 失物招领照片。卡片图不贴卡片边缘：卡片自带 18px 圆角和渐变底，负边距溢出会
+   把圆角处的渐变背景切掉一刀，且父级没有 overflow，圆角要靠自己画。 */
+.lost-found-card-media { display: block; overflow: hidden; margin-bottom: 16px; border-radius: 13px; background: #eef4ef; }
+.lost-found-card-media img { display: block; width: 100%; height: 170px; object-fit: cover; }
+.lost-found-detail-media { margin: 0 0 24px; }
+/* contain 而不是 cover：一张失物照片被裁掉的往往正是认得出它的那一块。 */
+.lost-found-detail-media img { display: block; width: 100%; max-height: 460px; border-radius: 16px; background: #eef4ef; object-fit: contain; }
+.lost-found-detail-media figcaption { margin-top: 9px; color: var(--muted); font-size: .72rem; }
+.lost-found-photo-current { margin-top: 10px; }
+.lost-found-photo-current img { display: block; width: 132px; height: 132px; border: 1px solid var(--line); border-radius: 13px; object-fit: cover; background: #eef4ef; }
+.lost-found-photo-empty { margin-top: 10px; color: var(--muted); font-size: .74rem; }
+@media (max-width: 575.98px) { .lost-found-card-media img { height: 148px; }.lost-found-detail-card { padding: 20px; }.lost-found-explain { padding: 14px; }.lost-found-filter-card { padding: 14px; }.lost-found-card { padding: 17px; } }
 
 /* Campus demand radar */
 .demand-radar-panel { overflow: hidden; }

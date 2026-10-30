@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -560,8 +560,16 @@ class DemandResponseAdmin(admin.ModelAdmin):
     readonly_fields = ('match_score', 'match_reason', 'created_at', 'updated_at')
 
 
+class LostFoundImageInline(admin.StackedInline):
+    model = LostFoundImage
+    extra = 0
+    max_num = 1
+    readonly_fields = ('image_width', 'image_height', 'thumbnail_width', 'thumbnail_height', 'preview_width', 'preview_height')
+
+
 @admin.register(LostFoundPost)
 class LostFoundPostAdmin(admin.ModelAdmin):
+    inlines = [LostFoundImageInline]
     list_display = ('title', 'post_type', 'category', 'location', 'reporter', 'status', 'occurred_at', 'view_count', 'created_at')
     list_filter = ('post_type', 'status', 'category', 'location', 'created_at', 'occurred_at')
     search_fields = ('title', 'description', 'identifying_features', 'reporter__username', 'location__name')

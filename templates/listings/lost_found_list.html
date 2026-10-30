@@ -61,6 +61,7 @@
     {% for post in posts %}
     <div class="col-md-6 col-xl-4">
         <article class="lost-found-card h-100">
+            {% if post.image %}<a class="lost-found-card-media" href="{% url 'lost_found_detail' post.id %}"><img src="{{ post.image.list_image_url }}" alt="{{ post.title }} 的照片"{% if post.image.list_image_width %} width="{{ post.image.list_image_width }}" height="{{ post.image.list_image_height }}"{% endif %} loading="lazy" decoding="async"></a>{% endif %}
             <div class="lost-found-card-head"><span class="lost-found-type {% if post.post_type == 'lost' %}lost-found-type-lost{% else %}lost-found-type-found{% endif %}"><i class="bi {% if post.post_type == 'lost' %}bi-search{% else %}bi-hand-index-thumb{% endif %} me-1"></i>{{ post.get_post_type_display }}</span><small>{{ post.created_at|date:'m月d日 H:i' }}</small></div>
             <h2><a href="{% url 'lost_found_detail' post.id %}">{{ post.title }}</a></h2>
             <p>{{ post.description|truncatechars:92 }}</p>

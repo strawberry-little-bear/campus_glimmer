@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .campus_location_service_hours import evaluate_location_service_window
 from .image_processing import ItemImageLimitError, normalize_item_image
-from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
+from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -760,6 +760,18 @@ class DisputeResolutionForm(StyledModelFormMixin, forms.ModelForm):
 
 
 class LostFoundPostForm(StyledModelFormMixin, forms.ModelForm):
+    # 照片不是 LostFoundPost 的字段：一条记录只有一张图，单独一行放在
+    # LostFoundImage 里，表单这边只负责接收。取舍见 LostFoundImage 的说明。
+    photo = forms.ImageField(
+        label='物品照片', required=False,
+        widget=forms.ClearableFileInput(attrs={'accept': 'image/*'}),
+        help_text='可选。只拍物品本身，不要拍到校园卡、学生证、身份证、宿舍门牌或他人正脸。',
+    )
+    remove_photo = forms.BooleanField(
+        label='移除当前照片', required=False,
+        help_text='勾选后保存即删除照片，记录本身保留。',
+    )
+
     class Meta:
         model = LostFoundPost
         fields = [
@@ -805,6 +817,10 @@ class LostFoundPostForm(StyledModelFormMixin, forms.ModelForm):
             now = timezone.now().replace(second=0, microsecond=0)
             self.initial.setdefault('occurred_at', now)
             self.initial.setdefault('expires_at', now + timezone.timedelta(days=30))
+        # 移除勾选框只在已经有照片时才有意义：没有照片时勾它等于什么都没做，
+        # 却会让用户以为完成了一次删除。编辑表单直接把这个字段摘掉。
+        if not getattr(self.instance, 'image', None):
+            del self.fields['remove_photo']
 
     def clean(self):
         cleaned_data = super().clean()
@@ -824,6 +840,18 @@ class LostFoundPostForm(StyledModelFormMixin, forms.ModelForm):
                 self.add_error('expires_at', '截止时间必须晚于当前时间。')
             elif expires_at > timezone.now() + timezone.timedelta(days=90):
                 self.add_error('expires_at', '截止时间不能超过 90 天。')
+        photo = cleaned_data.get('photo')
+        if photo is not None:
+            try:
+                cleaned_data['photo'] = normalize_item_image(photo)
+            except ItemImageLimitError:
+                # 文案与商品图片完全一致：两条上传链路共用同一套硬上限，
+                # 报出两个不同的数字只会让人以为失物招领另有规矩。
+                self.add_error('photo', '图片过大：单张不能超过 10 MB 或 2000 万像素。')
+            except Exception:
+                # Pillow 的异常可能携带路径或解码细节；用户只需要知道下一步该
+                # 换哪一张图，不需要看见底层库的实现。
+                self.add_error('photo', '图片处理失败，请换一张清晰的图片再试。')
         return cleaned_data
 
 
