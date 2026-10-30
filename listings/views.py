@@ -146,8 +146,8 @@ from .dispute_evidence_shape import build_dispute_evidence_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, LostFoundReportForm, LostFoundReportReviewForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -13849,6 +13849,12 @@ def lost_found_detail(request, post_id):
             my_lost_found_feedback = getattr(my_lead, 'feedback', None)
     lost_found_feedback = getattr(accepted_lead, 'feedback', None) if accepted_lead else None
     lead_form = LostFoundLeadForm(post=post) if request.user.is_authenticated and not is_owner and post.status == 'active' else None
+    # 举报入口不看 status：一条已经关闭的记录照样可能是骗局，而“已关闭”往往正是
+    # 骗局得手之后的状态。真正挡住重复举报的是“这个人报过一次”。
+    my_lost_found_report = (
+        LostFoundReport.objects.filter(post=post, reporter=request.user).first()
+        if request.user.is_authenticated and not is_owner else None
+    )
     return render(request, 'listings/lost_found_detail.html', {
         'post': post,
         'is_owner': is_owner,
@@ -13862,6 +13868,7 @@ def lost_found_detail(request, post_id):
             if is_owner and accepted_lead and not lost_found_feedback else None
         ),
         'matches': find_lost_found_matches(post) if post.status == 'active' else [],
+        'my_lost_found_report': my_lost_found_report,
     })
 
 
@@ -13978,6 +13985,130 @@ def review_lost_found_lead(request, lead_id, action):
             )
             messages.success(request, '已将这条线索标记为暂不匹配。')
     return redirect('lost_found_detail', lead.post_id)
+
+
+@login_required
+def report_lost_found(request, post_id):
+    """Report a lost-and-found record to the operators.
+
+    The reporter stays anonymous to the publisher and the publisher's answer
+    never reaches the reporter. That asymmetry is the whole point: a report is a
+    statement to the people who can act, not a message to the person being
+    reported, and letting the two sides talk through this form would turn it
+    into a harassment channel.
+    """
+    post = get_object_or_404(
+        LostFoundPost.objects.select_related('reporter'), pk=post_id,
+    )
+    if post.reporter_id == request.user.id:
+        messages.error(request, '不能举报自己发布的失物招领记录。')
+        return redirect('lost_found_detail', post_id=post.id)
+    if LostFoundReport.objects.filter(post=post, reporter=request.user).exists():
+        messages.info(request, '你已经举报过这条记录，管理员会尽快核实。')
+        return redirect('lost_found_detail', post_id=post.id)
+    if request.method == 'POST':
+        form = LostFoundReportForm(request.POST)
+        if form.is_valid():
+            report = form.save(commit=False)
+            report.post = post
+            report.reporter = request.user
+            try:
+                report.save()
+            except IntegrityError:
+                messages.info(request, '你已经举报过这条记录，管理员会尽快核实。')
+            else:
+                messages.success(request, '举报已提交，感谢你一起维护校园社区。')
+            return redirect('lost_found_detail', post_id=post.id)
+    else:
+        form = LostFoundReportForm()
+    return render(request, 'listings/lost_found_report_form.html', {
+        'form': form, 'post': post, 'title': '举报失物招领记录',
+    })
+
+
+@login_required
+def my_lost_found_reports(request):
+    """A reporter's own submissions and what came of them."""
+    reports = (
+        LostFoundReport.objects.filter(reporter=request.user)
+        .select_related('post', 'reviewer')
+        .order_by('-created_at', '-id')
+    )
+    paginator = Paginator(reports, 10)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'listings/my_lost_found_reports.html', {
+        'reports': page_obj.object_list,
+        'page_obj': page_obj,
+        'title': '我的失物招领举报',
+    })
+
+
+@login_required
+def lost_found_report_list(request):
+    if not request.user.is_staff:
+        raise PermissionDenied
+    all_reports = LostFoundReport.objects.select_related(
+        'post', 'post__reporter', 'post__category', 'post__location', 'reporter', 'reviewer',
+    )
+    status_filter = request.GET.get('status', 'all')
+    if status_filter in dict(LostFoundReport.STATUS_CHOICES):
+        reports = all_reports.filter(status=status_filter)
+        report_filter_query = urlencode({'status': status_filter})
+    else:
+        status_filter = 'all'
+        reports = all_reports
+        report_filter_query = ''
+    paginator = Paginator(reports, 20)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'listings/lost_found_reports.html', {
+        'reports': page_obj.object_list,
+        'page_obj': page_obj,
+        'report_filter_query': report_filter_query,
+        'status_filter': status_filter,
+        'report_statuses': LostFoundReport.STATUS_CHOICES,
+        'pending_report_count': all_reports.filter(status='pending').count(),
+        'title': '失物招领举报审核',
+    })
+
+
+@login_required
+def review_lost_found_report(request, report_id):
+    """Close one report and tell the reporter, without exposing the publisher."""
+    if not request.user.is_staff:
+        raise PermissionDenied
+    report = get_object_or_404(
+        LostFoundReport.objects.select_related('post', 'post__reporter', 'reporter'),
+        id=report_id,
+    )
+    if request.method == 'POST':
+        form = LostFoundReportReviewForm(request.POST, instance=report)
+        if form.is_valid():
+            with transaction.atomic():
+                report = LostFoundReport.objects.select_for_update(of=('self',)).get(pk=report.id)
+                report.status = form.cleaned_data['status']
+                report.review_note = form.cleaned_data['review_note']
+                report.reviewer = request.user
+                report.reviewed_at = timezone.now()
+                report.save(update_fields=[
+                    'status', 'review_note', 'reviewer', 'reviewed_at', 'updated_at',
+                ])
+                create_notification(
+                    report.reporter,
+                    actor=request.user,
+                    kind='report_update',
+                    title='你提交的举报有处理进展',
+                    message=f'关于失物招领记录“{report.post.title}”的举报状态已更新为“{report.get_status_display()}”。',
+                    target_url=reverse('my_lost_found_reports'),
+                )
+            messages.success(request, '举报审核结果已保存，举报人会收到通知。')
+            return redirect('lost_found_report_list')
+    else:
+        form = LostFoundReportReviewForm(instance=report, initial={'status': 'reviewing'})
+    return render(request, 'listings/lost_found_report_review.html', {
+        'form': form,
+        'report': report,
+        'title': '审核失物招领举报',
+    })
 
 
 @login_required

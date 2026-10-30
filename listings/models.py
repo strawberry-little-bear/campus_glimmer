@@ -2920,6 +2920,84 @@ class LostFoundImage(StoredImageVariantsMixin, models.Model):
         verbose_name_plural = '失物招领图片'
 
 
+class LostFoundReport(models.Model):
+    """A report raised against a lost-and-found record.
+
+    Lost-and-found is the one place on the site where a stranger is asked to
+    hand over an object on the strength of a description. That asymmetry is
+    what makes it worth a dedicated report target: the harm is not "a bad
+    listing" but "someone impersonates the owner and takes the item", or "the
+    photo the publisher trusted us with shows a campus card".
+
+    It is deliberately a separate model rather than a new ``Report.item``
+    target. ``Report`` is keyed to ``Item`` and carries item-shaped assumptions
+    (the seller, the listing status, the priority signals); reusing it would
+    mean either widening it to two nullable targets or building a second write
+    path for the same concept. One row per reporter per record keeps the
+    "one person, one report" rule that ``Report`` already enforces.
+
+    The reporter is never shown to the publisher, and the publisher is never
+    shown the review note: a report is a private statement to the operators,
+    not a message to the person being reported.
+    """
+
+    REASON_CHOICES = (
+        ('impersonation', '冒充失主或拾获者'),
+        ('privacy', '照片或描述泄露他人身份信息'),
+        ('fraud', '疑似诈骗或站外引流'),
+        ('false_info', '虚假或重复信息'),
+        ('other', '其他问题'),
+    )
+    STATUS_CHOICES = (
+        ('pending', '待审核'),
+        ('reviewing', '审核中'),
+        ('resolved', '已处理'),
+        ('rejected', '已驳回'),
+    )
+
+    post = models.ForeignKey(
+        LostFoundPost, on_delete=models.CASCADE, related_name='reports',
+        verbose_name='被举报记录',
+    )
+    reporter = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='submitted_lost_found_reports',
+        verbose_name='举报人',
+    )
+    reason = models.CharField('举报原因', max_length=20, choices=REASON_CHOICES)
+    detail = models.TextField('补充说明', blank=True)
+    status = models.CharField('审核状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    reviewer = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_lost_found_reports', verbose_name='审核人',
+    )
+    review_note = models.TextField('审核备注', blank=True)
+    reviewed_at = models.DateTimeField('审核时间', null=True, blank=True)
+    created_at = models.DateTimeField('举报时间', auto_now_add=True)
+    updated_at = models.DateTimeField('更新时间', auto_now=True)
+
+    class Meta:
+        verbose_name = '失物招领举报'
+        verbose_name_plural = '失物招领举报'
+        ordering = ['status', '-created_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['post', 'reporter'], name='unique_lost_found_report_by_user',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['status', '-created_at']),
+            models.Index(fields=['post', 'status']),
+            models.Index(fields=['reporter', 'status', '-created_at']),
+        ]
+
+    def clean(self):
+        if self.post_id and self.reporter_id and self.post.reporter_id == self.reporter_id:
+            raise ValidationError('不能举报自己发布的失物招领记录。')
+
+    def __str__(self):
+        return f'{self.post.title} · {self.get_reason_display()}'
+
+
 class DemandResponse(models.Model):
     """A seller's explicit response to an active purchase demand."""
 

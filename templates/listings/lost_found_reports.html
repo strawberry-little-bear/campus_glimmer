@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block title %}失物招领举报审核 - 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro operations-heading"><div><span class="eyebrow eyebrow-soft">Trust &amp; safety</span><h1 class="mt-2">失物招领举报审核</h1><p class="text-muted mb-0">集中核查针对失物招领的反馈。举报人身份对发布者不可见，审核结论只回给举报人。</p></div><a class="btn btn-outline-primary" href="{% url 'governance_workbench' %}"><i class="bi bi-shield-check me-1"></i>治理工作台</a></div>
+<div class="report-queue-note mb-4"><i class="bi bi-box-seam me-2"></i>当前有 <strong>{{ pending_report_count }}</strong> 条举报待处理或审核中。</div>
+<div class="report-filter-bar report-filter-bar--with-count mb-4">
+    <div class="report-filter-options"><span class="small text-muted">筛选状态</span>
+    <a class="report-filter {% if status_filter == 'all' %}is-active{% endif %}" href="{% url 'lost_found_report_list' %}">全部</a>
+    {% for status, label in report_statuses %}<a class="report-filter {% if status_filter == status %}is-active{% endif %}" href="{% url 'lost_found_report_list' %}?status={{ status }}">{{ label }}</a>{% endfor %}</div>
+    <span class="report-queue-range">{% if page_obj.paginator.count %}第 {{ page_obj.start_index }}–{{ page_obj.end_index }} 条 · 共 {{ page_obj.paginator.count }} 条{% else %}0 条{% endif %}</span>
+</div>
+<section class="report-list" aria-label="失物招领举报记录">
+{% for report in reports %}
+<article class="content-card report-admin-card {% if report.status in 'resolved rejected' %}is-closed{% endif %}">
+    <div class="report-admin-head"><div><span class="report-status report-status-{{ report.status }}">{{ report.get_status_display }}</span><h2><a href="{% url 'lost_found_detail' report.post_id %}">{{ report.post.title }}</a></h2><p class="mb-0 small text-muted">{{ report.get_reason_display }} · {{ report.reporter.username }} 举报 · {{ report.created_at|date:'Y-m-d H:i' }}</p></div><span class="small text-muted">发布者：{{ report.post.reporter.username }}</span></div>
+    <div class="report-admin-body"><p>{{ report.detail|default:'举报人未补充说明。'|linebreaksbr }}</p><p class="small text-muted mb-0"><i class="bi bi-geo-alt me-1"></i>{{ report.post.location.name|default:'地点未填写' }} · 记录当前状态：{{ report.post.get_status_display }}</p>{% if report.review_note %}<div class="report-review-note mt-3"><strong>审核备注</strong><p class="mb-0 mt-1">{{ report.review_note|linebreaksbr }}</p></div>{% endif %}</div>
+    <div class="report-admin-footer"><span class="small text-muted">{% if report.reviewer %}{{ report.reviewer.username }} · {{ report.reviewed_at|date:'Y-m-d H:i' }} 审核{% else %}尚未分配审核人{% endif %}</span>{% if report.status not in 'resolved rejected' %}<a class="btn btn-sm btn-primary" href="{% url 'review_lost_found_report' report.id %}"><i class="bi bi-check2-circle me-1"></i>处理举报</a>{% else %}<a class="btn btn-sm btn-outline-secondary" href="{% url 'review_lost_found_report' report.id %}">查看记录</a>{% endif %}</div>
+</article>
+{% empty %}<div class="content-card empty-state py-5"><i class="bi bi-box-seam"></i><h2>当前筛选下没有举报记录</h2><p>用户在失物招领详情页提交举报后，会在这里形成审核队列。</p></div>{% endfor %}
+</section>
+{% if page_obj.paginator.num_pages > 1 %}
+<nav class="governance-pagination report-pagination" aria-label="失物招领举报分页">
+    <ul class="pagination justify-content-center mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if report_filter_query %}&amp;{{ report_filter_query }}{% endif %}" aria-label="上一页"><i class="bi bi-chevron-left" aria-hidden="true"></i></a></li>{% else %}<li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-left"></i></span></li>{% endif %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if report_filter_query %}&amp;{{ report_filter_query }}{% endif %}" aria-label="下一页"><i class="bi bi-chevron-right" aria-hidden="true"></i></a></li>{% else %}<li class="page-item disabled"><span class="page-link" aria-hidden="true"><i class="bi bi-chevron-right"></i></span></li>{% endif %}
+    </ul>
+</nav>
+{% endif %}
+<div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>这里不自动下架记录、不自动通知发布者，也不把举报人身份透露给任何一方。举报只描述发布者与记录之间的关系，不构成对失物归属的判定。</div>
+{% endblock %}

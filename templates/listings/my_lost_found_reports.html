@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}{{ title }} · 拾光校园{% endblock %}
+{% block content %}
+<div class="page-intro report-history-intro">
+    <div><span class="eyebrow eyebrow-soft">Community safety</span><h1>我的失物举报</h1><p>这里只显示你提交过的失物招领举报。管理员核实后，会在这里写清处理结果。</p></div>
+    <a href="{% url 'lost_found_list' %}" class="btn btn-light"><i class="bi bi-box-seam me-2"></i>去失物招领</a>
+</div>
+<section class="report-history-list">
+    {% for report in reports %}
+    <article class="content-card report-history-card {% if report.status in 'resolved rejected' %}is-closed{% endif %}">
+        <div class="report-history-head">
+            <div>
+                <span class="report-status report-status-{{ report.status }}">{{ report.get_status_display }}</span>
+                <h2><a href="{% url 'lost_found_detail' report.post_id %}">{{ report.post.title }}</a></h2>
+                <p>{{ report.get_reason_display }} · {{ report.created_at|date:'Y-m-d H:i' }} 提交{% if report.reviewed_at %} · {{ report.reviewed_at|date:'Y-m-d H:i' }} 处理{% endif %}</p>
+            </div>
+            <a class="report-history-item-link" href="{% url 'lost_found_detail' report.post_id %}"><i class="bi bi-box-arrow-up-right me-1"></i>查看记录</a>
+        </div>
+        <div class="report-history-body">
+            {% if report.review_note %}<div class="report-review-note"><strong>审核说明</strong><p>{{ report.review_note|linebreaksbr }}</p></div>{% else %}<p class="mb-0 text-muted small">管理员还没有填写审核说明。核实完成后会在这里更新。</p>{% endif %}
+        </div>
+    </article>
+    {% empty %}
+    <div class="content-card empty-state py-5"><i class="bi bi-box-seam"></i><h2>还没有提交过举报</h2><p>看到冒充失主、站外引流或泄露他人身份信息的记录时，可以在详情页提交举报。</p><a href="{% url 'lost_found_list' %}" class="btn btn-primary">去失物招领</a></div>
+    {% endfor %}
+</section>
+{% if page_obj.has_other_pages %}
+<nav class="mt-4" aria-label="我的失物举报分页"><ul class="pagination justify-content-center mb-0">
+    {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">上一页</a></li>{% endif %}
+    <li class="page-item active"><span class="page-link" aria-current="page">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">下一页</a></li>{% endif %}
+</ul></nav>
+{% endif %}
+{% endblock %}

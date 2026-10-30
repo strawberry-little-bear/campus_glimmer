@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .campus_location_service_hours import evaluate_location_service_window
 from .image_processing import ItemImageLimitError, normalize_item_image
-from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
+from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -878,6 +878,58 @@ class LostFoundLeadForm(StyledModelFormMixin, forms.ModelForm):
             queryset = queryset.filter(post_type='found' if post.post_type == 'lost' else 'lost').exclude(pk=post.pk)
         self.fields['related_post'].queryset = queryset
         self.fields['related_post'].empty_label = '不关联其他记录（可选）'
+
+
+class LostFoundReportForm(StyledModelFormMixin, forms.ModelForm):
+    """What a reader can tell the operators about a lost-and-found record.
+
+    The reason list is not a copy of ``ReportForm``'s. A listing can be reported
+    for being spammy; a lost-and-found record has two harms of its own that a
+    listing cannot have - someone pretending to be the owner, and a photo that
+    shows somebody else's campus card. Both are the reason this queue exists.
+    """
+
+    class Meta:
+        model = LostFoundReport
+        fields = ['reason', 'detail']
+        widgets = {
+            'reason': forms.Select(attrs={'class': 'form-select'}),
+            'detail': forms.Textarea(attrs={
+                'rows': 5,
+                'placeholder': '说明你看到的问题，例如冒名者的说法与记录哪里对不上。不要在这里填写他人隐私。',
+            }),
+        }
+        help_texts = {
+            'detail': '举报只提交给管理员，不会公开你的身份，也不会转告被举报的发布者。',
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['reason'].widget.attrs['class'] = 'form-select'
+
+
+class LostFoundReportReviewForm(StyledModelFormMixin, forms.ModelForm):
+    """The operator's verdict on one report.
+
+    Only the verdict and the note are editable. The reason and the detail stay
+    exactly as the reporter wrote them: rewriting a report's content would turn
+    the audit trail into whatever the reviewer remembered.
+    """
+
+    class Meta:
+        model = LostFoundReport
+        fields = ['status', 'review_note']
+        widgets = {
+            'status': forms.Select(attrs={'class': 'form-select'}),
+            'review_note': forms.Textarea(attrs={
+                'rows': 5,
+                'placeholder': '记录核查依据与处理结果。这段说明会反馈给举报人。',
+            }),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['status'].widget.attrs['class'] = 'form-select'
 
 
 class DemandPostForm(StyledModelFormMixin, forms.ModelForm):

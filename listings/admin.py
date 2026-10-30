@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -584,6 +584,17 @@ class LostFoundLeadAdmin(admin.ModelAdmin):
     search_fields = ('post__title', 'respondent__username', 'message', 'related_post__title')
     autocomplete_fields = ('post', 'respondent', 'related_post')
     readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(LostFoundReport)
+class LostFoundReportAdmin(admin.ModelAdmin):
+    # 审核备注与复核时间留给运营页面的表单写，后台这里只读：同一个结论出现两条
+    # 写入路径时，先落地的那条不会告诉任何人第二条存在。
+    list_display = ('post', 'reporter', 'reason', 'status', 'reviewer', 'created_at', 'reviewed_at')
+    list_filter = ('reason', 'status', 'created_at', 'reviewed_at')
+    search_fields = ('post__title', 'reporter__username', 'detail', 'review_note')
+    autocomplete_fields = ('post', 'reporter', 'reviewer')
+    readonly_fields = ('created_at', 'updated_at', 'reviewer', 'review_note', 'reviewed_at', 'status')
 
 
 @admin.register(CommunityContribution)
