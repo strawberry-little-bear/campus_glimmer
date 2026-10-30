@@ -56,6 +56,7 @@ flowchart LR
 | [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验、存储端点测试，以及 `static/css/` 样式表的语法守卫（注释、字符串、花括号配平） |
 | [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、表格与分页链接名称、当前栏目、跳转主内容与导航触控目标 |
 | [`test_anchor_scroll_margin.py`](test_anchor_scroll_margin.py) | 页内跳转落点避让守卫：锚点、分页锚点、运营看板分区与表单控件都必须让出吸顶导航高度 |
+| [`test_contrast_contract.py`](test_contrast_contract.py) | 文字对比度契约：按浏览器分层合成规则复算深绿面板浅色文字的最坏背景，并钉住 `--muted`、`--primary` 与 `code` 字色的 AA 下限 |
 
 ## 🚪 根路由
 

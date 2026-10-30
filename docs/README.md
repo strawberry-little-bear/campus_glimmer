@@ -444,6 +444,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [内容审核队列分页](moderation-queue-pagination-design.md) | 想了解每页条数、筛选保留、越界页码与操作回跳的设计边界 |
 | [举报与争议队列分页](governance-queue-pagination-design.md) | 想了解 SQL 优先级排序、争议状态层级、全量待办统计与只读边界 |
 | [品牌化错误体验](error-experience-design.md) | 想了解 400 / 403 / 404 / 500 与 CSRF 错误页的恢复路径、隐私边界和移动端验收 |
+| [文字对比度契约](contrast-contract-design.md) | 想了解深绿面板浅色文字的合成规则、令牌下限，以及为什么结论落在静态契约里 |
 | [个人历史、专题足迹与领取申请分页](personal-queue-pagination-design.md) | 想了解浏览足迹上限、专题历史分页、申请状态排序、全量待办统计与安全原页回跳 |
 | [卖家商品工作台分页](my-items-workspace-pagination-design.md) | 想了解状态页签为什么改为服务端分页、全量统计如何保留，以及批量操作怎样回到原页 |
 | [生产部署基线](production-deployment.md) | 想配置 PostgreSQL、Redis、MinIO、Gunicorn 与生产探针 |

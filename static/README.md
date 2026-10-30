@@ -20,10 +20,10 @@
 
 | Token | 色值 | 使用场景 |
 | --- | --- | --- |
-| `--primary` | `#187a5b` | 主按钮、品牌图标、关键数字 |
+| `--primary` | `#167155` | 主按钮、品牌图标、关键数字 |
 | `--primary-dark` | `#146a50` | 主按钮悬停与深色强调 |
 | `--ink-soft` | `#42574d` | 次级正文、表单标签 |
-| `--muted` | `#61726a` | 说明文字、脚注、时间戳 |
+| `--muted` | `#525e58` | 说明文字、脚注、时间戳 |
 | `--mint` | `#e8f6ee` | 轻提示、选中态与柔和背景 |
 | `--warm` | `#f6aa61` | 首页主视觉与暖色强调 |
 | `--cream` | `#fbfaf5` | 页面底色 |
@@ -48,7 +48,7 @@
 | Bootstrap 类 | 兼容后的表现 |
 | --- | --- |
 | `.btn-light` / `.btn-outline-secondary` / `.btn-link` | 次级操作：`--ink-soft` 文字、`--line` 边框、11px 圆角 |
-| `.btn-outline-danger` / `.btn-danger` | 危险操作：`#b25548` 药丸按钮 |
+| `.btn-outline-danger` / `.btn-danger` | 危险操作：`#ab5245` 药丸按钮 |
 | `.btn-outline-warning` / `.btn-warning` / `.btn-dark` / `.btn-outline-dark` | 与语义色板一致的强调按钮 |
 | `.btn-success` / `.btn-outline-success` | 成功操作：`#1f7653` 实底或描边，与徽章成功色同源 |
 | `.badge` 配 `.text-bg-*` 或 `.bg-*` | 淡底深字药丸，与 `.order-status-*` 同一套语义色 |
@@ -92,12 +92,15 @@ Django 的 `RadioSelect` 与 `CheckboxSelectMultiple` 继承 `ChoiceWidget`，
 全站文字与图标按 WCAG AA 取值：正文 ≥ 4.5:1，图标等非文本元素 ≥ 3:1，
 大字号（≥ 24px，或 ≥ 18.66px 且字重 ≥ 700）按 3:1。以下是已经收口的几条约定，改色值时不要单独突破某一项：
 
-- **灰绿文字统一走 `var(--muted)`**。早期散落的 `#70817a` 一类灰绿在白底上只有 4.11:1，已全部收敛到 `--muted: #61726a`（白底 5.09:1）。
+- **灰绿文字统一走 `var(--muted)`**。早期散落的 `#70817a` 一类灰绿在白底上只有 4.11:1，已全部收敛到 `--muted: #525e58`（白底 6.77:1，最亮的米白底 6.48:1）。`--muted` 被全站几百处引用，动一次所有次要文字一起动，所以它的下限由契约测试逐条盯住，见下。
 - **实底白字按元素类型取阈值**。白字正文的底色本身要过 4.5:1：`.conversion-stage-index` 那个 24px 小方块里放的是阶段序号（正文），四个变体 `#4c815f` / `#5d75aa` / `#9f6a31` / `#786ba7` 分别落在 4.55 / 4.57 / 4.59 / 4.71:1。而 `.opportunity-icon`（39px）、`.report-target-icon`（42px）这类容器只放 Bootstrap Icons，按非文本 3:1 判就够（3.29:1、3.14:1）。两种阈值混为一谈，要么把图标底压得发闷，要么放过了真正的正文白字。
-- **`.eyebrow` 有两种形态**。基色是 `var(--primary)`，供 `page-intro` 一类浅色页面使用；深色 hero 里的反色标签由 `.hero-panel .eyebrow` 单独给 `#bdebd2`。早前基色直接写成 `#bdebd2`，而 `.eyebrow` 在 88 个模板里共出现 228 次，其中 28 次在 `page-intro` 这类浅色区块里，白底上只有 1.31:1，基本等于看不见。
-- **面板脚注走 `--panel-footnote`**。`[class*="-panel"] .rewrite-candidate-footnote` 取 `var(--panel-footnote, #61726a)`；各面板在自己的规则里覆写这个变量以匹配自身渐变底。回落值故意写成字面色而不是 `var(--muted)`：那样测试才能断言“面板外也有确切默认值”，而不是一个可能被继承色覆盖的引用。它与 `--muted` 同值，改 `--muted` 时要同步（`PanelFootnoteColourTests` 会盯这件事）。
+- **`.eyebrow` 有两种形态**。基色是 `var(--primary)`，供 `page-intro` 一类浅色页面使用；深色 hero 里的反色标签由 `.hero-panel .eyebrow` 单独给 `#d9f7e6`。早前基色直接写成 `#bdebd2`，而 `.eyebrow` 在 88 个模板里共出现 228 次，其中 28 次在 `page-intro` 这类浅色区块里，白底上只有 1.31:1，基本等于看不见。现在深色 hero 里那条落在最坏底色 `#277559` 上是 4.85:1——注意这个 4.85 是渐变叠完高光之后算出来的，单看任何一个色标都会高估。
+- **行内代码用品红 `#b02a6b`，不跟 Bootstrap 的 `#d63384`**。`code` 只有全局字色、没有自己的底板，落在什么底色上完全由上下文决定：Bootstrap 默认的 `#d63384` 在白底刚好 4.50:1，一到 `--mint` 就只剩 4.04:1。全局改成 `#b02a6b` 后，四种浅色版面（白 / `#f7faf8` / 米白 / 薄荻）都在 5.56:1 以上。自己画了底板的局部 `code` 规则（深色终端块、表格尾格那类）按各自的底板单独判，不走这个全局值——`ContrastTokenTests` 把这两类分开断言。
+- **错误页的 `--error-*` 与主令牌同值**。`static/css/error-pages.css` 是 400/403/404/500 的独立外壳，故意不依赖主样式表（500 时后端可能已经不可靠），所以令牌单独命名；但取值要和主令牌对齐——`--error-muted` 就是 `--muted`，`--error-primary` 就是 `--primary`。否则错误页会呈现一个和全站不一样的绿。这两个值也单独实测过：`#525e58` 落在米白底上 6.48:1，白字落在 `#167155` 上 5.95:1。
+- **面板脚注走 `--panel-footnote`**。`[class*="-panel"] .rewrite-candidate-footnote` 取 `var(--panel-footnote, #525e58)`；各面板在自己的规则里覆写这个变量以匹配自身渐变底。回落值故意写成字面色而不是 `var(--muted)`：那样测试才能断言“面板外也有确切默认值”，而不是一个可能被继承色覆盖的引用。它与 `--muted` 同值，改 `--muted` 时要同步（`PanelFootnoteColourTests` 会盯这件事）。
 - **徽章内的图标继承徽章色**。`.campus-verified-badge i { color: inherit }`：金色变体的底色是 `#f9d8a8`，原先写死的绿色图标只有 2.42:1，继承后跟随徽章自身的 `#684a20`（5.95:1）。
 - **模板的 `style` 属性里不写颜色**。行内色值是唯一同时躲过 token 扫描和静态对比度扫描的位置：`test_deployment.py` 的 `InlineStyleColourTests` 会把 `color` / `background` / `border-color` / `box-shadow` 这类属性里的字面值直接判失败，只放行 `var(...)`。几何属性（`width` / `height`）不在色值检查之列，但静态几何值仍要收敛成样式类（见「运营图表的行网格」），行内只保留必须由视图算出的比例宽度。真实踩过的坑：运营看板一条建议文案在模板里写了 `color:#6a7d73`，盖掉了已有的 token 规则，落在 `#fbfdfb` 上只有 4.29:1。
+- **深绿面板上的浅色文字走契约测试，不靠人眼**。`.hero-panel`、`.auth-story`、`.account-hero` 这三块面板的观感来自「一段多停止点线性渐变叠两团径向高光」，文字还有一半是半透明的。[`campus_glimmer/test_contrast_contract.py`](../campus_glimmer/test_contrast_contract.py) 按与浏览器一致的分层合成规则，把每个浅色文字位点的最坏背景算出来再断言 4.5:1：渐变取与前景比值最小的停止点，半透明前景先按 alpha 合成再算比值，多层 `background` 从最外层祖先往里逐层合成。改渐变色标、高光透明度、文字透明度或令牌值，这里会立刻变红，不必再为此起一轮浏览器审计。跑法：`python manage.py test campus_glimmer.test_contrast_contract`。
 - **校验要用浏览器里的真实背景**。同一个色值落在不同面板的渐变底上结果并不相同，指“最深浅底”一刀切的静态扫描会同时漏报和误报：白字落在深色 hero 上会被判失失败，装饰性圆点的 `color` 也会被算进去。可靠的判法是渲染后逐元素取计算色与合成后的祖先背景，并跳过 `background-image` 为渐变的元素。
 
 ## 🧭 页内跳转的避让量
@@ -256,6 +259,7 @@ flowchart LR
 - 运营页面和用户页面保持可区分的视觉层级，但不要分裂成两套设计语言；
 - 图片资源优先 WebP / 压缩后的 PNG，商品上传图由 `listings/image_processing.py` 处理；
 - 新增或修改颜色后，按「对比度基线」一节复核文字 4.5:1 / 图标 3:1，并用渲染后的真实背景而不是样式表文本判断；
+- 改了 `:root` 里的令牌、深绿面板的渐变色标或高光透明度，跑 `python manage.py test campus_glimmer.test_contrast_contract`；
 - 图片按**实际显示尺寸**给源，不要按原图直出。默认头像 `media/avatars/default.png` 最大只在
   `clamp(90px, 10vw, 124px)` 的账户头像位出现，导航栏里更是只有 30px，因此固定输出 256×256（覆盖 2x 视网膜）；
   它挂在每个登录页的导航栏上，之前用 749×750 的 200KB 原图，压到 256×256 后是 37KB。

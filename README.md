@@ -417,6 +417,19 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 
 详细边界见[当前取舍与边界](docs/product-boundaries.md)。
 
+### 可访问性
+
+文字对比度按 WCAG AA 逐页量取，不靠肉眼估。做法是用无头浏览器把每个页面的文字节点
+连同它真正合成出来的背景色一起读回来，再按 AA 公式复算：这一轮量完 53 个页面，
+从 463 处不达标降到 0。容易漏的是三类位置——深绿渐变面板上的浅色文字（单看任何一个
+色标都够深，合成之后的最亮处不够）、半透明前景（`rgba(255,255,255,.76)` 不是「白字」），
+以及被全站几百处引用的令牌（`--muted` 动一次，所有次要文字一起动）。
+
+结论落在 `campus_glimmer/test_contrast_contract.py` 里：它按与浏览器一致的分层合成规则
+复算每个浅色文字位点的最坏背景，再断言达到 4.5:1。改渐变色标、高光透明度、文字透明度
+或令牌值，这里会立刻变红，不必再为此起一轮浏览器审计。键盘焦点、窄屏布局与图片加载仍在
+逐页补齐，见[后续路线图](docs/roadmap.md)。
+
 ---
 
 ## 🗓️ 后续路线图
@@ -449,6 +462,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 | 专题目标、严格漏斗与跨专题样本口径 | [专题目标与转化漏斗](docs/campaign-goals-funnel-design.md) |
 | 举报与争议队列的分页、排序与全量统计 | [治理队列分页设计](docs/governance-queue-pagination-design.md) |
 | 400 / 403 / 404 / 500 与 CSRF 错误页的恢复路径和隐私边界 | [品牌化错误体验设计](docs/error-experience-design.md) |
+| 深绿面板浅色文字的合成规则与 AA 下限 | [文字对比度契约](docs/contrast-contract-design.md) |
 | 浏览足迹、专题历史与免费领取申请队列的分页边界 | [个人队列分页设计](docs/personal-queue-pagination-design.md) |
 | 学期阶段、统计快照与交易高峰 | [学期日历与交易高峰](docs/academic-calendar.md) |
 | 当前取舍、隐私边界与实现纪律 | [当前取舍与边界](docs/product-boundaries.md) |
