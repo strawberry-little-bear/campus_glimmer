@@ -167,6 +167,22 @@ class SummaryCountClaimTests(SimpleTestCase):
                 break
         self.assertEqual(mismatches, [], 'module-map 的章节标题计数与清单内容不一致')
 
+    def test_module_map_intro_paragraph_matches_the_module_table(self):
+        # 开头那段话也写了一遍模块总数，和二级标题、折叠块里的表格是同一个数。
+        lines = (DOCS_DIR / 'module-map.md').read_text(encoding='utf-8-sig').split(chr(10))
+        intro = next((line for line in lines if '是业务主体' in line), '')
+        match = re.search(r'(\d+)\s*个模块', intro)
+        self.assertIsNotNone(match, 'module-map 开头那段话里找不到模块总数')
+        stated = int(match.group(1))
+        actual = None
+        for start, body in _details_blocks(lines):
+            summary, _line = _pop_summary(body, start)
+            if summary is not None and '业务模块清单' in summary:
+                actual = _count_entries(body)['pipe_rows'] - 1
+                break
+        self.assertIsNotNone(actual, '找不到业务模块清单表格')
+        self.assertEqual(stated, actual, 'module-map 开头声明 ' + str(stated) + ' 个模块，表格里实际 ' + str(actual) + ' 行')
+
     def test_table_claims_do_not_hide_bullets(self):
         wrong = []
         for path, lines in _iter_docs():
