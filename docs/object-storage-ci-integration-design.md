@@ -72,11 +72,12 @@ MinIO 仍然只是后台进程：`RUNNER_TEMP` 下建数据目录，日志写到
 
 ## 覆盖范围
 
-`campus_glimmer/test_object_storage_integration.py` 共 12 项，分四组：
+`campus_glimmer/test_object_storage_integration.py` 共 12 项，分五组：
 
 - **配置层（2 项，永远运行）**：环境变量能拼出 `PublicEndpointS3Storage`；`location` 前缀会加到每个 key 上。这两项不碰网络，任何 job 里都能跑。
 - **上传与回源（3 项）**：`default_storage.save/open/exists/size` 回环；用裸 boto3 client 确认对象真的落在桶里且字节一致；删除后 `head_object` 取不到。
 - **权限与签名（5 项）**：签名 URL 指向 public endpoint 且能直接下载；`expire=` 参数透出到 `X-Amz-Expires`；同一对象未签名访问被拒而签名可用；签名被改写后拒绝；过期签名拒绝。
+- **就绪探针（1 项）**：`health._probe_object_storage()` 对配置好的 bucket 真的发出 `head_bucket`，证明 /readyz/ 检查的是同一个端点，且探针不建桶、不写临时对象。
 - **备份恢复（1 项）**：按 `docker/backup.py` 的 manifest 结构构造归档，先删掉对象再调 `restore_objects`，断言对象按原 key 写回且字节一致。
 
 每个进程用 `ci-smoke/<UTC 时间戳>-<uuid8>` 作为 key 前缀，`tearDownClass` 只清理自己前缀下的对象。并行 worker 与连续两次运行互不干扰，也不会碰到桶里既有的其它数据。
