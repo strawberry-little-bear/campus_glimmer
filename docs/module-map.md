@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，143 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，144 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -42,11 +42,11 @@ campus_glimmer/
 | `.github/` | [持续集成](../.github/CI.md) | GitHub Actions 与本地等价检查 |
 | `docs/screenshots/` | [系统界面预览](screenshots/README.md) | 首页截图的来源与维护方式 |
 
-## listings/ 的业务模块（143 个）
+## listings/ 的业务模块（144 个）
 
 
 <details>
-<summary>业务模块清单（143 个，按业务链路归组）</summary>
+<summary>业务模块清单（144 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -184,6 +184,7 @@ campus_glimmer/
 | `dispute_resolution_quality.py` | 交易争议按类型的驳回率、证据到达时刻、发起方向与处理意见填写率统计 | 读写 |
 | `dispute_evidence_shape.py` | 争议证据的格式与大小分布：扩展名各档、固定大小档、贴上限与超过上限、每笔争议份数 | 只读 |
 | `profile_contact_shape.py` | 联系方式的形状：四个手写字段的填写率、站外可触达组合、长度分档与参与相关性（只报告） | 只读 |
+| `moderation_risk_tier_shape.py` | 复核分级的形状：三档各自的规模与结局、复核节奏相对各自目标、待复核超期、两套风险尺度的交叉与每条规则的档位产出（只报告） | 只读 |
 | `lost_found_lead_quality.py` | 失物招领线索的提交量、确认率、确认率指向分离与反馈填写率统计 | 读写 |
 | `demand_response_conversion.py` | 确认求购响应之后的订单转化、下单时延、订单结局与卡点统计 | 读写 |
 | `item_image_coverage.py` | 在架商品的图片覆盖度与无图商品清单 | 读写 |
@@ -196,10 +197,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（160 个）
+## 业务链路的测试模块（161 个）
 
 <details>
-<summary>业务链路测试清单（160 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（161 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -301,6 +302,7 @@ campus_glimmer/
 - **`test_dispute_evidence_shape.py`**：扩展名全列含 0 样本档、大小档取规则原值、读不到大小单独数、已完结组才给方向
 
 - **`test_profile_contact_shape.py`**：分母是全部资料、空白算未填、长度档取 max_length 原值、零展示字段单列、只报相关不讲因果
+- **`test_moderation_risk_tier_shape.py`**：分母含 pending 且按 created_at 切、节奏按各自目标归一化、等于目标算目标内、右删失样本单独一节、两套尺子的两个方向分开报、规则按参与产出计数
 
 - **`test_favorite_collection_quality.py`**：心愿单分组的大小分布、空分组、渗透、命名收敛与先收藏后归类的四类分开报
 
