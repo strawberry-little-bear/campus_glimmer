@@ -11,7 +11,6 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
-from django.utils import timezone
 
 from .models import Category, CampusLocation, Item, SavedSearch, SavedSearchMatch
 from .saved_search_quiet_window import (
@@ -19,16 +18,9 @@ from .saved_search_quiet_window import (
     MIN_QUIET_SEARCHES, build_saved_search_quiet_window,
 )
 
-
-def local_tonight():
-    """今天 23:59，一个确保晚于测试运行时刻的参照点。
-
-    ``quiet_until`` 和缓冲命中的 ``matched_at`` 都是创建时写进去的真实当前时间。
-    参照点必须晚于它们，否则「正在静默」会被 ``quiet_until__gt=now`` 整批排除、
-    「早已过期」会被 ``__lte=now`` 整批排除——用「今天中午」在下午跑测试就会踩到
-    这个坑，而它长得像一个计算错误。
-    """
-    return timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
+# 参照点统一走 testing_clock：本地时间落到 23:59:00-24:00:00 时，各模块自己写的
+# 23:59:00 会早于夹具的 auto_now_add 时间戳，把周期内记录整批排除。
+from .testing_clock import local_tonight
 
 
 def make_user(username):

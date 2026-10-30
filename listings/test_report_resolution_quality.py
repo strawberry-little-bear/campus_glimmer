@@ -18,7 +18,6 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
-from django.utils import timezone
 
 from .models import Category, Item, Report
 from .report_resolution_quality import (
@@ -27,15 +26,9 @@ from .report_resolution_quality import (
     build_report_resolution_quality,
 )
 
-
-def local_tonight():
-    """今天 23:59，一个确保晚于测试运行时刻的参照点。
-
-    举报的 ``created_at`` 是 ``auto_now_add``，写的是真实当前时间。参照点必须晚于它，
-    否则周期内的举报会被 ``created_at__lte=now`` 整批排除——用「今天中午」在下午跑测试
-    就会踩到这个坑，而它长得像一个计算错误。
-    """
-    return timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
+# 参照点统一走 testing_clock：本地时间落到 23:59:00-24:00:00 时，各模块自己写的
+# 23:59:00 会早于夹具的 auto_now_add 时间戳，把周期内记录整批排除。
+from .testing_clock import local_tonight
 
 
 def make_user(username):

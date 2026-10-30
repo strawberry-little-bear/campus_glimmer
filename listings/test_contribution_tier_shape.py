@@ -18,7 +18,6 @@
 
 from django.contrib.auth.models import User
 from django.test import TestCase
-from django.utils import timezone
 
 from .contributions import (
     CONTRIBUTION_BADGE_RULES, CONTRIBUTION_LEVELS, record_contribution,
@@ -27,6 +26,10 @@ from .contribution_tier_shape import (
     LEVEL_ZERO, MIN_RANKED_USERS, NOISE_POINTS, build_contribution_tier_shape,
 )
 from .models import CommunityContribution
+
+# 参照点统一走 testing_clock：本地时间落到 23:59:00-24:00:00 时，各模块自己写的
+# 23:59:00 会早于夹具的 auto_now_add 时间戳，把周期内记录整批排除。
+from .testing_clock import local_tonight
 
 
 def make_user(username):
@@ -47,7 +50,7 @@ def add_contribution(user, *, kind, points, source_key):
 
 class ContributionTierShapeTests(TestCase):
     def setUp(self):
-        self.now = timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
+        self.now = local_tonight()
 
     # ------------------------------------------------------------ 空库与分母
 

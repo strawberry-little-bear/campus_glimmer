@@ -45,10 +45,9 @@ SWITCH_ON_AUTHORS = 12
 NO_PREFERENCE_AUTHORS = 6
 UNREVIEWED_USERS = 10
 
-
-def local_tonight():
-    """今天 23:59，一个确保晚于夹具写入时刻的参照点。"""
-    return timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
+# 参照点统一走 testing_clock：本地时间落到 23:59:00-24:00:00 时，各模块自己写的
+# 23:59:00 会早于夹具的 auto_now_add 时间戳，把周期内记录整批排除。
+from .testing_clock import local_tonight
 
 
 def stamp(instance, **fields):

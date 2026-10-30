@@ -24,7 +24,12 @@ from .models import (
 
 class CampaignUpdateTestCase(TestCase):
     def setUp(self):
-        self.now = timezone.now()
+        # 参照点钉在本地正午，不取真实此刻：本文件里有个测试要在同一个周期内再发
+        # 一次摘要，偏移量是 +20 分钟。真实时刻一旦落在本地 23:40 之后，+20 分钟
+        # 就跨过了午夜，「今天已经发过」这句判断失效，测试会在深夜随机变红。
+        self.now = timezone.localtime().replace(
+            hour=12, minute=0, second=0, microsecond=0,
+        )
         self.seller = User.objects.create_user(
             username='campaign-update-seller', password='safe-password-123',
         )
@@ -198,6 +203,12 @@ class CampaignUpdateDeliveryTests(CampaignUpdateTestCase):
 
         later_item, queued = self._queue(
             title='第一批之后的新上架', now=self.now + timedelta(minutes=10),
+        )
+        # 同一周期内的第二次摘要必须和第一次落在同一个本地自然日。参照点一旦跨过午夜，
+        # 「今天已经发过」这句判断就失效，这条测试会在深夜随机变红。
+        self.assertEqual(
+            timezone.localdate(self.now + timedelta(minutes=20)),
+            timezone.localdate(self.now),
         )
         same_period = send_campaign_update_digest(
             frequency='daily', now=self.now + timedelta(minutes=20),

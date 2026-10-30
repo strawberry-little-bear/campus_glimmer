@@ -9,7 +9,6 @@
 
 from django.contrib.auth.models import User
 from django.test import TestCase
-from django.utils import timezone
 
 from .models import Category, CampusLocation, Item, SavedSearch, SavedSearchMatch
 from .saved_search_limit_shape import (
@@ -17,6 +16,10 @@ from .saved_search_limit_shape import (
     MIN_BUFFERED_MATCHES, MIN_CADENCE_CELL, MIN_LIMIT_SEARCHES, NOISE_POINTS,
     TRUNCATED_LIST_LIMIT, build_saved_search_limit_shape,
 )
+
+# 参照点统一走 testing_clock：本地时间落到 23:59:00-24:00:00 时，各模块自己写的
+# 23:59:00 会早于夹具的 auto_now_add 时间戳，把周期内记录整批排除。
+from .testing_clock import local_tonight
 
 
 def make_user(username):
@@ -73,7 +76,7 @@ class SavedSearchLimitShapeTests(TestCase):
         self.seller = make_user('limit-seller')
         self.category = Category.objects.create(name='条数测试分类')
         self.location = CampusLocation.objects.create(name='条数测试地点')
-        self.now = timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
+        self.now = local_tonight()
 
     # ---------------------------------------------------------------- 九档分布
 
