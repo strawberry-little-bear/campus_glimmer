@@ -17,8 +17,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
-    CampusLocation, Category, Item, MeetingAppointment, MeetingIncident,
-    Order, OrderDispute, Report,
+    CampusLocation, Category, Item, LostFoundPost, LostFoundReport,
+    MeetingAppointment, MeetingIncident, Order, OrderDispute, Report,
 )
 from .governance_sla import (
     SLA_TARGETS, SLA_WARNING_RATIO, build_governance_sla,
@@ -115,6 +115,30 @@ class GovernanceSlaTests(TestCase):
         report.refresh_from_db()
         return report
 
+    def make_lost_found_report(
+        self, *, status='pending', created_ago=timedelta(), closed_ago=None,
+        reason='impersonation',
+    ):
+        # 发布者和举报人必须是两个人：模型自己禁止举报自己的记录，这也正是
+        # 这条队列存在的理由——失物招领是站内唯一要陌生人凭描述交出物品的地方。
+        post = LostFoundPost.objects.create(
+            reporter=self.member, post_type='lost', title='治理测试失物招领',
+            description='用于测试治理时效统计。', occurred_at=self.now - timedelta(hours=2),
+            expires_at=self.now + timedelta(days=5), status='active',
+        )
+        report = LostFoundReport.objects.create(
+            post=post, reporter=self.other, reason=reason, detail='需要处理。',
+            status=status,
+        )
+        updates = {'created_at': self.now - created_ago}
+        if closed_ago is not None:
+            updates['status'] = 'resolved'
+            updates['reviewed_at'] = self.now - closed_ago
+            updates['reviewer_id'] = self.staff.pk
+        LostFoundReport.objects.filter(pk=report.pk).update(**updates)
+        report.refresh_from_db()
+        return report
+
     def make_dispute(self, *, status='open', created_ago=timedelta(), closed_ago=None):
         dispute = OrderDispute.objects.create(
             order=self.make_order(), opened_by=self.other, reason='not_received',
@@ -160,20 +184,83 @@ class GovernanceSlaTests(TestCase):
         self.assertIn('所有队列均已清空', data['summary'])
         self.assertEqual(data['recommendations'], [])
 
-    def test_all_three_queues_are_reported_with_their_own_deadline(self):
+    def test_every_queue_is_reported_with_its_own_deadline(self):
         self.make_report()
         self.make_dispute()
         self.make_incident()
+        self.make_lost_found_report()
 
         rows = {row['kind']: row for row in build_governance_sla(days=30, now=self.now)['queues']}
 
         # 借用催收队列只有真正升级到三级的订单才出现，这里没有任何借用单。
-        self.assertEqual(set(rows), {'report', 'dispute', 'incident', 'borrow'})
+        self.assertEqual(
+            set(rows),
+            {'report', 'lost_found_report', 'dispute', 'incident', 'borrow'},
+        )
         # 时限必须各不相同：预约异常阻塞一次线下交付，举报只是离线复核。
         self.assertEqual(rows['report']['sla_label'], '2 天')
+        self.assertEqual(rows['lost_found_report']['sla_label'], '1 天')
         self.assertEqual(rows['dispute']['sla_label'], '3 天')
         self.assertEqual(rows['incident']['sla_label'], '1 天')
         self.assertEqual(rows['incident']['total'], 1)
+
+    def test_lost_found_reports_are_tighter_than_item_reports(self):
+        # 同一个小时数，两种举报的命运不一样：一条商品挂着，损失是一次难看的
+        # 页面；一条失物招领挂着，可能已经有人拿着假身份把东西领走了。所以
+        # 失物招领举报的时限必须是商品举报的一半，而不是借用一个数字。
+        self.make_lost_found_report(created_ago=timedelta(hours=30))
+
+        rows = {row['kind']: row for row in build_governance_sla(days=30, now=self.now)['queues']}
+
+        self.assertEqual(rows['lost_found_report']['overdue'], 1)
+        self.assertEqual(rows['report']['overdue'], 0)
+        self.assertLess(
+            rows['lost_found_report']['sla_seconds'], rows['report']['sla_seconds'],
+        )
+
+    def test_lost_found_report_latency_is_measured_to_the_review(self):
+        # 举报的处理时刻是 reviewed_at：打开审核页不算响应，写进审核人才算。
+        self.make_lost_found_report(
+            created_ago=timedelta(hours=5), closed_ago=timedelta(hours=4, minutes=30),
+        )
+
+        rows = {
+            row['kind']: row
+            for row in build_governance_sla(days=30, now=self.now)['queues']
+        }
+        row = rows['lost_found_report']
+
+        self.assertEqual(row['total'], 1)
+        self.assertEqual(row['closed'], 1)
+        self.assertEqual(row['open'], 0)
+        self.assertEqual(row['median_seconds'], 30 * 60)
+        self.assertEqual(row['median_label'], '30 分钟')
+        self.assertEqual(row['within_sla_rate'], 100.0)
+
+    def test_a_lost_found_report_opened_before_the_period_still_shows_up(self):
+        # 积压不按统计周期过滤：周期前就提交、还没人看的举报恰恰是最该看见的。
+        self.make_lost_found_report(created_ago=timedelta(days=10))
+
+        data = build_governance_sla(days=1, now=self.now)
+
+        self.assertFalse(data['has_data'])
+        self.assertEqual(data['total_open'], 1)
+        self.assertEqual(data['total_overdue'], 1)
+
+    def test_lost_found_reports_are_listed_next_to_item_reports(self):
+        # 两条举报通道挨着放，时限差一半才看得见；借用催收垫底，因为它的时限
+        # 不是 moderation 目标，而是催收阶梯的尾巴。
+        self.make_report()
+        self.make_lost_found_report()
+
+        kinds = [
+            row['kind']
+            for row in build_governance_sla(days=30, now=self.now)['queues']
+        ]
+
+        self.assertEqual(
+            kinds, ['report', 'lost_found_report', 'dispute', 'incident', 'borrow'],
+        )
 
     def test_closed_case_latency_is_measured_to_the_review_timestamp(self):
         self.make_report(created_ago=timedelta(hours=5), closed_ago=timedelta(hours=4, minutes=30))
@@ -229,7 +316,10 @@ class GovernanceSlaTests(TestCase):
         self.make_dispute(created_ago=warning_at - timedelta(minutes=1))
         self.make_dispute(created_ago=warning_at + timedelta(minutes=1))
 
-        row = build_governance_sla(days=30, now=self.now)['queues'][1]
+        row = {
+            queue['kind']: queue
+            for queue in build_governance_sla(days=30, now=self.now)['queues']
+        }['dispute']
 
         self.assertEqual(row['warning'], 1)
         self.assertEqual(row['overdue'], 0)
