@@ -230,3 +230,131 @@
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何字段、不动任何文件。</strong>不加迁移、不加字段、不改 <code>validate_dispute_evidence</code> 的 5 MB 上限、不改它的四种扩展名集合。上限与格式是产品决策，本模块只把现状读出来——改不改、怎么改，是运营拿着这些数字另外做的决定。<strong>不读文件内容</strong>：不 OCR、不解码、不看图片尺寸、不判断这份截图是不是真的和这笔订单有关；只读 <code>attachment.name</code>（路径字符串）和 <code>attachment.size</code>（存储返回的字节数），这两个都是存储层的元数据。<strong>不按用户排名、不输出用户名、不按 <code>uploaded_by</code> 拆</strong>——谁传的附件本身不带方向，拆开只会得到两个同样没有解释力的数。<strong>不读 <code>note</code></strong>（自由文本，可能写着电话、微信、楼栋号），<strong>不列证据文件名</strong>（那是用户上传时的原始名，可能带着真名、身份证号、订单号）。</div>
     {% endif %}
 </section>
+
+<section class="content-card ops-panel mb-4">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Contact shape</span><h2>联系方式的形状</h2></div>
+        <span class="ops-panel-hint">四个手写字段填了多少、写得多长、留下联系方式的是谁</span>
+    </div>
+    <p class="mb-3"><i class="bi bi-person-lines-fill me-1"></i><code>Profile</code> 上有四个由用户亲手填写的字段：<code>phone</code>（15 字）、<code>wechat</code>（50）、<code>bio</code>（500）、<code>student_id</code>（20）。四个都有表单入口、四个都挂着 <code>max_length</code>——<strong>四个都有规则</strong>。但 <code>phone</code> 和 <code>wechat</code> 只有会话侧栏「联系方式」一处展示，<code>bio</code> 出现在四个模板里，而 <code>student_id</code> <strong>采集后全站零展示</strong>。四个字段在业务模块里的读者数为零：<strong>一组带着长度上限的采集规则，运营看不到它的形状。</strong></p>
+    {% if not profile_contact_shape.has_data %}
+    <div class="empty-inline">{{ profile_contact_shape.summary }}</div>
+    {% endif %}
+    {% if profile_contact_shape.has_data %}
+    <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>资料份数</span><strong>{{ profile_contact_shape.profile_count }}</strong><small>另有 {{ profile_contact_shape.orphan_user_count }} 人没有资料行，不在分母里</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>留了站外联系方式</span><strong>{% if profile_contact_shape.reachable_share is None %}—{% else %}{{ profile_contact_shape.reachable_share }}%{% endif %}</strong><small>电话或微信至少一个，<code>bio</code> 不算</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>全站零展示的字段</span><strong>{{ profile_contact_shape.zero_display_fields|length }}</strong><small>{% for label in profile_contact_shape.zero_display_fields %}{{ label }}{% if not forloop.last %}、{% endif %}{% endfor %}——被采集，然后没有任何页面再读它</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>有人写到贴上限的字段</span><strong>{{ profile_contact_shape.near_limit_field_count }}</strong><small>达到各自 <code>max_length</code> 的九成</small></div></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>一、各字段填写率</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">联系方式的形状 · 一、各字段填写率</caption>
+                <thead><tr><th>字段</th><th>字数上限</th><th>填写份数</th><th>填写率（%）</th><th>站内展示位置</th></tr></thead>
+                <tbody>
+                    {% for row in profile_contact_shape.field_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.max_length }}</td>
+                        <td>{{ row.filled_count }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if row.has_display_surface %}{{ row.shown_in }}{% else %}<strong>{{ row.shown_in }}</strong>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">分母是<strong>全部资料</strong>，包括一个字段都没填的人：这一节问的是「填的人占几成」，不是「填了的人里有什么形状」。<strong>空白算未填</strong>——只打了空格再保存的用户，事实是没有留联系方式，而空格在会话侧栏渲染出来是空的。<strong>展示位置一并列出</strong>：同一个填写率背后可能是四次曝光，也可能是零次。<strong>「另有 N 人没有资料行」不进任何分母</strong>，信号漏建的用户单独数，不摊派。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>二、站外可触达的组合</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">联系方式的形状 · 二、站外可触达的组合</caption>
+                <thead><tr><th>组合</th><th>人数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in profile_contact_shape.reach_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.count }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if row.is_reachable %}可以绕开站内私信直接找到彼此{% else %}站内没有可直连的方式，沟通只能走私信{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">「站外可触达」<strong>只数 <code>phone</code> 和 <code>wechat</code></strong>：<code>bio</code> 是给人看的自我介绍，<code>student_id</code> 站内没有任何地方读它，把这两个算进来，这一节回答的就不是它想问的问题了。四种组合<strong>全列，包括 0 样本</strong>——「都没留」一个人都没有本身是结论，不是表格的缺口。</p>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>三、长度 vs 各字段自己的上限</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">联系方式的形状 · 三、长度 vs 各字段自己的上限</caption>
+                <thead><tr><th>字段</th><th>填写份数</th><th>最大观测长度</th><th>贴上限字符数</th><th>贴上限份数</th><th>贴上限占比（%）</th></tr></thead>
+                <tbody>
+                    {% for row in profile_contact_shape.length_rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        <td>{{ row.sample_count }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{% if row.max_seen is None %}—{% else %}{{ row.max_seen }}{% endif %}</td>
+                        <td>{{ row.near_limit_chars }}</td>
+                        <td>{{ row.near_limit_count }}</td>
+                        <td>{% if row.near_limit_share is None %}—{% else %}{{ row.near_limit_share }}{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0"><strong>档位取各字段 <code>max_length</code> 的固定比例，不取分位数</strong>：不足一成、一成到五成、五成到九成、贴上限（≥ 90%）。换算成字符数，电话的九成是 14，微信是 45，简介是 450，学号是 18——这些数字表单上不显示，但它们在模型里写着，是产品规则。一个每月都会移动的分位边界什么也说明不了，而这个数要能回答「上限是不是该调」「学号的 20 字是不是太短」。<strong>分母是填了该字段的人，不是全部资料</strong>：没填的人没有长度，摊派进任何一档都会把「不足一成」撑成一个假的多数。<strong>0 样本档全列</strong>：「没有人的简介写到 450 字以上」本身是结论，不是表格的缺口。</p>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">联系方式的形状 · 三、长度分档明细</caption>
+                <thead><tr><th>字段 · 长度档</th><th>份数</th><th>占比（%）</th><th>说明</th></tr></thead>
+                <tbody>
+                    {% for row in profile_contact_shape.length_rows %}
+                    {% for band in row.band_rows %}
+                    <tr>
+                        <td>{{ row.label }} · {{ band.label }}</td>
+                        <td>{{ band.count }}{% if band.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{% if band.share is None %}—{% else %}{{ band.share }}{% endif %}</td>
+                        <td class="ops-hint">{% if band.is_small_sample %}不足 {{ profile_contact_shape.min_field_sample }} 份，只作参考{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ops-panel-block">
+        <h3>四、留没留联系方式 × 参不参与交易</h3>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle ops-table">
+            <caption class="visually-hidden">联系方式的形状 · 四、留没留联系方式 × 参不参与交易</caption>
+                <thead><tr><th>分组</th><th>人数</th><th>占全部资料（%）</th><th>有过对话</th><th>下过买入订单</th><th>发布过商品</th></tr></thead>
+                <tbody>
+                    {% for row in profile_contact_shape.participation_rows %}
+                    <tr>
+                        <td>{{ row.label }}{% if row.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        <td>{{ row.user_count }}</td>
+                        <td>{% if row.share is None %}—{% else %}{{ row.share }}{% endif %}</td>
+                        {% for item in row.items %}
+                        <td>{{ item.count }}{% if item.is_small_sample %} <span class="badge text-bg-secondary">小样本</span>{% endif %}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="small text-muted mt-2 mb-0">三项<strong>各自独立取数，不并集也不交集</strong>：「只逛不谈」和「只发不买」要能分开看见。全量口径、不限周期——联系方式是累计状态。<strong>这张表只报共同变化，不讲因果</strong>：「留了联系方式的人更可能交易」这句话本模块不说，也不暗示。可能是留了联系方式的人本来就更认真，也可能是交易过的人更愿意留——两种都解释得通。反过来也不说：没留联系方式的人可能只是不需要，不是不参与。<strong>两组都报、全列，包括 0 样本组</strong>：一个平台完全可能此刻没有任何人留微信，那是一个结论，不是表格的缺口。</p>
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i><strong>本模块只报告，不改写任何字段。</strong>不加迁移、不加字段、不改任何一个 <code>max_length</code>。<strong>不输出任何字段值</strong>：不列用户名、不列手机号、不列微信号、不列学号，<strong>不读 <code>bio</code> 的正文</strong>——它是自由文本，读它会牵出「谁写了什么」，本模块只报它的长度。<strong>不按用户排名、不输出任何名单。</strong><strong>不判断「微信号是不是真的」「电话格式对不对」</strong>：<code>phone</code> 是 <code>CharField</code>，站内没有任何电话格式校验器，一个填到 15 字的用户只是刚好撞上 <code>max_length</code>，不代表那串数字能打通。<strong>不报「改过几次」</strong>——<code>Profile</code> 上没有 <code>updated_at</code>，也没有字段变更历史表，这个数不知道，不编。<strong>不自动补全、不提醒任何人填写、不因为某个字段填写率低就去改表单。</strong></div>
+    {% endif %}
+</section>

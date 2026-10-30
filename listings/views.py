@@ -144,6 +144,7 @@ from .contribution_milestone_phase_rhythm import build_contribution_milestone_ph
 from .availability import notify_item_available
 from .borrow_days_shape import build_borrow_days_shape
 from .dispute_evidence_shape import build_dispute_evidence_shape
+from .profile_contact_shape import build_profile_contact_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
@@ -3672,6 +3673,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('campaign_phase_review', '校园专题分阶段复盘', build_campaign_phase_review),
     ('borrow_days_shape', '默认借用天数形状', build_borrow_days_shape),
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
+    ('profile_contact_shape', '联系方式的形状', build_profile_contact_shape),
     ('recommendation_quality', '推荐质量', build_recommendation_quality),
     ('recommendation_impression_quality', '推荐曝光日志质量', build_recommendation_impression_quality),
     ('opportunity_impression_quality', '机会流曝光日志质量', build_opportunity_impression_quality),
@@ -10245,6 +10247,121 @@ def operations_dashboard_export(request):
         '此处只报告，不判断「证据够不够」——平台没有能力判断一段聊天记录能不能'
         '证明「商品与描述不符」，这个判断只有处理人能做；不读文件内容、不 OCR、'
         '不看图片尺寸、不判断截图是否与订单有关。',
+    ])
+    contact_shape = dashboard['profile_contact_shape']
+    writer.writerow([])
+    writer.writerow(['联系方式的形状'])
+    writer.writerow(['口径与门槛', contact_shape['summary'],
+                     '副标题：Profile 的四个手写字段第一次被数字读到',
+                     '只读 Profile.phone / wechat / bio / student_id 的填写与长度，'
+                     '不加迁移、不改任何 max_length、不输出任何字段值、不按用户排名'])
+    writer.writerow([
+        '回看天数（不参与过滤）', contact_shape['days'],
+        '资料份数', contact_shape['profile_count'],
+        '没有资料行的用户', contact_shape['orphan_user_count'],
+        '站外可触达字段', '、'.join(contact_shape['contact_fields']),
+        '填写率最小样本', contact_shape['min_field_sample'],
+        '组内最小样本', contact_shape['min_group_sample'],
+    ])
+    writer.writerow([])
+    writer.writerow(['一、各字段填写率'])
+    writer.writerow(['字段', '字数上限', '填写份数', '填写率（%）', '站内展示位置', '样本'])
+    for row in contact_shape['field_rows']:
+        writer.writerow([
+            row['label'], row['max_length'], row['filled_count'],
+            '' if row['share'] is None else row['share'], row['shown_in'],
+            '不足 %d 份，只作参考' % contact_shape['min_field_sample']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '分母是全部资料，包括一个字段都没填的人：这一节问的是「填的人占几成」，不是'
+        '「填了的人里有什么形状」',
+        '空白算未填：只打了空格再保存的用户，事实是没有留联系方式，而空格在会话侧栏'
+        '渲染出来是空的',
+        '展示位置一并列出：同一个填写率背后可能是四次曝光，也可能是零次',
+        '没有资料行的用户不进任何分母，单独数出来，不摊派',
+    ])
+    writer.writerow([])
+    writer.writerow(['二、站外可触达的组合'])
+    writer.writerow(['组合', '人数', '占比（%）', '样本', '说明'])
+    for row in contact_shape['reach_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            '' if row['share'] is None else row['share'],
+            '不足 %d 份，只作参考' % contact_shape['min_field_sample']
+            if row['is_small_sample'] else '可读数',
+            '可以绕开站内私信直接找到彼此' if row['is_reachable']
+            else '站内没有可直连的方式，沟通只能走私信',
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '站外可触达只数 phone 和 wechat：bio 是给人看的自我介绍，student_id 站内'
+        '没有任何地方读它，把这两个算进来，这一节回答的就不是它想问的问题了',
+        '四种组合全列，包括 0 样本：「都没留」一个人都没有本身是结论，不是表格的缺口',
+    ])
+    writer.writerow([])
+    writer.writerow(['三、长度 vs 各字段自己的上限'])
+    writer.writerow(['字段', '填写份数', '最大观测长度', '贴上限字符数', '贴上限份数',
+                     '贴上限占比（%）', '样本'])
+    for row in contact_shape['length_rows']:
+        writer.writerow([
+            row['label'], row['sample_count'],
+            '' if row['max_seen'] is None else row['max_seen'],
+            row['near_limit_chars'], row['near_limit_count'],
+            '' if row['near_limit_share'] is None else row['near_limit_share'],
+            '不足 %d 份，只作参考' % contact_shape['min_field_sample']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow(['字段 · 长度档', '份数', '占比（%）', '样本', '说明'])
+    for row in contact_shape['length_rows']:
+        for band in row['band_rows']:
+            writer.writerow([
+                '%s · %s' % (row['label'], band['label']), band['count'],
+                '' if band['share'] is None else band['share'],
+                '不足 %d 份，只作参考' % contact_shape['min_field_sample']
+                if band['is_small_sample'] else '可读数',
+                '档位取该字段 max_length 的固定比例，不取分位数',
+            ])
+    writer.writerow([
+        '说明', '', '', '', '', '',
+        '档位取各字段 max_length 的固定比例（不足一成 / 一成到五成 / 五成到九成 / '
+        '贴上限 ≥ 90%），换算成字符数，电话的九成是 14，微信是 45，简介是 450，'
+        '学号是 18。一个每月都会移动的分位边界什么也说明不了，而这个数要能回答'
+        '「上限是不是该调」「学号的 20 字是不是太短」',
+        '分母是填了该字段的人，不是全部资料：没填的人没有长度，摊派进任何一档都会把'
+        '「不足一成」撑成一个假的多数',
+        '0 样本档全列：「没有人的简介写到 450 字以上」本身是结论，不是表格的缺口',
+    ])
+    writer.writerow([])
+    writer.writerow(['四、留没留联系方式 × 参不参与交易'])
+    writer.writerow(['分组', '人数', '占全部资料（%）', '有过对话', '下过买入订单',
+                     '发布过商品', '样本'])
+    for row in contact_shape['participation_rows']:
+        writer.writerow([
+            row['label'], row['user_count'],
+            '' if row['share'] is None else row['share'],
+        ] + [
+            '%d%s' % (item['count'],
+                      '' if not item['is_small_sample']
+                      else '（不足 %d 人，只作参考）' % contact_shape['min_group_sample'])
+            for item in row['items']
+        ] + [
+            '不足 %d 人，只报规模、不给方向' % contact_shape['min_group_sample']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '', '', '', '',
+        '三项各自独立取数，不并集也不交集：「只逛不谈」和「只发不买」要能分开看见。'
+        '全量口径、不限周期——联系方式是累计状态',
+        '这张表只报共同变化，不讲因果：「留了联系方式的人更可能交易」这句话本模块不说，'
+        '也不暗示。可能是留了联系方式的人本来就更认真，也可能是交易过的人更愿意留——'
+        '两种都解释得通。反过来也不说：没留联系方式的人可能只是不需要，不是不参与',
+        '两组都报、全列，包括 0 样本组：一个平台完全可能此刻没有任何人留微信，'
+        '那是一个结论，不是表格的缺口',
+    ])
+    writer.writerow([
+        '此处只报告，不把相关性讲成因果。不输出任何字段值、不列用户名、不读 bio 正文。',
     ])
     response_quality = dashboard['notification_response']
     writer.writerow([])
