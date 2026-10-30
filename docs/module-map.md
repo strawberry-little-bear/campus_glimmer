@@ -142,7 +142,7 @@ campus_glimmer/
 | `task_run_failure_cause_trend.py` | 失败原因的跨周期变化：按原因 × 两个等长周期按份额判方向 | 读写 |
 | `task_run_overlap.py` | 命令的自我重叠：耗时对照运行间隔，重叠按台账真实对数 | 读写 |
 | `task_run_ledger_integrity.py` | 定时任务台账的时间、状态、失败备注与指标形状完整性审计 | 只报告 |
-| `governance_sla.py` | 四类治理队列的处理时长、超期清单与时限内完成率 | 读写 |
+| `governance_sla.py` | 五类治理队列的处理时长、超期清单与时限内完成率 | 读写 |
 | `borrow_escalation.py` | 借用逾期催收三级阶梯、归还闭环与看板汇总 | 读写 |
 | `borrow_risk.py` | 借用逾期风险分层：按分类与押金档位聚合升级率 | 读写 |
 | `borrow_rhythm.py` | 借用节奏与学期阶段交叉：阶段日均口径与阶段内分类明细 | 读写 |
@@ -178,6 +178,7 @@ campus_glimmer/
 | `gift_application_queue.py` | 免费领取申请队列的长度、处理时长与说明填写率统计 | 读写 |
 | `moderation_rule_quality.py` | 内容审核四条规则的误判率、漏判率与复核时效统计 | 读写 |
 | `moderation_appeal_quality.py` | 内容申诉的提交线、处理线、当前积压、恢复缺口与换人复核统计 | 只报告 |
+| `lost_found_report_quality.py` | 失物招领举报的提交量、理由分布、处理时长分档、待处理积压与「举报人对发布者不可见」的边界自检（只报告） | 只报告 |
 | `availability_watch_quality.py` | 有货提醒的等待时长、死信来源、白等规模与触达质量统计 | 读写 |
 | `rating_quality.py` | 交易评价的覆盖率、提交时延、双向分布与文字填写率统计 | 读写 |
 | `dispute_resolution_quality.py` | 交易争议按类型的驳回率、证据到达时刻、发起方向与处理意见填写率统计 | 读写 |
@@ -308,7 +309,7 @@ campus_glimmer/
 
 - **`test_governance_borrow_queue.py`**：治理工作台真的能读到三级催收案件，不只是举报与争议
 
-- **`test_governance_sla.py`**：去重计数、周期前积压、四类时限与治理工作台测试
+- **`test_governance_sla.py`**：去重计数、周期前积压、五类时限与治理工作台测试
 
 - **`test_handoff_code_usage.py`**：取件码的签发间隔、尝试次数分档、重复签发与用不上的码
 
@@ -343,6 +344,7 @@ campus_glimmer/
 
 - **`test_lost_found_matched_outcome.py`**：确认匹配之后的四种终局照实报、双向性只数认账那一侧、清单不带标题与用户名
 - **`test_lost_found_report.py`**：失物招领举报的唯一约束与禁止自举报、四条路径的权限边界、队列筛选分页、审核落库与只通知举报人测试
+- **`test_lost_found_report_quality.py`**：三条时间线分离、五个理由一栏不少、小样本只报数、边界集合差集与「既发布又举报的人不计进泄漏」、处理完没通知的举报人测试
 
 - **`test_meeting_attendance.py`**：到场口径：响应分档、迟到区间与缺席分母分开
 

@@ -92,11 +92,12 @@
 
 ## 不做什么
 
-- 不接入 `governance_sla.py` 的第五个治理队列：`SLA_TARGETS`、`QUEUE_LABELS`、`_fetch_cases`、
-  `_fetch_open_cases` 仍是 report / dispute / incident / borrow 四个 kind，治理工作台的
-  `kind_choices` 也没加。本轮是独立 staff 页面，统一进治理工作台是下一轮的事；
-- 不加运营看板面板：`OPERATIONS_DASHBOARD_SHARED_BUILDERS` 注册表未动，举报量、处理时长、
-  驳回率都还没进看板；
+- ~~不接入 `governance_sla.py` 的第五个治理队列~~：**本轮已落地**。`SLA_TARGETS` 新增
+  `lost_found_report`（24 小时），治理工作台的 `kind_choices` 与筛选白名单同步跟上，
+  队列排在商品举报之后、借用催收之前——两条举报通道的时限差一半才看得见；
+- ~~不加运营看板面板~~：**本轮已落地**。`lost_found_report_quality` 已注册进
+  `OPERATIONS_DASHBOARD_SHARED_BUILDERS` 并落在「失物招领」分区，提交量、理由分布、
+  处理时长分档、待处理积压、驳回率和「举报人对发布者不可见」的边界自检都已进页面和 CSV；
 - 不让发布者看到自己被举报的次数或内容，也不给举报人做回访问卷；
 - 不做自动下架、自动限流、信誉扣分；
 - 不改动失物招领的匹配、线索和字段含义，举报表与它们零关联——它是治理侧的事实台账，不是业务字段。
@@ -109,5 +110,17 @@
 - `listings.test_lost_found`、`listings.test_lost_found_filter_workspace`、`listings.test_lost_found_image`、
   `listings.test_report_outcome_feedback`、`campus_glimmer.test_page_semantics` 共 79 项既有测试全绿，
   确认新表没有动到既有失物招领行为和页面语义契约；
-- `manage.py check` 0 issues，`makimigrations --check --dry-run` 无漂移；
+- `manage.py check` 0 issues，`makemigrations --check --dry-run` 无漂移（本轮只加只读统计，
+  没有新迁移——`LostFoundReport` 上一轮已在 0081 落库）；
+- `listings.test_lost_found_report_quality` 18 项新测试全绿，覆盖空态分母、三条时间线分离、
+  五个理由一栏不少、小样本只报数、边界集合差集（含「既发布又举报的人不计进泄漏」）、
+  `handled_without_notice` 正常为 0 与异常变红两条路径、`days` 非法回落、负值夹零、
+  待处理清单条数上限与隐私字段白名单；
+- `listings.test_governance_sla` 扩到 38 项：第五个队列的时限、比商品举报紧一半、
+  处理时长量到审核时刻、周期前提交仍可见、队列顺序，全部通过；
+- `listings.test_dashboard_export_coverage` / `test_dashboard_export_columns` /
+  `test_operations_fragments` 共 27 项契约测试全绿：面板标题与 CSV 首列逐字一致，
+  模板新读的顶层键都在分区注册表里登记；
+- 演示库实跑渲染看板页面与 CSV 导出均 200，Chrome 无头模式在 1440px 与 500px 验收面板，
+  无横向溢出。
 - Chrome 无头模式在 1424px 与 390px 验收举报表单、我的举报、运营队列、审核页四个新页面，均无横向溢出。
