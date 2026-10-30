@@ -342,6 +342,7 @@ campus_glimmer/
 - **`test_lost_found_lead_quality.py`**：线索量分档、确认率指向分离、确认率按 post_type 拆与看板导出测试
 
 - **`test_lost_found_matched_outcome.py`**：确认匹配之后的四种终局照实报、双向性只数认账那一侧、清单不带标题与用户名
+- **`test_lost_found_report.py`**：失物招领举报的唯一约束与禁止自举报、四条路径的权限边界、队列筛选分页、审核落库与只通知举报人测试
 
 - **`test_meeting_attendance.py`**：到场口径：响应分档、迟到区间与缺席分母分开
 

@@ -4,7 +4,7 @@
 
 # screenshots · 系统界面预览
 
-**十九张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、失物招领、治理和运营七类入口。**
+**二十三张当前主分支的真实页面截图，覆盖浏览、交易、账户、消息、失物招领、治理和运营七类入口。**
 
 [项目首页](../../README.md) · [完整项目手册](../README.md) · [模块地图](../module-map.md)
 
@@ -116,6 +116,29 @@
 <table>
 <tr>
 <td width="50%" valign="top">
+<a href="lost-found-report-form.png"><img src="lost-found-report-form.png" alt="举报失物招领记录表单，展示被举报记录摘要、固定举报理由与补充说明" width="100%" /></a>
+<p align="center"><strong>失物招领 · 提交举报</strong><br /><sub>固定理由加补充说明，举报对象与隐私边界写在同一屏 · 本地演示数据</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="lost-found-my-reports.png"><img src="lost-found-my-reports.png" alt="我的失物举报，展示四种举报状态、处理结论与查看记录入口" width="100%" /></a>
+<p align="center"><strong>失物招领 · 我的举报</strong><br /><sub>只看自己提交过的举报，处理结论只回给举报人 · 本地演示数据</sub></p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<a href="lost-found-report-queue.png"><img src="lost-found-report-queue.png" alt="失物招领举报审核队列，展示状态筛选、分页区间、举报详情与已结案备注" width="100%" /></a>
+<p align="center"><strong>失物招领 · 举报审核队列</strong><br /><sub>状态筛选、分页区间与处理入口同屏，已结案记录保留审核备注 · 本地演示数据</sub></p>
+</td>
+<td width="50%" valign="top">
+<a href="lost-found-report-review.png"><img src="lost-found-report-review.png" alt="审核失物招领举报，展示举报详情、审核状态下拉与审核备注" width="100%" /></a>
+<p align="center"><strong>失物招领 · 审核举报</strong><br /><sub>一条写路径写入结论、审核人与时间，只通知举报人 · 本地演示数据</sub></p>
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%" valign="top">
 <a href="moderation-queue.png"><img src="moderation-queue.png" alt="内容审核值班台，展示四项待办、三级复核时限、组合筛选和审核记录" width="100%" /></a>
 <p align="center"><strong>内容审核值班台</strong><br /><sub>待办入口、分级时限、当前筛选结果与审核操作同屏 · 本地演示数据</sub></p>
 </td>
@@ -151,6 +174,10 @@
 | [`lost-found-list.png`](lost-found-list.png) | `1424 × 1200` | 失物招领列表；物品照片、记录类型、分类地点与筛选工作台 |
 | [`lost-found-detail.png`](lost-found-detail.png) | `1424 × 1200` | 失物招领详情；物品照片按原比例展示、辨识特征与线索说明 |
 | [`lost-found-form.png`](lost-found-form.png) | `1424 × 1200` | 发布失物招领；分区填写、可选照片字段与隐私提示 |
+| [`lost-found-report-form.png`](lost-found-report-form.png) | `1424 × 1400` | 举报失物招领记录；固定举报理由、补充说明与隐私边界说明 |
+| [`lost-found-my-reports.png`](lost-found-my-reports.png) | `1424 × 1400` | 我的失物举报；四种举报状态与处理结论只对举报人可见 |
+| [`lost-found-report-queue.png`](lost-found-report-queue.png) | `1424 × 1400` | 举报审核队列；状态筛选、分页区间与已结案记录的处理备注 |
+| [`lost-found-report-review.png`](lost-found-report-review.png) | `1424 × 1400` | 审核失物招领举报；举报详情、审核状态与审核备注，发布者信息不出现在结论里 |
 
 ## 🔄 更新截图时
 
