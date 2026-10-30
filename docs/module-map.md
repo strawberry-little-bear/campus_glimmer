@@ -42,11 +42,11 @@ campus_glimmer/
 | `.github/` | [持续集成](../.github/CI.md) | GitHub Actions 与本地等价检查 |
 | `docs/screenshots/` | [系统界面预览](screenshots/README.md) | 首页截图的来源与维护方式 |
 
-## listings/ 的业务模块（138 个）
+## listings/ 的业务模块（141 个）
 
 
 <details>
-<summary>业务模块清单（138 个，按业务链路归组）</summary>
+<summary>业务模块清单（141 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
@@ -194,10 +194,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（155 个）
+## 业务链路的测试模块（158 个）
 
 <details>
-<summary>业务链路测试清单（155 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（158 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -517,7 +517,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（118 篇，持续更新）</summary>
+<summary>设计文档清单（119 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
