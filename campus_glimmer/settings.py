@@ -50,6 +50,9 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # 放在最前面：关联 ID 必须在任何可能写日志的中间件之前就定下来，
+    # 否则排在它后面的组件报警时，日志里还是占位符。
+    'campus_glimmer.middleware.RequestIdMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # 动态响应此前完全不走压缩：看板一页 580KB 左右的 HTML 原样下发，普通页面
     # 也有 16KB 左右。部署是 gunicorn 直出、没有反向代理，所以只能在这里压。
@@ -160,6 +163,74 @@ validate_production_services(
     storage_backend=STORAGE_BACKEND,
     secret_key=SECRET_KEY,
 )
+
+# Django 自带的默认日志把 console handler 挂在 require_debug_true 上，也就是
+# 生产环境什么都不往 stdout 写，日志收集器只能收到空气。这里显式接管：
+# stdout 始终可用、每行都带请求关联 ID，级别由 DJANGO_LOG_LEVEL 控制。
+LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+        'request_id': {
+            '()': 'campus_glimmer.middleware.RequestIdFilter',
+        },
+    },
+    'formatters': {
+        'structured': {
+            'format': (
+                '%(asctime)s %(levelname)s [%(request_id)s] '
+                '%(name)s %(message)s'
+            ),
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+        'django.server': {
+            'format': '[%(asctime)s] %(message)s',
+            'datefmt': '%d/%b/%Y %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': LOG_LEVEL,
+            'formatter': 'structured',
+            'filters': ['request_id'],
+        },
+        'django.server': {
+            'class': 'logging.StreamHandler',
+            'level': 'INFO',
+            'formatter': 'django.server',
+            'filters': ['request_id'],
+        },
+        # Django 默认行为：DEBUG=False 时才给管理员发邮件。
+        'mail_admins': {
+            'class': 'django.utils.log.AdminEmailHandler',
+            'level': 'ERROR',
+            'filters': ['require_debug_false'],
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'mail_admins'],
+            'level': LOG_LEVEL,
+        },
+        'django.server': {
+            'handlers': ['django.server'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # 健康探针每 30 秒打一次 INFO，日志量比业务请求还大，单独压到 WARNING。
+        'campus_glimmer.health': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
 
 LOGIN_REDIRECT_URL = 'home'
 LOGIN_URL = 'login'
