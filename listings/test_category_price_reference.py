@@ -164,9 +164,16 @@ class CategoryPriceReferenceTests(TestCase):
         section = page.content.decode('utf-8').split('id="category-price-reference"', 1)[1]
         section = section.split('</section>', 1)[0]
         self.assertNotIn('不应出现在面板里的商品', section)
-        text = export.content.decode('utf-8-sig')
+        text = export.content.decode('utf-8-sig').replace('\r\n', '\n')
         self.assertIn('分类调价参考', text)
         self.assertIn('分类,样本范围,样本数,中位数,常见区间下限,常见区间上限', text)
         self.assertIn('导出参考分类', text)
-        category_section = text.split('分类调价参考', 1)[1].split('出售价格轨迹质量', 1)[0]
+        # 面板名在 CSV 里会出现两次：顶部「看板自身构建耗时」按耗时降序排，
+        # 其中一行是「构建：分类调价参考」。按整行切，切片边界才不会跟着
+        # 耗时排序漂移——那把下一个面板甚至耗时表本身包进来。
+        category_section = (
+            text.split('\n分类调价参考\n', 1)[1]
+            .split('\n出售价格轨迹质量,数值,说明\n', 1)[0]
+        )
+        self.assertIn('只读与隐私边界', category_section)
         self.assertNotIn('不应出现在面板里的商品', category_section)
