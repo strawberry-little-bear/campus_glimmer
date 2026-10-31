@@ -5,7 +5,7 @@
 > 本索引由 README 的项目结构章节长期拆分而来，用于维护代码文件、测试模块和设计文档的对应关系。新增模块时先更新这里，再考虑是否需要在首页补充一句能力摘要。
 
 
-顶层目录和根文件的分布如下。`listings/` 是业务主体，145 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
+顶层目录和根文件的分布如下。`listings/` 是业务主体，146 个模块全部列在后面的表里；最后一列标注这个模块是「读写」还是「只报告」——「只报告」是本项目的一条纪律：凡是统计与看板模块，都只读不写，也不把统计结果写回它观测的那张表。
 
 ```text
 campus_glimmer/
@@ -42,17 +42,18 @@ campus_glimmer/
 | `.github/` | [持续集成](../.github/CI.md) | GitHub Actions 与本地等价检查 |
 | `docs/screenshots/` | [系统界面预览](screenshots/README.md) | 首页截图的来源与维护方式 |
 
-## listings/ 的业务模块（145 个）
+## listings/ 的业务模块（146 个）
 
 
 <details>
-<summary>业务模块清单（145 个，按业务链路归组）</summary>
+<summary>业务模块清单（146 个，按业务链路归组）</summary>
 
 | 模块 | 做什么 | 读写 |
 | --- | --- | --- |
 | `admin.py` | 后台管理界面：商品、分类、地点、专题、订单、预约异常与举报的维护入口 | 读写 |
 | `analytics.py` | 运营指标、漏斗、分层、回访和运营提醒 | 读写 |
 | `dashboard_build_performance.py` | 运营看板共享构建器的请求内耗时、P50/P90、占比与重复 key 自检（不落库、不自动优化） | 只报告 |
+| `operations_panel_sections.py` | 从运营看板的页面和 CSV 导出里切出单个面板的共用原语：按 `<h2>` 认节、按整格认标题，不按裸标签子串切 | 只读 |
 | `availability.py` | 商品可用性与有货提醒 | 读写 |
 | `first_viewed.py` | 商品第一次被看见之后的收藏与下单时延、来源与后续一步（只报告不改写） | 读写 |
 | `bulk_listing_csv.py` | 毕业季批量发布 CSV 的 UTF-8 解码、固定表头、行级校验与预览草稿 | 只读 |
@@ -274,7 +275,7 @@ campus_glimmer/
 - **`test_contribution_milestone_phase_rhythm.py`**：同类学期同阶段对照、每百天强度、覆盖审计阻塞、快照差异放行、薄样本、进行中与无学期事件、页面 / CSV 只读契约
 
 - **`test_dashboard_build_performance.py`**：请求内构建耗时的空态、单样本、最近秩分位、重复 key、共享组装契约与页面 / CSV 导出一致性
-- **`test_dashboard_export_columns.py`**：面板与导出的层级与表头：子标题归节、表头可判别、摘要不冒充表头
+- **`test_dashboard_export_columns.py`**：面板与导出的层级与表头：子标题归节、表头可判别、摘要不冒充表头；外加切片契约——标题在导出里占整整一格、小标题不与节标题撞名、耗时表全带「构建：」前缀
 
 - **`test_dashboard_export_coverage.py`**：每个运营面板都有一条导出行，屏幕与下载同一份口径
 
