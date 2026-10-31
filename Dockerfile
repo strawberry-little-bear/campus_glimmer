@@ -29,8 +29,12 @@ RUN mkdir -p /app/data /app/media /app/staticfiles
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+# Liveness, not readiness: /healthz/ never touches PostgreSQL, Redis or object
+# storage, so a transient dependency outage cannot cascade into every worker
+# being restarted. Gate rollouts on /readyz/ instead (see
+# docs/deployment-health-endpoints-design.md).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD ["python", "/app/docker/healthcheck.py"]
+    CMD ["python", "/app/docker/healthcheck.py", "--liveness"]
 
 EXPOSE 8000
 ENTRYPOINT ["/entrypoint.sh"]

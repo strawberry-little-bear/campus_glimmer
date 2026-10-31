@@ -140,7 +140,10 @@ services:
       migrate:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "python", "/app/docker/healthcheck.py"]
+      # Liveness only: /healthz/ does not touch db/redis/object storage, so a
+      # transient dependency outage cannot restart every worker. Rollouts gate on
+      # /readyz/ (docs/deployment-health-endpoints-design.md).
+      test: ["CMD", "python", "/app/docker/healthcheck.py", "--liveness"]
       interval: 30s
       timeout: 5s
       start_period: 45s

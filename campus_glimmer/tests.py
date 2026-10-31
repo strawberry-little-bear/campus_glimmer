@@ -2,6 +2,9 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import os
+import subprocess
+import sys
 from unittest.mock import Mock, patch
 
 from django.db import OperationalError
@@ -160,6 +163,128 @@ class ContainerHealthcheckTests(SimpleTestCase):
 
         self.assertIn('readiness check failed', stderr.getvalue())
         self.assertNotIn('secret connection failure', stderr.getvalue())
+
+    def test_container_healthcheck_liveness_does_not_touch_dependencies(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+
+            self.assertTrue(module.is_alive())
+
+        urlopen.assert_called_once_with('http://127.0.0.1:8000/healthz/', timeout=4)
+
+    def test_container_healthcheck_liveness_reports_failure(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 503
+
+            self.assertFalse(module.is_alive())
+
+    def test_container_healthcheck_liveness_and_readiness_use_different_endpoints(self):
+        module = self.load_healthcheck()
+        self.assertNotEqual(module.LIVENESS_URL_TEMPLATE, module.READINESS_URL_TEMPLATE)
+
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+
+            module.is_alive()
+            module.is_ready()
+
+        self.assertEqual(
+            [call.args[0] for call in urlopen.call_args_list],
+            ['http://127.0.0.1:8000/healthz/', 'http://127.0.0.1:8000/readyz/'],
+        )
+
+    def test_container_healthcheck_hides_liveness_error_details(self):
+        module = self.load_healthcheck()
+        with patch.object(
+            module.urllib.request,
+            'urlopen',
+            side_effect=OSError('secret connection failure'),
+        ), patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            self.assertFalse(module.is_alive())
+
+        self.assertIn('liveness check failed', stderr.getvalue())
+        self.assertNotIn('secret connection failure', stderr.getvalue())
+
+    def test_container_healthcheck_defaults_to_liveness(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+
+            self.assertEqual(module.main([]), 0)
+
+        urlopen.assert_called_once_with('http://127.0.0.1:8000/healthz/', timeout=4)
+
+    def test_container_healthcheck_liveness_failure_exits_nonzero(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 503
+
+            self.assertEqual(module.main([]), 1)
+
+    def test_container_healthcheck_readiness_mode_probes_ready_endpoint(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 200
+
+            self.assertEqual(module.main(['--readiness']), 0)
+
+        urlopen.assert_called_once_with('http://127.0.0.1:8000/readyz/', timeout=4)
+
+    def test_container_healthcheck_readiness_mode_failure_exits_nonzero(self):
+        module = self.load_healthcheck()
+        with patch.object(module.urllib.request, 'urlopen') as urlopen:
+            urlopen.return_value.__enter__.return_value.status = 503
+
+            self.assertEqual(module.main(['--readiness']), 1)
+
+        self.assertEqual(urlopen.call_args.args[0], 'http://127.0.0.1:8000/readyz/')
+
+    def test_container_healthcheck_rejects_unknown_mode(self):
+        module = self.load_healthcheck()
+        with patch('sys.stderr', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit) as caught:
+                module.parse_args(['--bogus'])
+
+        self.assertNotEqual(caught.exception.code, 0)
+
+    def test_container_healthcheck_rejects_conflicting_modes(self):
+        module = self.load_healthcheck()
+        with patch('sys.stderr', new_callable=io.StringIO):
+            with self.assertRaises(SystemExit) as caught:
+                module.parse_args(['--liveness', '--readiness'])
+
+        self.assertNotEqual(caught.exception.code, 0)
+
+    def test_container_healthcheck_cli_liveness_fails_on_dead_port(self):
+        # End-to-end: the exact command the Dockerfile HEALTHCHECK runs must exit
+        # non-zero when nothing is listening, otherwise the probe is decorative.
+        script = Path(__file__).resolve().parents[1] / 'docker' / 'healthcheck.py'
+        environment = os.environ.copy()
+        environment['PORT'] = '45999'
+        result = subprocess.run(
+            [sys.executable, str(script), '--liveness'],
+            capture_output=True,
+            text=True,
+            env=environment,
+            timeout=60,
+        )
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('liveness check failed', result.stderr)
+
+    def test_container_healthcheck_cli_rejects_unknown_flag(self):
+        script = Path(__file__).resolve().parents[1] / 'docker' / 'healthcheck.py'
+        result = subprocess.run(
+            [sys.executable, str(script), '--bogus'],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('unrecognized arguments', result.stderr)
 
 
 class SecurityResponseBaselineTests(SimpleTestCase):

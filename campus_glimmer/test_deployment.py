@@ -1116,6 +1116,95 @@ class ComposeProductionTopologyTests(SimpleTestCase):
 
 
 
+class ContainerLivenessProbeTests(SimpleTestCase):
+    """容器的 HEALTHCHECK 只能是存活探针。
+
+    这条契约来自一次真实设计返工：``docker/healthcheck.py`` 最初只探
+    ``/readyz/``，而 ``/readyz/`` 会连 PostgreSQL、Redis 和对象存储。数据库
+    短暂抖动时，编排系统会把*每一个* web 副本一起重启，一次存储故障被放大成
+    全站故障。设计文档（``docs/deployment-health-endpoints-design.md``）因此
+    要求存活检查不碰依赖，但配置层面此前没有任何测试守着这句话。
+
+    只测 ``healthcheck.py`` 的函数是不够的：真正决定容器行为的是 Dockerfile
+    与 compose 里那条 CMD，把它改回 ``--readiness`` 不会有任何测试报警。
+    """
+
+    PROD_COMPOSE = PROJECT_ROOT / 'docker-compose.prod.yml'
+    DOCKERFILE = PROJECT_ROOT / 'Dockerfile'
+
+    def _dockerfile_healthcheck_command(self):
+        """取 HEALTHCHECK 指令（含续行）里的 CMD 参数。
+
+        续行以行尾反斜杠拼接，所以要一直读到 CMD 那一行为止，否则会把后面的
+        EXPOSE / ENTRYPOINT 一起吞进来。
+        """
+        text = self.DOCKERFILE.read_text(encoding='utf-8')
+        command = []
+        collecting = False
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not collecting:
+                collecting = stripped.startswith('HEALTHCHECK ')
+                continue
+            if stripped.upper().startswith('CMD '):
+                command.append(stripped[4:])
+                break
+            command.append(stripped.rstrip('\\').strip())
+        assert command, 'Dockerfile 的 HEALTHCHECK 里找不到 CMD'
+        return self._inline_sequence(command[0])
+
+    def _compose_healthcheck_command(self, service):
+        services = compose_services(self.PROD_COMPOSE)
+        lines = services[service]
+        inside = False
+        for line in lines:
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip(' '))
+            if stripped == 'healthcheck:':
+                inside = True
+                continue
+            if inside and indent <= 4:
+                break
+            if inside and stripped.startswith('test:'):
+                return self._inline_sequence(stripped.split(':', 1)[1])
+        self.fail('%s 服务没有声明 healthcheck.test' % service)
+
+    @staticmethod
+    def _inline_sequence(raw):
+        body = raw.strip().strip('[]')
+        return [item.strip().strip('"') for item in body.split(',') if item.strip()]
+
+    def test_dockerfile_healthcheck_probes_liveness_only(self):
+        command = self._dockerfile_healthcheck_command()
+
+        self.assertIn('python /app/docker/healthcheck.py --liveness', ' '.join(command))
+        self.assertNotIn('--readiness', ' '.join(command))
+
+    def test_production_web_healthcheck_probes_liveness_only(self):
+        command = self._compose_healthcheck_command('web')
+
+        self.assertEqual(command[-1], '--liveness')
+        self.assertNotIn('--readiness', command)
+
+    def test_production_web_healthcheck_never_gates_on_dependencies(self):
+        """没有任何服务会因 web 的 HEALTHCHECK 而等待，存活抖动才不会扩散。"""
+        services = compose_services(self.PROD_COMPOSE)
+        for name, lines in services.items():
+            depends = block_value(lines, 'depends_on:')
+            with self.subTest(service=name):
+                self.assertNotEqual(
+                    depends.get('web'), 'service_healthy',
+                    '%s 在等 web 变成 healthy，存活探针的抖动会扩散成启动阻塞' % name)
+
+    def test_local_compose_does_not_redefine_the_probe(self):
+        services = compose_services(PROJECT_ROOT / 'docker-compose.yml')
+        for name, lines in services.items():
+            with self.subTest(service=name):
+                self.assertFalse(
+                    any(line.strip() == 'healthcheck:' for line in lines),
+                    '本地 compose 不该覆盖探针语义，否则本地与线上行为分叉')
+
+
 class ContainerLogRotationTests(SimpleTestCase):
     '''每个服务的容器日志都必须封顶。
 
