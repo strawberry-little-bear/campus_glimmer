@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from .models import Category, Item, ItemPriceChange
 from .price_change_quality import build_price_change_quality
+from .operations_panel_sections import export_section_text, panel_sections
 
 
 class PriceChangeQualityTests(TestCase):
@@ -185,10 +186,16 @@ class PriceChangeQualityDashboardTests(TestCase):
 
     def test_operations_dashboard_export_contains_same_sections(self):
         response = self.client.get(reverse('operations_dashboard_export'))
+        page = self.client.get(reverse('operations_dashboard'))
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(page.status_code, 200)
         text = response.content.decode('utf-8-sig')
-        section = text.split('出售价格轨迹质量,数值', 1)[1].split('重新上架的那件商品', 1)[0]
+        # 节标题的清单只能从页面拿：节标题（<h2>）和小标题（<h3>）在导出里都是
+        # 独占一格的单行，光看 CSV 分不出谁是边界。
+        section = export_section_text(
+            text, '出售价格轨迹质量', panel_sections(page.content.decode('utf-8')),
+        )
         self.assertIn('方向与幅度', section)
         self.assertIn('幅度分档', section)
         self.assertIn('重复调价', section)

@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from listings.models import Category, Item
 
+from listings.operations_panel_sections import export_section_text, panel_sections
 from .chat_response import (
     MIN_CONTEXT_SAMPLE,
     MIN_LATENCY_SAMPLE,
@@ -366,9 +367,9 @@ class ChatResponseInsightTests(TestCase):
         html_section = html.split('chat-response-panel', 1)[1].split(
             'chat-response-trend-panel', 1,
         )[0]
-        csv_section = csv_text.split('私信响应时效', 1)[1].split(
-            '私信响应时效跨周期对比', 1,
-        )[0]
+        csv_section = export_section_text(
+            csv_text, '私信响应时效', panel_sections(html),
+        )
         for text in (html_section, csv_section):
             self.assertIn('按商品分类看私信响应', text)
             self.assertIn('按交易方式看私信响应', text)

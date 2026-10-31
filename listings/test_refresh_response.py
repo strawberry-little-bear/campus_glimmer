@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import csv
-import io
 from datetime import timedelta
 
 from django.contrib.auth.models import User
@@ -10,6 +8,7 @@ from django.utils import timezone
 
 from listings.models import Category, Favorite, Item, Order, SearchClick, SearchImpression
 from listings.refresh_response import MIN_GROUP_ITEMS, build_refresh_response
+from listings.operations_panel_sections import export_section, panel_html, panel_sections
 
 
 class RefreshResponseTests(TestCase):
@@ -270,19 +269,16 @@ class RefreshResponseDashboardTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(export.status_code, 200)
         html = page.content.decode('utf-8')
-        panel = html.split('商品刷新后的搜索回响', 1)[1].split(
-            '价格调整后的搜索回响', 1,
-        )[0]
+        panel = panel_html(html, '商品刷新后的搜索回响')
         for label in ('第 1 次', '第 2 次', '第 3 次', '第 4 次', '全部次序'):
             self.assertIn(label, panel)
         self.assertIn('刷新次序对照（前 72 小时 / 后 72 小时）', panel)
         self.assertIn('哪些刷新没有进入对照', panel)
 
-        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
-        titles = [row[0] if row else '' for row in rows]
-        start = titles.index('商品刷新后的搜索回响')
-        end = titles.index('价格调整后的搜索回响')
-        section = rows[start:end]
+        section = export_section(
+            export.content.decode('utf-8-sig'), '商品刷新后的搜索回响',
+            panel_sections(html),
+        )
 
         self.assertIn(
             [

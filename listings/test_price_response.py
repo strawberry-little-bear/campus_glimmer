@@ -14,6 +14,7 @@ from listings.models import (
     Category, Favorite, Item, ItemPriceChange, Order, SearchClick,
     SearchImpression,
 )
+from listings.operations_panel_sections import panel_html
 from listings.price_response import (
     MAGNITUDE_BUCKETS, MIN_GROUP_CHANGES, build_price_response,
 )
@@ -336,7 +337,7 @@ class PriceResponseDashboardTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(export.status_code, 200)
         html = page.content.decode('utf-8')
-        panel = html.split('价格调整后的搜索回响', 1)[1].split('Price change quality', 1)[0]
+        panel = panel_html(html, '价格调整后的搜索回响')
         for label in ('降价', '上涨', '零元基线', '全部', '0–5%', '20% 以上'):
             self.assertIn(label, panel)
         self.assertIn('方向对照（前 72 小时 / 后 72 小时）', panel)

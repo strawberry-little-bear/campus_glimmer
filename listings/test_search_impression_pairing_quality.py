@@ -9,8 +9,6 @@ and missing/orphan rows remain separate shapes rather than one scary "bad row"
 number.
 """
 
-import csv
-import io
 from datetime import timedelta
 from decimal import Decimal
 
@@ -20,6 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import Category, Item, SearchClick, SearchImpression, SearchQuery
+from .operations_panel_sections import export_section, panel_html, panel_sections
 from .search_impression_pairing_quality import (
     LATENCY_BUCKETS,
     build_search_impression_pairing_quality,
@@ -268,18 +267,17 @@ class SearchImpressionPairingQualityDashboardTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(export.status_code, 200)
         html = page.content.decode('utf-8')
-        panel = html.split('搜索曝光与点击配对质量', 1)[1].split(
-            '商品刷新后的搜索回响', 1,
-        )[0]
+        panel = panel_html(html, '搜索曝光与点击配对质量')
         self.assertIn('字段与结构', panel)
         self.assertIn('配对与延迟', panel)
         self.assertIn('覆盖', panel)
 
-        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
-        titles = [row[0] if row else '' for row in rows]
-        start = titles.index('搜索曝光与点击配对质量')
-        end = titles.index('商品刷新后的搜索回响')
-        section = '\n'.join(','.join(row) for row in rows[start:end])
+        section = '\n'.join(
+            ','.join(row) for row in export_section(
+                export.content.decode('utf-8-sig'), '搜索曝光与点击配对质量',
+                panel_sections(html),
+            )
+        )
         self.assertIn('字段与结构', section)
         self.assertIn('配对与延迟', section)
         self.assertIn('覆盖', section)

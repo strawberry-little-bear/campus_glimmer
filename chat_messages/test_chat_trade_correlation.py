@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from listings.models import Category, Item, Order, OrderEvent
 
+from listings.operations_panel_sections import export_section_text, panel_sections
 from .chat_trade_correlation import MIN_BUCKET_SAMPLE, build_chat_trade_correlation
 from .models import PrivateMessage
 
@@ -289,9 +290,10 @@ class ChatTradeCorrelationTests(TestCase):
         html_section = dashboard.content.decode('utf-8').split(
             'chat-trade-correlation-panel', 1,
         )[1].split('recommendation-quality-panel', 1)[0]
-        csv_section = export.content.decode('utf-8-sig').split(
-            '私信响应与成交的共同变化', 1,
-        )[1].split('首页推荐卡挑得准不准', 1)[0]
+        csv_section = export_section_text(
+            export.content.decode('utf-8-sig'), '私信响应与成交的共同变化',
+            panel_sections(dashboard.content.decode('utf-8')),
+        )
 
         for text in (html_section, csv_section):
             self.assertIn('响应档', text)

@@ -8,6 +8,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .category_price_reference import build_category_price_reference
+from .operations_panel_sections import (
+    export_section_text, panel_html, panel_sections,
+)
 from .models import Category, Item
 
 
@@ -161,8 +164,8 @@ class CategoryPriceReferenceTests(TestCase):
         self.assertContains(page, '分类调价参考')
         self.assertContains(page, '导出参考分类')
         self.assertContains(page, '当前价格快照')
-        section = page.content.decode('utf-8').split('id="category-price-reference"', 1)[1]
-        section = section.split('</section>', 1)[0]
+        page_html = page.content.decode('utf-8')
+        section = panel_html(page_html, '分类调价参考')
         self.assertNotIn('不应出现在面板里的商品', section)
         text = export.content.decode('utf-8-sig').replace('\r\n', '\n')
         self.assertIn('分类调价参考', text)
@@ -171,9 +174,8 @@ class CategoryPriceReferenceTests(TestCase):
         # 面板名在 CSV 里会出现两次：顶部「看板自身构建耗时」按耗时降序排，
         # 其中一行是「构建：分类调价参考」。按整行切，切片边界才不会跟着
         # 耗时排序漂移——那把下一个面板甚至耗时表本身包进来。
-        category_section = (
-            text.split('\n分类调价参考\n', 1)[1]
-            .split('\n出售价格轨迹质量,数值,说明\n', 1)[0]
+        category_section = export_section_text(
+            text, '分类调价参考', panel_sections(page_html),
         )
         self.assertIn('只读与隐私边界', category_section)
         self.assertNotIn('不应出现在面板里的商品', category_section)
