@@ -1113,3 +1113,101 @@ class ComposeProductionTopologyTests(SimpleTestCase):
         text = self.ENTRYPOINT.read_text(encoding='utf-8')
         self.assertIn('${DJANGO_RUN_STARTUP_TASKS:-1}', text)
         self.assertIn('python docker/startup_tasks.py', text)
+
+
+
+class ContainerLogRotationTests(SimpleTestCase):
+    '''每个服务的容器日志都必须封顶。
+
+    Docker 的 json-file 驱动默认 ``max-size: -1``，也就是不轮转。这个项目把
+    gunicorn 的 access log 和 Django 日志都写在 stdout，单机长跑之后
+    ``/var/lib/docker/containers`` 会把宿主磁盘吃光，症状是全站一起宕机，
+    而应用自身的日志里一个字都不会留下。这属于配置事故，只能由配置本身兜住。
+    '''
+
+    PROD_COMPOSE = PROJECT_ROOT / 'docker-compose.prod.yml'
+
+    def setUp(self):
+        self.services = compose_services(self.PROD_COMPOSE)
+        self.assertNotEqual(self.services, {})
+
+    def _log_anchor(self):
+        '''解析 x-log-defaults 锚点，返回嵌套后的真实键值。'''
+        text = self.PROD_COMPOSE.read_text(encoding='utf-8')
+        marker = 'x-log-defaults: &log-defaults'
+        self.assertIn(marker, text, '共享日志配置锚点 x-log-defaults 被删掉了')
+        anchor = {}
+        section = None
+        inside = False
+        for line in text.splitlines():
+            if line.startswith(marker):
+                inside = True
+                continue
+            if not inside:
+                continue
+            if not line.strip() or line.lstrip().startswith('#'):
+                continue
+            if not line.startswith(' '):
+                break
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip(' '))
+            if indent == 2:
+                key, _, value = stripped.partition(':')
+                section = key
+                anchor[section] = value.strip().strip('"') or None
+            elif indent == 4 and section is not None:
+                key, _, value = stripped.partition(':')
+                if not isinstance(anchor[section], dict):
+                    anchor[section] = {}
+                anchor[section][key] = value.strip().strip('"')
+        return anchor
+
+    def _logging_children(self, name):
+        children = []
+        inside = False
+        for line in self.services[name]:
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip(' '))
+            if stripped == 'logging:':
+                inside = True
+                continue
+            if inside and indent <= 4:
+                break
+            if inside:
+                children.append(stripped)
+        return children
+
+    def test_every_service_declares_log_rotation(self):
+        missing = sorted(
+            name for name in self.services if not self._logging_children(name))
+        self.assertEqual(
+            missing, [],
+            '这些服务没有 logging 配置，日志会无限增长：%s' % ', '.join(missing))
+
+    def test_every_service_inherits_the_shared_log_defaults(self):
+        for name in sorted(self.services):
+            with self.subTest(service=name):
+                self.assertEqual(
+                    self._logging_children(name), ['<<: *log-defaults'],
+                    '%s 没有复用共享日志锚点，各写一份必然漂移' % name)
+
+    def test_log_defaults_use_the_rotating_json_file_driver(self):
+        self.assertEqual(self._log_anchor().get('driver'), 'json-file')
+
+    def test_log_defaults_bound_the_size_on_disk(self):
+        options = self._log_anchor().get('options') or {}
+        self.assertIsInstance(options, dict, 'options 必须是一个映射')
+
+        # max-size: -1 是 Docker 的默认值，等于没写
+        self.assertRegex(
+            options.get('max-size', ''), r'^\d+(\.\d+)?[bkmgt]?$',
+            'max-size 必须是带单位的大小，-1 表示不轮转')
+        self.assertLessEqual(
+            float(options['max-size'].rstrip('bkmgt')), 64,
+            '单个日志文件封顶不该超过 64m')
+
+        self.assertRegex(options.get('max-file', ''), r'^\d+$')
+        self.assertGreaterEqual(
+            int(options['max-file']), 2, '至少要保留一份轮转前的日志')
+        self.assertLessEqual(
+            int(options['max-file']), 10, '保留份数太多照样能写满磁盘')
