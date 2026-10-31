@@ -1,13 +1,16 @@
 import hashlib
 import importlib.util
+import io
 import json
 import re
+import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from django.core.exceptions import ImproperlyConfigured
+from django.core.management import CommandError
 from django.test import SimpleTestCase
 
 from .deployment import (
@@ -759,3 +762,354 @@ class StylesheetSyntaxTests(SimpleTestCase):
             found, [],
             '样式表语法不完整，浏览器会从出错位置开始静默丢弃后续规则：\n'
             + '\n'.join('  ' + item for item in found))
+
+
+def load_startup_tasks_module():
+    path = PROJECT_ROOT / 'docker' / 'startup_tasks.py'
+    spec = importlib.util.spec_from_file_location('campus_startup_tasks', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def compose_services(path):
+    """按 ``services:`` 下的顶层键切分 compose 段落。
+
+    刻意不引入 PyYAML：它只是本机开发环境的间接依赖，并不在
+    ``requirements.txt`` 里，CI 只装这一个文件。用真正的 YAML 解析器会让
+    契约测试在干净的 CI runner 上直接 ImportError，把「配置漂移」伪装成
+    「环境坏了」。这里只解析本项目 compose 实际使用的那一小类写法。
+    """
+    services = {}
+    current = None
+    for line in path.read_text(encoding='utf-8').splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        if not line.startswith(' '):
+            current = line.rstrip() == 'services:'
+            continue
+        if not current:
+            continue
+        indent = len(line) - len(line.lstrip(' '))
+        stripped = line.strip()
+        if indent == 2 and stripped.endswith(':') and not stripped.startswith('- '):
+            current = stripped[:-1]
+            services.setdefault(current, [])
+            continue
+        if current:
+            services[current].append(line)
+    return services
+
+
+def block_value(lines, header):
+    """取出某个 YAML 块内、直接子级的 ``key: value`` 映射。"""
+    values = {}
+    current = None
+    inside = False
+    for line in lines:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(' '))
+        if stripped == header:
+            inside = True
+            continue
+        if inside and indent <= 4:
+            break
+        if not inside:
+            continue
+        if indent == 6 and stripped.endswith(':'):
+            current = stripped[:-1]
+            values[current] = None
+        elif indent == 8 and ':' in stripped:
+            key, _, value = stripped.partition(':')
+            if current is not None and key.strip() == 'condition':
+                values[current] = value.strip().strip('"')
+    return values
+
+
+def block_items(lines, header):
+    """取出某个 YAML 块内的 ``- item`` 列表。"""
+    items = []
+    inside = False
+    for line in lines:
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(' '))
+        if stripped == header:
+            inside = True
+            continue
+        if inside and indent <= 4:
+            break
+        if inside and stripped.startswith('- '):
+            items.append(stripped[2:].strip().strip('"'))
+    return items
+
+
+class StartupTaskTests(SimpleTestCase):
+    """迁移与 collectstatic 必须由一次性任务承担，且失败要中断发布。"""
+
+    def setUp(self):
+        self.module = load_startup_tasks_module()
+
+    def test_default_runs_migrate_then_collectstatic_non_interactively(self):
+        with patch.object(self.module, 'call_command') as call_command:
+            executed = self.module.run_startup_tasks(stdout=io.StringIO())
+
+        self.assertEqual(executed, ['migrate', 'collectstatic'])
+        self.assertEqual(
+            [call.args[0] for call in call_command.call_args_list],
+            ['migrate', 'collectstatic'],
+        )
+        for call in call_command.call_args_list:
+            with self.subTest(command=call.args[0]):
+                self.assertIn('--noinput', call.args)
+
+    def test_migrate_only_skips_collectstatic(self):
+        with patch.object(self.module, 'call_command') as call_command:
+            executed = self.module.run_startup_tasks(
+                collect_static=False, stdout=io.StringIO())
+
+        self.assertEqual(executed, ['migrate'])
+        self.assertEqual(call_command.call_count, 1)
+
+    def test_failure_stops_the_release_instead_of_serving_a_half_migrated_schema(self):
+        with patch.object(
+            self.module, 'call_command',
+            side_effect=CommandError('迁移失败'),
+        ) as call_command:
+            with self.assertRaises(CommandError):
+                self.module.run_startup_tasks(stdout=io.StringIO())
+
+        self.assertEqual(call_command.call_count, 1)
+
+    def test_collectstatic_failure_aborts_before_gunicorn_starts(self):
+        def fail_on_collectstatic(name, *args, **kwargs):
+            if name == 'collectstatic':
+                raise CommandError('静态清单写入失败')
+
+        with patch.object(
+            self.module, 'call_command', side_effect=fail_on_collectstatic,
+        ):
+            with self.assertRaises(CommandError):
+                self.module.run_startup_tasks(stdout=io.StringIO())
+
+    def test_standalone_invocation_configures_django_first(self):
+        # 生产 compose 里这个文件是「python docker/startup_tasks.py」直接跑的，
+        # 没有 manage.py 帮忙调用 django.setup()，缺了这一步每条管理命令都会
+        # 以 AppRegistryNotReady 收场。
+        with patch.object(self.module.apps, 'ready', False), \
+                patch.object(self.module.django, 'setup') as setup, \
+                patch.object(self.module, 'call_command'):
+            self.module.run_startup_tasks(stdout=io.StringIO())
+        setup.assert_called_once_with()
+
+    def test_does_not_reconfigure_an_already_configured_process(self):
+        with patch.object(self.module.apps, 'ready', True), \
+                patch.object(self.module.django, 'setup') as setup, \
+                patch.object(self.module, 'call_command'):
+            self.module.run_startup_tasks(stdout=io.StringIO())
+        setup.assert_not_called()
+
+    def test_main_maps_the_flag_onto_the_same_code_path(self):
+        with patch.object(
+            self.module, 'run_startup_tasks',
+            return_value=['migrate'],
+        ) as run_startup_tasks:
+            self.assertEqual(self.module.main(['--migrate-only']), 0)
+        run_startup_tasks.assert_called_once_with(collect_static=False)
+
+        with patch.object(
+            self.module, 'run_startup_tasks',
+            return_value=['migrate', 'collectstatic'],
+        ) as run_startup_tasks:
+            self.assertEqual(self.module.main([]), 0)
+        run_startup_tasks.assert_called_once_with(collect_static=True)
+
+
+class ComposeProductionTopologyTests(SimpleTestCase):
+    """多实例发布的启动任务边界，必须由配置本身保证。
+
+    这里盯的是三个曾经只能靠肉眼发现的事故：
+
+    1. ``web`` 还留在 entrypoint 里跑 migrate：扩容到多个副本后，每个 worker
+       都会并发执行迁移和 collectstatic，后者会把 Manifest 静态文件的
+       ``staticfiles.json`` 写裂，页面安静地丢掉全部样式。
+    2. ``migrate`` 与 ``web`` 的环境变量各写一遍：改一处忘另一处，迁移用的
+       连接串和服务用的连接串悄悄分叉。
+    3. collectstatic 的产出只在 migrate 容器里：web 挂载不到共享卷，静态文件
+       哈希和 manifest 对不上，DEBUG=False 下整站 500。
+    """
+
+    PROD_COMPOSE = PROJECT_ROOT / 'docker-compose.prod.yml'
+    LOCAL_COMPOSE = PROJECT_ROOT / 'docker-compose.yml'
+    ENTRYPOINT = PROJECT_ROOT / 'docker' / 'entrypoint.sh'
+
+    def setUp(self):
+        self.services = compose_services(self.PROD_COMPOSE)
+        self.assertIn('migrate', self.services)
+        self.assertIn('web', self.services)
+
+    def _environment(self, name):
+        values = {}
+        inside = False
+        for line in self.services[name]:
+            stripped = line.strip()
+            indent = len(line) - len(line.lstrip(' '))
+            if stripped == 'environment:':
+                inside = True
+                continue
+            if inside and indent <= 4:
+                break
+            if not inside:
+                continue
+            # <<: *app-env 是共享锚点，值在别处定义，不当成独立键
+            if stripped.startswith('<<:'):
+                continue
+            key, _, value = stripped.partition(':')
+            values[key.strip()] = value.strip().strip('"')
+        return values
+
+    def _scalar(self, name, key):
+        """读取服务块内直接的 ``key: value`` 行。"""
+        for line in self.services[name]:
+            stripped = line.strip()
+            if stripped.startswith(key + ':'):
+                return stripped.split(':', 1)[1].strip().strip('"')
+        return None
+
+    def _sequence(self, name, key):
+        """读取 ``key: [a, b]`` 行内序列或 ``- item`` 块序列。"""
+        raw = self._scalar(name, key)
+        if raw is None:
+            return []
+        if raw.startswith('['):
+            body = raw.strip('[]')
+            return [item.strip().strip('"') for item in body.split(',') if item.strip()]
+        return block_items(self.services[name], key + ':')
+
+    def _uses_shared_environment_anchor(self, name):
+        inside = False
+        for line in self.services[name]:
+            stripped = line.strip()
+            if stripped == 'environment:':
+                inside = True
+                continue
+            if inside and len(line) - len(line.lstrip(' ')) <= 4:
+                break
+            if inside and stripped.startswith('<<:'):
+                return stripped
+        return None
+
+    def _shared_environment_anchor(self):
+        """解析 x-app-env 锚点块，返回它真正定义的键值。"""
+        text = self.PROD_COMPOSE.read_text(encoding='utf-8')
+        marker = 'x-app-env: &app-env'
+        self.assertIn(marker, text, '共享环境变量锚点 x-app-env 被删掉了')
+        values = {}
+        inside = False
+        for line in text.splitlines():
+            if line.startswith(marker):
+                inside = True
+                continue
+            if inside:
+                if not line.strip() or line.lstrip().startswith('#'):
+                    continue
+                if not line.startswith(' '):
+                    break
+                key, _, value = line.strip().partition(':')
+                values[key.strip()] = value.strip().strip('"')
+        return values
+
+    def test_web_never_runs_startup_tasks(self):
+        self.assertEqual(
+            self._environment('web').get('DJANGO_RUN_STARTUP_TASKS'), '0')
+        self.assertEqual(self._sequence('web', 'entrypoint'), [])
+
+    def test_migrate_is_a_one_shot_job(self):
+        self.assertEqual(
+            self._scalar('migrate', 'restart'), 'no')
+        self.assertEqual(
+            self._sequence('migrate', 'entrypoint'),
+            ['python', 'docker/startup_tasks.py'],
+        )
+
+    def test_migrate_waits_for_every_dependency(self):
+        depends = block_value(self.services['migrate'], 'depends_on:')
+        self.assertEqual(depends.get('db'), 'service_healthy')
+        self.assertEqual(depends.get('redis'), 'service_healthy')
+        self.assertEqual(
+            depends.get('minio_init'), 'service_completed_successfully')
+
+    def test_web_starts_only_after_migrate_completed(self):
+        depends = block_value(self.services['web'], 'depends_on:')
+        self.assertEqual(
+            depends.get('migrate'), 'service_completed_successfully')
+        self.assertEqual(depends.get('db'), 'service_healthy')
+        self.assertEqual(depends.get('redis'), 'service_healthy')
+        self.assertEqual(
+            depends.get('minio_init'), 'service_completed_successfully')
+
+    def test_collectstatic_output_is_shared_and_read_only_for_web(self):
+        self.assertEqual(
+            self._sequence('migrate', 'volumes'),
+            ['staticfiles:/app/staticfiles'],
+        )
+        self.assertEqual(
+            self._sequence('web', 'volumes'),
+            ['staticfiles:/app/staticfiles:ro'],
+        )
+
+    def test_shared_environment_anchor_cannot_drift(self):
+        anchor = self._shared_environment_anchor()
+        shared = ('DJANGO_DEBUG', 'DJANGO_REQUIRE_PRODUCTION_SERVICES',
+                  'DJANGO_SESSION_ENGINE')
+
+        for name in ('web', 'migrate'):
+            with self.subTest(service=name):
+                # 两个服务都必须从同一个锚点继承共享配置，而不是各写一遍
+                self.assertEqual(
+                    self._uses_shared_environment_anchor(name), '<<: *app-env')
+                # 也不允许在服务块里偷偷覆盖共享键
+                for key in shared:
+                    self.assertNotIn(
+                        key, self._environment(name),
+                        '%s 覆盖了共享键 %s，锚点就失去意义了' % (name, key))
+
+        for key in shared:
+            with self.subTest(key=key):
+                self.assertIn(key, anchor)
+                self.assertTrue(anchor[key], '%s 在锚点里是空值' % key)
+        self.assertEqual(anchor.get('DJANGO_DEBUG'), '0')
+        self.assertEqual(anchor.get('DJANGO_REQUIRE_PRODUCTION_SERVICES'), '1')
+
+    def test_only_the_startup_task_flag_differs_between_web_and_migrate(self):
+        self.assertEqual(self._environment('web'), {'DJANGO_RUN_STARTUP_TASKS': '0'})
+        self.assertEqual(
+            self._environment('migrate'), {'DJANGO_RUN_STARTUP_TASKS': '1'})
+
+    def test_production_compose_declares_the_shared_staticfiles_volume(self):
+        text = self.PROD_COMPOSE.read_text(encoding='utf-8')
+        volumes_block = text.splitlines()
+        declared = False
+        inside = False
+        for line in volumes_block:
+            if not line.startswith(' '):
+                inside = line.rstrip() == 'volumes:'
+                continue
+            if inside and line.strip() == 'staticfiles:':
+                declared = True
+        self.assertTrue(declared, '顶层 volumes 缺少 staticfiles 命名卷')
+
+    def test_local_compose_keeps_the_single_container_default(self):
+        local = compose_services(self.LOCAL_COMPOSE)
+        self.assertNotIn('migrate', local)
+        environment = {}
+        for line in local['web']:
+            stripped = line.strip()
+            if stripped.startswith('DJANGO_RUN_STARTUP_TASKS'):
+                key, _, value = stripped.partition(':')
+                environment[key.strip()] = value.strip().strip('"')
+        self.assertEqual(environment.get('DJANGO_RUN_STARTUP_TASKS'), '1')
+
+    def test_entrypoint_gates_startup_tasks_and_defaults_to_running_them(self):
+        text = self.ENTRYPOINT.read_text(encoding='utf-8')
+        self.assertIn('${DJANGO_RUN_STARTUP_TASKS:-1}', text)
+        self.assertIn('python docker/startup_tasks.py', text)
