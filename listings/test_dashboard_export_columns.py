@@ -21,8 +21,6 @@
 对上而调整任何一边的文案。
 """
 
-import csv
-import io
 import re
 
 from django.contrib.auth.models import User
@@ -36,16 +34,17 @@ from .models import (
     NotificationPreference, Order,
 )
 from chat_messages.models import ModerationEvent
+from .operations_panel_sections import (
+    PANEL_TITLE, SUBHEAD, export_rows, panel_sections, panel_subheads,
+    section_body, strip_tags,
+)
 from .task_runs import normalise_metrics, record_task_run
 
 from datetime import time, timedelta
 
 
-PANEL_TITLE = re.compile(r"<h2[^>]*>(.*?)</h2>", re.S)
 TABLE = re.compile(r"<table.*?</table>", re.S)
 TH = re.compile(r"<th[^>]*>(.*?)</th>", re.S)
-SUBHEAD = re.compile(r"<h3[^>]*>(.*?)</h3>", re.S)
-TAG = re.compile(r"<[^>]+>")
 
 
 def panel_tables(html):
@@ -55,17 +54,17 @@ def panel_tables(html):
     顺序与模板一致。只收模板里真的用 <table> 画出来的表；汇总卡片和漏斗不是表格，
     不收。子标题取表格之前最近的那个 <h3>，没有就是 None。
     """
-    marks = [(m.start(), m.end(), _text(m.group(1))) for m in PANEL_TITLE.finditer(html)]
+    marks = [(m.start(), m.end(), strip_tags(m.group(1))) for m in PANEL_TITLE.finditer(html)]
     tables = []
     for index, (_, body_end, title) in enumerate(marks):
         segment_end = marks[index + 1][0] if index + 1 < len(marks) else len(html)
         segment = html[body_end:segment_end]
         subheads = [
-            (body_end + m.start(), _text(m.group(1)))
+            (body_end + m.start(), strip_tags(m.group(1)))
             for m in SUBHEAD.finditer(segment)
         ]
         for table in TABLE.finditer(segment):
-            columns = [_text(cell) for cell in TH.findall(table.group(0))]
+            columns = [strip_tags(cell) for cell in TH.findall(table.group(0))]
             columns = [column for column in columns if column]
             if not columns:
                 continue
@@ -76,11 +75,6 @@ def panel_tables(html):
                     subhead = name
             tables.append((title, subhead, columns))
     return tables
-
-
-def export_rows(text):
-    """CSV 的全部行，每行是去空白后的格子列表。"""
-    return [[cell.strip() for cell in row] for row in csv.reader(io.StringIO(text))]
 
 
 def is_key_value_summary(row):
@@ -145,10 +139,6 @@ def _looks_like_value(cell):
         return False
 
 
-def _text(raw):
-    return TAG.sub("", raw).strip()
-
-
 def _under_subhead(body, subhead):
     """从子标题那一行开始，到本段结束为止的行。"""
     out = []
@@ -159,19 +149,6 @@ def _under_subhead(body, subhead):
         if started:
             out.append(row)
     return out
-
-
-def panel_sections(html):
-    """面板的节标题集合，按 <h2> 抓。
-
-    节标题和子标题在导出里形状一模一样——都是独占一格的单行。要区分它们，只能
-    回到面板：<h2> 是节，<h3> 是节底下的小标题。少了这一步，导出里每个小标题
-    都会被当成新的一节，于是「这个小标题归哪一节」就永远问不出来。
-    """
-    return {
-        TAG.sub('', raw).strip()
-        for raw in PANEL_TITLE.findall(html) if TAG.sub('', raw).strip()
-    }
 
 
 def _header_gaps(title, subhead, columns, body):
@@ -189,33 +166,6 @@ def _header_gaps(title, subhead, columns, body):
     if not any(width >= len(columns) for width in widths):
         return [(title, subhead, columns, 'widths %s' % sorted(widths))]
     return []
-
-
-def section_body(rows, title, sections):
-    """某个节标题之后、下一个节标题之前的所有行。
-
-    节标题独占一格时，它下面紧跟的就是这个节的内容；标题即表头时，它自己那行也要算。
-    节与节之间用空行分隔，但空行也出现在同一节的多个小标题之间，所以真正的边界
-    是下一个节标题，不是下一个空行。
-
-    节标题的判据只看第一格：导出里「标题即表头」的节把节标题和列名写在同一行，
-    这种行的第一格仍然是节标题。判据用面板的 <h2> 清单兜底——只有面板上真的
-    存在这个标题，它才算下一节的开头；否则一段说明文字恰好以某个节标题起头，
-    就会把一节劈成两半。
-    """
-    body = []
-    started = False
-    for row in rows:
-        if not started:
-            if row and row[0] == title:
-                started = True
-                body.append(row)
-            continue
-        # 下一个节标题出现，本节到此为止。子标题不算边界。
-        if row and row[0] in sections and row[0] != title:
-            break
-        body.append(row)
-    return body
 
 
 class DashboardExportColumnTests(TestCase):
@@ -388,3 +338,71 @@ class DashboardExportColumnTests(TestCase):
                 continue
             leaks.append((previous[0], row))
         self.assertEqual(leaks, [])
+
+
+class OperationsPanelSliceTests(TestCase):
+    """「按行切出一个面板」这件事本身，也要有测试守着。
+
+    operations_panel_sections 是十几个面板测试共用的那把刀。刀钝了没人会立刻发现——
+    每个调用方只会看到自己的断言变成假话。所以这里把刀依赖的三件事各自钉住：标题在
+    导出里必须占着整整一格；小标题不能和节标题撞名；耗时表必须全带「构建：」前缀。
+
+    最后一条最容易被忘掉：谁把那个前缀去掉，按裸标签切片的老写法就会悄悄回到耗时表
+    上，而那种切法的失败是跟着耗时排序漂移的，表现为「偶尔红一下」，查起来最难。
+    """
+
+    # 提醒面板的空态标题：没有高优先级提醒时它才出现，导出里从来没有对应的一节。
+    EMPTY_STATE_TITLES = frozenset({'暂时没有高优先级提醒'})
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='slice-staff', password='safe-password-123', is_staff=True,
+        )
+        self.client.force_login(self.user)
+
+    def fetch(self):
+        html = self.client.get(
+            reverse('operations_dashboard'), {'days': 30},
+        ).content.decode('utf-8')
+        text = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        ).content.decode('utf-8-sig')
+        return html, text, export_rows(text)
+
+    def test_every_panel_title_occupies_a_whole_cell_in_the_export(self):
+        html, text, rows = self.fetch()
+        first_cells = {row[0] for row in rows if row}
+        expected = panel_sections(html) - self.EMPTY_STATE_TITLES
+        self.assertTrue(expected)
+        missing = sorted(title for title in expected if title not in first_cells)
+        self.assertEqual(missing, [])
+
+    def test_no_subheading_shares_a_name_with_a_section_title(self):
+        html, _, _ = self.fetch()
+        clashes = sorted(panel_subheads(html) & panel_sections(html))
+        self.assertEqual(clashes, [])
+
+    def test_the_shared_slicer_finds_every_panel(self):
+        html, text, rows = self.fetch()
+        sections = panel_sections(html) - self.EMPTY_STATE_TITLES
+        self.assertTrue(sections)
+        empty = []
+        for title in sorted(sections):
+            body = section_body(rows, title, sections)
+            if not body or body[0][0] != title:
+                empty.append(title)
+        self.assertEqual(empty, [])
+
+    def test_build_performance_rows_all_carry_the_prefix(self):
+        html, text, rows = self.fetch()
+        sections = panel_sections(html)
+        body = section_body(rows, '看板自身构建耗时', sections)
+        prefixed = [row for row in rows if row and row[0].startswith('构建：')]
+        self.assertTrue(prefixed)
+        # 全站的「构建：」行都必须落在耗时表这一节里，别处一个都不许有。
+        self.assertEqual(
+            [row for row in body if row and row[0].startswith('构建：')], prefixed,
+        )
+        # 行数还要和面板自己声明的自检数字对上，少一行就说明有构建器没报数。
+        summary = {row[0]: row[1] for row in body if len(row) > 1 and row[1]}
+        self.assertEqual(len(prefixed), int(summary['共享构建器数量']))
