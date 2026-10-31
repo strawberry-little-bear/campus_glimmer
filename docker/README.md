@@ -49,7 +49,7 @@ flowchart LR
 | --- | --- |
 | [`entrypoint.sh`](entrypoint.sh) | 默认执行启动任务后 `exec gunicorn`；设 `DJANGO_RUN_STARTUP_TASKS=0` 可跳过 |
 | [`startup_tasks.py`](startup_tasks.py) | 启动任务的唯一事实来源：`migrate --noinput` + `collectstatic --noinput` |
-| [`healthcheck.py`](healthcheck.py) | 请求容器内 `/readyz/`，供 Docker `HEALTHCHECK` 使用 |
+| [`healthcheck.py`](healthcheck.py) | `--liveness`（默认，探 `/healthz/`）与 `--readiness`（探 `/readyz/`）两种探针模式；Docker `HEALTHCHECK` 用前者 |
 | [`../campus_glimmer/middleware.py`](../campus_glimmer/middleware.py) | 请求关联 ID 中间件与日志过滤器，让多副本日志能对回同一次请求 |
 | [`../campus_glimmer/metrics.py`](../campus_glimmer/metrics.py) | 进程级 HTTP 指标与 Prometheus 文本格式的 `/metrics/` 端点，默认关闭 |
 | [`backup.py`](backup.py) | PostgreSQL dump、客户端版本核验、对象镜像、SHA-256 校验、保留期清理与对象恢复 |
@@ -85,7 +85,12 @@ Invoke-RestMethod http://127.0.0.1:8000/readyz/
 
 `.env.production` 只用于本机部署，不能提交，也不应被打进镜像。URL 中的特殊字符必须编码，例如密码里的 `@` 要写成 `%40`。`DJANGO_S3_PUBLIC_ENDPOINT_URL` 必须是浏览器可达的地址，不能填写仅供容器互访的 `http://minio:9000`。
 `migrate` 是一次性任务，成功后会保持退出状态，所以 `docker compose ps` 里它显示为
-`exited (0)` 属于正常结果，不代表部署失败；要确认的是 `web` 是否进入 `healthy`。
+`exited (0)` 属于正常结果，不代表部署失败；要确认的是 `web` 是否进入 `healthy`，
+也就是进程层面的存活。依赖是否可用是另一个问题，单独验 `/readyz/`：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8000/readyz/
+```
 Web 没有起来时先看迁移任务的日志，不要去翻 Web：
 
 ```powershell
@@ -103,6 +108,20 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs migrat
 | `/readyz/` | 数据库、缓存和对象存储能完成最小访问吗？ | 至少一个关键依赖不可用，暂不应接流量 |
 
 生产响应的 `checks` 包含 `database`、`cache`，对象存储启用时还包含 `object_storage`。探针只做最小查询，不执行迁移、不写业务数据，也不返回连接串、异常文本或凭据。`/healthz/` 不访问依赖，避免数据库抖动触发无意义的重启。
+
+谁来问哪个问题，必须分开：
+
+```powershell
+# 容器 HEALTHCHECK（Dockerfile 与 compose 里写死的那条）
+python docker/healthcheck.py --liveness
+
+# 发布脚本 / 反向代理 / 人工验收：能不能接流量
+python docker/healthcheck.py --readiness
+```
+
+`HEALTHCHECK` 只走 `--liveness`。`/readyz/` 连着三个外部依赖，拿它做存活探针的话，数据库抖一次编排系统就会把每个 web 副本判成 unhealthy 并重启，一次存储故障被放大成全站故障。两个模式互斥，默认 `--liveness`，传错参数会非零退出而不是静默探错端点。
+
+由此 `docker compose ps` 里 `web` 的 `healthy` 只代表进程活着；要看能不能接流量，仍然以 `/readyz/` 为准。
 
 ## 🧾 日志与请求关联
 

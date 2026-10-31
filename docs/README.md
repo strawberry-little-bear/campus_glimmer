@@ -332,6 +332,8 @@ docker compose down -v
 - `/readyz/` 是就绪检查，会验证 PostgreSQL、Redis 和 S3/MinIO，任一失败返回 `503`；
 - 编排系统应优先用 `/readyz/` 判断实例是否接流量。
 
+容器的 `HEALTHCHECK` 只请求 `/healthz/`：`/readyz/` 连着三个外部依赖，拿它做存活探针会把一次数据库抖动放大成每个副本都被重启。因此 `docker compose ps` 里的 `healthy` 只代表进程存活，不代表依赖可用。
+
 生产拓扑使用 [`docker-compose.prod.yml`](../docker-compose.prod.yml)：PostgreSQL 16、Redis 7、MinIO、Gunicorn Web 和备份 sidecar。所有生产配置集中在 `.env.production`，并通过 `DJANGO_REQUIRE_PRODUCTION_SERVICES=1` 在启动时 fail closed。
 
 <details>

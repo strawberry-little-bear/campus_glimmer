@@ -65,6 +65,27 @@
 - 不自动重启服务，不摘除实例，不修改负载均衡配置；流量控制由部署系统按状态码决定。
 - 不在请求间缓存结果，避免上一次成功掩盖当前故障。
 
+## 容器 HEALTHCHECK 只做存活
+
+端点拆开之后，容器里的探针也必须跟着分工。`Dockerfile` 与 `docker-compose.prod.yml` 的 `HEALTHCHECK` 只请求 `/healthz/`，不请求 `/readyz/`。
+
+理由是开头那条原则的直接后果：`/readyz/` 会连 PostgreSQL、Redis和对象存储，把它挂到 `HEALTHCHECK` 上，数据库一次短暂抖动就会让编排系统把**每一个** web 副本判成 unhealthy 并重启。原本只是一次存储抖动，被探针放大成全站重启，而且重启并不能修复数据库。
+
+因此分工固定为：
+
+| 使用方 | 探针 | 端点 | 理由 |
+| --- | --- | --- | --- |
+| 容器 `HEALTHCHECK` | `python docker/healthcheck.py --liveness` | `/healthz/` | 只证明进程还能响应 HTTP，不碰依赖 |
+| 发布脚本 / 反向代理 / 人工验收 | `python docker/healthcheck.py --readiness` | `/readyz/` | 决定能否接流量，需要看到全部依赖 |
+
+由此产生的两个口径变化：
+
+- `docker compose ps` 里 `web` 显示 `healthy` 只说明进程活着，**不**说明数据库、缓存和对象存储可用。判断能否接流量要看 `/readyz/`。
+- `docker-compose.prod.yml` 里没有任何服务用 `depends_on: web: service_healthy` 等待 Web，存活抖动因此不会扩散成启动阻塞。
+
+`docker/healthcheck.py` 支持 `--liveness` 与 `--readiness` 两个互斥参数，默认走 `--liveness`；传入未知参数会非零退出并打印用法，避免拼错参数时静默探错端点。两种模式的失败都只打印一行固定文案，不输出异常文本、连接串或堆栈——探针输出会进容器日志。
+
+后续如果接入 Kubernetes：`livenessProbe` 继续指向 `/healthz/`，`readinessProbe` 指向 `/readyz/`，两者不要合并，也不要把 `readinessProbe` 的失败阈值设成重启条件。
 ## 测试计划
 
 - 存活检查返回 200、稳定 JSON 和 `Cache-Control: no-store`。

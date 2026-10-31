@@ -349,6 +349,8 @@ docker compose down -v
 - `/healthz/`：存活检查，确认 Django 进程可以处理请求；
 - `/readyz/`：就绪检查，验证 PostgreSQL、Redis 和 S3/MinIO，失败时返回 `503`。
 
+容器 `HEALTHCHECK` 只走 `/healthz/`。`/readyz/` 连着三个外部依赖，拿它当存活探针的话，数据库抖一次编排系统就会把每个副本判成 unhealthy 并重启，一次存储故障被放大成全站故障。所以 `docker compose ps` 里的 `healthy` 只代表进程活着，能否接流量要看 `/readyz/`。
+
 进程级指标暴露在 `/metrics/`：默认返回 404，配置 `DJANGO_METRICS_TOKEN` 后需带
 `Authorization: Bearer` 令牌抓取；多 worker 下每个副本各计一份，汇总与告警由外层监控系统承担。
 

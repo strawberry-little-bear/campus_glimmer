@@ -337,6 +337,7 @@
   - `docker-compose.prod.yml` 编排 PostgreSQL 16、Redis 7、MinIO、Gunicorn Web、bucket 初始化、一次性迁移任务和备份 sidecar；`DJANGO_REQUIRE_PRODUCTION_SERVICES=1` 在配置缺失或仍含占位值时拒绝启动。
   - `settings.py` 将数据库、缓存、对象存储和静态文件策略收口到可测试的配置层；WhiteNoise 分发收集后的静态文件，上传文件进入对象存储。
   - `/healthz/` 只证明进程能响应；`/readyz/` 检查 PostgreSQL、Redis 和对象存储，任一关键依赖不可用时返回 `503`，且不泄露连接串或异常文本。
+  - 容器 `HEALTHCHECK` 只走 `/healthz/`（存活），`/readyz/`（就绪）由发布脚本、反向代理和人工验收调用；`docker compose ps` 里的 `healthy` 只代表进程存活，不代表依赖可用。
   - 备份 sidecar 生成 PostgreSQL custom dump、对象镜像和带 SHA-256 的 manifest；支持备份校验、对象增量恢复、失败目录隔离与保留期清理。
   - 当前基线面向单机小规模部署：启动任务已是一次性 `migrate` 服务，但 Web 仍是有状态的单副本；数据库与对象存储不是同一事务快照，默认备份也没有异地容灾能力。
   - 每个请求都带关联 ID：客户端传入的 `X-Request-ID` 经字符集校验后沿用，否则自动生成；同一个值同时进响应头、结构化日志行和 gunicorn 的 access log。Django 默认在 `DEBUG=False` 时什么都不往 stdout 写，现在由 `LOGGING` 显式接管，`DJANGO_LOG_LEVEL` 可调级别，Compose 再对全部服务按 `10m` × `5` 个文件轮转。
