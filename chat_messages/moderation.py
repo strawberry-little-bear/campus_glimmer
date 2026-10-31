@@ -69,11 +69,6 @@ def analyze_content(content: str) -> dict:
     }
 
 
-def scan_content(content: str) -> list[str]:
-    """Return stable, human-readable rule labels for risky content."""
-    return analyze_content(content)['matched_terms']
-
-
 def moderate_submission(content: str, *, author, channel: str, item=None, receiver=None):
     """Create an audit event and return it when content should be blocked."""
     analysis = analyze_content(content)

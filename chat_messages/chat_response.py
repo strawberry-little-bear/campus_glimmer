@@ -122,11 +122,6 @@ def _read_rows(rows):
     return [row for row in rows if row['is_read']]
 
 
-def _timed_rows(read_rows):
-    """Opened rows whose opening carries a usable timestamp."""
-    return [row for row in read_rows if row['read_at']]
-
-
 def _unopened_rows(rows, cutoff):
     """Rows sent before the cutoff and still never opened.
 
