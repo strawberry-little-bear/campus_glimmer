@@ -57,6 +57,10 @@ flowchart LR
 | [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、表格与分页链接名称、当前栏目、跳转主内容与导航触控目标 |
 | [`test_anchor_scroll_margin.py`](test_anchor_scroll_margin.py) | 页内跳转落点避让守卫：锚点、分页锚点、运营看板分区与表单控件都必须让出吸顶导航高度 |
 | [`test_contrast_contract.py`](test_contrast_contract.py) | 文字对比度契约：按浏览器分层合成规则复算深绿面板浅色文字的最坏背景，并钉住 `--muted`、`--primary` 与 `code` 字色的 AA 下限 |
+| [`test_backup_script.py`](test_backup_script.py) | 备份与还原边车的离线覆盖：校验和验证、清单路径逃逸、保留期清理与 PostgreSQL 客户端/服务端大版本检查；dump、对象下载与 S3 客户端全部替换，断言落在契约上而不是环境上 |
+| [`test_doc_count_claims.py`](test_doc_count_claims.py) | 文档计数声明契约：`docs/` 下全部 markdown 的折叠块条目数、表格数据行数与「共 N 项，分 M 组」都必须和真实内容对得上 |
+| [`test_error_pages.py`](test_error_pages.py) | 品牌化错误页：400、403、CSRF、404 与 500 的统一外壳、错误码与安全返回路径，以及不泄露堆栈与用户数据 |
+| [`test_object_storage_integration.py`](test_object_storage_integration.py) | 真实 S3/MinIO 集成覆盖：未配置时跳过、配置了却不可达时失败，绝不让「对象存储已验证」停留在文档里而什么都没上传 |
 
 ## 🚪 根路由
 

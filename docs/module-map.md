@@ -199,10 +199,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（163 个）
+## 业务链路的测试模块（184 个）
 
 <details>
-<summary>业务链路测试清单（163 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（184 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -256,6 +256,12 @@ campus_glimmer/
 - **`test_campaigns.py`**：校园专题、时间窗口和专题商品测试
 
 - **`test_campus_pulse.py`**：按校园地点聚合的供需热力与运营压力
+
+- **`test_activity_segment_query_budget.py`**：用户活跃分层的查询预算与逐用户重算 oracle——八种行为从一条 annotate 拆成八次分组聚合，口径逐格不变，JOIN 数写死不许合回去
+
+- **`test_campus_pulse_query_budget.py`**：校园供需热力的查询预算与逐地点 oracle——三个反向关系的计数不许挤进同一条 annotate，实测 0.30s/3 JOIN 降到 0.0076s，输出逐格相同
+
+- **`test_two_way_fanout_budget.py`**：两路笛卡尔积的查询预算与口径护栏——专题在售×报名、地点新增×成交、点击×曝光三处，数字带 distinct 一直对，中间行数却是乘积
 - **`test_location_registry_quality.py`**：档案开关、字段覆盖、当前引用、交付来源、近似重名、停用引用、只读边界与看板 / CSV 导出
 
 - **`test_location_maintenance_queue.py`**：地点维护队列的入队规则、互斥优先级、重叠信号、排序、截断、只读边界与看板 / CSV 导出
@@ -283,9 +289,15 @@ campus_glimmer/
 
 - **`test_demand_match_quality.py`**：分档采纳率、单调性、高分被拒、维度效果与看板导出
 
+- **`test_demand_filter_workspace.py`**：求购广场筛选工作台的关键词、分类、地点与状态组合，以及空态测试
+
+- **`test_demand_match_quality_query_budget.py`**：需求匹配质量聚合的 oracle——每个上报数字都用 values_list 加纯 Python 重算，filter 搬进 Count 时漏一个字段这里先红
+
 - **`test_demand_opportunity_followups.py`**：填写率排在逾期前面、没给期限的单独报、两组完成率守住噪声线
 
 - **`test_demand_radar.py`**：需求雷达聚合、供给判断和看板导出测试
+
+- **`test_demand_radar_query_budget.py`**：需求雷达可用供给的查询预算与逐候选 oracle——50 次 COUNT 收敛成 3 次，且查询数不许随候选数增长
 
 - **`test_demand_radar_hit_layers.py`**：分层命中率：门槛、未分织任务与导出行
 
@@ -309,6 +321,10 @@ campus_glimmer/
 - **`test_moderation_risk_tier_shape.py`**：分母含 pending 且按 created_at 切、节奏按各自目标归一化、等于目标算目标内、右删失样本单独一节、两套尺子的两个方向分开报、规则按参与产出计数
 
 - **`test_favorite_collection_quality.py`**：心愿单分组的大小分布、空分组、渗透、命名收敛与先收藏后归类的四类分开报
+
+- **`test_favorite_collection_quality_query_budget.py`**：「先收藏后归类」四类计数的查询预算与 oracle——四条 COUNT 合成一条 aggregate，跨数据库的时间差仍留在 Python 里算
+
+- **`test_favorite_pagination.py`**：心愿单分页、越界页码与权限隔离测试
 
 - **`test_first_viewed.py`**：第一次被看见之后的收藏与下单时延、来源拆解与后续一步
 
@@ -339,6 +355,10 @@ campus_glimmer/
 
 - **`test_my_items_pagination.py`**：每页 12 件、非法与越界页码、页签分页保留、批量工具可见性、原页回跳与开放重定向防护
 
+- **`test_my_orders_workspace.py`**：我的交易工作台的状态筛选、买卖双方计数与权限隔离测试
+
+- **`test_pagination_elision.py`**：商品、求购、失物招领三个列表页的分页省略——页数多时不许把页面撑出横向滚动条，首末页始终在场、翻页不丢筛选
+
 - **`test_lifecycle_reminder_effect.py`**：提醒之后的触达、阅读与行动对照，含事件优先、混合来源、通知删除后事件保留、分类分层、本周期提醒负担、样本门槛、隐私边界与看板导出
 
 - **`test_lifecycle_reminder_action_trend.py`**：跨周期对比的窗口切分、样本门槛、`both` 桶不判方向、无提醒不报零
@@ -347,6 +367,8 @@ campus_glimmer/
 - **`test_lifecycle_reminders.py`**：生命周期提醒的合并、冷却、偏好、免打扰、事件台账同事务写入与 dry-run 边界测试
 
 - **`test_lost_found.py`**：失物招领、匹配和线索流转测试
+
+- **`test_lost_found_filter_workspace.py`**：失物招领筛选工作台的类型、状态、分类与地点组合，以及空态测试
 
 - **`test_lost_found_image.py`**：一条记录一张可选照片的模型约束、变体生成与回退、表单字段显隐、发布 / 编辑 / 移除三条路径与页面渲染测试
 
@@ -390,6 +412,10 @@ campus_glimmer/
 
 - **`test_notification_preference_usage_smoke.py`**：三个场景的看板与导出渲染——有偏好行、空平台、有通知却零偏好行
 
+- **`test_moderation_notice_preference_query_budget.py`**：内容审核结果通知的查询预算——免打扰不再逐用户查、发言行为不再按组各查一遍、偏好四格不再搬全表，全部用 Python 重算作基准
+
+- **`test_notification_panel_query_budget.py`**：三个通知面板的查询预算与逐字段 oracle——二十多个开关从一百多次往返收敛成一次 aggregate，且不许拆回 N+1
+
 - **`test_notification_quiet_hours.py`**：免打扰窗口、跨午夜和未读静默测试
 
 - **`test_notification_quiet_hours_shape.py`**：空分母不报 0、相等时间单独数、总闸关着的配置不叠加、跨午夜按分钟覆盖、看板与导出同名
@@ -401,6 +427,12 @@ campus_glimmer/
 - **`test_notification_snooze_return.py`**：延后的通知到期后是否回来：把主动等待从处理时长里拆出来
 
 - **`test_operations_digest.py`**：告警日报只投活跃管理员、尊重偏好、幂等键不重复刷屏
+
+- **`test_operations_deferred_sections.py`**：运营看板延后揭开的契约——只有前 4 个分区首屏、其余 34 个带 cookie 时留空桩、所有隐藏规则必须挂在 html.js 下面
+
+- **`test_operations_fragments.py`**：运营看板分区取回的契约——上下文键表反查、端点权限门槛与两条渲染路径逐字节等价
+
+- **`test_operations_nav.py`**：运营看板分区跳转条与 38 个 partial 的对应关系，拦住「chip 还在、点下去却不动」这类单向失效
 
 - **`test_opportunity_digest.py`**：互助机会摘要通知、偏好和命令测试
 
@@ -419,6 +451,7 @@ campus_glimmer/
 - **`test_order_detail_presentation.py`**：订单详情「下一步」卡片的分支标题、渲染出的侧栏 h2 与模板拆分形状
 - **`test_order_workflow.py`**：订单状态机的直接口径——状态表必须覆盖全部状态、卖家推进与买家取消的不对称权限、终态拒绝一切目标、被拒流转不写任何行、取消回在售并只唤醒一次性关注
 
+- **`test_order_status_aggregate_query_budget.py`**：交易状态分布的查询预算与逐状态 oracle——七次 COUNT 合成一次 GROUP BY，没有订单的状态也必须显示 0
 
 - **`test_price_insights.py`**：同类价格分位数与参考可信度，样本不足时降低提示强度
 
@@ -461,11 +494,19 @@ campus_glimmer/
 - **`test_saved_search_quiet_window.py`**：三档静默状态分开数、占比分母是全部关注、缓冲命中不计入已送达
 
 - **`test_saved_search_limit_shape.py`**：九档分布与「不是 1 到 9」单列、截断规模只报此刻、条数 × 节奏交叉与页面导出测试
+
+- **`test_saved_search_pagination.py`**：关注搜索工作台的分页、操作回跳与开放重定向防护
 - **`test_search_combo_shift.py`**：组合占比口径、稀疏门槛、单周期组合与面板导出测试
 
 - **`test_search_impression_pairing_quality.py`**：周期边界、历史曝光可配对、字段缺失、零位置、延迟分档、自然日覆盖与看板导出隐私边界
 
 - **`test_search_exposure_cold_start.py`**：观察缓冲、首曝延迟边界、早于发布曝光、早于首曝点击、有点击无曝光、分类聚合、页面 20 条与 CSV 完整清单
+
+- **`test_search_insights_export_coverage.py`**：洞察页面板与 CSV 导出的节标题同构——默认要求同名，别名表每条都必须写明理由
+
+- **`test_search_insights_fragments.py`**：搜索洞察分区取回的契约——上下文键表反查、staff 门槛与两条渲染路径逐字节等价
+
+- **`test_search_insights_query_budget.py`**：搜索词分析的口径护栏与查询预算——点击与曝光不许挤进同一条 annotate，否则同一词的点击会按曝光条数重复计数
 
 - **`test_search_position_quality.py`**：位置分档点击率、排序效果与深度诊断，含页面与导出呈现
 
