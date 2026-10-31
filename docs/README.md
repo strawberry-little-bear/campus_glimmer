@@ -441,6 +441,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [校园专题报名设计](campaign-registration-design.md) | 想了解专题参与区间、幂等约束、隐私边界和运营口径 |
 | [校园专题上新摘要设计](campaign-update-digest-design.md) | 想了解主动订阅、合并摘要、发送边界和运营口径 |
 | [专题目标与转化漏斗](campaign-goals-funnel-design.md) | 想了解六类目标、节奏偏差、严格漏斗、跨专题样本门槛与对比边界 |
+| [专题摘要的形状](campaign-digest-shape-design.md) | 想了解加入与订阅的落差、缓冲池的三种结局、按各自周期归一化的送达节奏，以及只读边界 |
 | [内容审核队列分页](moderation-queue-pagination-design.md) | 想了解每页条数、筛选保留、越界页码与操作回跳的设计边界 |
 | [举报与争议队列分页](governance-queue-pagination-design.md) | 想了解 SQL 优先级排序、争议状态层级、全量待办统计与只读边界 |
 | [品牌化错误体验](error-experience-design.md) | 想了解 400 / 403 / 404 / 500 与 CSRF 错误页的恢复路径、隐私边界和移动端验收 |
