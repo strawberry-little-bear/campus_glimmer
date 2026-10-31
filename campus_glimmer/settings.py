@@ -53,6 +53,10 @@ MIDDLEWARE = [
     # 放在最前面：关联 ID 必须在任何可能写日志的中间件之前就定下来，
     # 否则排在它后面的组件报警时，日志里还是占位符。
     'campus_glimmer.middleware.RequestIdMiddleware',
+    # 紧跟关联 ID 之后：它要读 resolver_match，而 URL 解析发生在整个中间件链
+    # 的最内层，位置前后不影响取值；但它必须排在会短路请求的中间件之前，
+    # 否则被短路的请求一条指标都不留。
+    'campus_glimmer.metrics.MetricsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # 动态响应此前完全不走压缩：看板一页 580KB 左右的 HTML 原样下发，普通页面
     # 也有 16KB 左右。部署是 gunicorn 直出、没有反向代理，所以只能在这里压。
@@ -168,6 +172,12 @@ validate_production_services(
 # 生产环境什么都不往 stdout 写，日志收集器只能收到空气。这里显式接管：
 # stdout 始终可用、每行都带请求关联 ID，级别由 DJANGO_LOG_LEVEL 控制。
 LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
+
+# /metrics/ 的访问令牌。留空即整个端点返回 404——监控端点暴露的是内部拓扑
+# （有哪些路由、大致多快），不该默认对外可见。令牌只在这里读，不进任何模板。
+METRICS_TOKEN = os.getenv('DJANGO_METRICS_TOKEN', '').strip()
+METRICS_SERVICE_NAME = os.getenv('DJANGO_METRICS_SERVICE_NAME', 'campus-glimmer').strip() \
+    or 'campus-glimmer'
 
 LOGGING = {
     'version': 1,
