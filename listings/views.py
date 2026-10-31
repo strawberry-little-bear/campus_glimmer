@@ -28,6 +28,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .analytics import PERIOD_CHOICES, build_operations_dashboard, build_search_insights
 from .campaign_phase_review import build_campaign_phase_review
+# 专题摘要的订阅、缓冲与送达节奏。它读的是 campaign_analytics 汇总里那三个
+# 原始计数读不出来的事：订阅率、缓冲池的三种结局、以及相对各自频率周期的节奏。
+from .campaign_digest_shape import build_campaign_digest_shape
 from .campaign_registration import (
     CampaignRegistrationClosed, join_campaign, leave_campaign,
 )
@@ -3674,6 +3677,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
         build_contribution_milestone_phase_rhythm,
     ),
     ('campaign_phase_review', '校园专题分阶段复盘', build_campaign_phase_review),
+    ('campaign_digest_shape', '专题摘要的形状', build_campaign_digest_shape),
     ('borrow_days_shape', '默认借用天数形状', build_borrow_days_shape),
     ('dispute_evidence_shape', '申诉证据形状', build_dispute_evidence_shape),
     ('profile_contact_shape', '联系方式的形状', build_profile_contact_shape),
@@ -9802,6 +9806,146 @@ def operations_dashboard_export(request):
     writer.writerow([
         '只有三段都至少有 3 次预约才判断预约高峰；样本不足或并列时只报数字。'
         '这里不输出用户名、商品标题或订单号，也不调整专题、商品、曝光或通知。',
+    ])
+
+    digest = dashboard['campaign_digest_shape']
+    writer.writerow([])
+    writer.writerow(['专题摘要的形状'])
+    writer.writerow([
+        '口径与门槛', digest['summary'],
+        '副标题：从加入到订阅、缓冲池的三种结局，和送达的相对节奏',
+        '第一节是此刻的快照，不按窗口切；已退出的报名单列，不进订阅率的分母',
+        '频率取报名行当前的值，不是入队那一刻的值——命中自己没有频率字段',
+        '第二、三节按 matched_at 切窗口，只看窗口内入队的条目；第四节看此刻全部挂着的',
+        '节奏按各自频率的周期归一化，不按绝对时长；恰好等于一个周期算「周期内」',
+        '库里只写 cancelled_at、没有取消原因字段，「为什么取消」不知道，不编',
+        '不输出用户名、商品标题或订单号；不加迁移、不改频率选项、不取消任何命中',
+    ])
+    writer.writerow([
+        '参与中报名', digest['active_count'],
+        '其中开启摘要', digest['subscribed_count'],
+        '订阅率（%）', '' if digest['subscribe_rate'] is None else digest['subscribe_rate'],
+        '已退出报名', digest['left_count'],
+        '全局偏好关着', digest['subscribed_preference_off_count'],
+        '没有偏好行', digest['subscribed_no_preference_count'],
+        '此刻免打扰', digest['subscribed_quiet_count'],
+        '一档最小样本', digest['min_sample'],
+        '噪声线（百分点）', digest['noise_points'],
+    ])
+
+    writer.writerow([])
+    writer.writerow(['一、从加入到订阅'])
+    writer.writerow([
+        '频率', '周期（天）', '参与中报名', '开启摘要', '订阅率（%）',
+        '占总报名（%）', '全局偏好关着', '没有偏好行', '此刻免打扰', '样本',
+    ])
+    for row in digest['frequency_rows']:
+        writer.writerow([
+            row['label'],
+            '' if row['cycle_days'] is None else row['cycle_days'],
+            row['registration_count'], row['subscribed_count'],
+            '' if row['subscribe_rate'] is None else row['subscribe_rate'],
+            '' if row['share_of_active'] is None else row['share_of_active'],
+            row['preference_off_count'], row['no_preference_count'], row['quiet_count'],
+            '不足 %d 条，只作参考' % digest['min_sample']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '', '',
+        '分母是参与中的报名，已退出的报名单列：订阅率问的是「还在参与的人里多少人开着'
+        '摘要」，把已退出的人并进分母只会把它稀释掉',
+        '加入专题和订阅摘要是两次独立同意，两个数的落差就是这条链路的第一个漏点',
+        '「全局偏好关着」是发送端的第一道门，命中会一直挂着直到用户自己打开',
+        '「没有偏好行」的用户发送端会补一行默认开启的，照样送达，不并进上一列',
+        '「此刻免打扰」是快照，只压顶部角标，不挡摘要入库',
+        '频率取值落在两个选项之外的单独一行，只在真有的时候出现',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['二、缓冲池的三种结局'])
+    writer.writerow([
+        '频率', '周期（天）', '窗口内入队', '已送达', '已取消', '仍未送达',
+        '送达率（%）', '取消率（%）', '样本',
+    ])
+    for row in digest['outcome_rows']:
+        writer.writerow([
+            row['label'],
+            '' if row['cycle_days'] is None else row['cycle_days'],
+            row['queued_count'], row['delivered_count'], row['cancelled_count'],
+            row['pending_count'],
+            '' if row['delivered_rate'] is None else row['delivered_rate'],
+            '' if row['cancelled_rate'] is None else row['cancelled_rate'],
+            '不足 %d 条，只作参考' % digest['min_sample']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '',
+        '入队之后只有三种结局，加一种还没有结局：送达、取消、还挂着，四列互斥',
+        '窗口按 matched_at 切，不按 notified_at 切：要数的是「这段时间入队的条目去了哪里」',
+        '「仍未送达」只数窗口内入队的那些；第四节数的是此刻全部挂着的，两个数不一样',
+        '库里只写 cancelled_at，没有取消原因字段，所以「为什么取消」不知道，不编',
+        '频率取报名行当前的值，改过频率的报名会把老条目带到新频率那一行去',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['三、从入队到送达，相对各自频率的周期'])
+    writer.writerow([
+        '频率', '周期（天）', '已送达条数',
+        '周期内', '一到两倍', '两到四倍', '超过四倍',
+        '周期内占比（%）', '平均等待（秒）', '中位等待（秒）', 'P90 等待（秒）', '样本',
+    ])
+    for row in digest['rhythm_rows']:
+        writer.writerow([
+            row['label'],
+            '' if row['cycle_days'] is None else row['cycle_days'],
+            row['delivered_count'],
+        ] + [band['count'] for band in row['bands']] + [
+            '' if row['within_share'] is None else row['within_share'],
+            '' if row['mean_seconds'] is None else int(row['mean_seconds']),
+            '' if row['median_seconds'] is None else int(row['median_seconds']),
+            '' if row['p90_seconds'] is None else int(row['p90_seconds']),
+            '不足 %d 条，只作参考' % digest['min_sample']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '',
+        '分档按「等待时长 ÷ 该频率自己的周期」的倍数切，不按绝对时长切：缓冲三天的'
+        '条目在每周那一档是提前送达，在每日那一档是拖了三倍',
+        '恰好等于一个周期算「周期内」：踩着周期线送达的那一条是准点的',
+        '只收 notified_at 非空的条目；没有周期的表外频率不进任何一档，除不出倍数来',
+        '四档互斥、全列，包括 0 样本档',
+        '等待时长按秒报，页面同一行显示成小时和天',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['四、当前仍挂着的'])
+    writer.writerow([
+        '频率', '周期（天）', '仍在缓冲', '其中仍可投递',
+        '周期内', '已超周期', '最老一条已等待', '样本',
+    ])
+    for row in digest['pending_rows']:
+        writer.writerow([
+            row['label'],
+            '' if row['cycle_days'] is None else row['cycle_days'],
+            row['pending_count'], row['deliverable_count'],
+            '' if row['within_cycle_count'] is None else row['within_cycle_count'],
+            '' if row['overdue_count'] is None else row['overdue_count'],
+            row['oldest_wait_label'],
+            '不足 %d 条，只作参考' % digest['min_sample']
+            if row['is_small_sample'] else '可读数',
+        ])
+    writer.writerow([
+        '说明', '', '',
+        '这一节不看窗口，看此刻：所有仍未送达且未取消的命中，含窗口之前入队的',
+        '「其中仍可投递」用发送端自己的边界函数复算：报名仍活跃、订阅仍开着、'
+        '专题仍在进行、商品仍归属该专题且当前可售',
+        '仍可投递不足全部的那部分是审计尚未扫到的死条目，会由下一轮发送兜底取消',
+        '「周期内 / 已超周期」按该频率的周期切，表外频率没有周期，两列报空',
+    ])
+    writer.writerow([
+        '此处只报告：不加迁移、不改频率选项、不改发送边界、不取消任何命中、'
+        '不补发任何摘要、不按频率做任何自动处置。摘要阅读率由 campaign_analytics 报，'
+        '本模块不重复。',
     ])
 
     calendar = dashboard['academic_calendar']

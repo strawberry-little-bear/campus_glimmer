@@ -174,3 +174,128 @@
     {% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>只读复盘：边界采用半开区间，结束时刻不计入；完成交易只数当前状态为 <code>completed</code> 的订单。三段中任一段预约不足 3 次时只报数字；这里不输出用户名、商品标题或订单号，也不调整专题、商品、曝光或通知。</div>
 </section>
+
+<section class="content-card ops-panel mb-4 campaign-digest-shape-panel">
+    <div class="ops-panel-heading">
+        <div><span class="eyebrow eyebrow-soft">Campaign digest shape</span><h2>专题摘要的形状</h2></div>
+        <span class="ops-panel-hint">第一节是此刻的快照；二、三节按统计窗口；第四节看此刻仍挂着的</span>
+    </div>
+    {% if not campaign_digest_shape.has_data %}<div class="empty-inline">{{ campaign_digest_shape.summary }}</div>{% endif %}
+    <div class="campaign-analytics-summary campaign-digest-summary">
+        <div><span>参与中报名</span><strong>{{ campaign_digest_shape.active_count }}</strong><small>另有 {{ campaign_digest_shape.left_count }} 段已退出，不进分母</small></div>
+        <div><span>开启摘要</span><strong>{{ campaign_digest_shape.subscribed_count }}</strong><small>{% if campaign_digest_shape.subscribe_rate is not None %}订阅率 {{ campaign_digest_shape.subscribe_rate }}%{% else %}暂无参与中报名{% endif %}</small></div>
+        <div><span>窗口内入队</span><strong>{{ campaign_digest_shape.outcome_queued_count }}</strong><small>送达 {{ campaign_digest_shape.outcome_delivered_count }} · 取消 {{ campaign_digest_shape.outcome_cancelled_count }} · 未送达 {{ campaign_digest_shape.outcome_pending_count }}</small></div>
+        <div class="campaign-summary-warning"><span>此刻仍挂着</span><strong>{{ campaign_digest_shape.pending_total }}</strong><small>其中仍可投递 {{ campaign_digest_shape.pending_deliverable_count }}</small></div>
+    </div>
+
+    <div class="ops-panel-block">
+        <div class="campaign-subheading">
+            <div><h3>一、从加入到订阅</h3><p>加入专题和订阅摘要是两次独立同意，两个数的落差就是这条链路的第一个漏点。</p></div>
+            <span>只看此刻的快照，不按统计窗口切</span>
+        </div>
+        {% if campaign_digest_shape.frequency_rows %}
+        <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-digest-subscription-table"><caption class="visually-hidden">专题摘要的形状 · 从加入到订阅</caption><thead><tr><th>频率</th><th>周期（天）</th><th>参与中报名</th><th>开启摘要</th><th>订阅率（%）</th><th>占总报名（%）</th><th>偏好关着</th><th>没有偏好行</th><th>此刻免打扰</th><th>样本</th></tr></thead><tbody>
+            {% for row in campaign_digest_shape.frequency_rows %}
+            <tr>
+                <td><strong>{{ row.label }}</strong>{% if row.is_other %}<small class="d-block text-muted">表外取值</small>{% endif %}</td>
+                <td>{% if row.cycle_days %}{{ row.cycle_days }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ row.registration_count }}</td>
+                <td><strong>{{ row.subscribed_count }}</strong></td>
+                <td>{% if row.subscribe_rate is not None %}{{ row.subscribe_rate }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if row.share_of_active is not None %}{{ row.share_of_active }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ row.preference_off_count }}</td>
+                <td>{{ row.no_preference_count }}</td>
+                <td>{{ row.quiet_count }}</td>
+                <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">不足 {{ campaign_digest_shape.min_sample }} 条</span>{% else %}可读数{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody></table></div>
+        <p class="small text-muted mt-2 mb-0">分母是参与中的报名，已退出的报名单列在分母之外：订阅率问的是「还在参与的人里多少人开着摘要」，把已退出的人并进分母只会把它稀释掉。「偏好关着」是发送端的第一道门，命中会一直挂着直到用户自己打开；「没有偏好行」的用户发送端会补一行默认开启的，照样送达，不并进上一列；「此刻免打扰」是快照，只压顶部角标，不挡摘要入库。</p>
+        {% else %}
+        <div class="empty-inline mt-2">当前没有参与中的专题报名，这一节没有可分档的行。</div>
+        {% endif %}
+    </div>
+
+    <div class="ops-panel-block">
+        <div class="campaign-subheading">
+            <div><h3>二、缓冲池的三种结局</h3><p>入队之后只有三种结局，加一种还没有结局：送达、取消、还挂着，四列互斥。</p></div>
+            <span>窗口按 matched_at 切，不按 notified_at 切</span>
+        </div>
+        {% if campaign_digest_shape.outcome_rows %}
+        <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-digest-outcome-table"><caption class="visually-hidden">专题摘要的形状 · 缓冲池的三种结局</caption><thead><tr><th>频率</th><th>周期（天）</th><th>窗口内入队</th><th>已送达</th><th>已取消</th><th>仍未送达</th><th>送达率（%）</th><th>取消率（%）</th><th>样本</th></tr></thead><tbody>
+            {% for row in campaign_digest_shape.outcome_rows %}
+            <tr>
+                <td><strong>{{ row.label }}</strong>{% if row.is_other %}<small class="d-block text-muted">表外取值</small>{% endif %}</td>
+                <td>{% if row.cycle_days %}{{ row.cycle_days }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ row.queued_count }}</td>
+                <td><strong>{{ row.delivered_count }}</strong></td>
+                <td>{{ row.cancelled_count }}</td>
+                <td>{{ row.pending_count }}</td>
+                <td>{% if row.delivered_rate is not None %}{{ row.delivered_rate }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if row.cancelled_rate is not None %}{{ row.cancelled_rate }}%{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">不足 {{ campaign_digest_shape.min_sample }} 条</span>{% else %}可读数{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody></table></div>
+        <p class="small text-muted mt-2 mb-0">「仍未送达」只数窗口内入队的那些；第四节数的是此刻全部挂着的，两个数不一样。库里只写 cancelled_at，没有取消原因字段，所以「为什么取消」不知道，这里不编。频率取报名行当前的值，改过频率的报名会把老条目带到新频率那一行去。</p>
+        {% else %}
+        <div class="empty-inline mt-2">统计窗口内没有任何新入队的命中，这一节没有可分档的行。</div>
+        {% endif %}
+    </div>
+
+    <div class="ops-panel-block">
+        <div class="campaign-subheading">
+            <div><h3>三、从入队到送达，相对各自频率的周期</h3><p>缓冲三天的条目在每周那一档是提前送达，在每日那一档是拖了三倍，所以按各自频率的周期归一化。</p></div>
+            <span>恰好等于一个周期算「周期内」</span>
+        </div>
+        {% if campaign_digest_shape.rhythm_rows %}
+        <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-digest-rhythm-table"><caption class="visually-hidden">专题摘要的形状 · 从入队到送达，相对各自频率的周期</caption><thead><tr><th>频率</th><th>周期（天）</th><th>已送达</th><th>周期内</th><th>一到两倍</th><th>两到四倍</th><th>超过四倍</th><th>周期内占比（%）</th><th>平均等待</th><th>中位 / P90</th><th>样本</th></tr></thead><tbody>
+            {% for row in campaign_digest_shape.rhythm_rows %}
+            <tr>
+                <td><strong>{{ row.label }}</strong>{% if row.is_other %}<small class="d-block text-muted">表外取值，无周期</small>{% endif %}</td>
+                <td>{% if row.cycle_days %}{{ row.cycle_days }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ row.delivered_count }}</td>
+                {% for band in row.bands %}
+                <td>{{ band.count }}<small class="d-block text-muted">{% if band.share is not None %}{{ band.share }}%{% else %}—{% endif %}</small></td>
+                {% endfor %}
+                <td>{% if row.within_share is not None %}<strong>{{ row.within_share }}%</strong>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ row.mean_wait_label }}</td>
+                <td>{{ row.median_wait_label }}<small class="d-block text-muted">P90 {{ row.p90_wait_label }}</small></td>
+                <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">不足 {{ campaign_digest_shape.min_sample }} 条</span>{% else %}可读数{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody></table></div>
+        <p class="small text-muted mt-2 mb-0">只收 notified_at 非空的条目；没有周期的表外频率不进任何一档，除不出倍数来。四档互斥、全列，包括 0 样本档。等待时长在导出里按秒报，页面上换算成小时和天。</p>
+        {% else %}
+        <div class="empty-inline mt-2">统计窗口内还没有已送达的命中，节奏一节没有可算的行。</div>
+        {% endif %}
+    </div>
+
+    <div class="ops-panel-block">
+        <div class="campaign-subheading">
+            <div><h3>四、当前仍挂着的</h3><p>这一节不看窗口，看此刻：所有仍未送达且未取消的命中，含窗口之前入队的。</p></div>
+            <span>右删失样本，只报现状不推测结局</span>
+        </div>
+        {% if campaign_digest_shape.pending_rows %}
+        <div class="ops-table-wrap mt-2"><table class="table ops-table align-middle mb-0 campaign-digest-pending-table"><caption class="visually-hidden">专题摘要的形状 · 当前仍挂着的</caption><thead><tr><th>频率</th><th>周期（天）</th><th>仍在缓冲</th><th>其中仍可投递</th><th>周期内</th><th>已超周期</th><th>最老一条已等待</th><th>样本</th></tr></thead><tbody>
+            {% for row in campaign_digest_shape.pending_rows %}
+            <tr>
+                <td><strong>{{ row.label }}</strong>{% if row.is_other %}<small class="d-block text-muted">表外取值，无周期</small>{% endif %}</td>
+                <td>{% if row.cycle_days %}{{ row.cycle_days }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td><strong>{{ row.pending_count }}</strong></td>
+                <td>{{ row.deliverable_count }}</td>
+                <td>{% if row.within_cycle_count is not None %}{{ row.within_cycle_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{% if row.overdue_count is not None %}{{ row.overdue_count }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                <td>{{ row.oldest_wait_label }}</td>
+                <td>{% if row.is_small_sample %}<span class="badge text-bg-secondary">不足 {{ campaign_digest_shape.min_sample }} 条</span>{% else %}可读数{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody></table></div>
+        <p class="small text-muted mt-2 mb-0">「其中仍可投递」用发送端自己的边界函数复算：报名仍活跃、订阅仍开着、专题仍在进行、商品仍归属该专题且当前可售。仍可投递不足全部的那部分是审计尚未扫到的死条目，会由下一轮发送兜底取消。「周期内 / 已超周期」按该频率的周期切，表外频率没有周期，两列报空。</p>
+        {% else %}
+        <div class="empty-inline mt-2">此刻没有仍未送达、也未取消的命中，缓冲池是空的。</div>
+        {% endif %}
+    </div>
+
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-info-circle me-1"></i>此处只报告：不加迁移、不改频率选项、不改发送边界、不取消任何命中、不补发任何摘要、不按频率做任何自动处置。摘要阅读率由 <code>campaign_analytics</code> 报，本模块不重复。</div>
+</section>

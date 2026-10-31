@@ -40,7 +40,7 @@ OPERATIONS_SECTION_FRAGMENTS = (
     ('ops-notification-reach', '_notification_reach.html', True, ()),
     ('ops-notifications', '_notifications.html', False, ('notification_aggregation_quality', 'notification_kind_coverage', 'notification_preference_bypass_diagnosis', 'notification_preference_usage', 'notification_quiet_hours_shape', 'notification_snooze_return')),
     ('ops-governance', '_governance.html', False, ('meeting_incident_quality', 'moderation_notice_preference', 'report_resolution_quality')),
-    ('ops-campaigns', '_campaigns.html', True, ('campaign_phase_review',)),
+    ('ops-campaigns', '_campaigns.html', True, ('campaign_phase_review', 'campaign_digest_shape')),
     ('ops-response', '_response.html', True, ()),
     ('ops-recommendations', '_recommendations.html', False, ('favorite_collection_quality', 'opportunity_dismissal_quality', 'opportunity_impression_quality', 'recommendation_impression_quality', 'recommendation_quality')),
     ('ops-semester-phase', '_semester_phase.html', False, ('academic_phase_supply_preparation', 'academic_term_snapshot_quality')),

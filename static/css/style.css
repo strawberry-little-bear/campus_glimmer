@@ -1638,8 +1638,19 @@ a { color: inherit; text-decoration: none; }
 .campaign-comparison-table td { min-width: 90px; }
 .campaign-comparison-muted { color: var(--muted); font-size: .7rem; font-weight: 600; }
 .campaign-comparison-ranks { display: grid; gap: 3px; color: #5f7468; font-size: .68rem; white-space: nowrap; }
+.campaign-digest-shape-panel { overflow: hidden; background: linear-gradient(180deg, #fff 0%, #fbfdfb 100%); }
+.campaign-digest-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.campaign-digest-subscription-table th:first-child, .campaign-digest-subscription-table td:first-child { min-width: 132px; }
+.campaign-digest-subscription-table td { min-width: 74px; }
+.campaign-digest-outcome-table th:first-child, .campaign-digest-outcome-table td:first-child { min-width: 132px; }
+.campaign-digest-outcome-table td { min-width: 84px; }
+.campaign-digest-rhythm-table th:first-child, .campaign-digest-rhythm-table td:first-child { min-width: 132px; }
+.campaign-digest-rhythm-table td { min-width: 74px; }
+.campaign-digest-pending-table th:first-child, .campaign-digest-pending-table td:first-child { min-width: 132px; }
+.campaign-digest-pending-table td { min-width: 92px; }
+
 @media (max-width: 767px) { .campaign-funnel-grid, .campaign-comparison-summary { grid-template-columns: 1fr; }.campaign-subheading { align-items: flex-start; flex-direction: column; }.campaign-subheading > span { text-align: left; } }
-@media (max-width: 575px) { .campaign-analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.campaign-analytics-summary > div { min-height: 72px; padding: 11px; }.campaign-analytics-panel .ops-table { min-width: 980px; }.campaign-phase-review-panel .ops-table { min-width: 980px; }.campaign-funnel-block { padding: 12px; } }
+@media (max-width: 575px) { .campaign-analytics-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.campaign-analytics-summary > div { min-height: 72px; padding: 11px; }.campaign-analytics-panel .ops-table { min-width: 980px; }.campaign-phase-review-panel .ops-table { min-width: 980px; }.campaign-digest-shape-panel .ops-table { min-width: 1060px; }.campaign-funnel-block { padding: 12px; } }
 
 
 /* Lost and found */
