@@ -21,6 +21,7 @@ flowchart TB
     Backup --> MinIO
     Backup --> Disk["宿主机备份目录"]
     MinIO --> Disk
+    Monitor["外层监控系统<br/>Bearer 抓取 /metrics/"] --> Web
 ```
 
 本地开发仍然零额外服务：SQLite、LocMem 缓存和本地 `media/`。只有显式启用生产依赖时才要求 PostgreSQL、Redis 和对象存储，避免开发者为了跑一个页面先安装整套基础设施。
@@ -137,7 +138,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 镜像健康检查调用 `/readyz/`；
 - Redis 开启 AOF，但 Redis 不是业务事实源；
 - 备份默认写入宿主机目录，不自动复制到异地；
-- 没有自动故障转移、读写分离、对象跨区域复制、集中日志聚合或指标告警。
+- 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志与指标汇到一起的聚合和告警；进程内已有请求级指标，但还没有人负责盯着它们。
 
 迁移已经是独立的一次性任务。扩大到多实例前，仍需要把会话与上传文件改成无状态依赖，并为数据库、对象存储、备份和告警建立独立监控。
 
@@ -147,9 +148,25 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 
 `DJANGO_LOG_LEVEL` 控制级别（默认 `INFO`），健康探针日志单独压到 `WARNING`——它每 30 秒一条，比业务请求还吵。日志统一走 stdout，Compose 对全部服务按 `10m` × `5` 个文件轮转。关联关系、字符集校验与轮转参数由 `campus_glimmer/test_request_logging.py` 钉住。
 
+### 进程级指标与 `/metrics/`
+
+`campus_glimmer/metrics.py` 在进程内累计请求量、耗时直方图、在途请求数和构建信息，以 Prometheus 文本格式暴露在 `/metrics/`。它不写库、不引第三方依赖，序列化在锁外进行，抓取本身不跟业务请求抢同一把锁。
+
+- **路由标签只取 URL 模板**（`/listings/<int:pk>/`），不取 `request.path`：后者会让每条商品各成一个序列，一天就能把 Prometheus 的内存和每次抓取的体积一起打爆；
+- 标签组合封顶 500 组，超出折叠进 `overflow` 路由，同时把 `campus_glimmer_metrics_label_overflow` 置 1——封顶本身是一次故障，必须可见；
+- 状态码压成 `2xx/3xx/4xx/5xx`，按精确码分组等于把基数再乘一个量级；
+- 抓取请求自身不计入指标，否则每次 scrape 都会把业务曲线抬高一点；
+- 端点默认关闭：未配置 `DJANGO_METRICS_TOKEN` 时返回 404，配置后抓取需带 `Authorization: Bearer <token>`，令牌比对走 `hmac.compare_digest`。
+
+多 worker 下计数器按进程分离：gunicorn 起几个 worker 就有几份计数，抓任一副本都只是总量的一部分。所以这份指标回答的是「这个副本忙不忙、慢不慢、错误率有没有抬头」；把各副本汇到一起、按阈值告警、保留与可视化仍在外层监控系统。
+
+```powershell
+curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
+```
+
 ## 8. CI 覆盖
 
-GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。
+GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。`quality` 的完整测试同时覆盖指标端点契约：标签基数、暴露格式、序列封顶与 Bearer 鉴权。
 
 ## 相关文档
 

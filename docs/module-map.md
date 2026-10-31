@@ -11,7 +11,7 @@
 campus_glimmer/
 ├── accounts/                  # 注册、登录、个人资料和账户测试
 ├── chat_messages/             # 商品留言、私信、内容审核分级、误判放行与内容申诉闭环、私信响应时效、响应场景分层、响应时效跨周期对比和会话测试
-├── campus_glimmer/            # Django 项目配置、根路由和健康检查
+├── campus_glimmer/            # Django 项目配置、根路由、健康检查与进程级指标
 ├── listings/                  # 商品、订单、搜索、通知、运营和治理业务（见下面的模块表）
 │   ├── migrations/            # 数据库迁移
 │   └── management/commands/   # 预约超时、商品到期、运营日报、机会摘要、生命周期提醒、学期日历等管理命令
@@ -34,7 +34,7 @@ campus_glimmer/
 | --- | --- | --- |
 | `accounts/` | [账户与校园身份](../accounts/README.md) | 注册、资料和校园认证 |
 | `chat_messages/` | [留言、私信与内容治理](../chat_messages/README.md) | 收件箱、审核和申诉 |
-| `campus_glimmer/` | [Django 项目配置](../campus_glimmer/README.md) | 设置、根路由和健康检查 |
+| `campus_glimmer/` | [Django 项目配置](../campus_glimmer/README.md) | 设置、根路由、健康检查与进程级指标 |
 | `listings/` | [校园交易与运营核心](../listings/README.md) | 业务模块、定时任务和测试入口 |
 | `templates/` | [服务端渲染页面](../templates/README.md) | 模板结构、公共布局和约定 |
 | `static/` | [样式、脚本与基础图片](../static/README.md) | CSS、JavaScript 和静态资源 |

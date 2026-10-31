@@ -349,6 +349,9 @@ docker compose down -v
 - `/healthz/`：存活检查，确认 Django 进程可以处理请求；
 - `/readyz/`：就绪检查，验证 PostgreSQL、Redis 和 S3/MinIO，失败时返回 `503`。
 
+进程级指标暴露在 `/metrics/`：默认返回 404，配置 `DJANGO_METRICS_TOKEN` 后需带
+`Authorization: Bearer` 令牌抓取；多 worker 下每个副本各计一份，汇总与告警由外层监控系统承担。
+
 本地 Compose 继续使用 SQLite 与本地媒体文件。需要 PostgreSQL、Redis、MinIO 和定时备份时，使用 [生产编排](docker-compose.prod.yml)：
 
 ```bash
@@ -366,6 +369,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 - 启用 HTTPS 后配置安全重定向、Session/CSRF Cookie 和可信来源；
 - 域名与回滚窗口确认后再设置 `DJANGO_SECURE_HSTS_SECONDS`；
 - 将备份复制到独立主机或对象存储，并定期做恢复演练；
+- 需要采集指标时再设置 `DJANGO_METRICS_TOKEN`，留空即保持 `/metrics/` 关闭；
 - 不提交生产数据库、上传文件、密钥或包含用户隐私的日志；
 - 当前生产编排是单机、小规模基线，不提供自动故障转移或异地容灾。
 
@@ -453,7 +457,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 - **治理与通知**：继续做治理分组、申诉质量和通知降噪；
 - **校园场景与信任**：完善认证体验、可信档案和地点维护；
 - **运营与数据质量**：加强导出一致性、样本审计、指标血缘和告警；
-- **基础设施与体验**：补齐多实例迁移、集中日志、监控告警、异机备份与恢复演练；继续优化移动端、无障碍和图片加载。
+- **基础设施与体验**：在进程级 `/metrics/` 指标之上补齐跨副本聚合与告警、多实例迁移、集中日志、异机备份与恢复演练；继续优化移动端、无障碍和图片加载。
 
 每个方向都拆成可独立验证、独立回滚的小迭代。详细待办、已落地范围和不做某项功能的理由见
 [后续路线图](docs/roadmap.md)。

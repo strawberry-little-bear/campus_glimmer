@@ -51,6 +51,7 @@ flowchart LR
 | [`startup_tasks.py`](startup_tasks.py) | 启动任务的唯一事实来源：`migrate --noinput` + `collectstatic --noinput` |
 | [`healthcheck.py`](healthcheck.py) | 请求容器内 `/readyz/`，供 Docker `HEALTHCHECK` 使用 |
 | [`../campus_glimmer/middleware.py`](../campus_glimmer/middleware.py) | 请求关联 ID 中间件与日志过滤器，让多副本日志能对回同一次请求 |
+| [`../campus_glimmer/metrics.py`](../campus_glimmer/metrics.py) | 进程级 HTTP 指标与 Prometheus 文本格式的 `/metrics/` 端点，默认关闭 |
 | [`backup.py`](backup.py) | PostgreSQL dump、客户端版本核验、对象镜像、SHA-256 校验、保留期清理与对象恢复 |
 | [`../Dockerfile`](../Dockerfile) | Python 3.12 镜像、PostgreSQL 客户端、健康检查和 8000 端口 |
 | [`../docker-compose.yml`](../docker-compose.yml) | 本地 SQLite、LocMem 与媒体卷 |
@@ -113,6 +114,19 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs migrat
 
 `DJANGO_LOG_LEVEL` 控制日志级别（默认 `INFO`），日志统一走 stdout，由 json-file 驱动按 `10m` × `5` 个文件轮转，不会无限涨满磁盘。要把一次投诉对回具体请求，先用响应头或用户提供的 ID 在各个副本里 grep。
 
+## 📈 指标与告警
+
+[`../campus_glimmer/metrics.py`](../campus_glimmer/metrics.py) 在进程内累计请求量、耗时直方图、在途请求数和构建信息，以 Prometheus 文本格式暴露在 `/metrics/`，零新增依赖：
+
+```powershell
+curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
+```
+
+- 端点默认关闭：未配置 `DJANGO_METRICS_TOKEN` 时返回 404，不对外暴露内部路由拓扑；
+- 路由标签只用 URL 模板，`/listings/1/` 与 `/listings/2/` 共用 `listings/<int:pk>/` 一个序列，标签组合封顶 500 组；
+- 抓取请求自身不计入指标，健康探针和业务曲线的数字因此保持干净；
+- 多 worker 下每个副本各有一份计数：跨副本汇总、按阈值告警、保留与可视化由外层监控系统承担，容器内不假装已经解决。
+
 ## 💾 备份与恢复
 
 备份 sidecar 默认每日运行一次，写入 `${BACKUP_HOST_DIR:-./backups}`：
@@ -130,7 +144,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec backup
 - 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；横向扩容前仍需要无状态化会话与上传文件。
 - Redis 的 AOF 用于进程重启后的缓存连续性，不替代 PostgreSQL 备份。
 - 数据库与对象存储不是同一事务快照；默认备份也在宿主机目录，不等同于异地容灾。
-- TLS、反向代理、集中日志采集、指标告警、证书续期和安全补丁由外层部署环境承担；容器内已保证日志带请求关联 ID 并按大小轮转，聚合与告警仍在外层。
+- TLS、反向代理、集中日志采集、指标告警、证书续期和安全补丁由外层部署环境承担；容器内已保证日志带请求关联 ID、按大小轮转，并提供进程级 `/metrics/` 指标；把各副本的日志与指标汇到一起、按阈值告警仍在外层。
 - 正式上线前仍需做真实上传、签名 URL、恢复演练和端到端人工烟雾测试。
 
 ## 📚 继续阅读
