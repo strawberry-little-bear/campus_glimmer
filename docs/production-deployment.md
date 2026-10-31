@@ -137,9 +137,15 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 镜像健康检查调用 `/readyz/`；
 - Redis 开启 AOF，但 Redis 不是业务事实源；
 - 备份默认写入宿主机目录，不自动复制到异地；
-- 没有自动故障转移、读写分离、对象跨区域复制或集中日志系统。
+- 没有自动故障转移、读写分离、对象跨区域复制、集中日志聚合或指标告警。
 
 迁移已经是独立的一次性任务。扩大到多实例前，仍需要把会话与上传文件改成无状态依赖，并为数据库、对象存储、备份和告警建立独立监控。
+
+### 请求关联 ID 与日志轮转
+
+多副本下日志分散在各个容器里，没有关联 ID 时只能靠时间戳和 URL 猜。`campus_glimmer.middleware.RequestIdMiddleware` 给每个请求分配一个 ID：客户端带 `X-Request-ID` 就沿用（只接受 `[A-Za-z0-9._-]` 且不超过 64 字符，否则重新生成），否则自己生成；同一个值同时写进响应头和日志上下文，gunicorn 的 access log 也打同一个字段。
+
+`DJANGO_LOG_LEVEL` 控制级别（默认 `INFO`），健康探针日志单独压到 `WARNING`——它每 30 秒一条，比业务请求还吵。日志统一走 stdout，Compose 对全部服务按 `10m` × `5` 个文件轮转。关联关系、字符集校验与轮转参数由 `campus_glimmer/test_request_logging.py` 钉住。
 
 ## 8. CI 覆盖
 

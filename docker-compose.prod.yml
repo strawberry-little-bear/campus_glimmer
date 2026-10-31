@@ -5,6 +5,14 @@ x-app-env: &app-env
   DJANGO_REQUIRE_PRODUCTION_SERVICES: "1"
   DJANGO_SESSION_ENGINE: django.contrib.sessions.backends.cached_db
 
+# 单机长跑时 gunicorn 的 access log 与 Django 日志都写进容器 stdout，而 Docker 的 json-file 驱动默认不轮转。
+# 磁盘被日志写满之后整站一起宕机，所以这里给每个服务统一封顶。
+x-log-defaults: &log-defaults
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   db:
     image: postgres:16-alpine
@@ -20,6 +28,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging:
+      <<: *log-defaults
     networks:
       - backend
 
@@ -39,6 +49,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    logging:
+      <<: *log-defaults
     networks:
       - backend
 
@@ -54,6 +66,8 @@ services:
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    logging:
+      <<: *log-defaults
     networks:
       - backend
 
@@ -76,6 +90,8 @@ services:
         mc version enable "local/$$MINIO_BUCKET" || true
     depends_on:
       - minio
+    logging:
+      <<: *log-defaults
     networks:
       - backend
 
@@ -97,6 +113,8 @@ services:
         condition: service_healthy
       minio_init:
         condition: service_completed_successfully
+    logging:
+      <<: *log-defaults
     networks:
       - backend
 
@@ -128,6 +146,8 @@ services:
       start_period: 45s
       retries: 3
     stop_grace_period: 30s
+    logging:
+      <<: *log-defaults
     networks:
       - backend
 
@@ -146,6 +166,8 @@ services:
         condition: service_healthy
       minio_init:
         condition: service_completed_successfully
+    logging:
+      <<: *log-defaults
     networks:
       - backend
 
