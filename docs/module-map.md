@@ -199,10 +199,10 @@ campus_glimmer/
 
 </details>
 
-## 业务链路的测试模块（162 个）
+## 业务链路的测试模块（163 个）
 
 <details>
-<summary>业务链路测试清单（162 个，按主题就近排列）</summary>
+<summary>业务链路测试清单（163 个，按主题就近排列）</summary>
 
 清单按主题就近排列，包含 `listings/tests.py`（早期总装）、各业务模块测试，以及落在 `chat_messages/` 但守住运营看板契约的六条链路测试。
 
@@ -417,6 +417,8 @@ campus_glimmer/
 - **`test_order_stage_flow.py`**：订单全链路阶段时长与瓶颈定位
 
 - **`test_order_detail_presentation.py`**：订单详情「下一步」卡片的分支标题、渲染出的侧栏 h2 与模板拆分形状
+- **`test_order_workflow.py`**：订单状态机的直接口径——状态表必须覆盖全部状态、卖家推进与买家取消的不对称权限、终态拒绝一切目标、被拒流转不写任何行、取消回在售并只唤醒一次性关注
+
 
 - **`test_price_insights.py`**：同类价格分位数与参考可信度，样本不足时降低提示强度
 
