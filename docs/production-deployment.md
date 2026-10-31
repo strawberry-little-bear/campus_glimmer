@@ -78,10 +78,13 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 1. PostgreSQL 健康；
 2. Redis 健康；
 3. MinIO 启动并完成 bucket 初始化；
-4. Web 等待依赖后执行迁移、收集静态文件，再启动 Gunicorn；
+4. `migrate` 一次性任务执行迁移与静态文件收集，成功后退出；
+5. Web 确认 `migrate` 成功后启动 Gunicorn；
 5. 备份 sidecar 连接数据库和对象存储，按周期运行。
 
-Web 启动时执行 `python manage.py migrate --noinput`。当前基线只运行一个 Web 实例；多实例同时启动时会产生并发迁移风险，必须改为独立迁移任务并由发布系统保证只执行一次。
+启动任务由 `docker/startup_tasks.py` 统一实现，`migrate` 服务与入口脚本调用同一份代码，避免两处实现漂移。生产拓扑下 Web 设 `DJANGO_RUN_STARTUP_TASKS=0`，不再自行迁移；直接 `docker run` 镜像时该变量默认为 `1`，单容器用法保持不变。
+
+拆成独立任务不只是为了少一次等待：`collectstatic` 在 `CompressedManifestStaticFilesStorage` 下会重写 `staticfiles.json`，多个 worker 并发执行会写裂哈希清单，页面随后安静地丢掉全部样式。因此 `migrate` 与 Web 通过 `staticfiles` 命名卷共享产物，Web 以只读挂载。
 
 ## 4. 验证
 
@@ -136,7 +139,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 备份默认写入宿主机目录，不自动复制到异地；
 - 没有自动故障转移、读写分离、对象跨区域复制或集中日志系统。
 
-在扩大到多实例前，应把迁移拆成独立任务，把媒体对象改为共享对象存储，把会话和缓存统一到外部 Redis，并为数据库、对象存储、备份和告警建立独立监控。
+迁移已经是独立的一次性任务。扩大到多实例前，仍需要把会话与上传文件改成无状态依赖，并为数据库、对象存储、备份和告警建立独立监控。
 
 ## 8. CI 覆盖
 

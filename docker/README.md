@@ -31,6 +31,8 @@
 flowchart LR
     Browser["浏览器"] --> Proxy["HTTPS / 反向代理<br/>由部署环境提供"]
     Proxy --> Web["Django + Gunicorn"]
+    Migrate["migrate 一次性任务<br/>migrate + collectstatic"] --> StaticFiles[("staticfiles 命名卷")]
+    Web --> StaticFiles
     Web --> PG[("PostgreSQL 16")]
     Web --> Redis[("Redis 7")]
     Web --> MinIO[("MinIO / S3")]
@@ -39,18 +41,19 @@ flowchart LR
     Backup --> Disk["宿主机备份目录"]
 ```
 
-Web 等待 PostgreSQL、Redis 和 MinIO bucket 初始化完成后启动。入口脚本先执行迁移和静态文件收集，再由 Gunicorn 提供服务；任一步失败都会阻止错误实例启动。
+启动任务由独立的 `migrate` 服务一次性完成，Web 只在它成功退出后才启动。迁移和静态文件收集必须只跑一次：并发 `collectstatic` 会写裂 `staticfiles.json` 哈希清单，让页面安静地丢掉全部样式。直接 `docker run` 镜像时没有这个服务，入口脚本会退回自己执行，保证单容器用法不受影响。
 
 ## 🗂️ 文件说明
 
 | 文件 | 真实职责 |
 | --- | --- |
-| [`entrypoint.sh`](entrypoint.sh) | 执行迁移、收集静态文件，再 `exec gunicorn` |
+| [`entrypoint.sh`](entrypoint.sh) | 默认执行启动任务后 `exec gunicorn`；设 `DJANGO_RUN_STARTUP_TASKS=0` 可跳过 |
+| [`startup_tasks.py`](startup_tasks.py) | 启动任务的唯一事实来源：`migrate --noinput` + `collectstatic --noinput` |
 | [`healthcheck.py`](healthcheck.py) | 请求容器内 `/readyz/`，供 Docker `HEALTHCHECK` 使用 |
 | [`backup.py`](backup.py) | PostgreSQL dump、客户端版本核验、对象镜像、SHA-256 校验、保留期清理与对象恢复 |
 | [`../Dockerfile`](../Dockerfile) | Python 3.12 镜像、PostgreSQL 客户端、健康检查和 8000 端口 |
 | [`../docker-compose.yml`](../docker-compose.yml) | 本地 SQLite、LocMem 与媒体卷 |
-| [`../docker-compose.prod.yml`](../docker-compose.prod.yml) | PostgreSQL、Redis、MinIO、Web 与备份 sidecar |
+| [`../docker-compose.prod.yml`](../docker-compose.prod.yml) | PostgreSQL、Redis、MinIO、一次性迁移任务、Web 与备份 sidecar |
 | [`../.env.production.example`](../.env.production.example) | 生产环境变量模板，所有 `CHANGE_ME` 都必须替换 |
 
 ## 🚪 本地启动
@@ -79,6 +82,16 @@ Invoke-RestMethod http://127.0.0.1:8000/readyz/
 ```
 
 `.env.production` 只用于本机部署，不能提交，也不应被打进镜像。URL 中的特殊字符必须编码，例如密码里的 `@` 要写成 `%40`。`DJANGO_S3_PUBLIC_ENDPOINT_URL` 必须是浏览器可达的地址，不能填写仅供容器互访的 `http://minio:9000`。
+`migrate` 是一次性任务，成功后会保持退出状态，所以 `docker compose ps` 里它显示为
+`exited (0)` 属于正常结果，不代表部署失败；要确认的是 `web` 是否进入 `healthy`。
+Web 没有起来时先看迁移任务的日志，不要去翻 Web：
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.prod.yml logs migrate
+```
+
+迁移任务失败时 Web 不会启动，这是有意的——带病启动只会让请求打到结构不对的库上。
+修好配置后重新执行 `up -d`，迁移任务会再次运行，已应用的迁移不会重复执行。
 
 ## ❤️ 健康检查语义
 
@@ -103,7 +116,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec backup
 ## ⚠️ 真实部署边界
 
 - 当前生产拓扑是单机小规模基线，不是高可用、跨可用区或自动故障转移方案。
-- Web 启动时执行数据库迁移；多实例发布前应拆成独立的一次性迁移任务。
+- 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；横向扩容前仍需要无状态化会话与上传文件。
 - Redis 的 AOF 用于进程重启后的缓存连续性，不替代 PostgreSQL 备份。
 - 数据库与对象存储不是同一事务快照；默认备份也在宿主机目录，不等同于异地容灾。
 - TLS、反向代理、日志采集、指标告警、证书续期和安全补丁由外层部署环境承担。

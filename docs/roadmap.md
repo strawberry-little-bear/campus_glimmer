@@ -334,13 +334,13 @@
 <summary>展开这 3 个方向</summary>
 
 - **生产基础设施基线**：单机小规模生产拓扑已经落地，默认本地体验保持不变，生产环境可显式切换到 PostgreSQL、Redis 与 S3 兼容对象存储。
-  - `docker-compose.prod.yml` 编排 PostgreSQL 16、Redis 7、MinIO、Gunicorn Web、bucket 初始化和备份 sidecar；`DJANGO_REQUIRE_PRODUCTION_SERVICES=1` 在配置缺失或仍含占位值时拒绝启动。
+  - `docker-compose.prod.yml` 编排 PostgreSQL 16、Redis 7、MinIO、Gunicorn Web、bucket 初始化、一次性迁移任务和备份 sidecar；`DJANGO_REQUIRE_PRODUCTION_SERVICES=1` 在配置缺失或仍含占位值时拒绝启动。
   - `settings.py` 将数据库、缓存、对象存储和静态文件策略收口到可测试的配置层；WhiteNoise 分发收集后的静态文件，上传文件进入对象存储。
   - `/healthz/` 只证明进程能响应；`/readyz/` 检查 PostgreSQL、Redis 和对象存储，任一关键依赖不可用时返回 `503`，且不泄露连接串或异常文本。
   - 备份 sidecar 生成 PostgreSQL custom dump、对象镜像和带 SHA-256 的 manifest；支持备份校验、对象增量恢复、失败目录隔离与保留期清理。
-  - 当前基线面向单机小规模部署：Web 启动时执行迁移，不适合多实例并发发布；数据库与对象存储不是同一事务快照，默认备份也没有异地容灾能力。
+  - 当前基线面向单机小规模部署：启动任务已是一次性 `migrate` 服务，但 Web 仍是有状态的单副本；数据库与对象存储不是同一事务快照，默认备份也没有异地容灾能力。
 
-- **生产可靠性继续演进**：把单机基线推进到可运营的正式环境，仍需独立迁移任务、多实例无状态 Web、集中日志与指标告警、异机备份、恢复演练和 PostgreSQL PITR。
+- **生产可靠性继续演进**：把单机基线推进到可运营的正式环境，仍需多实例无状态 Web、集中日志与指标告警、异机备份、恢复演练和 PostgreSQL PITR。
   - 对象存储的真实上传链路已由 `object-storage` CI 任务覆盖：该任务在 runner 上直接启动 MinIO，真实执行上传、回源、匿名拒绝、签名 URL、过期与篡改签名的拒绝以及对象镜像恢复，口径见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务把「PostgreSQL dump 后隔离恢复」也接进了 CI：migrate 之后真实 dump、灌进一个全新的隔离库，再逐表比对行数、索引数与约束数，对象部分恢复到第二个桶后按原 key 逐字节比对；同一任务还用一份假的 17 客户端验证版本护栏真的会拦。备份脚本自身的失败分支（校验汇总、清单路径越权、版本护栏、保留期清理、失败时清空 staging）已由 30 项离线测试钉住，口径见[备份脚本边界设计](backup-script-boundary-design.md)。仍然人工的部分：跨机复制、加密托管与密钥轮换，以及真实数据量下的恢复耗时。
   - Redis 只承担缓存与 `cached_db` 会话缓存，不保存唯一业务事实；Redis 故障应影响性能与就绪状态，而不改变订单、通知等数据库事实。
   - HSTS 需在 HTTPS 稳定后显式开启；默认安全响应头基线已经落地。
