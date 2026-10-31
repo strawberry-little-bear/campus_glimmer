@@ -5,6 +5,8 @@ services:
       - "8000:8000"
     environment:
       DJANGO_DEBUG: "0"
+      # 本地单容器没有独立的 migrate 服务，入口脚本自己完成启动任务。
+      DJANGO_RUN_STARTUP_TASKS: "1"
       DJANGO_SECRET_KEY: "change-this-in-production"
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
       DJANGO_DB_PATH: "/app/data/db.sqlite3"

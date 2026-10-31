@@ -1,5 +1,10 @@
 name: campus-glimmer-prod
 
+x-app-env: &app-env
+  DJANGO_DEBUG: "0"
+  DJANGO_REQUIRE_PRODUCTION_SERVICES: "1"
+  DJANGO_SESSION_ENGINE: django.contrib.sessions.backends.cached_db
+
 services:
   db:
     image: postgres:16-alpine
@@ -74,23 +79,47 @@ services:
     networks:
       - backend
 
-  web:
+  migrate:
     build: .
-    restart: unless-stopped
+    restart: "no"
+    entrypoint: ["python", "docker/startup_tasks.py"]
     env_file:
       - ${APP_ENV_FILE:-.env.production}
     environment:
-      DJANGO_DEBUG: "0"
-      DJANGO_REQUIRE_PRODUCTION_SERVICES: "1"
-      DJANGO_SESSION_ENGINE: django.contrib.sessions.backends.cached_db
-    ports:
-      - "${WEB_BIND:-127.0.0.1:8000}:8000"
+      <<: *app-env
+      DJANGO_RUN_STARTUP_TASKS: "1"
+    volumes:
+      - staticfiles:/app/staticfiles
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
       minio_init:
+        condition: service_completed_successfully
+    networks:
+      - backend
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ${APP_ENV_FILE:-.env.production}
+    environment:
+      <<: *app-env
+      DJANGO_RUN_STARTUP_TASKS: "0"
+    ports:
+      - "${WEB_BIND:-127.0.0.1:8000}:8000"
+    volumes:
+      - staticfiles:/app/staticfiles:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio_init:
+        condition: service_completed_successfully
+      migrate:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "/app/docker/healthcheck.py"]
@@ -121,6 +150,7 @@ services:
       - backend
 
 volumes:
+  staticfiles:
   postgres_data:
   redis_data:
   minio_data:
