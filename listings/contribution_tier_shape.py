@@ -135,11 +135,6 @@ def _percent(part, whole):
     return round(part / whole * 100, 1) if whole else None
 
 
-def _mean_label(values):
-    """平均值一律带上「分」，空样本报「—」。"""
-    return f'{sum(values) / len(values):.1f} 分' if values else '—'
-
-
 def _median(values):
     """中位数。偶数个取中间两个的平均，和 statistics.median 同一个口径。"""
     ordered = sorted(values)

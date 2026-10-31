@@ -110,14 +110,6 @@ CONFIDENCE_LABELS = {
 }
 
 
-def _ladder_index(value):
-    """Where a threshold sits on the ladder, or None if it is off the ladder."""
-    try:
-        return THRESHOLD_LADDER.index(int(value))
-    except (TypeError, ValueError):
-        return None
-
-
 def _share(part, whole):
     return round(part / whole * 100, 1) if whole else None
 

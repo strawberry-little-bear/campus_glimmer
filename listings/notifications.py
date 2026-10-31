@@ -102,16 +102,6 @@ def active_unread_notifications(recipient, *, now=None, quiet=None):
     ).filter(actionable_unread_q(now))
 
 
-def snoozed_notifications(recipient, *, now=None):
-    """Return unread notifications deliberately hidden until a future time."""
-    now = now or timezone.now()
-    return Notification.objects.filter(
-        recipient=recipient,
-        is_read=False,
-        snoozed_until__gt=now,
-    )
-
-
 def normalize_notification_ids(raw_ids, *, limit=MAX_BULK_NOTIFICATION_IDS):
     """Return unique positive IDs in request order, capped for bounded updates."""
     if limit <= 0:

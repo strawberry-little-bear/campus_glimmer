@@ -46,7 +46,7 @@ from datetime import time as dt_time, timedelta
 from django.db.models import Count
 from django.utils import timezone
 
-from .models import DeliveryConfirmation, Notification, Order, OrderEvent
+from .models import DeliveryConfirmation, Notification, Order
 
 PERIOD_CHOICES = (
     (7, '最近 7 天'),
@@ -55,8 +55,6 @@ PERIOD_CHOICES = (
     (365, '最近 1 年'),
 )
 
-# 确认码只在这个阶段生成、也只在这个阶段被核对。视图里两个入口都守着这一条。
-MEETING_STATUS = 'meeting'
 
 # 已经走完当面交付的阶段。订单只有从"待当面交付"走到这些状态，才谈得上"生成了
 # 没有、用了没有"；还挂在本阶段的订单是右删失样本，单独数，不进分母。
@@ -163,27 +161,6 @@ def _fetch_concluded_orders(*, created_after=None, created_before=None):
         orders = orders.filter(created_at__lte=created_before)
     return list(orders)
 
-
-def _meeting_entered_at_by_order(orders):
-    """每笔订单第一次进入"待当面交付"的时刻，没有就没有。
-
-    事件表里混着一批 ``from_status == to_status`` 的记录——签到、约定交付时间、
-    发起争议，都是真动作但不是阶段切换。拿它们当进入时刻，会把一笔一直在本阶段
-    里打转的订单读成一笔刚进来的订单，这里和订单阶段流面板用的是同一条规则。
-    """
-    events = OrderEvent.objects.filter(
-        order_id__in=[order.id for order in orders],
-    ).values('order_id', 'from_status', 'to_status', 'created_at').order_by(
-        'order_id', 'created_at', 'id',
-    )
-    entered_at = {}
-    for event in events:
-        if event['to_status'] != MEETING_STATUS:
-            continue
-        if event['from_status'] and event['from_status'] == event['to_status']:
-            continue
-        entered_at.setdefault(event['order_id'], event['created_at'])
-    return entered_at
 
 
 def _generation_count_by_order(orders):
