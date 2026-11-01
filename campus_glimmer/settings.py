@@ -1,6 +1,8 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .deployment import (
     cache_config,
     database_config,
@@ -26,6 +28,41 @@ def _env_int(name, default):
         return int(os.getenv(name, str(default)))
     except (TypeError, ValueError):
         return default
+
+
+def _env_float(name, default):
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_tristate(name):
+    # 三态开关：没设置时返回 None，由调用方按环境自己判断；设置了就只认显式的真假。
+    # 这里故意不像 _env_bool 那样静默默认：DJANGO_METRICS_SHARED=flase 这种拼错的
+    # 开关一旦被当成「关」，排查的人会以为共享从来就没开过。
+    raw = (os.getenv(name) or '').strip().lower()
+    if not raw:
+        return None
+    if raw in {'1', 'true', 'yes', 'on'}:
+        return True
+    if raw in {'0', 'false', 'no', 'off'}:
+        return False
+    raise ImproperlyConfigured(
+        '%s 只能是 1/0 这类布尔值，现在是 %r' % (name, raw)
+    )
+
+
+def _share_pacing(interval, ttl):
+    # 发布节奏的校验必须在启动时就炸：TTL 小于等于间隔时，一个活着的实例也会
+    # 在两次发布之间从舰队视图里过期，症状是看板上的实例数来回跳，而没有任何
+    # 东西指向这个配置项。间隔为 0 同理，那会把发布线程变成忙循环。
+    if ttl <= interval or interval <= 0:
+        raise ImproperlyConfigured(
+            'DJANGO_METRICS_SHARE_TTL 必须大于 DJANGO_METRICS_SHARE_INTERVAL，'
+            '且间隔必须为正数（当前 TTL=%r，间隔=%r）' % (ttl, interval)
+        )
+    return interval, ttl
 
 
 def _hsts_seconds(value=None):
@@ -178,6 +215,18 @@ LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
 METRICS_TOKEN = os.getenv('DJANGO_METRICS_TOKEN', '').strip()
 METRICS_SERVICE_NAME = os.getenv('DJANGO_METRICS_SERVICE_NAME', 'campus-glimmer').strip() \
     or 'campus-glimmer'
+
+# 跨副本指标聚合。留空表示按缓存后端自己判断：LocMem 是进程内的，多 worker 下各存
+# 各的，开了只会给出「只有我自己」的假象；Redis 一类跨进程后端默认开。启用后要把
+# Prometheus 的抓取目标只留一个 /metrics/——每个副本返回的都是同一份合并视图，
+# 重复抓取会把总量按副本数翻倍。
+METRICS_SHARED = _env_tristate('DJANGO_METRICS_SHARED')
+
+# 快照发布间隔与存活时间。校验放在 _share_pacing 里，启动时就炸。
+METRICS_SHARE_INTERVAL, METRICS_SHARE_TTL = _share_pacing(
+    _env_float('DJANGO_METRICS_SHARE_INTERVAL', 5.0),
+    _env_float('DJANGO_METRICS_SHARE_TTL', 30.0),
+)
 
 LOGGING = {
     'version': 1,
