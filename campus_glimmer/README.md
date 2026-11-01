@@ -32,6 +32,7 @@ flowchart LR
     URL --> Health["/healthz/"]
     URL --> Ready["/readyz/"]
     URL --> Metrics["/metrics/<br/>默认 404"]
+    URL --> Alerts["/alerts/<br/>默认 404"]
     Accounts --> Django["Django 应用"]
     Listings --> Django
     Messages --> Django
@@ -49,15 +50,17 @@ flowchart LR
 | [`settings.py`](settings.py) | 应用注册、模板、认证、本地 / 生产数据依赖、静态资源、邮件和安全响应头 |
 | [`deployment.py`](deployment.py) | 数据库 URL、Redis cache、对象存储配置与生产 fail-closed 校验 |
 | [`storage.py`](storage.py) | S3 兼容存储的内部上传端点和浏览器访问端点分离 |
-| [`urls.py`](urls.py) | 首页、后台、三个业务应用、两个健康检查与 `/metrics/` 的根路由 |
+| [`urls.py`](urls.py) | 首页、后台、三个业务应用、两个健康检查与 `/metrics/`、`/alerts/` 的根路由 |
 | [`context_processors.py`](context_processors.py) | 向全站模板注入私信与通知未读数 |
 | [`health.py`](health.py) | 提供存活探针与数据库、缓存、对象存储就绪探针 |
 | [`middleware.py`](middleware.py) | 请求关联 ID 中间件与日志过滤器，让多副本日志能对回同一次请求 |
 | [`metrics.py`](metrics.py) | 进程级 HTTP 指标、Prometheus 文本格式的 `/metrics/` 端点，以及跨副本快照发布与合并（默认关闭） |
+| [`alerts.py`](alerts.py) | 八条盯住观测链路自己的阈值规则；只评估、只报告，评估发生在抓取那一刻 |
 | [`wsgi.py`](wsgi.py) / [`asgi.py`](asgi.py) | 部署入口 |
 | [`tests.py`](tests.py) | 根路由、探针与安全配置基线测试 |
 | [`test_metrics.py`](test_metrics.py) | 指标契约：标签基数、暴露格式、序列封顶、在途计数与 Bearer 鉴权（单进程口径） |
 | [`test_metrics_fleet.py`](test_metrics_fleet.py) | 跨副本联合视图：开关三态、快照形状、合并规则、共享存储降级、发布线程与端到端合并 |
+| [`test_alerts.py`](test_alerts.py) | 指标告警：分位数插值、pending→firing 状态机、八条探针、三族序列与端点自保 |
 | [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验、存储端点测试，以及 `static/css/` 样式表的语法守卫（注释、字符串、花括号配平） |
 | [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、表格与分页链接名称、当前栏目、跳转主内容与导航触控目标 |
 | [`test_anchor_scroll_margin.py`](test_anchor_scroll_margin.py) | 页内跳转落点避让守卫：锚点、分页锚点、运营看板分区与表单控件都必须让出吸顶导航高度 |
@@ -78,7 +81,8 @@ flowchart LR
 | `/messages/` | 留言、私信、内容审核与申诉 |
 | `/healthz/` | 只证明 Django 进程还能响应，不访问数据库 |
 | `/readyz/` | 检查数据库、缓存和对象存储；关键依赖不可用时返回 `503` |
-| `/metrics/` | 指标端点；未配置 `DJANGO_METRICS_TOKEN` 时返回 `404`，启用共享后返回整个舰队的合并视图 |
+| `/metrics/` | 指标端点；未配置 `DJANGO_METRICS_TOKEN` 时返回 `404`，启用共享后返回整个舰队的合并视图，末尾拼上告警序列 |
+| `/alerts/` | 同一个令牌下的人读告警状态 JSON；未配置令牌时同样返回 `404` |
 
 ## ❤️ 两个探针不能混用
 
