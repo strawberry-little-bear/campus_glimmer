@@ -5,7 +5,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from listings.views import home
 from .health import health_check, ready_check
-from .metrics import METRICS_PATH, metrics_view
+from .alerts import ALERTS_PATH, ALERTS_URL_NAME, alerts_view
+from .metrics import METRICS_PATH, METRICS_URL_NAME, metrics_view
 
 
 urlpatterns = [
@@ -13,7 +14,8 @@ urlpatterns = [
     path('', home, name='home'),
     path('healthz/', health_check, name='health_check'),
     path('readyz/', ready_check, name='ready_check'),
-    path(METRICS_PATH.lstrip('/'), metrics_view, name='metrics'),
+    path(METRICS_PATH.lstrip('/'), metrics_view, name=METRICS_URL_NAME),
+    path(ALERTS_PATH.lstrip('/'), alerts_view, name=ALERTS_URL_NAME),
     path('accounts/', include('accounts.urls')),
     path('listings/', include('listings.urls')),
     path('messages/', include('chat_messages.urls')), 
