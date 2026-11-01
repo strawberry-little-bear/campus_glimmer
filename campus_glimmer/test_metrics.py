@@ -12,7 +12,8 @@
 * **端点默认关闭**。监控端点暴露的是内部拓扑，忘了关等于把路由表送给外面。
 * **多进程语义**。计数器在进程内，多 worker 下每个 worker 各算一份——这件
   事必须在文档里写明。这里的用例全部按单进程口径写死：跨副本的联合视图、
-  合并规则和降级路径由 ``test_metrics_fleet.py`` 单独钉住，两边不混在一起。
+  合并规则和降级路径由 ``test_metrics_fleet.py`` 单独钉住，按阈值的告警由
+  ``test_alerts.py`` 单独钉住，两边不混在一起。
 """
 
 import re
@@ -27,6 +28,7 @@ from .metrics import (
     MetricsMiddleware,
     MetricsRegistry,
     get_registry,
+    is_authorised,
     reset_registry,
 )
 
@@ -533,7 +535,7 @@ class MetricsEndpointAuthTests(SimpleTestCase):
         from django.test import RequestFactory
 
         from . import metrics as metrics_module
-        from .metrics import _authorised
+        from .metrics import is_authorised
 
         calls = []
 
@@ -549,7 +551,7 @@ class MetricsEndpointAuthTests(SimpleTestCase):
                 METRICS_PATH, HTTP_AUTHORIZATION='Bearer sekrit-token',
             )
             with override_settings(METRICS_TOKEN='sekrit-token'):
-                self.assertTrue(_authorised(request))
+                self.assertTrue(is_authorised(request))
         finally:
             metrics_module.hmac = real_hmac
 

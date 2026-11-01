@@ -180,8 +180,14 @@ class MetricsSnapshotShapeTests(SimpleTestCase):
         self.assertEqual(
             sorted(snapshot),
             ['buckets', 'build', 'durations', 'in_flight', 'instance',
-             'overflowed', 'published_at', 'requests', 'started_at'],
+             'overflowed', 'published_at', 'requests', 'shared_read_errors',
+             'started_at'],
         )
+        # 降级次数必须随快照走：只报本进程的话，合并后的视图分不出「全网在
+        # 降级」和「只有这一个副本在降级」，而这两件事的处置完全不同。
+        self.assertEqual(snapshot['shared_read_errors'], 0)
+        registry.note_shared_read_error()
+        self.assertEqual(registry.snapshot()['shared_read_errors'], 1)
         self.assertEqual(snapshot['instance'], instance_id())
         self.assertAlmostEqual(snapshot['published_at'], time.time(), delta=5)
         self.assertEqual(snapshot['buckets'], list(LATENCY_BUCKETS))

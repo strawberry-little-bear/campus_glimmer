@@ -18,6 +18,11 @@
 记进指标；禁用共享时也有一个序列明说「你现在看到的是一个进程，不是整个
 服务」。启用共享后请只把一个抓取目标指向 ``/metrics/``：每个副本返回的都是
 同一份合并视图，重复抓取会把总量按副本数翻倍。
+
+阈值告警：合并出来的这份视图同时喂给 :mod:`campus_glimmer.alerts`，它在每次
+抓取时按一组声明式规则判断有没有越界，结果以 ``/alerts/`` 的 JSON 和
+``/metrics/`` 末尾的几个 ``campus_glimmer_alert_*`` 序列暴露。规则、阈值与
+pending → firing 的语义见那个模块。
 """
 
 import hmac
@@ -38,6 +43,12 @@ logger = logging.getLogger(__name__)
 # 这种只会在生产里显形的漂移。
 METRICS_PATH = '/metrics/'
 METRICS_URL_NAME = 'metrics'
+# /alerts/ 也在这里声明：中间件要把监控自己的请求排除掉，两个路径必须在
+# 同一处定义。分开放就会得到上一轮那种「视图在 /metrics/、中间件却在跳过
+# 另一个路径」的漂移——它只在生产里显形，本地测试一个都发现不了。
+ALERTS_PATH = '/alerts/'
+ALERTS_URL_NAME = 'alerts'
+OBSERVABILITY_PATHS = frozenset({METRICS_PATH, ALERTS_PATH})
 
 PREFIX = 'campus_glimmer'
 
@@ -190,6 +201,10 @@ class MetricsRegistry:
                 'overflowed': self._overflowed,
                 'started_at': self._started_at,
                 'buckets': list(self._buckets),
+                # 进快照是为了让合并后的视图能把它加起来：只报本进程的
+                # 话，「全网在降级」和「只有这一个副本在降级」在告警上
+                # 分不开，而这两件事该有的处置完全不同。
+                'shared_read_errors': self._shared_read_errors,
                 'build': {
                     'service': settings.METRICS_SERVICE_NAME,
                     'python': _python_version(),
@@ -207,141 +222,9 @@ class MetricsRegistry:
         重复渲染得到同一段文本。
         """
 
-        if view is None:
-            view = self.snapshot()
-        with self._lock:
-            shared_read_errors = self._shared_read_errors
-
-        requests = sorted(
-            (tuple(item[:3]), item[3]) for item in view['requests']
+        return render_families(
+            _families(self.snapshot() if view is None else view)
         )
-        duration_items = sorted(
-            ((item[0], item[1]), list(item[2:])) for item in view['durations']
-        )
-        in_flight = view['in_flight']
-        started_at = view['started_at']
-        overflowed = view['overflowed']
-        buckets = list(view['buckets'])
-        meta = view.get('meta') or {}
-        builds = view.get('builds') or [_build_key(view['build'])]
-
-        lines = []
-
-        lines.extend(_header(
-            PREFIX + '_http_requests_total', 'counter',
-            'HTTP 请求总数，按请求方法、路由模板和状态类别聚合。',
-        ))
-        for (route, method, status_class), value in requests:
-            lines.append(_sample(
-                PREFIX + '_http_requests_total',
-                (('method', method), ('route', route), ('status_class', status_class)),
-                value,
-            ))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_http_request_duration_seconds', 'histogram',
-            'HTTP 请求耗时直方图（秒），只按路由模板聚合。',
-        ))
-        for (route, method), slot in duration_items:
-            labels = (('method', method), ('route', route))
-            for index, upper in enumerate(buckets):
-                lines.append(_sample(
-                    PREFIX + '_http_request_duration_seconds_bucket',
-                    labels + (('le', _format_number(upper)),),
-                    slot[2 + index],
-                ))
-            # Prometheus 要求直方图必须带 +Inf 桶，否则分位数算不出来。
-            lines.append(_sample(
-                PREFIX + '_http_request_duration_seconds_bucket',
-                labels + (('le', '+Inf'),),
-                slot[0],
-            ))
-            lines.append(_sample(
-                PREFIX + '_http_request_duration_seconds_sum', labels, slot[1],
-            ))
-            lines.append(_sample(
-                PREFIX + '_http_request_duration_seconds_count', labels, slot[0],
-            ))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_http_requests_in_flight', 'gauge',
-            '正在处理中的请求数。',
-        ))
-        lines.append(_sample(PREFIX + '_http_requests_in_flight', (), in_flight))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_metrics_label_overflow', 'gauge',
-            '标签组合触及序列上限时为 1，此时部分请求被并入 overflow 路由。',
-        ))
-        lines.append(_sample(
-            PREFIX + '_metrics_label_overflow', (), 1 if overflowed else 0,
-        ))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_process_start_time_seconds', 'gauge',
-            '进程启动时间（Unix 时间戳）；共享聚合开启时是视图内最早启动的实例。',
-        ))
-        lines.append(_sample(PREFIX + '_process_start_time_seconds', (), started_at))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_build_info', 'gauge',
-            '构建信息，值恒为 1，用于在指标里挂版本标签。',
-        ))
-        for build in builds:
-            lines.append(_sample(PREFIX + '_build_info', build, 1))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_metrics_shared_enabled', 'gauge',
-            '是否启用了跨副本共享聚合；为 0 时上面全部是本进程视角，不是整个服务的数字。',
-        ))
-        lines.append(_sample(
-            PREFIX + '_metrics_shared_enabled', (), 1 if meta.get('shared') else 0,
-        ))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_metrics_instances', 'gauge',
-            '本次视图包含的实例数（含本进程）。',
-        ))
-        lines.append(_sample(
-            PREFIX + '_metrics_instances', (), int(meta.get('instances', 1)),
-        ))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_metrics_view_age_seconds', 'gauge',
-            '视图内最旧的远端快照年龄（秒）；没有远端实例时为 0。',
-        ))
-        lines.append(_sample(
-            PREFIX + '_metrics_view_age_seconds', (), float(meta.get('view_age', 0.0)),
-        ))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_metrics_bucket_mismatch', 'gauge',
-            '因直方图分桶布局与本地不同而未并入直方图的实例数；它们的请求计数仍然并入总数。',
-        ))
-        lines.append(_sample(
-            PREFIX + '_metrics_bucket_mismatch', (),
-            int(meta.get('bucket_mismatch', 0)),
-        ))
-
-        lines.append('')
-        lines.extend(_header(
-            PREFIX + '_metrics_shared_read_errors_total', 'counter',
-            '读取共享存储失败的次数；失败时该次抓取退化为本进程视图。',
-        ))
-        lines.append(_sample(
-            PREFIX + '_metrics_shared_read_errors_total', (), shared_read_errors,
-        ))
-
-        return '\n'.join(lines) + '\n'
 
     def _bounded(self, store, key):
         """取标签组合的存储键；达到序列上限后折叠到 overflow 路由。"""
@@ -374,6 +257,165 @@ def reset_registry():
     with _registry_lock:
         _registry = MetricsRegistry()
     return _registry
+
+
+# 直方图的三个子序列必须挂在家族名后面。漏掉后缀的话 Prometheus 直接认不出
+# 这是个直方图，分位数全线算不出来；而本项目自己的行格式校验只查单行语法，
+# 照样全绿。所以后缀只能在这一处集中定义，并且由 test_metrics.py 的直方图
+# 用例盯住。
+BUCKET_SUFFIX = '_bucket'
+COUNT_SUFFIX = '_count'
+SUM_SUFFIX = '_sum'
+
+
+def plain_sample(labels, value):
+    """构造一条序列名与家族名相同的样本（计数器、仪表都是这个形状）。
+
+    统一成 (标签, 值, 后缀) 三元组，是为了让 :func:`iter_samples` 和
+    :func:`render_families` 不必猜一条样本该叫什么名字。猜的后果就是两侧
+    分裂：告警读着一个名字，看板上写着另一个名字，延迟规则于是永远不触发，
+    而没有任何测试会发现它。
+    """
+
+    return (labels, value, '')
+
+
+def _families(view):
+    """把一份视图整理成 [(指标名, 类型, 说明, [(标签, 值, 后缀), ...]), ...]。
+
+    渲染和告警评估共用这一份整理结果。分开写两份的后果是「看板上的数和
+    告警判断的数不是同一个数」——那种分裂没有任何报错，只有值班的人吃亏，
+    所以宁肯让两边共用一次计算。
+    """
+
+    requests = sorted(
+        (tuple(item[:3]), item[3]) for item in view['requests']
+    )
+    duration_items = sorted(
+        ((item[0], item[1]), list(item[2:])) for item in view['durations']
+    )
+    in_flight = view['in_flight']
+    started_at = view['started_at']
+    overflowed = view['overflowed']
+    buckets = list(view['buckets'])
+    meta = view.get('meta') or {}
+    builds = view.get('builds') or [_build_key(view['build'])]
+    # 旧版本写进共享缓存的快照没有这个键，按 0 读：升级过程中新旧副本会同时
+    # 在线一段时间，不能因为一个缺键就让整次抓取失败。
+    shared_read_errors = view.get('shared_read_errors', 0)
+
+    http_requests = [
+        plain_sample(
+            (('method', method), ('route', route), ('status_class', status_class)),
+            value,
+        )
+        for (route, method, status_class), value in requests
+    ]
+
+    duration_samples = []
+    for (route, method), slot in duration_items:
+        labels = (('method', method), ('route', route))
+        for index, upper in enumerate(buckets):
+            duration_samples.append((
+                labels + (('le', _format_number(upper)),), slot[2 + index],
+                BUCKET_SUFFIX,
+            ))
+        # Prometheus 要求直方图必须带 +Inf 桶，否则分位数算不出来。
+        duration_samples.append((
+            labels + (('le', '+Inf'),), slot[0], BUCKET_SUFFIX,
+        ))
+        duration_samples.append((labels, slot[1], SUM_SUFFIX))
+        duration_samples.append((labels, slot[0], COUNT_SUFFIX))
+
+    return [
+        (
+            PREFIX + '_http_requests_total', 'counter',
+            'HTTP 请求总数，按请求方法、路由模板和状态类别聚合。',
+            http_requests,
+        ),
+        (
+            PREFIX + '_http_request_duration_seconds', 'histogram',
+            'HTTP 请求耗时直方图（秒），只按路由模板聚合。',
+            duration_samples,
+        ),
+        (
+            PREFIX + '_http_requests_in_flight', 'gauge',
+            '正在处理中的请求数。',
+            [plain_sample((), in_flight)],
+        ),
+        (
+            PREFIX + '_metrics_label_overflow', 'gauge',
+            '标签组合触及序列上限时为 1，此时部分请求被并入 overflow 路由。',
+            [plain_sample((), 1 if overflowed else 0)],
+        ),
+        (
+            PREFIX + '_process_start_time_seconds', 'gauge',
+            '进程启动时间（Unix 时间戳）；共享聚合开启时是视图内最早启动的实例。',
+            [plain_sample((), started_at)],
+        ),
+        (
+            PREFIX + '_build_info', 'gauge',
+            '构建信息，值恒为 1，用于在指标里挂版本标签。',
+            [plain_sample(build, 1) for build in builds],
+        ),
+        (
+            PREFIX + '_metrics_shared_enabled', 'gauge',
+            '是否启用了跨副本共享聚合；为 0 时上面全部是本进程视角，不是整个服务的数字。',
+            [plain_sample((), 1 if meta.get('shared') else 0)],
+        ),
+        (
+            PREFIX + '_metrics_instances', 'gauge',
+            '本次视图包含的实例数（含本进程）。',
+            [plain_sample((), int(meta.get('instances', 1)))],
+        ),
+        (
+            PREFIX + '_metrics_view_age_seconds', 'gauge',
+            '视图内最旧的远端快照年龄（秒）；没有远端实例时为 0。',
+            [plain_sample((), float(meta.get('view_age', 0.0)))],
+        ),
+        (
+            PREFIX + '_metrics_bucket_mismatch', 'gauge',
+            '因直方图分桶布局与本地不同而未并入直方图的实例数；它们的请求计数仍然并入总数。',
+            [plain_sample((), int(meta.get('bucket_mismatch', 0)))],
+        ),
+        (
+            PREFIX + '_metrics_shared_read_errors_total', 'counter',
+            '读取共享存储失败的次数；失败时该次抓取退化为本进程视图。',
+            [plain_sample((), shared_read_errors)],
+        ),
+    ]
+
+
+def iter_samples(view):
+    """把一份视图摊成 (指标名, 标签字典, 值) 三元组，按暴露顺序。
+
+    告警评估读的是这个，不是把 :meth:`MetricsRegistry.render` 的文本再解析
+    回来：解析自己的输出意味着序列化格式的任何改动都会悄悄改掉告警的输入，
+    而两边都没有测试会发现这件事。
+    """
+
+    return [
+        (name + suffix, dict(labels), value)
+        for name, _kind, _description, samples in _families(view)
+        for labels, value, suffix in samples
+    ]
+
+
+def render_families(families):
+    """把 [(指标名, 类型, 说明, [(标签, 值, 后缀), ...]), ...] 渲染成文本。
+
+    家族之间空一行、结尾只有一个换行：两者都是解析器不要求但人盯着的时候
+    要能数的东西。
+    """
+
+    lines = []
+    for index, (name, kind, description, samples) in enumerate(families):
+        if index:
+            lines.append('')
+        lines.extend(_header(name, kind, description))
+        for labels, value, suffix in samples:
+            lines.append(_sample(name + suffix, labels, value))
+    return '\n'.join(lines) + '\n'
 
 
 def _header(name, kind, description):
@@ -413,8 +455,8 @@ def _route_label(request):
     return _sanitize_label(getattr(match, 'route', '') or '/')
 
 
-def _is_metrics_request(request):
-    return request.path_info == METRICS_PATH
+def _is_observability_request(request):
+    return request.path_info in OBSERVABILITY_PATHS
 
 
 class MetricsMiddleware:
@@ -433,9 +475,10 @@ class MetricsMiddleware:
         ensure_publisher()
 
     def __call__(self, request):
-        if _is_metrics_request(request):
+        if _is_observability_request(request):
             # 抓取自身不进指标，否则 Prometheus 的每次 scrape 都会把请求量
             # 和耗时曲线抬高一点，看板上的数字从此不完全是自己业务的。
+            # /alerts/ 也一样：它是给人看的同一个数的另一种形状。
             return self.get_response(request)
 
         registry = get_registry()
@@ -453,7 +496,7 @@ class MetricsMiddleware:
             )
 
 
-def _authorised(request):
+def is_authorised(request):
     expected = (getattr(settings, 'METRICS_TOKEN', '') or '').strip()
     if not expected:
         return False
@@ -468,14 +511,22 @@ def _authorised(request):
 
 @require_http_methods(['GET', 'HEAD'])
 def metrics_view(request):
-    """以 Prometheus 文本格式暴露指标。"""
+    """以 Prometheus 文本格式暴露指标，末尾附上按阈值的告警状态。"""
 
-    if not _authorised(request):
+    if not is_authorised(request):
         # 没配 token 或 token 不对时返回 404 而不是 403：这个端点的存在本身
         # 就不该被探测到。
         raise Http404('指标端点未启用')
+    # 延迟导入：alerts 要读这里的 iter_samples，模块级互相导入会成环。
+    from .alerts import render_alerts
+
+    view = fleet_view()
+    text = get_registry().render(view)
+    alerts = render_alerts(iter_samples(view))
+    if alerts:
+        text += '\n' + alerts
     response = HttpResponse(
-        render_fleet(),
+        text,
         content_type='text/plain; version=0.0.4; charset=utf-8',
     )
     response.headers['Cache-Control'] = 'no-store'
@@ -560,6 +611,7 @@ def merge_fleet(local, remotes, now=None):
     overflowed = bool(local['overflowed'])
     started_at = local['started_at']
     builds = {_build_key(local['build'])}
+    shared_read_errors = local.get('shared_read_errors', 0)
     view_age = 0.0
     bucket_mismatch = 0
 
@@ -571,6 +623,7 @@ def merge_fleet(local, remotes, now=None):
         in_flight += snapshot['in_flight']
         overflowed = overflowed or bool(snapshot['overflowed'])
         started_at = min(started_at, snapshot['started_at'])
+        shared_read_errors += snapshot.get('shared_read_errors', 0)
         builds.add(_build_key(snapshot['build']))
         if list(snapshot['buckets']) == buckets:
             add_durations(snapshot['durations'])
@@ -591,6 +644,7 @@ def merge_fleet(local, remotes, now=None):
         'buckets': buckets,
         'build': local['build'],
         'builds': sorted(builds),
+        'shared_read_errors': shared_read_errors,
         'meta': {
             'shared': True,
             'instances': 1 + len(remotes),
@@ -734,30 +788,45 @@ def _share_ttl():
     return max(ttl, _share_interval() + 1.0)
 
 
-def render_fleet(registry=None, store=None, now=None):
-    """渲染舰队视图：本进程当前状态加上共享存储里其他实例的最近快照。
+def fleet_view(registry=None, store=None, now=None):
+    """本次抓取应该看到的视图：本进程状态，或合并后的舰队视图。
 
     禁用共享、或者共享存储读不动时都退回到本进程视图——后者会把失败次数
     记进指标。退化的前提是宁可少算也要能抓到：监控端点自己 500 比数字旧
     一点更难排查。
+
+    :func:`render_fleet` 是它的文本形式。拆开是因为告警评估要的是同一份
+    视图本身，而不是它的文本。
     """
 
     registry = get_registry() if registry is None else registry
     local = registry.snapshot()
     if not shared_store_enabled():
-        return registry.render(local)
+        return local
     try:
         store = SharedMetricsStore() if store is None else store
         remotes = store.read_instances(exclude=local['instance'])
         # 合并也放进 try：别处是旧版本、或缓存里被写坏了格式时，这该算一次
         # 读失败，而不是让监控端点自己 500——抓不动的端点比数字旧一点的端点
         # 更难排查。
-        view = merge_fleet(local, remotes, now=now)
+        return merge_fleet(local, remotes, now=now)
     except Exception as error:
         registry.note_shared_read_error()
         logger.warning(
             '读取指标共享存储失败，本次抓取退化为本进程视图：%s: %s',
             type(error).__name__, error,
         )
-        return registry.render(local)
-    return registry.render(view)
+        # 重新取一份快照，而不是把上面那份 local 直接交出去：这一次失败的
+        # 次数也必须出现在本次输出里。拿旧快照返回的话第一次失败永远看不见，
+        # 要等到下一次抓取才多出 1——而「刚刚才坏」和「已经坏了一会」该有的
+        # 处置根本不是一回事，值班的人要先能分开这两者。
+        return registry.snapshot()
+
+
+def render_fleet(registry=None, store=None, now=None):
+    """渲染舰队视图：本进程当前状态加上共享存储里其他实例的最近快照。"""
+
+    registry = get_registry() if registry is None else registry
+    return registry.render(
+        fleet_view(registry=registry, store=store, now=now)
+    )
