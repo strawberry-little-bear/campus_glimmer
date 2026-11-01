@@ -20,6 +20,7 @@ flowchart TB
     Backup["备份 sidecar"] --> PG
     Backup --> MinIO
     Backup --> Disk["宿主机备份目录"]
+    Backup --> Offsite["异地 bucket（可选）"]
     MinIO --> Disk
     Monitor["外层监控系统<br/>Bearer 抓取 /metrics/"] --> Web
 ```
@@ -34,7 +35,7 @@ flowchart TB
 | Redis | Django cache、`cached_db` 会话缓存 | 不保存唯一业务事实；AOF 不是数据库备份 |
 | MinIO / S3 | 商品图、头像等对象文件 | 不保存业务记录之间的引用关系 |
 | WhiteNoise | 收集并分发静态文件 | 不处理用户上传文件 |
-| 备份 sidecar | PostgreSQL custom dump + 对象镜像 | 不提供异地容灾或高可用 |
+| 备份 sidecar | PostgreSQL custom dump + 对象镜像 + 可选异地镜像 | 异地镜像默认关闭；不提供高可用 |
 
 数据库和对象存储不是同一事务快照。备份先完成 PostgreSQL dump，再镜像对象前缀；两者可以用于恢复站点，但无法保证某一毫秒级别的严格一致性。生产镜像固定 PostgreSQL 16 客户端，备份脚本还会拒绝客户端与服务端主版本不一致的配置。备份口径见[备份与恢复](backup-restore.md)。
 
@@ -139,7 +140,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - Web 默认绑定 `127.0.0.1:8000`，由外层反向代理接入；
 - 镜像健康检查只调用 `/healthz/`（存活），`/readyz/`（就绪）由发布脚本、反向代理和人工验收调用；
 - Redis 开启 AOF，但 Redis 不是业务事实源；
-- 备份默认写入宿主机目录，不自动复制到异地；
+- 备份默认写入宿主机目录；异地镜像需显式配置 `BACKUP_OFFSITE_*`，默认关闭；
 - 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志与指标汇到一起的聚合和告警；进程内已有请求级指标，但还没有人负责盯着它们。
 
 迁移已经是独立的一次性任务。会话（`cached_db` + Redis）、缓存（Redis）和上传文件（S3 兼容对象存储）都已经是副本间共享的外部依赖，`docker-compose.replicas.yml` 放开端口后 Web 即可横向扩容；仍未解决的是跨副本的日志汇总、指标聚合与告警，以及数据库、对象存储、备份的独立监控。

@@ -52,7 +52,7 @@ flowchart LR
 | [`healthcheck.py`](healthcheck.py) | `--liveness`（默认，探 `/healthz/`）与 `--readiness`（探 `/readyz/`）两种探针模式；Docker `HEALTHCHECK` 用前者 |
 | [`../campus_glimmer/middleware.py`](../campus_glimmer/middleware.py) | 请求关联 ID 中间件与日志过滤器，让多副本日志能对回同一次请求 |
 | [`../campus_glimmer/metrics.py`](../campus_glimmer/metrics.py) | 进程级 HTTP 指标与 Prometheus 文本格式的 `/metrics/` 端点，默认关闭 |
-| [`backup.py`](backup.py) | PostgreSQL dump、客户端版本核验、对象镜像、SHA-256 校验、保留期清理与对象恢复 |
+| [`backup.py`](backup.py) | PostgreSQL dump、客户端版本核验、对象镜像、SHA-256 校验、保留期清理、对象恢复与异地镜像 |
 | [`../Dockerfile`](../Dockerfile) | Python 3.12 镜像、PostgreSQL 客户端、健康检查和 8000 端口 |
 | [`../docker-compose.yml`](../docker-compose.yml) | 本地 SQLite、LocMem 与媒体卷 |
 | [`../docker-compose.prod.yml`](../docker-compose.prod.yml) | PostgreSQL、Redis、MinIO、一次性迁移任务、Web、备份 sidecar 与统一的日志轮转 |
@@ -158,12 +158,21 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec backup
 
 备份包含 PostgreSQL custom dump、对象镜像和带大小 / SHA-256 的 manifest。生产镜像安装 PostgreSQL 16 客户端；备份脚本还会在 dump 前核验客户端与服务端主版本，不一致时拒绝生成归档。恢复不是自动动作，完整顺序、对象增量恢复边界和人工验收清单见[备份与恢复](../docs/backup-restore.md)。
 
+想额外留一份不跟宿主机共存亡的副本，配置 `BACKUP_OFFSITE_*` 即可（见 [`.env.production.example`](../.env.production.example)）。留空即完全关闭；只填其中几项会直接报错退出，不会静默跳过：
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.prod.yml exec backup python docker/backup.py --mirror /backups/backup-YYYYMMDDTHHMMSSZ
+docker compose --env-file .env.production -f docker-compose.prod.yml exec backup python docker/backup.py --prune-offsite
+```
+
+异地镜像不是"上传成功"就算完成：每个对象都会读回并按 manifest 的 SHA-256 逐字节比对，远端 key 集合也要与本地归档对齐，缺一个都算这次备份失败。异地账号刻意与 `DJANGO_S3_*` 分开，否则主机一坏两边一起没，"异地"只是换个目录名。
+
 ## ⚠️ 真实部署边界
 
 - 当前生产拓扑是单机小规模基线，不是高可用、跨可用区或自动故障转移方案。
 - 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；会话、缓存和上传文件已经是副本间共享的依赖，`docker-compose.replicas.yml` 放开端口后即可横向扩容，但多副本的入口、日志汇总与告警仍由外层部署环境负责。
 - Redis 的 AOF 用于进程重启后的缓存连续性，不替代 PostgreSQL 备份。
-- 数据库与对象存储不是同一事务快照；默认备份也在宿主机目录，不等同于异地容灾。
+- 数据库与对象存储不是同一事务快照；异地镜像默认关闭，需要显式配置 `BACKUP_OFFSITE_*`，且启用后仍不提供加密托管与密钥轮换。
 - TLS、反向代理、集中日志采集、指标告警、证书续期和安全补丁由外层部署环境承担；容器内已保证日志带请求关联 ID、按大小轮转，并提供进程级 `/metrics/` 指标；把各副本的日志与指标汇到一起、按阈值告警仍在外层。
 - 正式上线前仍需做真实上传、签名 URL、恢复演练和端到端人工烟雾测试。
 

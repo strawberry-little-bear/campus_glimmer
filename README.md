@@ -208,7 +208,7 @@ flowchart LR
 | 文件存储 | 本地 `media/`（开发）· S3 / MinIO（生产） |
 | 图片 | Pillow · EXIF 方向 · WebP 重编码 · 缩略图与响应式候选 |
 | 部署 | Docker Compose · Gunicorn · WhiteNoise · `/healthz/` 与 `/readyz/` |
-| 备份 | PostgreSQL custom dump · S3 对象镜像 · SHA-256 校验 · 增量恢复 |
+| 备份 | PostgreSQL custom dump · S3 对象镜像 · SHA-256 校验 · 增量恢复 · 可选异地镜像 |
 | 质量 | GitHub Actions · PostgreSQL/Redis 集成任务 · Django check · 迁移检查 · 自动化测试 |
 
 项目保持 Django 应用的自然边界：
@@ -370,7 +370,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 - `DJANGO_S3_PUBLIC_ENDPOINT_URL` 必须是浏览器可访问的域名或端口；
 - 启用 HTTPS 后配置安全重定向、Session/CSRF Cookie 和可信来源；
 - 域名与回滚窗口确认后再设置 `DJANGO_SECURE_HSTS_SECONDS`；
-- 将备份复制到独立主机或对象存储，并定期做恢复演练；
+- 需要不随宿主机一起损失的副本时配置 `BACKUP_OFFSITE_*`（留空即关闭，只填其中几项会报错），并定期做恢复演练；
 - 需要采集指标时再设置 `DJANGO_METRICS_TOKEN`，留空即保持 `/metrics/` 关闭；
 - 不提交生产数据库、上传文件、密钥或包含用户隐私的日志；
 - 当前生产编排是单机、小规模基线，不提供自动故障转移或异地容灾。
@@ -459,7 +459,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 - **治理与通知**：继续做治理分组、申诉质量和通知降噪；
 - **校园场景与信任**：完善认证体验、可信档案和地点维护；
 - **运营与数据质量**：加强导出一致性、样本审计、指标血缘和告警；
-- **基础设施与体验**：在进程级 `/metrics/` 指标之上补齐跨副本聚合与告警、集中日志、异机备份与恢复演练；Web 侧的无状态依赖与多副本端口边界已经落地，继续优化移动端、无障碍和图片加载。
+- **基础设施与体验**：在进程级 `/metrics/` 指标之上补齐跨副本聚合与告警、集中日志、默认启用的异机备份与恢复演练；Web 侧的无状态依赖与多副本端口边界已经落地，继续优化移动端、无障碍和图片加载。
 
 每个方向都拆成可独立验证、独立回滚的小迭代。详细待办、已落地范围和不做某项功能的理由见
 [后续路线图](docs/roadmap.md)。
