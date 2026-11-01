@@ -49,6 +49,7 @@ CN_NUMERALS = {
 # 真实测试文件里的 def test_ 个数。对着代码验，才不会自己被自己骗过去。
 GROUP_CLAIM_DOCS = {
     'backup-script-boundary-design.md': 'campus_glimmer/test_backup_script.py',
+    'metrics-fleet-view-design.md': 'campus_glimmer/test_metrics_fleet.py',
     'object-storage-ci-integration-design.md': 'campus_glimmer/test_object_storage_integration.py',
 }
 
