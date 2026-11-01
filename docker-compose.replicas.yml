@@ -1,0 +1,18 @@
+# 多副本演练用的叠加文件，不改变单机基线的任何语义。
+#
+# 用法：
+#   docker compose --env-file .env.production -f docker-compose.prod.yml `
+#                -f docker-compose.replicas.yml up -d --scale web=3
+#
+# 为什么需要这个文件：docker-compose.prod.yml 的 web 固定绑定
+# ${WEB_BIND:-127.0.0.1:8000}:8000，这是「单机直接对外」的便利写法。
+# 同一个宿主端口不能被两个容器同时绑定，所以直接 --scale web=2 会起不来。
+# 这里用 !reset 把端口发布整个清掉，副本之间只通过 backend 网络互访，
+# 由外层反向代理统一入口——那本来就是生产拓扑里由部署环境负责的那一层。
+#
+# 只改端口发布，别的一律不碰：环境变量锚点、启动顺序、健康检查语义、
+# 静态文件只读挂载和日志轮转都必须和单副本基线保持一致，否则这次演练
+# 验的就不是同一套部署。
+services:
+  web:
+    ports: !reset []
