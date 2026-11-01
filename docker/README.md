@@ -136,7 +136,7 @@ python docker/healthcheck.py --readiness
 
 ## 📈 指标与告警
 
-[`../campus_glimmer/metrics.py`](../campus_glimmer/metrics.py) 在进程内累计请求量、耗时直方图、在途请求数和构建信息，以 Prometheus 文本格式暴露在 `/metrics/`，零新增依赖：
+[`../campus_glimmer/metrics.py`](../campus_glimmer/metrics.py) 在进程内累计请求量、耗时直方图、在途请求数和构建信息，以 Prometheus 文本格式暴露在 `/metrics/`，零新增依赖。默认缓存是跨进程后端（生产即 Redis）时，每个 worker 每五秒把整份快照写进共享存储，`/metrics/` 读回全部实例的最近快照合并成一份舰队视图：
 
 ```powershell
 curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
@@ -145,7 +145,10 @@ curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/
 - 端点默认关闭：未配置 `DJANGO_METRICS_TOKEN` 时返回 404，不对外暴露内部路由拓扑；
 - 路由标签只用 URL 模板，`/listings/1/` 与 `/listings/2/` 共用 `listings/<int:pk>/` 一个序列，标签组合封顶 500 组；
 - 抓取请求自身不计入指标，健康探针和业务曲线的数字因此保持干净；
-- 多 worker 下每个副本各有一份计数：跨副本汇总、按阈值告警、保留与可视化由外层监控系统承担，容器内不假装已经解决。
+- 跨副本联合视图已经落地：计数器相加、在途求和、启动时间取最早，直方图只合并分桶布局相同的实例，`campus_glimmer_metrics_instances` 与 `campus_glimmer_metrics_view_age_seconds` 说明这次抓到的是几个实例、视图有多旧；
+- 共享存储读不动时降级为本进程视图并记一次 `campus_glimmer_metrics_shared_read_errors_total`，不会让端点自己 500；
+- **启用共享后只能把一个抓取目标指向 `/metrics/`**：每个副本返回的都是同一份合并视图，配两个抓取目标会把总量按副本数翻倍，而翻倍出来的数字看起来完全正常；
+- 按阈值告警、保留与可视化仍由外层监控系统承担，容器内不假装已经解决。
 
 ## 💾 备份与恢复
 
@@ -173,12 +176,13 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec backup
 - 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；会话、缓存和上传文件已经是副本间共享的依赖，`docker-compose.replicas.yml` 放开端口后即可横向扩容，但多副本的入口、日志汇总与告警仍由外层部署环境负责。
 - Redis 的 AOF 用于进程重启后的缓存连续性，不替代 PostgreSQL 备份。
 - 数据库与对象存储不是同一事务快照；异地镜像默认关闭，需要显式配置 `BACKUP_OFFSITE_*`，且启用后仍不提供加密托管与密钥轮换。
-- TLS、反向代理、集中日志采集、指标告警、证书续期和安全补丁由外层部署环境承担；容器内已保证日志带请求关联 ID、按大小轮转，并提供进程级 `/metrics/` 指标；把各副本的日志与指标汇到一起、按阈值告警仍在外层。
+- TLS、反向代理、集中日志采集、指标告警、证书续期和安全补丁由外层部署环境承担；容器内已保证日志带请求关联 ID、按大小轮转，并提供带跨副本联合视图的 `/metrics/` 指标；把各副本的日志汇到一起、按阈值告警仍在外层。
 - 正式上线前仍需做真实上传、签名 URL、恢复演练和端到端人工烟雾测试。
 
 ## 📚 继续阅读
 
 - [生产部署基线](../docs/production-deployment.md)
+- [跨副本指标聚合设计](../docs/metrics-fleet-view-design.md)
 - [备份与恢复](../docs/backup-restore.md)
 - [部署健康端点设计](../docs/deployment-health-endpoints-design.md)
 - [Django 项目配置](../campus_glimmer/README.md)

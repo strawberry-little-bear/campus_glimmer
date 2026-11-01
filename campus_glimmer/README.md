@@ -53,10 +53,11 @@ flowchart LR
 | [`context_processors.py`](context_processors.py) | 向全站模板注入私信与通知未读数 |
 | [`health.py`](health.py) | 提供存活探针与数据库、缓存、对象存储就绪探针 |
 | [`middleware.py`](middleware.py) | 请求关联 ID 中间件与日志过滤器，让多副本日志能对回同一次请求 |
-| [`metrics.py`](metrics.py) | 进程级 HTTP 指标与 Prometheus 文本格式的 `/metrics/` 端点，默认关闭 |
+| [`metrics.py`](metrics.py) | 进程级 HTTP 指标、Prometheus 文本格式的 `/metrics/` 端点，以及跨副本快照发布与合并（默认关闭） |
 | [`wsgi.py`](wsgi.py) / [`asgi.py`](asgi.py) | 部署入口 |
 | [`tests.py`](tests.py) | 根路由、探针与安全配置基线测试 |
-| [`test_metrics.py`](test_metrics.py) | 指标契约：标签基数、暴露格式、序列封顶、在途计数与 Bearer 鉴权 |
+| [`test_metrics.py`](test_metrics.py) | 指标契约：标签基数、暴露格式、序列封顶、在途计数与 Bearer 鉴权（单进程口径） |
+| [`test_metrics_fleet.py`](test_metrics_fleet.py) | 跨副本联合视图：开关三态、快照形状、合并规则、共享存储降级、发布线程与端到端合并 |
 | [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验、存储端点测试，以及 `static/css/` 样式表的语法守卫（注释、字符串、花括号配平） |
 | [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、表格与分页链接名称、当前栏目、跳转主内容与导航触控目标 |
 | [`test_anchor_scroll_margin.py`](test_anchor_scroll_margin.py) | 页内跳转落点避让守卫：锚点、分页锚点、运营看板分区与表单控件都必须让出吸顶导航高度 |
@@ -77,7 +78,7 @@ flowchart LR
 | `/messages/` | 留言、私信、内容审核与申诉 |
 | `/healthz/` | 只证明 Django 进程还能响应，不访问数据库 |
 | `/readyz/` | 检查数据库、缓存和对象存储；关键依赖不可用时返回 `503` |
-| `/metrics/` | 进程级指标，未配置 `DJANGO_METRICS_TOKEN` 时返回 `404` |
+| `/metrics/` | 指标端点；未配置 `DJANGO_METRICS_TOKEN` 时返回 `404`，启用共享后返回整个舰队的合并视图 |
 
 ## ❤️ 两个探针不能混用
 
@@ -138,6 +139,9 @@ PostgreSQL + Redis + S3 兼容存储 + cached_db 会话 + WhiteNoise 静态文�
 | `DJANGO_S3_PUBLIC_ENDPOINT_URL` | 浏览器实际访问对象存储的外部端点 |
 | `DJANGO_REQUIRE_PRODUCTION_SERVICES` | 生产 fail-closed 开关；配置缺失时拒绝启动 |
 | `DJANGO_METRICS_TOKEN` | `/metrics/` 的 Bearer 令牌；留空即整个端点返回 404 |
+| `DJANGO_METRICS_SHARED` | 跨副本指标联合开关；留空时按缓存后端判断（LocMem 关、Redis 开） |
+| `DJANGO_METRICS_SHARE_INTERVAL` | 快照发布间隔（秒），默认 `5.0` |
+| `DJANGO_METRICS_SHARE_TTL` | 快照存活时间（秒），默认 `30.0`，必须大于间隔 |
 
 - 本地默认值直接可运行，生产必须显式覆盖 `DJANGO_SECRET_KEY`、域名、HTTPS 和 Cookie 安全开关；
 - 完整样例见 [`../.env.production.example`](../.env.production.example)，逐项说明见[生产部署基线](../docs/production-deployment.md)；

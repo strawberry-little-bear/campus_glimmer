@@ -141,9 +141,9 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 镜像健康检查只调用 `/healthz/`（存活），`/readyz/`（就绪）由发布脚本、反向代理和人工验收调用；
 - Redis 开启 AOF，但 Redis 不是业务事实源；
 - 备份默认写入宿主机目录；异地镜像需显式配置 `BACKUP_OFFSITE_*`，默认关闭；
-- 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志与指标汇到一起的聚合和告警；进程内已有请求级指标，但还没有人负责盯着它们。
+- 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志汇到一起；指标的跨副本联合视图已经落地，但按指标告警仍缺着，还没有人负责盯着它们。
 
-迁移已经是独立的一次性任务。会话（`cached_db` + Redis）、缓存（Redis）和上传文件（S3 兼容对象存储）都已经是副本间共享的外部依赖，`docker-compose.replicas.yml` 放开端口后 Web 即可横向扩容；仍未解决的是跨副本的日志汇总、指标聚合与告警，以及数据库、对象存储、备份的独立监控。
+迁移已经是独立的一次性任务。会话（`cached_db` + Redis）、缓存（Redis）和上传文件（S3 兼容对象存储）都已经是副本间共享的外部依赖，`docker-compose.replicas.yml` 放开端口后 Web 即可横向扩容；仍未解决的是跨副本的日志汇总与按指标告警，以及数据库、对象存储、备份的独立监控。
 
 ### 请求关联 ID 与日志轮转
 
@@ -155,13 +155,21 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 
 `campus_glimmer/metrics.py` 在进程内累计请求量、耗时直方图、在途请求数和构建信息，以 Prometheus 文本格式暴露在 `/metrics/`。它不写库、不引第三方依赖，序列化在锁外进行，抓取本身不跟业务请求抢同一把锁。
 
+默认缓存是跨进程后端（生产即 Redis）时，每个 worker 每五秒把整份快照写进共享存储，`/metrics/` 读回全部实例的最近快照合并成一份舰队视图。共享载体就是默认缓存本身，不为这件事多引一个组件。合并规则、降级路径与失败边界见[跨副本指标聚合设计](metrics-fleet-view-design.md)。
+
+- **合并规则**：请求计数器按标签组合相加、在途求和、启动时间取最早、构建信息按内容去重；直方图只合并分桶布局相同的实例，不同的那份只进计数器，并由 `campus_glimmer_metrics_bucket_mismatch` 报出来——混桶会算出从未发生过的分位数，比不合并更糟；
+- **读取时必须排除自己的实例标识**，否则本进程那份计数会被算两遍，而症状只是「数字比日志里数出来的多一倍」，没有任何报错；
+- **五个新序列**说明这次抓到的是几个实例、视图有多旧、跳过了谁、降级过几次：`campus_glimmer_metrics_shared_enabled`、`campus_glimmer_metrics_instances`、`campus_glimmer_metrics_view_age_seconds`、`campus_glimmer_metrics_bucket_mismatch`、`campus_glimmer_metrics_shared_read_errors_total`。既有序列名与标签完全不变，现有看板不需要跟着改；
+- **共享存储读不动时降级而不是失效**：退回本进程视图并记一次计数，因为一个 500 的监控端点比数字旧一点的监控端点更难排查；
+- **启用共享后只能把一个抓取目标指向 `/metrics/`**：每个副本返回的都是同一份合并视图，配两个抓取目标会把总量按副本数翻倍，而翻倍出来的数字看起来完全正常。
+
 - **路由标签只取 URL 模板**（`/listings/<int:pk>/`），不取 `request.path`：后者会让每条商品各成一个序列，一天就能把 Prometheus 的内存和每次抓取的体积一起打爆；
 - 标签组合封顶 500 组，超出折叠进 `overflow` 路由，同时把 `campus_glimmer_metrics_label_overflow` 置 1——封顶本身是一次故障，必须可见；
 - 状态码压成 `2xx/3xx/4xx/5xx`，按精确码分组等于把基数再乘一个量级；
 - 抓取请求自身不计入指标，否则每次 scrape 都会把业务曲线抬高一点；
 - 端点默认关闭：未配置 `DJANGO_METRICS_TOKEN` 时返回 404，配置后抓取需带 `Authorization: Bearer <token>`，令牌比对走 `hmac.compare_digest`。
 
-多 worker 下计数器按进程分离：gunicorn 起几个 worker 就有几份计数，抓任一副本都只是总量的一部分。所以这份指标回答的是「这个副本忙不忙、慢不慢、错误率有没有抬头」；把各副本汇到一起、按阈值告警、保留与可视化仍在外层监控系统。
+没有启用共享时（LocMem 缓存，或显式关掉）计数器按进程分离：gunicorn 起几个 worker 就有几份计数，抓任一副本都只是总量的一部分。此时 `campus_glimmer_metrics_instances` 恒为 1、`campus_glimmer_metrics_shared_enabled` 恒为 0，指标回答的是「这个副本忙不忙、慢不慢、错误率有没有抬头」。启用了共享，同一次抓取拿到的就是整个服务的总量。仍在外层监控系统的是按阈值告警、保留与可视化。
 
 ```powershell
 curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
@@ -181,12 +189,13 @@ docker compose --env-file .env.production -f docker-compose.prod.yml -f docker-c
 
 ## 8. CI 覆盖
 
-GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。`quality` 的完整测试同时覆盖指标端点契约：标签基数、暴露格式、序列封顶与 Bearer 鉴权。
+GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。`quality` 的完整测试同时覆盖指标端点契约：标签基数、暴露格式、序列封顶与 Bearer 鉴权，以及跨副本联合视图的合并规则、降级路径与五个新序列（口径见[跨副本指标聚合设计](metrics-fleet-view-design.md)）。`production-deps` 用的是真 Redis，共享开关会自动生效，发布线程在整套测试期间真实运行。
 
 ## 相关文档
 
 - [备份与恢复](backup-restore.md)
 - [健康端点演进](deployment-health-endpoints-design.md)
+- [跨副本指标聚合设计](metrics-fleet-view-design.md)
 - [对象存储 CI 集成设计](object-storage-ci-integration-design.md)
 - [后台与定时任务](scheduled-tasks.md)
 - [当前取舍与边界](product-boundaries.md)
