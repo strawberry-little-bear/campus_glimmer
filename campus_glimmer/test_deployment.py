@@ -843,6 +843,26 @@ def block_items(lines, header):
     return items
 
 
+def service_scalar(services, name, key):
+    """读取服务块内直接的 ``key: value`` 行。"""
+    for line in services[name]:
+        stripped = line.strip()
+        if stripped.startswith(key + ':'):
+            return stripped.split(':', 1)[1].strip().strip('"')
+    return None
+
+
+def service_sequence(services, name, key):
+    """读取 ``key: [a, b]`` 行内序列或 ``- item`` 块序列。"""
+    raw = service_scalar(services, name, key)
+    if raw is None:
+        return []
+    if raw.startswith('['):
+        body = raw.strip('[]')
+        return [item.strip().strip('"') for item in body.split(',') if item.strip()]
+    return block_items(services[name], key + ':')
+
+
 class StartupTaskTests(SimpleTestCase):
     """迁移与 collectstatic 必须由一次性任务承担，且失败要中断发布。"""
 
@@ -967,24 +987,6 @@ class ComposeProductionTopologyTests(SimpleTestCase):
             values[key.strip()] = value.strip().strip('"')
         return values
 
-    def _scalar(self, name, key):
-        """读取服务块内直接的 ``key: value`` 行。"""
-        for line in self.services[name]:
-            stripped = line.strip()
-            if stripped.startswith(key + ':'):
-                return stripped.split(':', 1)[1].strip().strip('"')
-        return None
-
-    def _sequence(self, name, key):
-        """读取 ``key: [a, b]`` 行内序列或 ``- item`` 块序列。"""
-        raw = self._scalar(name, key)
-        if raw is None:
-            return []
-        if raw.startswith('['):
-            body = raw.strip('[]')
-            return [item.strip().strip('"') for item in body.split(',') if item.strip()]
-        return block_items(self.services[name], key + ':')
-
     def _uses_shared_environment_anchor(self, name):
         inside = False
         for line in self.services[name]:
@@ -1021,13 +1023,13 @@ class ComposeProductionTopologyTests(SimpleTestCase):
     def test_web_never_runs_startup_tasks(self):
         self.assertEqual(
             self._environment('web').get('DJANGO_RUN_STARTUP_TASKS'), '0')
-        self.assertEqual(self._sequence('web', 'entrypoint'), [])
+        self.assertEqual(service_sequence(self.services, 'web', 'entrypoint'), [])
 
     def test_migrate_is_a_one_shot_job(self):
         self.assertEqual(
-            self._scalar('migrate', 'restart'), 'no')
+            service_scalar(self.services, 'migrate', 'restart'), 'no')
         self.assertEqual(
-            self._sequence('migrate', 'entrypoint'),
+            service_sequence(self.services, 'migrate', 'entrypoint'),
             ['python', 'docker/startup_tasks.py'],
         )
 
@@ -1049,11 +1051,11 @@ class ComposeProductionTopologyTests(SimpleTestCase):
 
     def test_collectstatic_output_is_shared_and_read_only_for_web(self):
         self.assertEqual(
-            self._sequence('migrate', 'volumes'),
+            service_sequence(self.services, 'migrate', 'volumes'),
             ['staticfiles:/app/staticfiles'],
         )
         self.assertEqual(
-            self._sequence('web', 'volumes'),
+            service_sequence(self.services, 'web', 'volumes'),
             ['staticfiles:/app/staticfiles:ro'],
         )
 
@@ -1203,6 +1205,209 @@ class ContainerLivenessProbeTests(SimpleTestCase):
                 self.assertFalse(
                     any(line.strip() == 'healthcheck:' for line in lines),
                     '本地 compose 不该覆盖探针语义，否则本地与线上行为分叉')
+
+
+class MultiReplicaReadinessTests(SimpleTestCase):
+    """Web 副本之间不能靠本机状态互通。
+
+    扩容到多个 web 副本时，进程内的任何状态都会立刻分叉：A 副本写在本地磁盘
+    上的头像，B 副本看不到；A 副本存在 LocMem 里的会话，B 副本读不到。症状是
+    「刷新一下登录状态就没了」「图片时有时无」，而且只在有两个以上副本时才出现，
+    单副本本地开发和单机基线永远复现不了。
+
+    这些不变量全部落在配置层，因此也全部由配置层钉住：谁把存储改回
+    filesystem、把缓存改回 LocMem、把媒体目录重新挂回容器、或者把
+    docker-compose.replicas.yml 删掉，测试必须当场红，而不是等到线上第二个副本
+    起来之后才被人发现。
+    """
+
+    PROD_COMPOSE = PROJECT_ROOT / 'docker-compose.prod.yml'
+    REPLICAS_COMPOSE = PROJECT_ROOT / 'docker-compose.replicas.yml'
+    ENV_TEMPLATE = PROJECT_ROOT / '.env.production.example'
+    URLS = PROJECT_ROOT / 'campus_glimmer' / 'urls.py'
+
+    def setUp(self):
+        self.services = compose_services(self.PROD_COMPOSE)
+        self.web_env = self._web_environment()
+
+    def _web_environment(self):
+        values = {}
+        inside = False
+        for line in self.services['web']:
+            stripped = line.strip()
+            if stripped == 'environment:':
+                inside = True
+                continue
+            if inside and len(line) - len(line.lstrip(' ')) <= 4:
+                break
+            if not inside:
+                continue
+            if stripped.startswith('<<:'):
+                key = stripped.split(':', 1)[1].strip().lstrip('*')
+                anchor = self._anchor_environment(key)
+                values.update(anchor)
+                continue
+            key, _, value = stripped.partition(':')
+            values[key.strip()] = value.strip().strip('"')
+        return values
+
+    def _anchor_environment(self, name):
+        text = self.PROD_COMPOSE.read_text(encoding='utf-8')
+        marker = 'x-{0}: &{0}'.format(name)
+        self.assertIn(marker, text, 'compose 里找不到锚点 ' + marker)
+        values = {}
+        inside = False
+        for line in text.splitlines():
+            if line.startswith(marker):
+                inside = True
+                continue
+            if inside:
+                if not line.strip() or line.lstrip().startswith('#'):
+                    continue
+                if not line.startswith(' '):
+                    break
+                key, _, value = line.strip().partition(':')
+                values[key.strip()] = value.strip().strip('"')
+        return values
+
+    def _web_env_file(self):
+        """web 通过 env_file 注入的那一个环境文件名。
+
+        共享 Redis / 对象存储这类密钥不进 compose 文件（不能进仓库），只能走
+        env_file。所以「副本之间是否共享」这一半事实在 .env.production 里，
+        仓库内可校验的替身是 .env.production.example。
+        """
+        files = service_sequence(self.services, 'web', 'env_file')
+        self.assertEqual(
+            files, ['${APP_ENV_FILE:-.env.production}'],
+            'web 的 env_file 被改动，模板里的共享依赖就传不进副本了',
+        )
+
+    def _env_template_values(self):
+        values = {}
+        for line in self.ENV_TEMPLATE.read_text(encoding='utf-8').splitlines():
+            if '=' in line and not line.lstrip().startswith('#'):
+                key, _, value = line.partition('=')
+                values[key.strip()] = value.strip()
+        return values
+
+    def test_production_sessions_are_backed_by_shared_state(self):
+        # 会话必须落在数据库或共享缓存里，不能只活在单个进程的内存中。
+        engine = self.web_env.get('DJANGO_SESSION_ENGINE')
+        self.assertIn(
+            engine,
+            {
+                'django.contrib.sessions.backends.db',
+                'django.contrib.sessions.backends.cached_db',
+                'django.contrib.sessions.backends.cache',
+            },
+            'web 的 DJANGO_SESSION_ENGINE=%r 不跨副本共享' % engine,
+        )
+
+    def test_production_cache_is_shared_redis_not_per_process_locmem(self):
+        self._web_env_file()
+        self.assertTrue(
+            self._env_template_values().get('DJANGO_CACHE_URL', '').startswith('redis://'),
+            '.env.production.example 没有给出共享 Redis，'
+            '漏配时 Django 会退回每副本一份的 LocMemCache',
+        )
+
+    def test_production_uploads_land_in_object_storage(self):
+        self.assertEqual(
+            self._env_template_values().get('DJANGO_STORAGE_BACKEND'), 's3',
+            '上传文件落在本地文件系统上时，只有收到上传的那个副本能读回它',
+        )
+
+    def test_web_does_not_mount_a_private_media_directory(self):
+        for line in self.services['web']:
+            self.assertNotIn(
+                '/app/media', line,
+                'web 挂载了本地媒体目录，副本之间看不到彼此上传的文件',
+            )
+
+    def test_media_is_served_from_storage_outside_debug_mode(self):
+        # Django 的 static() 只在本机 DEBUG 下挂本地 MEDIA_ROOT；生产由存储后端
+        # 出网。一旦这个守卫被去掉，DEBUG=False 的副本就会各自从本地 media 目录
+        # 读文件，而那个目录在容器里是空的。
+        text = self.URLS.read_text(encoding='utf-8')
+        self.assertIn('if settings.DEBUG:', text)
+        guarded = text.split('if settings.DEBUG:', 1)[1]
+        self.assertIn('document_root=settings.MEDIA_ROOT', guarded)
+        self.assertLess(
+            guarded.index('document_root=settings.MEDIA_ROOT'),
+            guarded.index('\n\n\n') if '\n\n\n' in guarded else len(guarded),
+        )
+
+    def test_static_files_stay_shared_and_read_only_for_every_replica(self):
+        self.assertEqual(
+            service_sequence(self.services, 'web', 'volumes'),
+            ['staticfiles:/app/staticfiles:ro'],
+        )
+
+    def test_replicas_override_resets_the_host_port_binding(self):
+        """--scale web=N 起不来的真正原因是固定宿主端口，必须由配置解开。"""
+        self.assertTrue(
+            self.REPLICAS_COMPOSE.exists(),
+            '缺少 docker-compose.replicas.yml：单机基线写死了 127.0.0.1:8000，'
+            '同一个宿主端口无法被两个副本同时绑定，--scale 直接失败',
+        )
+        text = self.REPLICAS_COMPOSE.read_text(encoding='utf-8')
+        # 只认有效配置行：注释里写一句「用 !reset」不算数，否则删掉 !reset
+        # 之后测试照样绿，而 --scale 仍然起不来。
+        effective = [line.strip() for line in text.splitlines()
+                     if line.strip() and not line.lstrip().startswith('#')]
+        self.assertIn('services:', effective)
+        self.assertIn('web:', effective)
+        ports = [line for line in effective if line.startswith('ports:')]
+        self.assertEqual(
+            ports, ['ports: !reset []'],
+            '副本叠加文件必须用 !reset 清掉端口发布，实际是 %r' % (ports,))
+
+    def test_replicas_override_changes_nothing_else(self):
+        """只放端口，别的一律不动，否则这次演练验的不是同一套部署。"""
+        text = self.REPLICAS_COMPOSE.read_text(encoding='utf-8')
+        body = [line for line in text.splitlines()
+                if line.strip() and not line.lstrip().startswith('#')]
+        services = {}
+        current = None
+        for line in body:
+            if not line.startswith(' '):
+                current = line.rstrip() == 'services:'
+                continue
+            if current and len(line) - len(line.lstrip(' ')) == 2:
+                current = line.strip()[:-1]
+                services.setdefault(current, [])
+                continue
+            if current:
+                services[current].append(line)
+        self.assertEqual(list(services), ['web'], '副本叠加文件只能改 web')
+        keys = [line.strip().split(':', 1)[0] for line in services['web']]
+        self.assertEqual(keys, ['ports'], '副本叠加文件只允许改 ports')
+
+    def test_production_env_template_declares_the_shared_dependencies(self):
+        """模板必须一次性给出「副本间共享」需要的全部外部依赖。
+
+        分开写 storage / cache 会漏：只给 s3 不给 Redis 时，会话仍然锁在单个
+        副本的进程内存里，用户照样会被随机登出。
+        """
+        values = self._env_template_values()
+        self.assertEqual(values.get('DJANGO_STORAGE_BACKEND'), 's3')
+        self.assertTrue(
+            values.get('DJANGO_CACHE_URL', '').startswith('redis://'),
+            '.env.production.example 没有给出共享 Redis，'
+            '部署时会退回每副本一份的 LocMemCache',
+        )
+        self.assertTrue(values.get('DJANGO_S3_BUCKET'))
+        self.assertTrue(values.get('DJANGO_S3_ENDPOINT_URL'))
+
+    def test_no_replica_may_wait_on_another_replicas_health(self):
+        for name, lines in self.services.items():
+            depends = block_value(lines, 'depends_on:')
+            with self.subTest(service=name):
+                self.assertNotEqual(
+                    depends.get('web'), 'service_healthy',
+                    '%s 等 web 变 healthy，副本扩缩容会被健康抖动卡住' % name,
+                )
 
 
 class ContainerLogRotationTests(SimpleTestCase):
