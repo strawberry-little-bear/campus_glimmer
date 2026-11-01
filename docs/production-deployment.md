@@ -142,7 +142,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 备份默认写入宿主机目录，不自动复制到异地；
 - 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志与指标汇到一起的聚合和告警；进程内已有请求级指标，但还没有人负责盯着它们。
 
-迁移已经是独立的一次性任务。扩大到多实例前，仍需要把会话与上传文件改成无状态依赖，并为数据库、对象存储、备份和告警建立独立监控。
+迁移已经是独立的一次性任务。会话（`cached_db` + Redis）、缓存（Redis）和上传文件（S3 兼容对象存储）都已经是副本间共享的外部依赖，`docker-compose.replicas.yml` 放开端口后 Web 即可横向扩容；仍未解决的是跨副本的日志汇总、指标聚合与告警，以及数据库、对象存储、备份的独立监控。
 
 ### 请求关联 ID 与日志轮转
 
@@ -165,6 +165,18 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 ```powershell
 curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
 ```
+
+### 多副本演练
+
+单机基线的 `web` 固定绑定 `${WEB_BIND:-127.0.0.1:8000}:8000`，这是「单机直接对外」的便利写法，但同一个宿主端口不能被两个容器同时绑定，所以直接 `--scale web=2` 起不来。多副本演练用叠加文件把端口发布整个清掉：
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.prod.yml -f docker-compose.replicas.yml up -d --scale web=3
+```
+
+这个文件只做一件事：`ports: !reset []`。环境变量锚点、启动顺序、健康检查语义、静态文件只读挂载和日志轮转全部保持与单副本基线一致，否则这次演练验的就不是同一套部署。副本之间只通过 `backend` 网络互访，统一入口由外层反向代理负责——那本来就是生产拓扑里由部署环境承担的一层。
+
+副本安全性本身不是口头约定，`campus_glimmer/test_deployment.py` 的 `MultiReplicaReadinessTests` 逐条钉住配置：会话后端必须跨副本共享、缓存必须指向 Redis、上传必须落到对象存储、Web 不得挂载本地媒体目录、媒体不得在 `DEBUG` 之外由本地盘提供、静态文件对所有副本保持共享只读、副本叠加文件只允许改端口发布。这些断言同时是负向护栏——把存储改回 `filesystem`、把缓存改回 LocMem、删掉叠加文件或去掉 `!reset`，测试都会当场失败。
 
 ## 8. CI 覆盖
 

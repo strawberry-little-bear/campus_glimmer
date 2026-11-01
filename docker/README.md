@@ -57,6 +57,7 @@ flowchart LR
 | [`../docker-compose.yml`](../docker-compose.yml) | 本地 SQLite、LocMem 与媒体卷 |
 | [`../docker-compose.prod.yml`](../docker-compose.prod.yml) | PostgreSQL、Redis、MinIO、一次性迁移任务、Web、备份 sidecar 与统一的日志轮转 |
 | [`../.env.production.example`](../.env.production.example) | 生产环境变量模板，所有 `CHANGE_ME` 都必须替换 |
+| [`../docker-compose.replicas.yml`](../docker-compose.replicas.yml) | 多副本演练叠加文件，只把 `web` 的固定宿主端口 `!reset` 掉 |
 
 ## 🚪 本地启动
 
@@ -160,7 +161,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec backup
 ## ⚠️ 真实部署边界
 
 - 当前生产拓扑是单机小规模基线，不是高可用、跨可用区或自动故障转移方案。
-- 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；横向扩容前仍需要无状态化会话与上传文件。
+- 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；会话、缓存和上传文件已经是副本间共享的依赖，`docker-compose.replicas.yml` 放开端口后即可横向扩容，但多副本的入口、日志汇总与告警仍由外层部署环境负责。
 - Redis 的 AOF 用于进程重启后的缓存连续性，不替代 PostgreSQL 备份。
 - 数据库与对象存储不是同一事务快照；默认备份也在宿主机目录，不等同于异地容灾。
 - TLS、反向代理、集中日志采集、指标告警、证书续期和安全补丁由外层部署环境承担；容器内已保证日志带请求关联 ID、按大小轮转，并提供进程级 `/metrics/` 指标；把各副本的日志与指标汇到一起、按阈值告警仍在外层。
