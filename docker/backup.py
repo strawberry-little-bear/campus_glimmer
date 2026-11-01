@@ -5,6 +5,12 @@ a byte-for-byte object mirror under ``objects/``, and ``manifest.json`` with
 the original object keys and SHA-256 checksums. The script intentionally uses
 ``pg_dump`` instead of Django serialization so identifiers, indexes and
 constraints are restored together with the data.
+
+The same archive can additionally be mirrored to a second, independently
+configured S3-compatible bucket, so a dead host does not take the business
+volumes and the only backup with it. That mirror is verified by reading every
+object back and comparing SHA-256, because a truncated upload still looks like
+a complete key in a listing.
 """
 
 import argparse
@@ -22,10 +28,23 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 
 BACKUP_PREFIX = 'backup-'
 MANIFEST_FORMAT = 1
+
+# 异地镜像的配置项。它们刻意与 DJANGO_S3_* 分开：业务存储和备份容灾必须能指向
+# 不同的主机、不同的账号，否则主机一坏两边一起没，"异地"只是换个目录名。
+OFFSITE_ENV = (
+    'BACKUP_OFFSITE_ENDPOINT_URL',
+    'BACKUP_OFFSITE_BUCKET',
+    'BACKUP_OFFSITE_ACCESS_KEY_ID',
+    'BACKUP_OFFSITE_SECRET_ACCESS_KEY',
+    'BACKUP_OFFSITE_REGION',
+    'BACKUP_OFFSITE_PREFIX',
+    'BACKUP_OFFSITE_RETENTION_DAYS',
+)
 
 
 def _env(name, default=''):
@@ -149,6 +168,162 @@ def _s3_client():
             s3={'addressing_style': _env('DJANGO_S3_ADDRESSING_STYLE', 'path')},
         ),
     )
+
+
+def offsite_config():
+    """读取异地镜像目标；未启用时返回 None，配了一半则当场报错。
+
+    「以为开了异地备份」比「明确没开」危险得多：前者会让运维依据一个不存在的
+    副本做恢复演练。所以只填了其中几项也必须是错误，不能静默跳过。
+    """
+    endpoint = _env('BACKUP_OFFSITE_ENDPOINT_URL')
+    if not endpoint:
+        stray = sorted(name for name in OFFSITE_ENV[1:] if _env(name))
+        if stray:
+            raise ValueError(
+                '配置了 ' + ','.join(stray) + ' 但没有 BACKUP_OFFSITE_ENDPOINT_URL，'
+                '异地镜像不会执行；要么补全端点，要么把这些变量全部清空'
+            )
+        return None
+    bucket = _env('BACKUP_OFFSITE_BUCKET')
+    if not bucket:
+        raise ValueError('缺少 BACKUP_OFFSITE_BUCKET，异地镜像没有目标 bucket。')
+    access_key = _env('BACKUP_OFFSITE_ACCESS_KEY_ID')
+    secret_key = _env('BACKUP_OFFSITE_SECRET_ACCESS_KEY')
+    if not access_key or not secret_key:
+        raise ValueError(
+            '缺少 BACKUP_OFFSITE_ACCESS_KEY_ID / BACKUP_OFFSITE_SECRET_ACCESS_KEY，'
+            '异地镜像无法通过鉴权。'
+        )
+    retention_raw = _env('BACKUP_OFFSITE_RETENTION_DAYS') or _env('BACKUP_RETENTION_DAYS', '14')
+    try:
+        retention_days = int(retention_raw)
+    except ValueError as exc:
+        raise ValueError('BACKUP_OFFSITE_RETENTION_DAYS 必须是整数天数。') from exc
+    return {
+        'endpoint_url': endpoint,
+        'bucket': bucket,
+        'access_key_id': access_key,
+        'secret_access_key': secret_key,
+        'region': _env('BACKUP_OFFSITE_REGION', 'us-east-1') or 'us-east-1',
+        'prefix': object_listing_prefix(
+            _env('BACKUP_OFFSITE_PREFIX', 'campus-glimmer-backups')),
+        'retention_days': retention_days,
+    }
+
+
+def offsite_client(config):
+    return boto3.session.Session().client(
+        's3',
+        endpoint_url=config['endpoint_url'],
+        region_name=config['region'],
+        aws_access_key_id=config['access_key_id'],
+        aws_secret_access_key=config['secret_access_key'],
+        config=Config(
+            signature_version='s3v4',
+            s3={'addressing_style': 'path'},
+        ),
+    )
+
+
+def _offsite_files(root, manifest):
+    """归档里必须原样出现在异地的文件：库、清单和每一个对象镜像。"""
+    root = Path(root).resolve()
+    files = ['database.dump', 'manifest.json']
+    files.extend(entry['file'] for entry in manifest['object_storage']['objects'])
+    return [(relative, _safe_backup_path(root, relative)) for relative in files]
+
+
+def _remote_keys(client, bucket, prefix):
+    keys = set()
+    paginator = client.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get('Contents', []):
+            keys.add(obj['Key'])
+    return keys
+
+
+def mirror_backup(backup_dir, *, config, client=None):
+    """把一份已校验的本地归档原样推到异地 bucket，并逐字节读回比对。
+
+    「上传返回 200」不等于「备份成功」：被截断的上传在列表里照样是一个完整
+    key。所以每个对象都重新下载，按 manifest 里的 SHA-256 比对字节；最后再把
+    远端的 key 集合和预期集合对一遍，缺一个都算这次备份失败。
+    """
+    manifest = verify_backup(backup_dir)
+    root = Path(backup_dir).resolve()
+    client = client or offsite_client(config)
+    name = root.name
+    scope = f"{config['prefix']}{name}/"
+
+    uploaded = []
+    for relative, path in _offsite_files(root, manifest):
+        key = f'{scope}{relative}'
+        client.upload_file(str(path), config['bucket'], key)
+        body = client.get_object(Bucket=config['bucket'], Key=key)['Body'].read()
+        if hashlib.sha256(body).hexdigest() != sha256_file(path):
+            raise ValueError(f'异地副本校验失败：{key}')
+        uploaded.append(key)
+
+    expected = set(uploaded)
+    listed = _remote_keys(client, config['bucket'], scope)
+    if listed != expected:
+        missing = sorted(expected - listed)
+        extra = sorted(listed - expected)
+        raise ValueError(
+            '异地副本的 key 集合与本地归档不一致：'
+            f'缺少 {missing or "无"}，多出 {extra or "无"}'
+        )
+    return {
+        'name': name,
+        'bucket': config['bucket'],
+        'prefix': scope,
+        'keys': len(expected),
+        'bytes': sum(path.stat().st_size for _, path in _offsite_files(root, manifest)),
+    }
+
+
+def prune_offsite(config, retention_days, *, now=None, client=None):
+    """删除异地 bucket 里过期的 ``backup-*`` 归档。
+
+    创建时间只从每个归档自己的 manifest.json 读，读不到就跳过：宁可多留一天，
+    也不能凭 key 名猜一个时间去删别人的数据。
+    """
+    if retention_days < 1:
+        return []
+    client = client or offsite_client(config)
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=retention_days)
+    prefix = config['prefix']
+    groups = {}
+    for key in sorted(_remote_keys(client, config['bucket'], prefix)):
+        rest = key[len(prefix):]
+        name, separator, relative = rest.partition('/')
+        if not separator or not relative or not name.startswith(BACKUP_PREFIX):
+            continue
+        groups.setdefault(name, []).append(key)
+
+    removed = []
+    for name in sorted(groups):
+        keys = groups[name]
+        manifest_key = f'{prefix}{name}/manifest.json'
+        if manifest_key not in keys:
+            continue
+        try:
+            body = client.get_object(
+                Bucket=config['bucket'], Key=manifest_key)['Body'].read()
+            created = datetime.fromisoformat(json.loads(body)['created_at'])
+            if created.tzinfo is None:
+                created = created.replace(tzinfo=timezone.utc)
+        except (ClientError, OSError, ValueError, TypeError):
+            # 一个读不动的 manifest 不能拦住别的过期归档被清理，
+            # 但也不能反过来让"读不到"变成"删掉"的理由。
+            continue
+        if created >= cutoff:
+            continue
+        for key in keys:
+            client.delete_object(Bucket=config['bucket'], Key=key)
+        removed.append(name)
+    return removed
 
 
 def object_listing_prefix(prefix):
@@ -358,6 +533,18 @@ def run_once():
     if removed:
         print(f'expired backups removed: {len(removed)}')
 
+    offsite = offsite_config()
+    if offsite is not None:
+        mirrored = mirror_backup(final, config=offsite)
+        print(
+            f"backup mirrored: {mirrored['keys']} objects -> "
+            f"s3://{mirrored['bucket']}/{mirrored['prefix']}"
+        )
+        stale = prune_offsite(offsite, offsite['retention_days'])
+        if stale:
+            print(f'expired offsite backups removed: {len(stale)}')
+    return final
+
 
 def main():
     parser = argparse.ArgumentParser(description='Back up PostgreSQL and object storage.')
@@ -365,6 +552,8 @@ def main():
     parser.add_argument('--verify', metavar='PATH', help='Verify one backup directory and exit.')
     parser.add_argument('--restore-objects', metavar='PATH', help='Restore object storage from one backup and exit.')
     parser.add_argument('--restore-bucket', help='Destination bucket for --restore-objects.')
+    parser.add_argument('--mirror', metavar='PATH', help='Mirror one backup directory to the offsite bucket and exit.')
+    parser.add_argument('--prune-offsite', action='store_true', help='Prune expired archives in the offsite bucket and exit.')
     parser.add_argument(
         '--interval-seconds',
         type=int,
@@ -381,6 +570,23 @@ def main():
         bucket = args.restore_bucket or _env('DJANGO_S3_BUCKET') or manifest['object_storage']['bucket']
         count = restore_objects(args.restore_objects, bucket=bucket)
         print(f'objects restored: {count} -> {bucket}')
+        return
+    if args.mirror:
+        config = offsite_config()
+        if config is None:
+            raise SystemExit('未配置 BACKUP_OFFSITE_ENDPOINT_URL，无法执行异地镜像。')
+        mirrored = mirror_backup(args.mirror, config=config)
+        print(
+            f"backup mirrored: {mirrored['keys']} objects -> "
+            f"s3://{mirrored['bucket']}/{mirrored['prefix']}"
+        )
+        return
+    if args.prune_offsite:
+        config = offsite_config()
+        if config is None:
+            raise SystemExit('未配置 BACKUP_OFFSITE_ENDPOINT_URL，无法清理异地备份。')
+        stale = prune_offsite(config, config['retention_days'])
+        print(f'expired offsite backups removed: {len(stale)}')
         return
     if args.once:
         run_once()
