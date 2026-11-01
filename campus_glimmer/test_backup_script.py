@@ -17,6 +17,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from botocore.exceptions import ClientError
+
 from django.test import SimpleTestCase
 
 from .test_deployment import load_backup_module
@@ -453,8 +455,9 @@ class RunOnceTests(BackupScriptTests):
             'DJANGO_DATABASE_URL': 'postgres://campus@db/glimmer',
             'DJANGO_S3_BUCKET': 'campus-glimmer',
             'DJANGO_S3_LOCATION': 'media',
+            **dict.fromkeys(self.backup.OFFSITE_ENV, ''),
         }
-        with patch.dict(os.environ, environment), \
+        with patch.dict(os.environ, environment, clear=True), \
                 patch.object(self.backup, 'create_backup', return_value=final) as create, \
                 patch.object(self.backup, 'prune_backups', return_value=[final]) as prune:
             self.backup.run_once()
@@ -467,6 +470,7 @@ class RunOnceTests(BackupScriptTests):
         prune.assert_called_once_with('/tmp/backups', 7)
 
     def test_run_once_falls_back_to_the_documented_defaults(self):
+        # clear=True 同时意味着没有任何 BACKUP_OFFSITE_*，即异地镜像保持关闭。
         with patch.dict(os.environ, {}, clear=True), \
                 patch.object(self.backup, 'create_backup') as create, \
                 patch.object(self.backup, 'prune_backups', return_value=[]) as prune:
@@ -478,3 +482,337 @@ class RunOnceTests(BackupScriptTests):
             prefix='',
         )
         prune.assert_called_once_with('/backups', 14)
+
+
+class _Body:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def read(self):
+        return self._payload
+
+
+class FakeOffsiteClient:
+    """内存里的假 S3，只实现异地镜像真正用到的那几个调用。
+
+    刻意不模仿 boto3 的全部行为：这里要验的是备份脚本的契约（传了什么、读回了
+    什么、删了什么），不是 SDK 的语义。
+    """
+
+    def __init__(self, objects=None, *, corrupt=(), drop=()):
+        self.objects = dict(objects or {})
+        self.uploads = []
+        self.deleted = []
+        self.reads = []
+        self.corrupt = set(corrupt)
+        self.drop = set(drop)
+
+    def upload_file(self, path, bucket, key):
+        self.uploads.append(key)
+        self.objects[key] = Path(path).read_bytes()
+
+    def get_object(self, Bucket, Key):
+        self.reads.append(Key)
+        if Key not in self.objects:
+            # 与真实 S3 一致：不存在的 key 是 ClientError，不是 KeyError。
+            raise ClientError(
+                {'Error': {'Code': 'NoSuchKey', 'Message': 'missing'}}, 'GetObject')
+        payload = self.objects[Key]
+        if Key in self.corrupt:
+            payload = payload[:-1]
+        return {'Body': _Body(payload)}
+
+    def get_paginator(self, name):
+        client = self
+
+        class _Paginator:
+            def paginate(self, Bucket, Prefix):
+                keys = sorted(
+                    key for key in client.objects
+                    if key.startswith(Prefix) and key not in client.drop
+                )
+                yield {'Contents': [{'Key': key} for key in keys]}
+
+        return _Paginator()
+
+    def delete_object(self, Bucket, Key):
+        self.deleted.append(Key)
+        self.objects.pop(Key, None)
+
+
+class OffsiteConfigTests(BackupScriptTests):
+    """异地目标要么完整，要么明确没开；「配了一半」必须当场报错。"""
+
+    BASE = {
+        'BACKUP_OFFSITE_ENDPOINT_URL': 'https://offsite.example.com',
+        'BACKUP_OFFSITE_BUCKET': 'glimmer-offsite',
+        'BACKUP_OFFSITE_ACCESS_KEY_ID': 'key',
+        'BACKUP_OFFSITE_SECRET_ACCESS_KEY': 'secret',
+    }
+
+    def test_returns_none_when_nothing_is_configured(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIsNone(self.backup.offsite_config())
+
+    def test_reads_a_complete_configuration(self):
+        with patch.dict(os.environ, dict(self.BASE, BACKUP_OFFSITE_PREFIX='dr/',
+                                         BACKUP_OFFSITE_RETENTION_DAYS='30'), clear=True):
+            config = self.backup.offsite_config()
+        self.assertEqual(config['endpoint_url'], 'https://offsite.example.com')
+        self.assertEqual(config['bucket'], 'glimmer-offsite')
+        self.assertEqual(config['region'], 'us-east-1')
+        self.assertEqual(config['prefix'], 'dr/')
+        self.assertEqual(config['retention_days'], 30)
+
+    def test_an_endpoint_without_a_bucket_is_an_error(self):
+        with patch.dict(os.environ, {'BACKUP_OFFSITE_ENDPOINT_URL': 'https://x'}, clear=True):
+            with self.assertRaisesRegex(ValueError, 'BACKUP_OFFSITE_BUCKET'):
+                self.backup.offsite_config()
+
+    def test_missing_credentials_are_an_error(self):
+        environment = {'BACKUP_OFFSITE_ENDPOINT_URL': 'https://x',
+                       'BACKUP_OFFSITE_BUCKET': 'b'}
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaisesRegex(ValueError, 'ACCESS_KEY_ID'):
+                self.backup.offsite_config()
+
+    def test_stray_keys_without_an_endpoint_are_an_error(self):
+        # 只填了桶和账号却漏了端点，镜像会静默不执行——这正是最危险的那种配置。
+        environment = {'BACKUP_OFFSITE_BUCKET': 'b',
+                       'BACKUP_OFFSITE_ACCESS_KEY_ID': 'k',
+                       'BACKUP_OFFSITE_SECRET_ACCESS_KEY': 's'}
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaisesRegex(ValueError, 'BACKUP_OFFSITE_ENDPOINT_URL'):
+                self.backup.offsite_config()
+
+    def test_a_non_numeric_retention_is_an_error(self):
+        environment = dict(self.BASE, BACKUP_OFFSITE_RETENTION_DAYS='two weeks')
+        with patch.dict(os.environ, environment, clear=True):
+            with self.assertRaisesRegex(ValueError, 'BACKUP_OFFSITE_RETENTION_DAYS'):
+                self.backup.offsite_config()
+
+    def test_retention_falls_back_to_the_local_retention(self):
+        with patch.dict(os.environ, dict(self.BASE, BACKUP_RETENTION_DAYS='3'), clear=True):
+            self.assertEqual(self.backup.offsite_config()['retention_days'], 3)
+
+
+class MirrorBackupTests(BackupScriptTests):
+    def setUp(self):
+        super().setUp()
+        self.root = Path(tempfile.mkdtemp())
+        self.backup_dir = self.root / 'backup-20261024T120000Z'
+        self.manifest = self._write_backup(self.backup_dir)
+        self.config = {
+            'endpoint_url': 'https://offsite.example.com',
+            'bucket': 'glimmer-offsite',
+            'access_key_id': 'key',
+            'secret_access_key': 'secret',
+            'region': 'us-east-1',
+            'prefix': 'dr/',
+            'retention_days': 14,
+        }
+
+    def _keys(self, client):
+        return set(client.uploads)
+
+    def test_uploads_every_verified_file_under_the_archive_name(self):
+        client = FakeOffsiteClient()
+        result = self.backup.mirror_backup(
+            self.backup_dir, config=self.config, client=client)
+        self.assertEqual(
+            self._keys(client),
+            {
+                'dr/backup-20261024T120000Z/database.dump',
+                'dr/backup-20261024T120000Z/manifest.json',
+                'dr/backup-20261024T120000Z/objects/00000000-photo.jpg',
+            },
+        )
+        self.assertEqual(result['keys'], 3)
+        self.assertEqual(result['name'], 'backup-20261024T120000Z')
+        self.assertGreater(result['bytes'], 0)
+
+    def test_the_remote_copy_is_read_back_and_compared_byte_for_byte(self):
+        client = FakeOffsiteClient()
+        self.backup.mirror_backup(self.backup_dir, config=self.config, client=client)
+        for key in client.uploads:
+            self.assertEqual(
+                client.objects[key],
+                (self.backup_dir / key.split('/', 2)[2]).read_bytes(),
+                '异地副本与本地归档不一致：' + key,
+            )
+
+    def test_a_truncated_upload_fails_the_backup(self):
+        client = FakeOffsiteClient(
+            corrupt={'dr/backup-20261024T120000Z/database.dump'})
+        with self.assertRaisesRegex(ValueError, '异地副本校验失败'):
+            self.backup.mirror_backup(self.backup_dir, config=self.config, client=client)
+
+    def test_a_missing_remote_key_fails_the_backup(self):
+        client = FakeOffsiteClient(
+            drop={'dr/backup-20261024T120000Z/manifest.json'})
+        with self.assertRaisesRegex(ValueError, '缺少'):
+            self.backup.mirror_backup(self.backup_dir, config=self.config, client=client)
+
+    def test_an_unexpected_remote_key_fails_the_backup(self):
+        client = FakeOffsiteClient(
+            objects={'dr/backup-20261024T120000Z/rogue': b'x'})
+        with self.assertRaisesRegex(ValueError, '多出'):
+            self.backup.mirror_backup(self.backup_dir, config=self.config, client=client)
+
+    def test_an_unverifiable_archive_is_never_uploaded(self):
+        (self.backup_dir / 'database.dump').write_bytes(b'tampered')
+        client = FakeOffsiteClient()
+        with self.assertRaises(ValueError):
+            self.backup.mirror_backup(self.backup_dir, config=self.config, client=client)
+        self.assertEqual(client.uploads, [])
+
+
+class PruneOffsiteTests(BackupScriptTests):
+    CONFIG = {
+        'endpoint_url': 'https://offsite.example.com',
+        'bucket': 'glimmer-offsite',
+        'access_key_id': 'key',
+        'secret_access_key': 'secret',
+        'region': 'us-east-1',
+        'prefix': 'dr/',
+        'retention_days': 14,
+    }
+
+    def _archive(self, name, created):
+        return (
+            f'dr/{name}/manifest.json',
+            json.dumps({'format_version': 1, 'created_at': created}).encode('utf-8'),
+        )
+
+    def test_only_expired_archives_are_deleted(self):
+        now = datetime(2026, 10, 24, tzinfo=timezone.utc)
+        objects = dict([
+            self._archive('backup-old', '2026-10-01T00:00:00+00:00'),
+            ('dr/backup-old/database.dump', b'dump'),
+            self._archive('backup-new', '2026-10-20T00:00:00+00:00'),
+            ('dr/backup-new/database.dump', b'dump'),
+        ])
+        client = FakeOffsiteClient(objects)
+        removed = self.backup.prune_offsite(
+            self.CONFIG, 14, now=now, client=client)
+        self.assertEqual(removed, ['backup-old'])
+        self.assertEqual(client.deleted, [
+            'dr/backup-old/database.dump',
+            'dr/backup-old/manifest.json',
+        ])
+        self.assertIn('dr/backup-new/database.dump', client.objects)
+
+    def test_a_naive_manifest_timestamp_is_treated_as_utc(self):
+        now = datetime(2026, 10, 24, tzinfo=timezone.utc)
+        client = FakeOffsiteClient(dict([
+            self._archive('backup-old', '2026-10-01T00:00:00'),
+            ('dr/backup-old/database.dump', b'dump'),
+        ]))
+        self.assertEqual(
+            self.backup.prune_offsite(self.CONFIG, 14, now=now, client=client),
+            ['backup-old'],
+        )
+
+    def test_an_archive_without_a_manifest_is_kept(self):
+        # 没有可判定的创建时间就不删：凭 key 名猜时间去删数据比多留一天危险。
+        now = datetime(2026, 10, 24, tzinfo=timezone.utc)
+        client = FakeOffsiteClient({'dr/backup-old/database.dump': b'dump'})
+        self.assertEqual(
+            self.backup.prune_offsite(self.CONFIG, 14, now=now, client=client), [])
+        self.assertEqual(client.deleted, [])
+        # 没有 manifest 就连读都不该去读：创建时间无从判断，就不能凭猜去删。
+        self.assertEqual(client.reads, [])
+
+    def test_an_unreadable_manifest_does_not_block_the_others(self):
+        now = datetime(2026, 10, 24, tzinfo=timezone.utc)
+        objects = dict([
+            ('dr/backup-broken/manifest.json', b'not json'),
+            ('dr/backup-broken/database.dump', b'dump'),
+            self._archive('backup-old', '2026-10-01T00:00:00+00:00'),
+            ('dr/backup-old/database.dump', b'dump'),
+        ])
+        client = FakeOffsiteClient(objects)
+        self.assertEqual(
+            self.backup.prune_offsite(self.CONFIG, 14, now=now, client=client),
+            ['backup-old'],
+        )
+
+    def test_keys_outside_the_prefix_are_ignored(self):
+        now = datetime(2026, 10, 24, tzinfo=timezone.utc)
+        client = FakeOffsiteClient(dict([
+            self._archive('backup-old', '2026-10-01T00:00:00+00:00'),
+            ('dr/backup-old/database.dump', b'dump'),
+            ('media/00000000-photo.jpg', b'photo'),
+        ]))
+        self.assertEqual(
+            self.backup.prune_offsite(self.CONFIG, 14, now=now, client=client),
+            ['backup-old'],
+        )
+        self.assertEqual(client.deleted, [
+            'dr/backup-old/database.dump', 'dr/backup-old/manifest.json',
+        ])
+
+    def test_a_retention_below_one_day_deletes_nothing(self):
+        # 保留期写成 0 是配置事故，此时"全部过期"会一次性清空异地备份，
+        # 所以必须整棵跳过，而不是把 cutoff 当成现在。
+        now = datetime(2026, 10, 24, tzinfo=timezone.utc)
+        client = FakeOffsiteClient(dict([
+            self._archive('backup-old', '2026-10-01T00:00:00+00:00'),
+            ('dr/backup-old/database.dump', b'dump'),
+        ]))
+        self.assertEqual(self.backup.prune_offsite(self.CONFIG, 0, now=now, client=client), [])
+        self.assertEqual(client.deleted, [])
+        self.assertEqual(sorted(client.objects), [
+            'dr/backup-old/database.dump', 'dr/backup-old/manifest.json',
+        ])
+
+
+class RunOnceOffsiteTests(BackupScriptTests):
+    FINAL = Path('/backups/backup-20261024T120000Z')
+    OFFSITE = {
+        'BACKUP_OFFSITE_ENDPOINT_URL': 'https://offsite.example.com',
+        'BACKUP_OFFSITE_BUCKET': 'glimmer-offsite',
+        'BACKUP_OFFSITE_ACCESS_KEY_ID': 'key',
+        'BACKUP_OFFSITE_SECRET_ACCESS_KEY': 'secret',
+    }
+    BASE = {
+        'BACKUP_DIR': '/tmp/backups',
+        'BACKUP_RETENTION_DAYS': '7',
+        'DJANGO_DATABASE_URL': 'postgres://campus@db/glimmer',
+        'DJANGO_S3_BUCKET': 'campus-glimmer',
+        'DJANGO_S3_LOCATION': 'media',
+    }
+
+    def _offsite_empty(self):
+        return dict.fromkeys(self.backup.OFFSITE_ENV, '')
+
+    def test_run_once_mirrors_the_new_archive_and_prunes_the_remote_copy(self):
+        environment = dict(self.BASE, **self.OFFSITE,
+                           BACKUP_OFFSITE_RETENTION_DAYS='30')
+        with patch.dict(os.environ, environment, clear=True),                 patch.object(self.backup, 'create_backup', return_value=self.FINAL),                 patch.object(self.backup, 'prune_backups', return_value=[]),                 patch.object(self.backup, 'mirror_backup',
+                             return_value={'name': 'backup-20261024T120000Z',
+                                           'bucket': 'glimmer-offsite',
+                                           'prefix': 'dr/backup-20261024T120000Z/',
+                                           'keys': 3, 'bytes': 12}) as mirror,                 patch.object(self.backup, 'prune_offsite',
+                             return_value=['backup-old']) as prune_remote:
+            self.backup.run_once()
+        self.assertEqual(mirror.call_count, 1)
+        config = mirror.call_args.kwargs['config']
+        self.assertEqual(config['bucket'], 'glimmer-offsite')
+        self.assertEqual(config['retention_days'], 30)
+        self.assertEqual(mirror.call_args.args[0], self.FINAL)
+        prune_remote.assert_called_once_with(config, 30)
+
+    def test_run_once_skips_mirroring_when_no_offsite_target_is_configured(self):
+        environment = dict(self.BASE, **self._offsite_empty())
+        with patch.dict(os.environ, environment, clear=True),                 patch.object(self.backup, 'create_backup', return_value=self.FINAL),                 patch.object(self.backup, 'prune_backups', return_value=[]),                 patch.object(self.backup, 'mirror_backup') as mirror:
+            self.backup.run_once()
+        mirror.assert_not_called()
+
+    def test_a_failed_mirror_propagates_so_the_sidecar_reports_a_failure(self):
+        # 备份没到异地就是没备份成功，不能只在本机留下一个"看起来完成"的归档。
+        environment = dict(self.BASE, **self.OFFSITE)
+        with patch.dict(os.environ, environment, clear=True),                 patch.object(self.backup, 'create_backup', return_value=self.FINAL),                 patch.object(self.backup, 'prune_backups', return_value=[]),                 patch.object(self.backup, 'mirror_backup',
+                             side_effect=ValueError('异地副本校验失败')):
+            with self.assertRaisesRegex(ValueError, '异地副本校验失败'):
+                self.backup.run_once()
