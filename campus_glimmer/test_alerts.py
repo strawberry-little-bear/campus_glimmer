@@ -24,6 +24,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 from .alerts import (
+    ALERT_HISTORY_LIMIT,
     METRIC_BUCKET_MISMATCH,
     METRIC_DURATION_BUCKET,
     METRIC_INSTANCES,
@@ -600,6 +601,143 @@ class AlertNotificationTests(SimpleTestCase):
         )
 
 
+
+
+
+class AlertHistoryTests(SimpleTestCase):
+    """有界历史只帮助排障，不把自己伪装成持久化审计或可靠投递。"""
+
+    def _engine(self, for_seconds=0, on=True):
+        self.probe = _FakeProbe(on=on)
+        return AlertEngine(rules=[
+            Rule('Probe', 'warning', '测试规则', for_seconds, self.probe),
+        ])
+
+    def test_history_starts_empty(self):
+        engine = self._engine()
+        self.assertEqual(engine.history(), [])
+        self.assertEqual(
+            engine.counters()['transitions'],
+            {'firing': 0, 'resolved': 0},
+        )
+
+    def test_a_firing_transition_is_recorded_with_safe_fields(self):
+        engine = self._engine()
+        engine.evaluate([], now=10.0)
+        history = engine.history()
+        self.assertEqual(len(history), 1)
+        event = history[0]
+        self.assertEqual(event['event'], 'firing')
+        self.assertEqual(event['name'], 'Probe')
+        self.assertEqual(event['severity'], 'warning')
+        self.assertEqual(event['state'], 'firing')
+        self.assertEqual(event['summary'], '测试规则')
+        self.assertEqual(event['value'], 1.0)
+        self.assertEqual(event['detail'], '测试条件')
+        self.assertEqual(event['since'], 10.0)
+        self.assertEqual(event['occurred_at'], 10.0)
+        self.assertEqual(event['active_seconds'], 0.0)
+        self.assertEqual(
+            set(event),
+            {
+                'event', 'name', 'severity', 'summary', 'state', 'value',
+                'detail', 'since', 'occurred_at', 'active_seconds',
+            },
+        )
+
+    def test_ongoing_firing_is_not_recorded_again(self):
+        engine = self._engine()
+        engine.evaluate([], now=0.0)
+        engine.evaluate([], now=10.0)
+        self.assertEqual(len(engine.history()), 1)
+        self.assertEqual(engine.counters()['transitions']['firing'], 1)
+
+    def test_same_evaluation_uses_reverse_rule_order_for_newest_first(self):
+        engine = AlertEngine(rules=[
+            Rule('First', 'warning', '规则一', 0, _FakeProbe(on=True)),
+            Rule('Second', 'critical', '规则二', 0, _FakeProbe(on=True)),
+        ])
+        engine.evaluate([], now=0.0)
+        self.assertEqual(
+            [event['name'] for event in engine.history()],
+            ['Second', 'First'],
+        )
+
+    def test_resolved_is_recorded_after_firing_newest_first(self):
+        engine = self._engine(on=True)
+        engine.evaluate([], now=0.0)
+        self.probe.on = False
+        engine.evaluate([], now=5.0)
+        history = engine.history()
+        self.assertEqual(
+            [event['event'] for event in history],
+            ['resolved', 'firing'],
+        )
+        self.assertEqual(history[0]['state'], 'inactive')
+        self.assertEqual(history[0]['since'], 0.0)
+        self.assertEqual(history[0]['occurred_at'], 5.0)
+        self.assertEqual(history[0]['active_seconds'], 5.0)
+
+    def test_pending_recovery_leaves_no_transition_history(self):
+        engine = self._engine(for_seconds=10, on=True)
+        engine.evaluate([], now=0.0)
+        self.probe.on = False
+        engine.evaluate([], now=1.0)
+        self.assertEqual(engine.history(), [])
+        self.assertEqual(
+            engine.counters()['transitions'],
+            {'firing': 0, 'resolved': 0},
+        )
+
+    def test_history_keeps_only_the_latest_transitions(self):
+        engine = self._engine()
+        for step in range(ALERT_HISTORY_LIMIT + 1):
+            self.probe.on = step % 2 == 0
+            engine.evaluate([], now=float(step))
+        history = engine.history()
+        self.assertEqual(len(history), ALERT_HISTORY_LIMIT)
+        self.assertEqual(history[0]['event'], 'firing')
+        self.assertEqual(history[0]['occurred_at'], float(ALERT_HISTORY_LIMIT))
+        self.assertEqual(history[-1]['event'], 'resolved')
+        self.assertEqual(history[-1]['occurred_at'], 1.0)
+
+    def test_history_is_handed_out_as_copies(self):
+        engine = self._engine()
+        engine.evaluate([], now=0.0)
+        history = engine.history()
+        history.append({'event': 'tampered'})
+        history[0]['event'] = 'tampered'
+        self.assertEqual(len(engine.history()), 1)
+        self.assertEqual(engine.history()[0]['event'], 'firing')
+
+    def test_transition_counts_match_history_and_are_exposed_by_event(self):
+        engine = self._engine(on=True)
+        engine.evaluate([], now=0.0)
+        self.probe.on = False
+        engine.evaluate([], now=4.0)
+        self.assertEqual(
+            engine.counters()['transitions'],
+            {'firing': 1, 'resolved': 1},
+        )
+        self.assertEqual(
+            sum(engine.counters()['transitions'].values()),
+            len(engine.history()),
+        )
+        samples = parse_exposition(
+            render_families(_alert_families(engine.states(), engine.counters()))
+        )
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_transitions_total',
+                 event='firing'),
+            [1],
+        )
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_transitions_total',
+                 event='resolved'),
+            [1],
+        )
+
+
 @override_settings(METRICS_TOKEN=TOKEN)
 class MetricsExposureTests(SimpleTestCase):
     """告警状态在 /metrics/ 上的形状，以及与看板口径的一致性。"""
@@ -620,6 +758,7 @@ class MetricsExposureTests(SimpleTestCase):
         for name in ('campus_glimmer_alert_firing', 'campus_glimmer_alert_pending',
                      'campus_glimmer_alert_active_seconds',
                      'campus_glimmer_alert_notifications_total',
+                     'campus_glimmer_alert_transitions_total',
                      'campus_glimmer_alert_evaluations_total',
                      'campus_glimmer_alert_evaluation_errors_total'):
             self.assertIn(name, declared)
@@ -707,11 +846,12 @@ class MetricsExposureTests(SimpleTestCase):
             line.split()[2] for line in text.split('\n')
             if line.startswith('# TYPE ')
         ]
-        self.assertEqual(declared[-6:], [
+        self.assertEqual(declared[-7:], [
             'campus_glimmer_alert_firing',
             'campus_glimmer_alert_pending',
             'campus_glimmer_alert_active_seconds',
             'campus_glimmer_alert_notifications_total',
+            'campus_glimmer_alert_transitions_total',
             'campus_glimmer_alert_evaluations_total',
             'campus_glimmer_alert_evaluation_errors_total',
         ])
@@ -755,6 +895,35 @@ class AlertsEndpointTests(SimpleTestCase):
             sorted(alert['name'] for alert in payload['alerts']),
             sorted(rule.name for rule in RULES),
         )
+
+    def test_the_payload_exposes_a_bounded_process_history(self):
+        engine = get_engine()
+        rule = Rule('History', 'critical', '历史测试', 0, _FakeProbe(on=True))
+        with patch.object(engine, '_rules', (rule,)):
+            response = self.client.get(ALERTS_PATH, **AUTH)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(payload['history'], engine.history())
+        self.assertEqual(payload['history_limit'], ALERT_HISTORY_LIMIT)
+        self.assertEqual(payload['history_scope'], 'process')
+        self.assertIs(payload['history_persistent'], False)
+        self.assertEqual(payload['history'][0]['event'], 'firing')
+
+    def test_the_payload_history_never_contains_webhook_credentials(self):
+        engine = get_engine()
+        notifier = MagicMock()
+        notifier.url = 'https://alerts.example.test/hook?token=hook-secret'
+        notifier.token = 'hook-secret'
+        notifier.deliver.return_value = {
+            'delivered': 1, 'failed': 0, 'skipped': 0,
+        }
+        rule = Rule('PrivateHook', 'warning', '凭据测试', 0,
+                    _FakeProbe(on=True))
+        with patch.object(engine, '_rules', (rule,)),                 patch.object(engine, '_notifier', notifier):
+            response = self.client.get(ALERTS_PATH, **AUTH)
+        body = response.content.decode('utf-8')
+        self.assertNotIn('hook-secret', body)
+        self.assertNotIn('https://alerts.example.test', body)
+        self.assertEqual(engine.history()[0]['name'], 'PrivateHook')
 
     def test_the_payload_agrees_with_the_metrics_endpoint(self):
         # 两个端点回答的是同一批问题：JSON 里的 firing 集合必须和

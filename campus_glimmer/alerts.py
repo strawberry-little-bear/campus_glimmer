@@ -106,6 +106,11 @@ WINDOW_MAX_AGE = 3900.0
 # 批次，超时必须短到即使远端挂住也不会把监控端点一起拖过常见 scrape timeout。
 WEBHOOK_TIMEOUT_SECONDS = 2.0
 
+# 最近一次进程生命周期内的状态翻转只保留一个有界尾部。它是给人排障的窗口，
+# 不是持久化审计：进程重启即清空，多副本之间也不共享。固定上限避免告警反复
+# 翻转时把监控进程自己的内存拖垮。
+ALERT_HISTORY_LIMIT = 100
+
 
 def histogram_quantile(buckets, quantile):
     """从累计分桶求分位数，桶内线性插分。
@@ -545,6 +550,8 @@ class AlertEngine:
         self._evaluations = 0
         self._errors = 0
         self._notifications = {'delivered': 0, 'failed': 0, 'skipped': 0}
+        self._transitions = {'firing': 0, 'resolved': 0}
+        self._history = deque(maxlen=ALERT_HISTORY_LIMIT)
         self._last = []
 
     def evaluate(self, samples, now=None):
@@ -604,12 +611,19 @@ class AlertEngine:
         with self._lock:
             return [dict(item) for item in self._last]
 
+    def history(self):
+        """返回最近的状态翻转，最新在前；调用方拿到的是副本。"""
+
+        with self._lock:
+            return [dict(event) for event in reversed(self._history)]
+
     def counters(self):
         with self._lock:
             return {
                 'evaluations': self._evaluations,
                 'errors': self._errors,
                 'notifications': dict(self._notifications),
+                'transitions': dict(self._transitions),
             }
 
     def _advance(self, rule, fired, value, detail, now):
@@ -649,7 +663,7 @@ class AlertEngine:
 
     def _transition_event(self, transition, rule, state, now, since,
                           active_seconds):
-        return {
+        event = {
             'event': transition,
             'name': rule.name,
             'severity': rule.severity,
@@ -661,6 +675,11 @@ class AlertEngine:
             'occurred_at': now,
             'active_seconds': active_seconds,
         }
+        # 历史和通知各拿一份副本：通知器是外部边界，不能让它的实现有机会
+        # 改动排障窗口里的记录。
+        self._history.append(dict(event))
+        self._transitions[transition] += 1
+        return dict(event)
 
     def _view(self, rule, state, status, now):
         since = state.firing_since if status == 'firing' else state.pending_since
@@ -739,6 +758,12 @@ def _alert_families(states, counters):
              for result in ('delivered', 'failed', 'skipped')],
         ),
         (
+            PREFIX + '_alert_transitions_total', 'counter',
+            '告警真实状态翻转的次数，按 firing/resolved 区分。',
+            [plain_sample((('event', event),), counters['transitions'][event])
+             for event in ('firing', 'resolved')],
+        ),
+        (
             PREFIX + '_alert_evaluations_total', 'counter',
             '告警评估完成的次数。',
             [plain_sample((), counters['evaluations'])],
@@ -780,6 +805,10 @@ def alerts_payload(states, samples, now):
         'instances': gauges.get(METRIC_INSTANCES, 1),
         'counts': counts,
         'alerts': states,
+        'history': get_engine().history(),
+        'history_limit': ALERT_HISTORY_LIMIT,
+        'history_scope': 'process',
+        'history_persistent': False,
     }
 
 
