@@ -13599,15 +13599,35 @@ def save_search(request):
     return redirect(next_url)
 
 
-def _attach_saved_search_stats(saved_searches, *, user):
-    """Attach buffered and live match counts to each saved search."""
-    pending_by_search = dict(
-        SavedSearchMatch.objects.filter(
-            saved_search__in=saved_searches, notified_at__isnull=True,
-        ).values_list('saved_search_id').annotate(
+SAVED_SEARCH_PENDING_PREVIEW_LIMIT = 3
+
+
+def _counts_by_saved_search(queryset):
+    """Group a SavedSearchMatch queryset into ``{saved_search_id: count}``."""
+    return dict(
+        queryset.values_list('saved_search_id').annotate(
             count=Count('saved_search_id'),
         ).values_list('saved_search_id', 'count')
     )
+
+
+def _attach_saved_search_stats(saved_searches, *, user):
+    """Attach buffered/live counts and a safe preview of recent pending matches."""
+    pending_matches = SavedSearchMatch.objects.filter(
+        saved_search__in=saved_searches, notified_at__isnull=True,
+    )
+    pending_by_search = _counts_by_saved_search(pending_matches)
+
+    now = timezone.now()
+    available_pending_matches = pending_matches.filter(
+        item__status='available',
+    ).filter(
+        Q(item__expires_at__isnull=True) | Q(item__expires_at__gt=now),
+    )
+    if user.is_authenticated:
+        available_pending_matches = available_pending_matches.exclude(item__seller=user)
+    available_pending_by_search = _counts_by_saved_search(available_pending_matches)
+
     available_items = Item.objects.available().select_related('category', 'location')
     if user.is_authenticated:
         available_items = available_items.exclude(seller=user)
@@ -13616,8 +13636,25 @@ def _attach_saved_search_stats(saved_searches, *, user):
         live_by_search[saved_search.pk] = sum(
             1 for item in available_items if matches_saved_search(saved_search, item)
         )
+
     for saved_search in saved_searches:
         saved_search.pending_match_count = pending_by_search.get(saved_search.pk, 0)
+        saved_search.available_pending_match_count = available_pending_by_search.get(
+            saved_search.pk, 0,
+        )
+        preview_limit = max(
+            1, min(saved_search.max_matches_per_notice, SAVED_SEARCH_PENDING_PREVIEW_LIMIT),
+        )
+        saved_search.pending_preview_limit = preview_limit
+        saved_search.pending_preview_matches = list(
+            available_pending_matches.filter(saved_search=saved_search)
+            .select_related('item')
+            .order_by('-matched_at', '-pk')[:preview_limit]
+        )
+        saved_search.remaining_pending_match_count = max(
+            0,
+            saved_search.available_pending_match_count - len(saved_search.pending_preview_matches),
+        )
         saved_search.live_match_count = live_by_search.get(saved_search.pk, 0)
         # live_match_count is a live re-evaluation of the current catalogue, so it
         # can be handed back to the list page as a filter. pending_match_count

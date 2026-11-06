@@ -44,6 +44,31 @@
             {% if saved_search.is_quiet %}<span class="saved-search-metric is-quiet"><i class="bi bi-moon-stars-fill"></i>静默至 {{ saved_search.quiet_until|date:'m-d H:i' }}</span>{% endif %}
         </div>
 
+        <section class="saved-search-preview" aria-labelledby="saved-search-preview-{{ saved_search.id }}">
+            <div class="saved-search-preview-head">
+                <h3 id="saved-search-preview-{{ saved_search.id }}"><i class="bi bi-inbox"></i>最近命中</h3>
+                <span>通知最多列出 {{ saved_search.max_matches_per_notice }} 条</span>
+            </div>
+            {% if saved_search.pending_preview_matches %}
+            <ul>
+                {% for match in saved_search.pending_preview_matches %}
+                <li>
+                    <a href="{% url 'item_detail' match.item_id %}">
+                        <span>{{ match.item.title }}</span>
+                        <strong>¥{{ match.item.price }}</strong>
+                    </a>
+                    <time datetime="{{ match.matched_at|date:'c' }}">{{ match.matched_at|date:'m-d H:i' }} 命中</time>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if saved_search.remaining_pending_match_count %}
+            <p class="saved-search-preview-more">另有 {{ saved_search.remaining_pending_match_count }} 条仍可查看的命中，将在提醒中合并处理。</p>
+            {% endif %}
+            {% else %}
+            <p class="saved-search-preview-empty"><i class="bi bi-check2-circle"></i>{% if saved_search.pending_match_count %}待提醒里暂时没有仍可查看的商品；已下架或售出的命中不会提供失效链接。{% else %}暂无待提醒命中，新商品出现后会在这里预览。{% endif %}</p>
+            {% endif %}
+        </section>
+
         <form class="saved-search-cadence" method="post" action="{% url 'update_saved_search_cadence' saved_search.id %}">
             {% csrf_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
