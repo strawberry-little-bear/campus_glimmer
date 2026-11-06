@@ -315,7 +315,7 @@
 <a id="discover-g1"></a>
 
 <details>
-<summary>搜索、筛选与空结果诊断（6 条，含缩进子项）</summary>
+<summary>搜索、筛选与空结果诊断（7 条，含缩进子项）</summary>
 
 - 全局搜索支持关键词、分类、校园地点、成色和价格条件。
 
