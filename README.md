@@ -1,4 +1,4 @@
-<a id="top"></a>
+﻿<a id="top"></a>
 <div align="center">
 
 <img src="docs/assets/brand-mark.svg" width="94" alt="拾光校园品牌图标" />
@@ -216,6 +216,7 @@ flowchart LR
 ```text
 accounts/         注册、登录、个人资料与校园认证
 chat_messages/    留言、私信、内容审核与申诉
+observability/    告警翻转历史与可观测性数据
 listings/         商品、订单、搜索、通知、运营与治理
 templates/        页面模板
 static/           CSS、JavaScript 与静态资源
@@ -352,7 +353,7 @@ docker compose down -v
 容器 `HEALTHCHECK` 只走 `/healthz/`。`/readyz/` 连着三个外部依赖，拿它当存活探针的话，数据库抖一次编排系统就会把每个副本判成 unhealthy 并重启，一次存储故障被放大成全站故障。所以 `docker compose ps` 里的 `healthy` 只代表进程活着，能否接流量要看 `/readyz/`。
 
 进程级指标暴露在 `/metrics/`：默认返回 404，配置 `DJANGO_METRICS_TOKEN` 后需带
-`Authorization: Bearer` 令牌抓取。默认缓存是跨进程后端（生产即 Redis）时，每个 worker 每五秒把整份快照写进共享存储，一次抓取拿到的是整个舰队的合并视图；没启用共享时才退回到「只看到这一个副本」。启用共享后只能配一个抓取目标，否则总量会按副本数翻倍。八条盯住观测链路自己的规则在抓取那一刻评估——视图陈旧、读取失败上升、分桶不符、实例数下降、标签溢出、5xx 占比、p95 与共享未启用——结果以 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列和人读的 `/alerts/` JSON 给出；`/alerts/` 同时返回最近 100 条 `firing/resolved` 翻转（最新在前，仅进程内、非持久化），`campus_glimmer_alert_transitions_total` 按事件累计。配置 `DJANGO_ALERT_WEBHOOK_URL` 后，`pending → firing` 与 `firing → inactive` 会各发一次 JSON 批次，持续 firing 不重复；通知失败只计数、不重试，也不会让抓取失败，口径见[按指标告警设计](docs/metrics-alerting-design.md)。
+`Authorization: Bearer` 令牌抓取。默认缓存是跨进程后端（生产即 Redis）时，每个 worker 每五秒把整份快照写进共享存储，一次抓取拿到的是整个舰队的合并视图；没启用共享时才退回到「只看到这一个副本」。启用共享后只能配一个抓取目标，否则总量会按副本数翻倍。八条盯住观测链路自己的规则在抓取那一刻评估——视图陈旧、读取失败上升、分桶不符、实例数下降、标签溢出、5xx 占比、p95 与共享未启用——结果以 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列和人读的 `/alerts/` JSON 给出；`/alerts/` 同时返回最近 100 条 `firing/resolved` 翻转（最新在前；默认写入数据库并保留最近 1000 条，数据库不可用时自动退回进程内窗口并标记降级），`campus_glimmer_alert_transitions_total` 按事件累计。配置 `DJANGO_ALERT_WEBHOOK_URL` 后，`pending → firing` 与 `firing → inactive` 会各发一次 JSON 批次，持续 firing 不重复；通知失败只计数、不重试，也不会让抓取失败，口径见[按指标告警设计](docs/metrics-alerting-design.md)。
 
 本地 Compose 继续使用 SQLite 与本地媒体文件。需要 PostgreSQL、Redis、MinIO 和定时备份时，使用 [生产编排](docker-compose.prod.yml)：
 
@@ -388,7 +389,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 提交前建议运行：
 
 ```bash
-python -m compileall -q accounts campus_glimmer chat_messages listings
+python -m compileall -q accounts campus_glimmer chat_messages listings observability
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test
@@ -460,7 +461,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 - **治理与通知**：继续做治理分组、申诉质量和通知降噪；
 - **校园场景与信任**：完善认证体验、可信档案和地点维护；
 - **运营与数据质量**：加强导出一致性、样本审计与指标血缘；
-- **基础设施与体验**：进程级 `/metrics/`、跨副本联合视图、按指标告警、可选 Webhook 与最近 100 条进程内翻转历史已落地，接下来补集中日志、默认启用的异机备份、恢复演练与持久化告警历史；Web 侧的无状态依赖与多副本端口边界已经落地，继续优化移动端、无障碍和图片加载。
+- **基础设施与体验**：进程级 `/metrics/`、跨副本联合视图、按指标告警、可选 Webhook 与最近 100 条数据库持久化翻转历史（表内保留 1000 条）已落地，接下来补集中日志、默认启用的异机备份、恢复演练，以及告警投递重试队列与跨副本去重；Web 侧的无状态依赖与多副本端口边界已经落地，继续优化移动端、无障碍和图片加载。
 
 每个方向都拆成可独立验证、独立回滚的小迭代。详细待办、已落地范围和不做某项功能的理由见
 [后续路线图](docs/roadmap.md)。

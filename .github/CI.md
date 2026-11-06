@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 <img src="../docs/assets/brand-mark.svg" width="72" alt="拾光校园品牌图标">
 
@@ -19,7 +19,7 @@ flowchart LR
     Push["push main / pull_request main"] --> Checkout["actions/checkout@v5"]
     Checkout --> Python["actions/setup-python@v6<br/>Python 3.12 + pip cache"]
     Python --> Install["pip install -r requirements.txt"]
-    Install --> Compile["compileall<br/>accounts / campus_glimmer / chat_messages / listings"]
+    Install --> Compile["compileall<br/>accounts / campus_glimmer / chat_messages / listings / observability"]
     Compile --> DjangoCheck["manage.py check"]
     DjangoCheck --> Migration["makemigrations --check --dry-run"]
     Migration --> Tests["manage.py test"]
@@ -39,7 +39,7 @@ flowchart LR
 | `object-storage` | SQLite | LocMem | s3（MinIO） | 对象存储链路本身 |
 | `backup-restore` | PostgreSQL 16 | LocMem | s3（MinIO） | dump 灌回隔离库后的表、索引、约束与对象恢复 |
 
-备份链路单独占一个任务，不和两千多项业务测试挤在同一片红里。它显式安装 PostgreSQL 16 客户端（runner 自带的是 18），把 `migrate` 之后的库真实 dump 进一个全新的隔离数据库，逐表比对行数、索引数与约束数，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump。细节见[备份与恢复](../docs/backup-restore.md)。
+备份链路单独占一个任务，不和完整业务测试挤在同一片红里。它显式安装 PostgreSQL 16 客户端（runner 自带的是 18），把 `migrate` 之后的库真实 dump 进一个全新的隔离数据库，逐表比对行数、索引数与约束数，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump。细节见[备份与恢复](../docs/backup-restore.md)。
 
 两个需要 MinIO 的任务共用 [`scripts/start-minio.sh`](scripts/start-minio.sh)：同一段启动逻辑写成两份，迟早会出现「桶只建在一边、策略只清了一边」这种只在一个任务里暴露的问题。
 
@@ -48,7 +48,7 @@ flowchart LR
 提交前建议运行：
 
 ```powershell
-python -m compileall -q accounts campus_glimmer chat_messages listings
+python -m compileall -q accounts campus_glimmer chat_messages listings observability
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test

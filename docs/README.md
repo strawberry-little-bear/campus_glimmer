@@ -1,4 +1,4 @@
-<a id="top"></a>
+﻿<a id="top"></a>
 <p align="right">
   <a href="../README.md">← 返回项目主页</a>
 </p>
@@ -172,6 +172,7 @@ campus_glimmer/
 ├── accounts/                  # 注册、登录、个人资料
 ├── chat_messages/             # 留言、私信、内容审核与申诉
 ├── campus_glimmer/            # Django 配置、根路由和健康检查
+├── observability/             # 告警翻转历史与可观测性数据
 ├── listings/                  # 商品、订单、搜索、通知、运营与治理
 │   ├── migrations/            # 数据库迁移
 │   └── management/commands/   # 运维、运营和回填命令
@@ -263,7 +264,7 @@ python manage.py runserver
 ### 4. 常用检查
 
 ```bash
-python -m compileall -q accounts campus_glimmer chat_messages listings
+python -m compileall -q accounts campus_glimmer chat_messages listings observability
 python manage.py check
 python manage.py makemigrations --check --dry-run
 python manage.py test
@@ -456,7 +457,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [备份与恢复](backup-restore.md) | 想创建、校验、保留或恢复数据库与对象存储 |
 | [备份脚本边界设计](backup-script-boundary-design.md) | 想了解备份脚本的失败分支为什么值得离线测试，以及哪些部分仍然只能人工演练 |
 | [对象存储 CI 集成设计](object-storage-ci-integration-design.md) | 想了解 MinIO 集成任务覆盖了什么，以及为什么宁可失败也不静默跳过 |
-| [按指标告警设计](metrics-alerting-design.md) | 想了解八条规则为什么在状态翻转时通知、最近 100 条进程内历史怎么取舍、for 时长按什么取、Webhook 失败为什么不影响抓取，以及阈值为什么是模块常量 |
+| [按指标告警设计](metrics-alerting-design.md) | 想了解八条规则为什么在状态翻转时通知、数据库持久化历史与故障降级怎么取舍、for 时长按什么取、Webhook 失败为什么不影响抓取，以及阈值为什么是模块常量 |
 | [跨副本指标聚合设计](metrics-fleet-view-design.md) | 想了解舰队视图为什么用周期全量快照、合并规则每条的理由，以及为什么启用共享后只能配一个抓取目标 |
 | [搜索洞察懒加载与导出同构](search-insights-lazy-loading-design.md) | 想了解搜索洞察分区为什么比运营看板多一列裁剪，以及 CSV 导出与页面同构是怎么守住的 |
 | [联系方式的形状](profile-contact-shape-design.md) | 想了解四个手写字段为什么按全量口径算、长度档为什么不取分位数，以及为什么只报相关性不讲因果 |

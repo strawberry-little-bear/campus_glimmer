@@ -1,4 +1,4 @@
-# 模块与测试地图
+﻿# 模块与测试地图
 
 [返回 README](../README.md) · [功能手册](feature-handbook.md)
 
@@ -12,6 +12,7 @@ campus_glimmer/
 ├── accounts/                  # 注册、登录、个人资料和账户测试
 ├── chat_messages/             # 商品留言、私信、内容审核分级、误判放行与内容申诉闭环、私信响应时效、响应场景分层、响应时效跨周期对比和会话测试
 ├── campus_glimmer/            # Django 项目配置、根路由、健康检查与进程级指标
+├── observability/             # 告警翻转历史的有界数据库存储与降级边界
 ├── listings/                  # 商品、订单、搜索、通知、运营和治理业务（见下面的模块表）
 │   ├── migrations/            # 数据库迁移
 │   └── management/commands/   # 预约超时、商品到期、运营日报、机会摘要、生命周期提醒、学期日历等管理命令
@@ -739,7 +740,7 @@ campus_glimmer/
 - **`dashboard-export-subhead-alignment-design.md`**：面板与下载件的标题必须是同一句话，以及第一版为什么选错了数——`field_total` 恒为 25、`rows|length` 空平台是 0，两者问的不是同一个问题
 - **`task-run-ledger-integrity-design.md`**：定时任务台账的时间、状态、失败备注与指标形状完整性审计口径
 - **`deployment-health-endpoints-design.md`**：存活检查与数据库就绪检查拆分，失败不泄露部署细节
-- **`metrics-alerting-design.md`**：八条规则为什么只在状态翻转时通知、最近 100 条进程内历史为什么不是审计、for 时长按什么取、冷启动的基线回退，以及 Webhook 失败与多副本去重的边界
+- **`metrics-alerting-design.md`**：八条规则为什么只在状态翻转时通知、数据库历史为什么是有界排障记录而不是可靠审计、for 时长按什么取、冷启动的基线回退，以及 Webhook 失败与多副本去重的边界
 - **`campaign-goals-funnel-design.md`**：专题目标的周期口径、实时进度、节奏偏差、严格漏斗与跨专题汇总边界
 - **`production-deployment.md`**：PostgreSQL、Redis、MinIO / S3、WhiteNoise、单机 Compose 拓扑与上线边界
 - **`backup-restore.md`**：数据库 custom dump、对象镜像、SHA-256 校验、保留期、恢复顺序与演练边界
