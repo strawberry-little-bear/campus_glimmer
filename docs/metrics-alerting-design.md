@@ -53,6 +53,27 @@
 
 上一轮已经踩过一次同类问题的坑——`_families` 重构时漏了直方图的后缀，Prometheus 认不出那是直方图，而本项目的行格式校验照样全绿。这一轮的对应风险是「规则读的名字和端点暴露的名字分裂」，症状同样是某条规则永远不触发，而「永远不触发」和「没有这条规则」在看板上长得一模一样。所以序列名全部从 `metrics.PREFIX` 拼出来，不在这里重写字面量。
 
+## 投递队列的健康指标
+
+Webhook outbox 不只在 `/alerts/` 的 JSON 里可见，也直接进入 Prometheus。状态族固定输出 `pending`、`delivering`、`delivered`、`skipped`、`exhausted` 五条序列，某类暂时为 0 时也保留样本，避免看板和告警表达式随队列内容改变形状：
+
+| 指标 | 类型 | 含义 |
+| --- | --- | --- |
+| `campus_glimmer_alert_notification_queue{status="..."}` | gauge | outbox 中各状态的记录数 |
+| `campus_glimmer_alert_notification_queue_due` | gauge | 已到重试时间、等待投递的记录数 |
+| `campus_glimmer_alert_notification_queue_enabled` | gauge | 是否启用数据库 outbox |
+| `campus_glimmer_alert_notification_queue_degraded` | gauge | 摘要读取失败时为 1，此时状态计数不可信 |
+
+外层监控可以直接用这三条表达式覆盖最常见的投递故障：
+
+```promql
+campus_glimmer_alert_notification_queue{status="exhausted"} > 0
+campus_glimmer_alert_notification_queue_due > 0
+campus_glimmer_alert_notification_queue_degraded > 0
+```
+
+`render_alerts()` 每次抓取只读取一次 outbox 摘要，并用同一份结果渲染四个指标；数据库故障时返回全零状态形状并置 `degraded=1`，无论 `/metrics/` 还是 `/alerts/` 都仍返回 200。`exhausted` 是终态台账，清理周期决定它会不会持续存在；接告警时应结合 `flush_alert_notifications --prune-days` 的保留策略。
+
 ## 八条规则
 
 | 规则 | 级别 | for | 判断依据 |
@@ -107,7 +128,7 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 
 ## 覆盖范围
 
-`campus_glimmer/test_alerts.py` 共 74 项，分十一组：
+`campus_glimmer/test_alerts.py` 共 77 项，分十一组：
 
 - **HistogramQuantileTests（6 项）**：没有分桶、没有 +Inf 桶、空档、零样本时的取值，以及 p95 的插值结果。
 - **AlertStateMachineTests（6 项）**：pending 不喊人、熬满 for 才 firing、中途恢复要重启计时、恢复要清掉 active_seconds、状态按副本交出、每条规则各自评估。
@@ -115,13 +136,13 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 - **ViewAndSharedProbeTests（8 项）**：视图陈旧、读取失败上升、分桶不符、标签溢出四条规则在「序列缺失」和「刚过阈值」两侧的行为。
 - **TrafficAndLatencyProbeTests（6 项）**：5xx 占比与 p95 的样本下限、低值安静、高值报警，以及分母是含 5xx 的请求总数而不是 2xx。
 - **SampleWindowTests（5 项）**：单条样本没有基线、窗口内增量、计数器回退按 0 计、峰值只算窗口内、过期样本被剪掉。
-- **MetricsExposureTests（6 项）**：八个告警家族的 TYPE 行唯一、规则读的名字与端点暴露的名字逐条相同、firing/pending/active_seconds 三族的成员与状态机完全一致、评估计数随抓取推进、告警拼在业务指标之后。
+- **MetricsExposureTests（9 项）**：十二个告警家族的 TYPE 行唯一、规则读的名字与端点暴露的名字逐条相同、firing/pending/active_seconds 三族的成员与状态机完全一致、评估计数随抓取推进、告警拼在业务指标之后，以及 outbox 启用/关闭/降级时的固定状态形状。
 - **AlertsEndpointTests（7 项）**：未配令牌 404、只允许 GET/HEAD、载荷带服务身份与计数、静默规则也在载荷里、有界历史与来源声明、历史不含 Webhook 凭据、JSON 与 `/metrics/` 给出同一个 firing 集合。
 - **AlertSelfPreservationTests（4 项）**：探针抛异常时端点仍 200 且计入评估错误、失败时沿用上一次结论、抓 `/alerts/` 不喂业务指标、单例可重置。
 - **AlertNotificationTests（10 项）**：pending 不发、首次 firing 只发一次、持续 firing 不重复、pending 恢复不发、firing 恢复发 resolved、多规则合并批次、载荷/请求头/Bearer 令牌、未配置时跳过、网络与非 2xx 失败不外溢、通知计数进入 Prometheus。
 - **AlertHistoryPersistenceTests（7 项）**：数据库写入与读回、1000 条上限、写入失败与读取失败降级、端点默认使用数据库历史、数据库故障不拖垮两个监控端点、显式关闭持久化。
 
-投递队列另有 `observability/tests.py` 的 8 项测试覆盖：立即投递、跨副本去重、退避后重试、重试耗尽、台账清理、队列摘要、数据库故障直投降级、管理命令重试与旧记录清理。两者合计 82 项。
+投递队列另有 `observability/tests.py` 的 8 项测试覆盖：立即投递、跨副本去重、退避后重试、重试耗尽、台账清理、队列摘要、数据库故障直投降级、管理命令重试与旧记录清理。两者合计 85 项。
 
 「规则读的名字与端点暴露的名字逐条相同」和「三族成员与状态机完全一致」是这里最值得留意的两条。前者防的是名字分裂（症状是规则永远不触发），后者防的是把 pending 也画成 firing（症状是看板把每条规则都显示成正在响，而所有数值本身毫无异常）。这两条在写完之后都用变异测试验证过：把对应判断改坏，有用例会红。
 

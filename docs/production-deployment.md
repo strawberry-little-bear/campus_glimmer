@@ -171,7 +171,15 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 
 没有启用共享时（LocMem 缓存，或显式关掉）计数器按进程分离：gunicorn 起几个 worker 就有几份计数，抓任一副本都只是总量的一部分。此时 `campus_glimmer_metrics_instances` 恒为 1、`campus_glimmer_metrics_shared_enabled` 恒为 0，指标回答的是「这个副本忙不忙、慢不慢、错误率有没有抬头」。启用了共享，同一次抓取拿到的就是整个服务的总量。保留、可视化与升级策略仍在外层监控系统。
 
-告警在抓取时评估，`pending → firing` 和 `firing → inactive` 可各触发一次 Webhook。设置 `DJANGO_ALERT_WEBHOOK_URL` 开启，`DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` 可选，`DJANGO_ALERT_WEBHOOK_TIMEOUT` 默认 2 秒；URL 留空即关闭。配置 URL 后默认启用数据库 outbox：事件先写入 `observability_alertnotificationdelivery`，立即尝试一次，失败按指数退避，Prometheus 下一次抓取或 `python manage.py flush_alert_notifications` 继续投递；达到上限后保留 `exhausted` 记录。`/alerts/` 的 `notification_queue` 暴露各状态计数与到期数量。翻转历史仍写入 `observability_alerttransition`，表内最多保留 1000 条，配置 `DJANGO_ALERT_HISTORY_DB_ENABLED=false` 可关闭；数据库历史失败时端点仍返回 200，自动退回进程内窗口。多 worker 各自维护状态，但同一规则、事件、状态与默认 60 秒窗口会生成相同幂等键，避免同一次翻转被重复投递。
+告警在抓取时评估，`pending → firing` 和 `firing → inactive` 可各触发一次 Webhook。设置 `DJANGO_ALERT_WEBHOOK_URL` 开启，`DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` 可选，`DJANGO_ALERT_WEBHOOK_TIMEOUT` 默认 2 秒；URL 留空即关闭。配置 URL 后默认启用数据库 outbox：事件先写入 `observability_alertnotificationdelivery`，立即尝试一次，失败按指数退避，Prometheus 下一次抓取或 `python manage.py flush_alert_notifications` 继续投递；达到上限后保留 `exhausted` 记录。`/alerts/` 的 `notification_queue` 暴露各状态计数与到期数量；`/metrics/` 同时暴露固定五类状态的 `campus_glimmer_alert_notification_queue{status="..."}`、到期数 `campus_glimmer_alert_notification_queue_due`、启用状态 `campus_glimmer_alert_notification_queue_enabled` 和降级标记 `campus_glimmer_alert_notification_queue_degraded`。外层监控至少应关注：
+
+```promql
+campus_glimmer_alert_notification_queue{status="exhausted"} > 0
+campus_glimmer_alert_notification_queue_due > 0
+campus_glimmer_alert_notification_queue_degraded > 0
+```
+
+`exhausted` 会一直保留到清理任务删除旧终态记录，因此告警应配合 `flush_alert_notifications --prune-days` 的保留周期使用。翻转历史仍写入 `observability_alerttransition`，表内最多保留 1000 条，配置 `DJANGO_ALERT_HISTORY_DB_ENABLED=false` 可关闭；数据库历史失败时端点仍返回 200，自动退回进程内窗口。多 worker 各自维护状态，但同一规则、事件、状态与默认 60 秒窗口会生成相同幂等键，避免同一次翻转被重复投递。
 
 ```powershell
 curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
@@ -191,7 +199,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml -f docker-c
 
 ## 8. CI 覆盖
 
-GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。`quality` 的完整测试同时覆盖指标端点契约：标签基数、暴露格式、序列封顶与 Bearer 鉴权，跨副本联合视图的合并规则、降级路径与五个新序列（口径见[跨副本指标聚合设计](metrics-fleet-view-design.md)），以及八条指标告警的状态机、八族序列、有界持久化历史与数据库故障降级、可选 Webhook 投递与自保路径（口径见[按指标告警设计](metrics-alerting-design.md)）。`production-deps` 用的是真 Redis，共享开关会自动生效，发布线程在整套测试期间真实运行。
+GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。`quality` 的完整测试同时覆盖指标端点契约：标签基数、暴露格式、序列封顶与 Bearer 鉴权，跨副本联合视图的合并规则、降级路径与五个新序列（口径见[跨副本指标聚合设计](metrics-fleet-view-design.md)），以及八条指标告警的状态机、十二族序列、有界持久化历史与数据库故障降级、可选 Webhook 投递、outbox 健康指标与自保路径（口径见[按指标告警设计](metrics-alerting-design.md)）。`production-deps` 用的是真 Redis，共享开关会自动生效，发布线程在整套测试期间真实运行。
 
 ## 相关文档
 

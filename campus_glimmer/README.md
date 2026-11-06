@@ -60,7 +60,7 @@ flowchart LR
 | [`tests.py`](tests.py) | 根路由、探针与安全配置基线测试 |
 | [`test_metrics.py`](test_metrics.py) | 指标契约：标签基数、暴露格式、序列封顶、在途计数与 Bearer 鉴权（单进程口径） |
 | [`test_metrics_fleet.py`](test_metrics_fleet.py) | 跨副本联合视图：开关三态、快照形状、合并规则、共享存储降级、发布线程与端到端合并 |
-| [`test_alerts.py`](test_alerts.py) | 指标告警：分位数插值、pending→firing 状态机、八条探针、八族序列、有界持久化历史与数据库故障降级、Webhook 投递与端点自保 |
+| [`test_alerts.py`](test_alerts.py) | 指标告警：分位数插值、pending→firing 状态机、八条探针、十二族序列、有界持久化历史与数据库故障降级、Webhook 投递、outbox 健康指标与端点自保 |
 | [`test_deployment.py`](test_deployment.py) | 生产配置解析、fail-closed 校验、存储端点测试，以及 `static/css/` 样式表的语法守卫（注释、字符串、花括号配平） |
 | [`test_page_semantics.py`](test_page_semantics.py) | 全站页面语义守卫：标题层级、表单标签、可访问名称、`alt`、表格与分页链接名称、当前栏目、跳转主内容与导航触控目标 |
 | [`test_anchor_scroll_margin.py`](test_anchor_scroll_margin.py) | 页内跳转落点避让守卫：锚点、分页锚点、运营看板分区与表单控件都必须让出吸顶导航高度 |
