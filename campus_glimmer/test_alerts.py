@@ -18,7 +18,7 @@
 
 import json
 import math
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
@@ -33,6 +33,7 @@ from .alerts import (
     METRIC_VIEW_AGE,
     RULES,
     AlertEngine,
+    AlertNotifier,
     Rule,
     RuleContext,
     SampleWindow,
@@ -42,6 +43,7 @@ from .alerts import (
     _probe_label_overflow,
     _probe_read_errors,
     _probe_view_stale,
+    _alert_families,
     get_engine,
     histogram_quantile,
     render_alerts,
@@ -52,6 +54,7 @@ from .metrics import (
     METRICS_PATH,
     get_registry,
     iter_samples,
+    render_families,
     reset_registry,
 )
 from .test_metrics import find, parse_exposition
@@ -410,6 +413,194 @@ class SampleWindowTests(SimpleTestCase):
 
 
 @override_settings(METRICS_TOKEN=TOKEN)
+class AlertNotificationTests(SimpleTestCase):
+    """Webhook 只在状态翻转时发一次，且它的故障不能外溢。"""
+
+    def _response(self, status=204):
+        response = MagicMock()
+        response.status = status
+        response.__enter__.return_value = response
+        return response
+
+    def _engine(self, notifier, *rules):
+        return AlertEngine(rules=rules, notifier=notifier)
+
+    def test_pending_does_not_notify(self):
+        notifier = MagicMock()
+        engine = self._engine(
+            notifier,
+            Rule('Pending', 'warning', '测试规则', 10, _FakeProbe(on=True)),
+        )
+        self.assertEqual(engine.evaluate([], now=0.0)[0]['state'], 'pending')
+        notifier.deliver.assert_not_called()
+        self.assertEqual(engine.counters()['notifications']['skipped'], 0)
+
+    def test_firing_notifies_once_and_ongoing_firing_does_not_repeat(self):
+        notifier = MagicMock()
+        notifier.deliver.return_value = {
+            'delivered': 1, 'failed': 0, 'skipped': 0,
+        }
+        engine = self._engine(
+            notifier,
+            Rule('Firing', 'critical', '测试规则', 0, _FakeProbe(on=True)),
+        )
+        engine.evaluate([], now=0.0)
+        engine.evaluate([], now=10.0)
+        notifier.deliver.assert_called_once()
+        self.assertEqual(engine.counters()['notifications']['delivered'], 1)
+
+    def test_pending_recovery_does_not_notify(self):
+        probe = _FakeProbe(on=True)
+        notifier = MagicMock()
+        engine = self._engine(
+            notifier,
+            Rule('Blip', 'warning', '测试规则', 10, probe),
+        )
+        engine.evaluate([], now=0.0)
+        probe.on = False
+        self.assertEqual(engine.evaluate([], now=1.0)[0]['state'], 'inactive')
+        notifier.deliver.assert_not_called()
+
+    def test_firing_recovery_sends_resolved(self):
+        probe = _FakeProbe(on=True)
+        notifier = MagicMock()
+        notifier.deliver.return_value = {
+            'delivered': 1, 'failed': 0, 'skipped': 0,
+        }
+        engine = self._engine(
+            notifier,
+            Rule('Recovered', 'critical', '测试规则', 0, probe),
+        )
+        engine.evaluate([], now=0.0)
+        probe.on = False
+        self.assertEqual(engine.evaluate([], now=5.0)[0]['state'], 'inactive')
+        events = notifier.deliver.call_args.args[0]
+        self.assertEqual([event['event'] for event in events], ['resolved'])
+        self.assertEqual(events[0]['state'], 'inactive')
+        self.assertEqual(events[0]['active_seconds'], 5.0)
+
+    def test_multiple_transitions_are_delivered_as_one_batch(self):
+        notifier = MagicMock()
+        notifier.deliver.return_value = {
+            'delivered': 2, 'failed': 0, 'skipped': 0,
+        }
+        engine = self._engine(
+            notifier,
+            Rule('First', 'warning', '规则一', 0, _FakeProbe(on=True)),
+            Rule('Second', 'critical', '规则二', 0, _FakeProbe(on=True)),
+        )
+        engine.evaluate([], now=0.0)
+        notifier.deliver.assert_called_once()
+        events = notifier.deliver.call_args.args[0]
+        self.assertEqual([event['name'] for event in events], ['First', 'Second'])
+        self.assertEqual(engine.counters()['notifications']['delivered'], 2)
+
+    def test_delivery_payload_headers_and_bearer_token(self):
+        opener = MagicMock(return_value=self._response())
+        notifier = AlertNotifier(
+            url='https://alerts.example.test/hook',
+            token='hook-secret',
+            timeout=1.5,
+            service_name='campus-test',
+            opener=opener,
+        )
+        engine = self._engine(
+            notifier,
+            Rule('Payload', 'critical', '载荷测试', 0, _FakeProbe(on=True)),
+        )
+        engine.evaluate([], now=10.0)
+        request = opener.call_args.args[0]
+        self.assertEqual(request.full_url, 'https://alerts.example.test/hook')
+        self.assertEqual(request.method, 'POST')
+        self.assertEqual(request.get_header('Content-type'),
+                         'application/json; charset=utf-8')
+        self.assertEqual(request.get_header('User-agent'),
+                         'campus-glimmer-alerts/1')
+        self.assertEqual(request.get_header('Authorization'), 'Bearer hook-secret')
+        self.assertEqual(opener.call_args.kwargs['timeout'], 1.5)
+        payload = json.loads(request.data.decode('utf-8'))
+        self.assertEqual(payload['service'], 'campus-test')
+        self.assertEqual(payload['generated_at'], 10.0)
+        self.assertEqual(payload['events'][0]['event'], 'firing')
+        self.assertEqual(payload['events'][0]['name'], 'Payload')
+        self.assertEqual(payload['events'][0]['state'], 'firing')
+
+    def test_unconfigured_webhook_skips_without_opening_network(self):
+        opener = MagicMock()
+        engine = self._engine(
+            AlertNotifier(url='', opener=opener),
+            Rule('QuietHook', 'warning', '测试规则', 0, _FakeProbe(on=True)),
+        )
+        engine.evaluate([], now=0.0)
+        opener.assert_not_called()
+        self.assertEqual(engine.counters()['notifications']['skipped'], 1)
+
+    def test_delivery_failure_is_counted_and_does_not_escape(self):
+        def timeout_opener(*_args, **_kwargs):
+            raise TimeoutError('slow')
+
+        def status_opener(*_args, **_kwargs):
+            return self._response(503)
+
+        for label, opener in (('timeout', timeout_opener),
+                              ('non-2xx', status_opener)):
+            with self.subTest(label=label):
+                engine = self._engine(
+                    AlertNotifier(url='https://alerts.example.test/hook',
+                                  opener=opener),
+                    Rule('FailingHook', 'warning', '测试规则', 0,
+                         _FakeProbe(on=True)),
+                )
+                with self.assertLogs('campus_glimmer.alerts', level='WARNING'):
+                    state = engine.evaluate([], now=0.0)[0]
+                self.assertEqual(state['state'], 'firing')
+                self.assertEqual(
+                    engine.counters()['notifications']['failed'], 1,
+                )
+
+    def test_a_broken_notifier_cannot_take_the_metrics_endpoint_down(self):
+        reset_registry()
+        reset_engine()
+        self.addCleanup(reset_registry)
+        self.addCleanup(reset_engine)
+        engine = get_engine()
+        notifier = MagicMock()
+        notifier.deliver.side_effect = RuntimeError('broken notifier')
+        rule = Rule('BrokenHook', 'warning', '测试规则', 0, _FakeProbe(on=True))
+        with patch.object(engine, '_rules', (rule,)), \
+                patch.object(engine, '_notifier', notifier), \
+                self.assertLogs('campus_glimmer.alerts', level='WARNING'):
+            response = self.client.get(METRICS_PATH, **AUTH)
+        self.assertEqual(response.status_code, 200)
+        samples = parse_exposition(response.content.decode('utf-8'))
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notifications_total',
+                 result='failed'),
+            [1],
+        )
+
+    def test_notification_counts_are_exposed_in_prometheus(self):
+        engine = self._engine(
+            AlertNotifier(url=''),
+            Rule('ExposedHook', 'warning', '测试规则', 0, _FakeProbe(on=True)),
+        )
+        engine.evaluate([], now=0.0)
+        samples = parse_exposition(
+            render_families(_alert_families(engine.states(), engine.counters()))
+        )
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notifications_total',
+                 result='skipped'),
+            [1],
+        )
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notifications_total',
+                 result='failed'),
+            [0],
+        )
+
+
+@override_settings(METRICS_TOKEN=TOKEN)
 class MetricsExposureTests(SimpleTestCase):
     """告警状态在 /metrics/ 上的形状，以及与看板口径的一致性。"""
 
@@ -428,6 +619,7 @@ class MetricsExposureTests(SimpleTestCase):
         self.assertEqual(len(declared), len(set(declared)))
         for name in ('campus_glimmer_alert_firing', 'campus_glimmer_alert_pending',
                      'campus_glimmer_alert_active_seconds',
+                     'campus_glimmer_alert_notifications_total',
                      'campus_glimmer_alert_evaluations_total',
                      'campus_glimmer_alert_evaluation_errors_total'):
             self.assertIn(name, declared)
@@ -515,10 +707,11 @@ class MetricsExposureTests(SimpleTestCase):
             line.split()[2] for line in text.split('\n')
             if line.startswith('# TYPE ')
         ]
-        self.assertEqual(declared[-5:], [
+        self.assertEqual(declared[-6:], [
             'campus_glimmer_alert_firing',
             'campus_glimmer_alert_pending',
             'campus_glimmer_alert_active_seconds',
+            'campus_glimmer_alert_notifications_total',
             'campus_glimmer_alert_evaluations_total',
             'campus_glimmer_alert_evaluation_errors_total',
         ])

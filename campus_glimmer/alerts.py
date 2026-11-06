@@ -1,10 +1,10 @@
 # campus_glimmer/alerts.py
 """按指标的阈值告警：把「现在有没有越界」从人的眼睛搬到代码里。
 
-只评估、只报告：不呼叫任何人、不发邮件、不改任何业务状态。产物是
-``/alerts/`` 上的一份 JSON 和 ``/metrics/`` 末尾的几个
-``campus_glimmer_alert_*`` 序列，由外层监控系统决定怎么喊人——本项目没有、
-也不打算自己实现一套值班轮换。
+只评估、报告，并在状态翻转时可选地 POST 一次 Webhook：不维护值班表、
+不发邮件、不改任何业务状态。产物是 ``/alerts/`` 上的一份 JSON、``/metrics/``
+末尾的几个 ``campus_glimmer_alert_*`` 序列，以及一条可选的批量通知。通知只在
+pending → firing 和 firing → inactive 时触发，持续 firing 不会每轮抓取重复喊人。
 
 为什么在抓取时评估，而不是再起一个定时线程：Prometheus 模型里规则的评估
 节奏就是抓取节奏，再起一个线程只是多一条要维护的生命周期；两份节奏一漂移，
@@ -19,10 +19,12 @@
 能对不上——这是本模块唯一比「算法正确」更要紧的不变式。
 """
 
+import json
 import logging
 import math
 import threading
 import time
+import urllib.request
 from collections import deque
 
 from django.conf import settings
@@ -100,6 +102,10 @@ SHARED_DISABLED_FOR = 600.0
 # 历史窗口必须不小于任何规则的窗口，否则规则会「忘了」它还需要的样本。
 WINDOW_MAX_AGE = 3900.0
 
+# Webhook 是状态翻转上的尽力而为通知，不是可靠消息队列：一次抓取最多发一个
+# 批次，超时必须短到即使远端挂住也不会把监控端点一起拖过常见 scrape timeout。
+WEBHOOK_TIMEOUT_SECONDS = 2.0
+
 
 def histogram_quantile(buckets, quantile):
     """从累计分桶求分位数，桶内线性插分。
@@ -132,6 +138,76 @@ def histogram_quantile(buckets, quantile):
             )
         lower_edge, lower_count = edge, count
     return lower_edge
+
+
+class AlertNotifier:
+    """把一次评估里的状态翻转投递成一个 JSON 批次。
+
+    URL 未配置时什么都不发，但把事件记成 ``skipped``；配置了却失败时记成
+    ``failed``。两种情况都不抛给调用方——监控端点不能因为喊人的渠道坏了而
+    返回 500。这里没有重试队列：下一轮评估已经没有这次翻转事件，重发需要
+    持久化 outbox，那是另一个可靠性问题，不在本轮悄悄假装已经解决。
+    """
+
+    def __init__(self, url='', token='', timeout=WEBHOOK_TIMEOUT_SECONDS,
+                 service_name=None, opener=None):
+        self._url = (url or '').strip()
+        self._token = (token or '').strip()
+        self._timeout = max(float(timeout), 0.1)
+        self._service_name = (
+            service_name
+            or getattr(settings, 'METRICS_SERVICE_NAME', 'campus-glimmer')
+        )
+        self._opener = opener or urllib.request.urlopen
+
+    @classmethod
+    def from_settings(cls):
+        return cls(
+            url=getattr(settings, 'ALERT_WEBHOOK_URL', ''),
+            token=getattr(settings, 'ALERT_WEBHOOK_BEARER_TOKEN', ''),
+            timeout=getattr(settings, 'ALERT_WEBHOOK_TIMEOUT', WEBHOOK_TIMEOUT_SECONDS),
+            service_name=getattr(settings, 'METRICS_SERVICE_NAME', 'campus-glimmer'),
+        )
+
+    def deliver(self, events, now):
+        """返回按结果拆分的事件计数；网络失败永远不向外抛。"""
+
+        if not events:
+            return {'delivered': 0, 'failed': 0, 'skipped': 0}
+        if not self._url:
+            return {'delivered': 0, 'failed': 0, 'skipped': len(events)}
+
+        headers = {
+            'Content-Type': 'application/json; charset=utf-8',
+            'User-Agent': 'campus-glimmer-alerts/1',
+        }
+        if self._token:
+            headers['Authorization'] = 'Bearer ' + self._token
+        body = json.dumps(
+            {
+                'service': self._service_name,
+                'generated_at': now,
+                'events': events,
+            },
+            ensure_ascii=False,
+            separators=(',', ':'),
+        ).encode('utf-8')
+        request = urllib.request.Request(
+            self._url, data=body, headers=headers, method='POST',
+        )
+        try:
+            with self._opener(request, timeout=self._timeout) as response:
+                status = getattr(response, 'status', 200)
+                if not 200 <= int(status) < 300:
+                    raise RuntimeError('webhook returned HTTP %s' % status)
+        except Exception as error:
+            # 不把 URL 或响应正文写进日志：Webhook 地址本身可能带访问凭据。
+            logger.warning(
+                '告警 Webhook 投递失败（%d 条）：%s',
+                len(events), type(error).__name__,
+            )
+            return {'delivered': 0, 'failed': len(events), 'skipped': 0}
+        return {'delivered': len(events), 'failed': 0, 'skipped': 0}
 
 
 class SampleWindow:
@@ -458,15 +534,17 @@ RULES = (
 class AlertEngine:
     """按规则评估样本，维护 pending → firing 的状态机。"""
 
-    def __init__(self, rules=RULES, window=None):
+    def __init__(self, rules=RULES, window=None, notifier=None):
         self._rules = tuple(rules)
         self._window = SampleWindow() if window is None else window
+        self._notifier = notifier
         # 状态按需建，不在这里按当次的规则集合一次性建齐：两份集合一旦漂移
         # 就是一次 KeyError，而它只在运行期显形，启动时一点声音都没有。
         self._states = {}
         self._lock = threading.Lock()
         self._evaluations = 0
         self._errors = 0
+        self._notifications = {'delivered': 0, 'failed': 0, 'skipped': 0}
         self._last = []
 
     def evaluate(self, samples, now=None):
@@ -479,10 +557,16 @@ class AlertEngine:
             self._window.record(samples, now)
             context = RuleContext(samples, self._window, now)
             results = []
+            notifications = []
             for rule in self._rules:
                 fired, value, detail = rule.probe(context)
                 with self._lock:
-                    results.append(self._advance(rule, fired, value, detail, now))
+                    state, notification = self._advance(
+                        rule, fired, value, detail, now,
+                    )
+                results.append(state)
+                if notification is not None:
+                    notifications.append(notification)
         except Exception as error:
             # 告警自己坏掉不能顺带把 /metrics/ 搞成 500：一个挂掉的监控端点比
             # 没有告警更难排查。这里退回上一次的结论并计数。
@@ -495,7 +579,26 @@ class AlertEngine:
             return self.states()
         with self._lock:
             self._last = results
+        if notifications and self._notifier is not None:
+            self._deliver_notifications(notifications, now)
         return results
+
+    def _deliver_notifications(self, events, now):
+        try:
+            outcomes = self._notifier.deliver(events, now)
+            if not isinstance(outcomes, dict):
+                raise TypeError('notifier result must be a dict')
+        except Exception as error:
+            # 通知器是监控端点的下游，不是它的前置条件。即使测试替身或未来
+            # 实现漏掉了异常处理，也只能让这次投递失败，不能把 /metrics/ 拽成 500。
+            logger.warning(
+                '告警 Webhook 通知器异常（%d 条）：%s',
+                len(events), type(error).__name__,
+            )
+            outcomes = {'failed': len(events)}
+        with self._lock:
+            for result in self._notifications:
+                self._notifications[result] += outcomes.get(result, 0)
 
     def states(self):
         with self._lock:
@@ -503,7 +606,11 @@ class AlertEngine:
 
     def counters(self):
         with self._lock:
-            return {'evaluations': self._evaluations, 'errors': self._errors}
+            return {
+                'evaluations': self._evaluations,
+                'errors': self._errors,
+                'notifications': dict(self._notifications),
+            }
 
     def _advance(self, rule, fired, value, detail, now):
         state = self._states.get(rule.name)
@@ -512,19 +619,48 @@ class AlertEngine:
         state.value = value
         state.detail = detail
         if not fired:
+            was_firing = state.firing_since is not None
+            started_at = state.pending_since
+            active_seconds = (now - started_at) if started_at is not None else 0.0
             if state.pending_since is not None or state.firing_since is not None:
                 state.resolved_at = now
             state.pending_since = None
             state.firing_since = None
-            return self._view(rule, state, 'inactive', now)
+            view = self._view(rule, state, 'inactive', now)
+            notification = None
+            if was_firing:
+                notification = self._transition_event(
+                    'resolved', rule, state, now, started_at, active_seconds,
+                )
+            return view, notification
         if state.pending_since is None:
             state.pending_since = now
         if now - state.pending_since >= rule.for_seconds:
+            notification = None
             if state.firing_since is None:
                 state.firing_since = state.pending_since
                 state.resolved_at = None
-            return self._view(rule, state, 'firing', now)
-        return self._view(rule, state, 'pending', now)
+                notification = self._transition_event(
+                    'firing', rule, state, now, state.pending_since,
+                    now - state.pending_since,
+                )
+            return self._view(rule, state, 'firing', now), notification
+        return self._view(rule, state, 'pending', now), None
+
+    def _transition_event(self, transition, rule, state, now, since,
+                          active_seconds):
+        return {
+            'event': transition,
+            'name': rule.name,
+            'severity': rule.severity,
+            'summary': rule.summary,
+            'state': 'firing' if transition == 'firing' else 'inactive',
+            'value': state.value,
+            'detail': state.detail,
+            'since': since,
+            'occurred_at': now,
+            'active_seconds': active_seconds,
+        }
 
     def _view(self, rule, state, status, now):
         since = state.firing_since if status == 'firing' else state.pending_since
@@ -552,7 +688,7 @@ def get_engine():
     if _engine is None:
         with _engine_lock:
             if _engine is None:
-                _engine = AlertEngine()
+                _engine = AlertEngine(notifier=AlertNotifier.from_settings())
     return _engine
 
 
@@ -561,7 +697,7 @@ def reset_engine():
 
     global _engine
     with _engine_lock:
-        _engine = AlertEngine()
+        _engine = AlertEngine(notifier=AlertNotifier.from_settings())
     return _engine
 
 
@@ -595,6 +731,12 @@ def _alert_families(states, counters):
             '条件连续成立的秒数；firing 时即故障已持续的时长。',
             [plain_sample(_alert_labels(state), state['active_seconds'])
              for state in states if state['state'] != 'inactive'],
+        ),
+        (
+            PREFIX + '_alert_notifications_total', 'counter',
+            '告警状态翻转时的 Webhook 投递事件数，按 delivered/failed/skipped 区分。',
+            [plain_sample((('result', result),), counters['notifications'][result])
+             for result in ('delivered', 'failed', 'skipped')],
         ),
         (
             PREFIX + '_alert_evaluations_total', 'counter',

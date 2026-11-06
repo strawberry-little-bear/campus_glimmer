@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -215,6 +216,21 @@ LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
 METRICS_TOKEN = os.getenv('DJANGO_METRICS_TOKEN', '').strip()
 METRICS_SERVICE_NAME = os.getenv('DJANGO_METRICS_SERVICE_NAME', 'campus-glimmer').strip() \
     or 'campus-glimmer'
+
+# 告警状态翻转时的可选 Webhook。地址留空即关闭；它和指标令牌是两件事：前者
+# 决定「谁被喊醒」，后者决定「谁能读取观测端点」。URL 在启动时校验，避免部署
+# 后才在告警真正发生的那一刻发现地址写错。
+ALERT_WEBHOOK_URL = os.getenv('DJANGO_ALERT_WEBHOOK_URL', '').strip()
+ALERT_WEBHOOK_BEARER_TOKEN = os.getenv('DJANGO_ALERT_WEBHOOK_BEARER_TOKEN', '').strip()
+ALERT_WEBHOOK_TIMEOUT = _env_float('DJANGO_ALERT_WEBHOOK_TIMEOUT', 2.0)
+if ALERT_WEBHOOK_TIMEOUT <= 0:
+    raise ImproperlyConfigured('DJANGO_ALERT_WEBHOOK_TIMEOUT 必须为正数')
+if ALERT_WEBHOOK_URL:
+    _alert_webhook = urlparse(ALERT_WEBHOOK_URL)
+    if _alert_webhook.scheme not in {'http', 'https'} or not _alert_webhook.netloc:
+        raise ImproperlyConfigured(
+            'DJANGO_ALERT_WEBHOOK_URL 必须是完整的 http:// 或 https:// 地址'
+        )
 
 # 跨副本指标聚合。留空表示按缓存后端自己判断：LocMem 是进程内的，多 worker 下各存
 # 各的，开了只会给出「只有我自己」的假象；Redis 一类跨进程后端默认开。启用后要把
