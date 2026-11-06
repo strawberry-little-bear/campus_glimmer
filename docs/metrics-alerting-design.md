@@ -22,11 +22,11 @@
 
 ## 四个设计取舍
 
-### 一、只评估、只报告
+### 一、状态翻转时尽力通知
 
-不呼叫任何人、不发邮件、不改任何业务状态。产物是 `/alerts/` 上的一份 JSON 和 `/metrics/` 末尾的几个 `campus_glimmer_alert_*` 序列，由外层监控系统决定怎么喊人。
+评估本身不改任何业务状态；除 `/alerts/` 的 JSON 和 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列外，配置 `DJANGO_ALERT_WEBHOOK_URL` 后还会在 `pending → firing` 和 `firing → inactive` 时各发一次 JSON 批次。持续 firing 不重复发送，`pending → inactive` 也不发送；URL 留空即完全关闭通知。
 
-本项目没有、也不打算自己实现一套值班轮换。做了那一层的系统要回答「谁在什么时候必须响应」「升级路径是什么」「静默多久」，这三个问题每一个都比八条阈值规则更难维护，而它们的答案在本项目的规模下就是「部署的人看邮件」。
+这是尽力而为的 Webhook，不是一套值班系统：没有邮件、呼叫、升级路径或持久化重试队列，也不维护值班轮换。投递失败只把 `campus_glimmer_alert_notifications_total{result="failed"}` 加一，监控端点仍返回 200。做了值班系统的项目还要回答「谁在什么时候必须响应」「静默多久」，这些问题仍然留给部署方的外层监控。
 
 ### 二、在抓取时评估，不起第二个定时线程
 
@@ -92,22 +92,25 @@
 
 评估整体包在 `try` 里。探针抛异常时 `/metrics/` 仍然 200，只是沿用上一次的结论，并把 `campus_glimmer_alert_evaluation_errors_total` 加一。一个 500 的监控端点比它要报告的故障更难排查：Prometheus 会记 `up == 0`，而看板上所有曲线一起消失。
 
+Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，也只计为 `failed` 并写一条不含 URL 的告警日志，不改变评估结果。请求使用短超时且不重试；同一轮的多条状态翻转会合并成一个 HTTP 请求，避免通知渠道故障把抓取拖过 scrape timeout。
+
 `_advance` 按需建状态，不按当次的规则集合一次性建齐。两份集合一旦漂移就是一次 KeyError，而它只在运行期显形，启动时一点声音都没有。
 
 `SampleWindow` 是有界的：序列数由指标侧的封顶决定，时间长度由 `WINDOW_MAX_AGE`（3900 秒，不小于任何规则的窗口）决定，都不会跟着进程一起无限长大。
 
 ## 覆盖范围
 
-`campus_glimmer/test_alerts.py` 共 46 项，分八组：
+`campus_glimmer/test_alerts.py` 共 56 项，分九组：
 
 - **HistogramQuantileTests（6 项）**：没有分桶、没有 +Inf 桶、空档、零样本时的取值，以及 p95 的插值结果。
 - **AlertStateMachineTests（6 项）**：pending 不喊人、熬满 for 才 firing、中途恢复要重启计时、恢复要清掉 active_seconds、状态按副本交出、每条规则各自评估。
 - **ViewAndSharedProbeTests（8 项）**：视图陈旧、读取失败上升、分桶不符、标签溢出四条规则在「序列缺失」和「刚过阈值」两侧的行为。
 - **TrafficAndLatencyProbeTests（6 项）**：5xx 占比与 p95 的样本下限、低值安静、高值报警，以及分母是含 5xx 的请求总数而不是 2xx。
 - **SampleWindowTests（5 项）**：单条样本没有基线、窗口内增量、计数器回退按 0 计、峰值只算窗口内、过期样本被剪掉。
-- **MetricsExposureTests（6 项）**：五个告警家族的 TYPE 行唯一、规则读的名字与端点暴露的名字逐条相同、firing/pending/active_seconds 三族的成员与状态机完全一致、评估计数随抓取推进、告警拼在业务指标之后。
+- **MetricsExposureTests（6 项）**：六个告警家族的 TYPE 行唯一、规则读的名字与端点暴露的名字逐条相同、firing/pending/active_seconds 三族的成员与状态机完全一致、评估计数随抓取推进、告警拼在业务指标之后。
 - **AlertsEndpointTests（5 项）**：未配令牌 404、只允许 GET/HEAD、载荷带服务身份与计数、静默规则也在载荷里、JSON 与 `/metrics/` 给出同一个 firing 集合。
 - **AlertSelfPreservationTests（4 项）**：探针抛异常时端点仍 200 且计入评估错误、失败时沿用上一次结论、抓 `/alerts/` 不喂业务指标、单例可重置。
+- **AlertNotificationTests（10 项）**：pending 不发、首次 firing 只发一次、持续 firing 不重复、pending 恢复不发、firing 恢复发 resolved、多规则合并批次、载荷/请求头/Bearer 令牌、未配置时跳过、网络与非 2xx 失败不外溢、通知计数进入 Prometheus。
 
 「规则读的名字与端点暴露的名字逐条相同」和「三族成员与状态机完全一致」是这里最值得留意的两条。前者防的是名字分裂（症状是规则永远不触发），后者防的是把 pending 也画成 firing（症状是看板把每条规则都显示成正在响，而所有数值本身毫无异常）。这两条在写完之后都用变异测试验证过：把对应判断改坏，有用例会红。
 
@@ -115,11 +118,21 @@
 
 这一轮**没有**做的部分，需要如实说明：
 
-- **没有任何通知渠道**。没有邮件、没有 webhook、没有呼叫。判断做完了，喊人这件事仍然完全在外层。
-- **没有历史存储**。`SampleWindow` 只有内存里 65 分钟，进程重启即清零。想看昨天发生了什么仍然要指望外层监控系统。
+- **通知是可选且不可靠的**。只支持一次 best-effort Webhook POST，没有邮件、呼叫、重试队列或持久化 outbox；进程退出或远端失败时这次翻转就丢了。多个 worker 也各自维护状态，因此仍应只配置一个抓取目标，避免重复通知。
+- **没有历史存储**。`SampleWindow` 只有内存里 65 分钟，进程重启即清零；没有告警历史、确认状态或投递记录。想看昨天发生了什么仍然要指望外层监控系统。
 - **没有抑制与静默**。没有「维护窗口内不喊」、没有「同一故障合并成一条」、没有升级路径。这些是值班系统的功能，不在本模块范围内。
 - **规则是硬编码的八条**。不提供用户自定义规则、不提供配置文件里的阈值、不提供 PromQL。加一条规则就是加一个 `_probe_*` 函数和一行 `RULES`。
 - **`for` 的计时依赖抓取节奏**。两次抓取间隔超过 `for` 时长的规则（300 秒那两条）在抓取间隔过长时会晚一个周期才 firing。这是「评估节奏等于抓取节奏」的代价，写在这里以免以后有人以为是 bug。
+
+## Webhook 配置与运维边界
+
+| 环境变量 | 默认值 | 作用 |
+| --- | --- | --- |
+| `DJANGO_ALERT_WEBHOOK_URL` | 空 | 完整的 `http://` 或 `https://` 地址；留空即关闭通知 |
+| `DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` | 空 | 可选，作为 `Authorization: Bearer` 发送 |
+| `DJANGO_ALERT_WEBHOOK_TIMEOUT` | `2.0` | 单次 POST 超时秒数，必须为正数 |
+
+Webhook 地址在启动时校验。通知失败不会重试，发送前也不会等待队列；因此它适合接 IM 机器人或轻量自动化工单，不适合作为唯一的事故记录。多 worker 部署下没有跨进程状态去重，仍应只配置一个 Prometheus 抓取目标；需要多副本高可用通知时，应在外部监控层完成。
 
 ## 运维上必须知道的两件事
 

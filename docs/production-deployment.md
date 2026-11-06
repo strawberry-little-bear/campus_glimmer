@@ -141,7 +141,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 镜像健康检查只调用 `/healthz/`（存活），`/readyz/`（就绪）由发布脚本、反向代理和人工验收调用；
 - Redis 开启 AOF，但 Redis 不是业务事实源；
 - 备份默认写入宿主机目录；异地镜像需显式配置 `BACKUP_OFFSITE_*`，默认关闭；
-- 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志汇到一起；指标的跨副本联合视图和按指标告警都已经落地（口径见[按指标告警设计](metrics-alerting-design.md)），但仍然没有人负责盯着它们——告警只评估和报告，喊人这件事在外层。
+- 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志汇到一起；指标的跨副本联合视图和按指标告警都已经落地（口径见[按指标告警设计](metrics-alerting-design.md)）。配置 `DJANGO_ALERT_WEBHOOK_URL` 后，状态翻转会尽力投递一次；升级与值班策略仍在外层。
 
 迁移已经是独立的一次性任务。会话（`cached_db` + Redis）、缓存（Redis）和上传文件（S3 兼容对象存储）都已经是副本间共享的外部依赖，`docker-compose.replicas.yml` 放开端口后 Web 即可横向扩容；仍未解决的是跨副本的日志汇总，以及数据库、对象存储、备份的独立监控；这些数字本身还没有任何通知渠道。
 
@@ -169,7 +169,9 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 抓取请求自身不计入指标，否则每次 scrape 都会把业务曲线抬高一点；
 - 端点默认关闭：未配置 `DJANGO_METRICS_TOKEN` 时返回 404，配置后抓取需带 `Authorization: Bearer <token>`，令牌比对走 `hmac.compare_digest`。
 
-没有启用共享时（LocMem 缓存，或显式关掉）计数器按进程分离：gunicorn 起几个 worker 就有几份计数，抓任一副本都只是总量的一部分。此时 `campus_glimmer_metrics_instances` 恒为 1、`campus_glimmer_metrics_shared_enabled` 恒为 0，指标回答的是「这个副本忙不忙、慢不慢、错误率有没有抬头」。启用了共享，同一次抓取拿到的就是整个服务的总量。仍在外层监控系统的是按阈值告警、保留与可视化。
+没有启用共享时（LocMem 缓存，或显式关掉）计数器按进程分离：gunicorn 起几个 worker 就有几份计数，抓任一副本都只是总量的一部分。此时 `campus_glimmer_metrics_instances` 恒为 1、`campus_glimmer_metrics_shared_enabled` 恒为 0，指标回答的是「这个副本忙不忙、慢不慢、错误率有没有抬头」。启用了共享，同一次抓取拿到的就是整个服务的总量。保留、可视化与升级策略仍在外层监控系统。
+
+告警在抓取时评估，`pending → firing` 和 `firing → inactive` 可各触发一次 Webhook。设置 `DJANGO_ALERT_WEBHOOK_URL` 开启，`DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` 可选，`DJANGO_ALERT_WEBHOOK_TIMEOUT` 默认 2 秒；URL 留空即关闭。投递是单次 best-effort POST，不重试、不持久化，失败只记入 `campus_glimmer_alert_notifications_total{result="failed"}`。多 worker 无跨进程状态去重，仍应只配置一个抓取目标。
 
 ```powershell
 curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
@@ -189,7 +191,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml -f docker-c
 
 ## 8. CI 覆盖
 
-GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。`quality` 的完整测试同时覆盖指标端点契约：标签基数、暴露格式、序列封顶与 Bearer 鉴权，跨副本联合视图的合并规则、降级路径与五个新序列（口径见[跨副本指标聚合设计](metrics-fleet-view-design.md)），以及八条指标告警的状态机、三族序列与自保路径（口径见[按指标告警设计](metrics-alerting-design.md)）。`production-deps` 用的是真 Redis，共享开关会自动生效，发布线程在整套测试期间真实运行。
+GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移一致性和完整测试；`production-deps` 任务使用 PostgreSQL 16 与 Redis 7 service，执行 `collectstatic` 并再次跑完整测试。`object-storage` 任务在 runner 上直接启动 MinIO，对默认存储执行真实上传、回源、签名 URL 与对象镜像恢复，覆盖范围与取舍见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务额外安装 PostgreSQL 16 客户端，把 `migrate` 之后的库真实 dump 到一个全新隔离库并逐表比对行数、索引与约束，对象部分恢复到第二个桶后按原 key 逐字节比对，并用一个主版本不一致的假客户端验证版本护栏会拒绝生成 dump，口径见[备份与恢复](backup-restore.md)。`quality` 的完整测试同时覆盖指标端点契约：标签基数、暴露格式、序列封顶与 Bearer 鉴权，跨副本联合视图的合并规则、降级路径与五个新序列（口径见[跨副本指标聚合设计](metrics-fleet-view-design.md)），以及八条指标告警的状态机、六族序列、可选 Webhook 投递与自保路径（口径见[按指标告警设计](metrics-alerting-design.md)）。`production-deps` 用的是真 Redis，共享开关会自动生效，发布线程在整套测试期间真实运行。
 
 ## 相关文档
 
