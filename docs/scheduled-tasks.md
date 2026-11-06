@@ -51,6 +51,17 @@ python manage.py send_operations_digest --days 30
 
 可选周期为 `7`、`30`、`90` 或 `365` 天。命令没有发现告警时不会生成空通知；同一天、同一周期重复运行时也不会向同一管理员重复投递。
 
+### 告警 Webhook 重试
+
+投递到期的告警通知，并清理长期保留的终态台账：
+
+```bash
+python manage.py flush_alert_notifications
+python manage.py flush_alert_notifications --limit 100 --prune-days 30
+```
+
+配置了 `DJANGO_ALERT_WEBHOOK_URL` 后 outbox 默认开启。Prometheus 抓取会顺带处理到期行，因此单抓取目标部署通常无需额外调度；如果抓取可能停止，建议每分钟运行一次本命令。`--limit` 控制单次最多投递数，`--prune-days` 只删除已投递、已跳过或重试耗尽的记录，不会删除仍在等待或投递中的事件。
+
 ### 互助机会摘要
 
 向存在有效商品或失物招领记录、且当前确实有可响应机会的用户发送每日摘要：

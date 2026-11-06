@@ -353,7 +353,7 @@ docker compose down -v
 容器 `HEALTHCHECK` 只走 `/healthz/`。`/readyz/` 连着三个外部依赖，拿它当存活探针的话，数据库抖一次编排系统就会把每个副本判成 unhealthy 并重启，一次存储故障被放大成全站故障。所以 `docker compose ps` 里的 `healthy` 只代表进程活着，能否接流量要看 `/readyz/`。
 
 进程级指标暴露在 `/metrics/`：默认返回 404，配置 `DJANGO_METRICS_TOKEN` 后需带
-`Authorization: Bearer` 令牌抓取。默认缓存是跨进程后端（生产即 Redis）时，每个 worker 每五秒把整份快照写进共享存储，一次抓取拿到的是整个舰队的合并视图；没启用共享时才退回到「只看到这一个副本」。启用共享后只能配一个抓取目标，否则总量会按副本数翻倍。八条盯住观测链路自己的规则在抓取那一刻评估——视图陈旧、读取失败上升、分桶不符、实例数下降、标签溢出、5xx 占比、p95 与共享未启用——结果以 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列和人读的 `/alerts/` JSON 给出；`/alerts/` 同时返回最近 100 条 `firing/resolved` 翻转（最新在前；默认写入数据库并保留最近 1000 条，数据库不可用时自动退回进程内窗口并标记降级），`campus_glimmer_alert_transitions_total` 按事件累计。配置 `DJANGO_ALERT_WEBHOOK_URL` 后，`pending → firing` 与 `firing → inactive` 会各发一次 JSON 批次，持续 firing 不重复；通知失败只计数、不重试，也不会让抓取失败，口径见[按指标告警设计](docs/metrics-alerting-design.md)。
+`Authorization: Bearer` 令牌抓取。默认缓存是跨进程后端（生产即 Redis）时，每个 worker 每五秒把整份快照写进共享存储，一次抓取拿到的是整个舰队的合并视图；没启用共享时才退回到「只看到这一个副本」。启用共享后只能配一个抓取目标，否则总量会按副本数翻倍。八条盯住观测链路自己的规则在抓取那一刻评估——视图陈旧、读取失败上升、分桶不符、实例数下降、标签溢出、5xx 占比、p95 与共享未启用——结果以 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列和人读的 `/alerts/` JSON 给出；`/alerts/` 同时返回最近 100 条 `firing/resolved` 翻转（最新在前；默认写入数据库并保留最近 1000 条，数据库不可用时自动退回进程内窗口并标记降级），`campus_glimmer_alert_transitions_total` 按事件累计。配置 `DJANGO_ALERT_WEBHOOK_URL` 后，`pending → firing` 与 `firing → inactive` 会先写入数据库 outbox 再立即投递，持续 firing 不重复；失败按指数退避重试，`/alerts/` 的 `notification_queue` 显示队列状态，数据库异常也不会让抓取失败，口径见[按指标告警设计](docs/metrics-alerting-design.md)。
 
 本地 Compose 继续使用 SQLite 与本地媒体文件。需要 PostgreSQL、Redis、MinIO 和定时备份时，使用 [生产编排](docker-compose.prod.yml)：
 
@@ -373,7 +373,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 - 域名与回滚窗口确认后再设置 `DJANGO_SECURE_HSTS_SECONDS`；
 - 需要不随宿主机一起损失的副本时配置 `BACKUP_OFFSITE_*`（留空即关闭，只填其中几项会报错），并定期做恢复演练；
 - 需要采集指标时再设置 `DJANGO_METRICS_TOKEN`，留空即保持 `/metrics/` 关闭；
-- 需要接收告警状态翻转时配置 `DJANGO_ALERT_WEBHOOK_URL` 和可选的 Bearer 令牌；留空即关闭通知，投递失败不会重试；
+- 需要接收告警状态翻转时配置 `DJANGO_ALERT_WEBHOOK_URL` 和可选的 Bearer 令牌；留空即关闭通知，配置后默认由数据库 outbox 做有界重试；
 - 不提交生产数据库、上传文件、密钥或包含用户隐私的日志；
 - 当前生产编排是单机、小规模基线，不提供自动故障转移或异地容灾。
 
@@ -416,6 +416,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 | `process_order_timeouts` | 预约超时、归还提醒与逾期催收 | 周期性运行 |
 | `expire_items` | 下架到期商品并通知发布者 | 每日运行 |
 | `send_operations_digest` | 生成管理员运营告警日报 | 按统计周期运行 |
+| `flush_alert_notifications` | 重试到期告警通知并清理旧台账 | 每分钟运行，或由抓取与恢复流程触发 |
 | `send_opportunity_digest` | 发送互助机会摘要 | 每日运行 |
 | `send_saved_search_digest` | 发送关注搜索汇总 | 按日 / 周运行 |
 | `send_campaign_update_digest` | 发送校园专题上新摘要 | 按日 / 周运行 |

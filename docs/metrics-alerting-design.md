@@ -23,17 +23,17 @@
 
 ## 五个设计取舍
 
-### 一、状态翻转时尽力通知
+### 一、状态翻转先入 outbox，再投递与重试
 
-评估不修改业务事实；除 `/alerts/` 的 JSON 和 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列外，配置 `DJANGO_ALERT_WEBHOOK_URL` 后还会在 `pending → firing` 和 `firing → inactive` 时各发一次 JSON 批次。持续 firing 不重复发送，`pending → inactive` 也不发送；URL 留空即完全关闭通知。
+评估不修改业务事实；除 `/alerts/` 的 JSON 和 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列外，配置 `DJANGO_ALERT_WEBHOOK_URL` 后，`pending → firing` 和 `firing → inactive` 会先写入 `observability_alertnotificationdelivery`，随后立即尝试一次 Webhook。持续 firing 不重复发送，`pending → inactive` 也不发送；URL 留空即完全关闭通知。
 
-这是尽力而为的 Webhook，不是一套值班系统：没有邮件、呼叫、升级路径或持久化重试队列，也不维护值班轮换。投递失败只把 `campus_glimmer_alert_notifications_total{result="failed"}` 加一，监控端点仍返回 200。做了值班系统的项目还要回答「谁在什么时候必须响应」「静默多久」，这些问题仍然留给部署方的外层监控。
+这是有界重试的 Webhook outbox，不是一套值班系统：没有邮件、呼叫、升级路径或值班轮换。投递失败会按指数退避留在表中，Prometheus 下一次抓取或 `flush_alert_notifications` 会继续尝试；达到上限后标记 `exhausted`。`/alerts/` 的 `notification_queue` 暴露状态计数与到期数量，数据库故障时端点仍返回 200，并退回一次直接投递。做了值班系统的项目还要回答「谁在什么时候必须响应」「静默多久」，这些问题仍然留给部署方的外层监控。
 
 ### 二、状态翻转写入有界数据库历史，失败时退回进程内尾部
 
 `AlertEngine` 只把真正的 `firing` 与 `resolved` 翻转交给 `DatabaseAlertHistory`，`pending`、持续 firing 和 `pending → inactive` 都不写。数据库表保留最近 1000 条，`/alerts/` 按最新在前返回最近 100 条，并显式给出 `history_limit`、`history_scope`、`history_persistent`、`history_degraded` 与 `history_retention`。内存 `deque(maxlen=100)` 始终保留，既承接关闭持久化的部署，也用于数据库故障降级。
 
-这是有界排障记录，不是可靠审计或 outbox：数据库写入或读取失败只把 `campus_glimmer_alert_history_errors_total{operation="write|read"}` 加一，端点仍返回 200 并标记降级；多 worker 仍可能重复记录，也不会补偿 Webhook 投递失败。事件里不包含 Webhook URL、Bearer Token 或其他凭据。要可靠追查跨部署历史，仍应接外层监控系统。
+这是有界排障记录，不是可靠审计：数据库写入或读取失败只把 `campus_glimmer_alert_history_errors_total{operation="write|read"}` 加一，端点仍返回 200 并标记降级；多 worker 仍可能重复记录。Webhook 重试台账单独保存在 outbox 表中，不与这条历史混用。事件里不包含 Webhook URL、Bearer Token 或其他凭据。要可靠追查跨部署历史，仍应接外层监控系统。
 
 ### 三、在抓取时评估，不起第二个定时线程
 
@@ -99,7 +99,7 @@
 
 评估整体包在 `try` 里。探针抛异常时 `/metrics/` 仍然 200，只是沿用上一次的结论，并把 `campus_glimmer_alert_evaluation_errors_total` 加一。一个 500 的监控端点比它要报告的故障更难排查：Prometheus 会记 `up == 0`，而看板上所有曲线一起消失。
 
-Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，也只计为 `failed` 并写一条不含 URL 的告警日志，不改变评估结果。请求使用短超时且不重试；同一轮的多条状态翻转会合并成一个 HTTP 请求，避免通知渠道故障把抓取拖过 scrape timeout。
+Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，也只计为 `failed` 并写一条不含 URL 的告警日志，不改变评估结果。请求使用短超时；outbox 对失败行做有界指数退避，下一次抓取或管理命令继续尝试，不会把一次网络故障放大成无限重试。没有 outbox 的本地调试模式仍保留一次性直投。
 
 `_advance` 按需建状态，不按当次的规则集合一次性建齐。两份集合一旦漂移就是一次 KeyError，而它只在运行期显形，启动时一点声音都没有。
 
@@ -107,7 +107,7 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 
 ## 覆盖范围
 
-`campus_glimmer/test_alerts.py` 共 74 项，分十一组：
+告警测试共 82 项：`campus_glimmer/test_alerts.py` 的 74 项分十一组，`observability/tests.py` 的 8 项覆盖投递队列：
 
 - **HistogramQuantileTests（6 项）**：没有分桶、没有 +Inf 桶、空档、零样本时的取值，以及 p95 的插值结果。
 - **AlertStateMachineTests（6 项）**：pending 不喊人、熬满 for 才 firing、中途恢复要重启计时、恢复要清掉 active_seconds、状态按副本交出、每条规则各自评估。
@@ -119,6 +119,7 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 - **AlertsEndpointTests（7 项）**：未配令牌 404、只允许 GET/HEAD、载荷带服务身份与计数、静默规则也在载荷里、有界历史与来源声明、历史不含 Webhook 凭据、JSON 与 `/metrics/` 给出同一个 firing 集合。
 - **AlertSelfPreservationTests（4 项）**：探针抛异常时端点仍 200 且计入评估错误、失败时沿用上一次结论、抓 `/alerts/` 不喂业务指标、单例可重置。
 - **AlertNotificationTests（10 项）**：pending 不发、首次 firing 只发一次、持续 firing 不重复、pending 恢复不发、firing 恢复发 resolved、多规则合并批次、载荷/请求头/Bearer 令牌、未配置时跳过、网络与非 2xx 失败不外溢、通知计数进入 Prometheus。
+- **AlertDeliveryQueueTests（8 项，`observability/tests.py`）**：立即投递、跨副本去重、退避后重试、重试耗尽、台账清理、队列摘要、数据库故障直投降级、管理命令重试与旧记录清理。
 - **AlertHistoryPersistenceTests（7 项）**：数据库写入与读回、1000 条上限、写入失败与读取失败降级、端点默认使用数据库历史、数据库故障不拖垮两个监控端点、显式关闭持久化。
 
 「规则读的名字与端点暴露的名字逐条相同」和「三族成员与状态机完全一致」是这里最值得留意的两条。前者防的是名字分裂（症状是规则永远不触发），后者防的是把 pending 也画成 firing（症状是看板把每条规则都显示成正在响，而所有数值本身毫无异常）。这两条在写完之后都用变异测试验证过：把对应判断改坏，有用例会红。
@@ -127,8 +128,8 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 
 这一轮**没有**做的部分，需要如实说明：
 
-- **通知是可选且不可靠的**。只支持一次 best-effort Webhook POST，没有邮件、呼叫、重试队列或持久化 outbox；进程退出或远端失败时这次翻转就丢了。多个 worker 也各自维护状态，因此仍应只配置一个抓取目标，避免重复通知。
-- **持久化历史不是可靠审计**。数据库只保留最近 1000 条状态翻转，`/alerts/` 只展示最近 100 条；数据库失败时降级为进程内窗口，多 worker 仍可能重复记录，也没有确认状态或投递记录。想看可靠的事故时间线仍然要指望外层监控系统。
+- **通知是可选且有界重试的**。数据库 outbox 保存状态、尝试次数和下次重试时间，失败可继续收敛；但它不是消息队列或值班系统，没有无限重试、人工确认、升级路径和优先级保证。多个 worker 仍各自维护状态，同一时间窗口内的翻转通过幂等键合并。
+- **持久化历史不是可靠审计**。数据库只保留最近 1000 条状态翻转，`/alerts/` 只展示最近 100 条；数据库失败时降级为进程内窗口，多 worker 仍可能重复记录。投递台账只回答通知是否送达，不替代事故时间线。
 - **没有抑制与静默**。没有「维护窗口内不喊」、没有「同一故障合并成一条」、没有升级路径。这些是值班系统的功能，不在本模块范围内。
 - **规则是硬编码的八条**。不提供用户自定义规则、不提供配置文件里的阈值、不提供 PromQL。加一条规则就是加一个 `_probe_*` 函数和一行 `RULES`。
 - **`for` 的计时依赖抓取节奏**。两次抓取间隔超过 `for` 时长的规则（300 秒那两条）在抓取间隔过长时会晚一个周期才 firing。这是「评估节奏等于抓取节奏」的代价，写在这里以免以后有人以为是 bug。
@@ -141,8 +142,14 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 | `DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` | 空 | 可选，作为 `Authorization: Bearer` 发送 |
 | `DJANGO_ALERT_WEBHOOK_TIMEOUT` | `2.0` | 单次 POST 超时秒数，必须为正数 |
 | `DJANGO_ALERT_HISTORY_DB_ENABLED` | `true` | 翻转历史是否写入数据库；关闭后只保留进程内窗口 |
+| `DJANGO_ALERT_NOTIFICATION_QUEUE_ENABLED` | `true` | 是否在配置 Webhook 后启用数据库 outbox；关闭时退回一次性直投 |
+| `DJANGO_ALERT_NOTIFICATION_MAX_ATTEMPTS` | `5` | 单条通知的最大尝试次数 |
+| `DJANGO_ALERT_NOTIFICATION_RETRY_BASE_SECONDS` | `30` | 指数退避的基础秒数 |
+| `DJANGO_ALERT_NOTIFICATION_RETRY_MAX_SECONDS` | `3600` | 单次退避上限 |
+| `DJANGO_ALERT_NOTIFICATION_DEDUPE_SECONDS` | `60` | 跨副本合并同一翻转的时间窗口 |
+| `DJANGO_ALERT_NOTIFICATION_LEASE_SECONDS` | `120` | 投递认领租约，进程崩溃后由命令接手 |
 
-Webhook 地址在启动时校验。通知失败不会重试，发送前也不会等待队列；因此它适合接 IM 机器人或轻量自动化工单，不适合作为唯一的事故记录。多 worker 部署下没有跨进程状态去重，仍应只配置一个 Prometheus 抓取目标；需要多副本高可用通知时，应在外部监控层完成。
+Webhook 地址在启动时校验。配置 URL 后默认启用 outbox；Prometheus 抓取会首次投递并继续处理到期重试，`python manage.py flush_alert_notifications` 则用于没有抓取流量时主动补投并清理默认 30 天前的终态记录。多 worker 仍各自维护状态，但同一规则、事件、状态和 60 秒窗口会生成相同幂等键；需要更严格顺序、优先队列或升级响应时，应在外部监控层完成。
 
 ## 运维上必须知道的两件事
 

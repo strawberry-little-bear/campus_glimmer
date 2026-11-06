@@ -171,7 +171,7 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 
 没有启用共享时（LocMem 缓存，或显式关掉）计数器按进程分离：gunicorn 起几个 worker 就有几份计数，抓任一副本都只是总量的一部分。此时 `campus_glimmer_metrics_instances` 恒为 1、`campus_glimmer_metrics_shared_enabled` 恒为 0，指标回答的是「这个副本忙不忙、慢不慢、错误率有没有抬头」。启用了共享，同一次抓取拿到的就是整个服务的总量。保留、可视化与升级策略仍在外层监控系统。
 
-告警在抓取时评估，`pending → firing` 和 `firing → inactive` 可各触发一次 Webhook。设置 `DJANGO_ALERT_WEBHOOK_URL` 开启，`DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` 可选，`DJANGO_ALERT_WEBHOOK_TIMEOUT` 默认 2 秒；URL 留空即关闭。投递是单次 best-effort POST，不重试、不持久化，失败只记入 `campus_glimmer_alert_notifications_total{result="failed"}`。`/alerts/` 同时返回最近 100 条 `firing/resolved` 翻转，最新在前；翻转默认写入 `observability_alerttransition`，表内最多保留 1000 条，设置 `DJANGO_ALERT_HISTORY_DB_ENABLED=false` 可关闭持久化。`history_scope`、`history_persistent`、`history_degraded` 与 `history_retention` 说明当前来源；数据库写入或读取失败时端点仍返回 200，自动退回进程内窗口，并把 `campus_glimmer_alert_history_errors_total{operation="write|read"}` 加一。`campus_glimmer_alert_transitions_total{event="firing|resolved"}` 按事件累计。多 worker 仍各自维护状态，可能重复记录和通知，仍应只配置一个抓取目标；需要可靠审计或跨副本去重时，应接外层监控。
+告警在抓取时评估，`pending → firing` 和 `firing → inactive` 可各触发一次 Webhook。设置 `DJANGO_ALERT_WEBHOOK_URL` 开启，`DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` 可选，`DJANGO_ALERT_WEBHOOK_TIMEOUT` 默认 2 秒；URL 留空即关闭。配置 URL 后默认启用数据库 outbox：事件先写入 `observability_alertnotificationdelivery`，立即尝试一次，失败按指数退避，Prometheus 下一次抓取或 `python manage.py flush_alert_notifications` 继续投递；达到上限后保留 `exhausted` 记录。`/alerts/` 的 `notification_queue` 暴露各状态计数与到期数量。翻转历史仍写入 `observability_alerttransition`，表内最多保留 1000 条，配置 `DJANGO_ALERT_HISTORY_DB_ENABLED=false` 可关闭；数据库历史失败时端点仍返回 200，自动退回进程内窗口。多 worker 各自维护状态，但同一规则、事件、状态与默认 60 秒窗口会生成相同幂等键，避免同一次翻转被重复投递。
 
 ```powershell
 curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/

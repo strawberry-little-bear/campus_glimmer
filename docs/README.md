@@ -362,6 +362,7 @@ docker compose down -v
 | `process_order_timeouts` | 预约超时、归还提醒和逾期催收 | 周期性运行 |
 | `expire_items` | 下架到期商品并通知发布者 | 每日运行 |
 | `send_operations_digest` | 生成管理员运营告警日报 | 按统计周期运行 |
+| `flush_alert_notifications` | 重试到期告警通知并清理旧台账 | 每分钟运行，或由抓取与恢复流程触发 |
 | `send_opportunity_digest` | 发送互助机会摘要 | 每日运行 |
 | `send_saved_search_digest` | 发送关注搜索汇总 | 按日/周频率运行 |
 | `send_campaign_update_digest` | 发送校园专题上新摘要 | 按日/周频率运行 |
