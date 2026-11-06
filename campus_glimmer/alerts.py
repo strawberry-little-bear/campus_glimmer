@@ -58,6 +58,16 @@ METRIC_VIEW_AGE = PREFIX + '_metrics_view_age_seconds'
 METRIC_BUCKET_MISMATCH = PREFIX + '_metrics_bucket_mismatch'
 METRIC_READ_ERRORS = PREFIX + '_metrics_shared_read_errors_total'
 
+# outbox 的状态标签必须固定：某类状态暂时为 0 时也输出样本，否则 Prometheus
+# 里这条序列会消失，告警表达式和看板会随队列内容改变形状。
+ALERT_DELIVERY_STATUSES = (
+    'pending',
+    'delivering',
+    'delivered',
+    'skipped',
+    'exhausted',
+)
+
 # ---- 阈值与节奏 ----
 
 # 视图陈旧：默认五秒发布一次，三倍没更新就说明发布线程停了或副本没了。
@@ -869,13 +879,26 @@ def _alert_labels(state):
     return (('alertname', state['name']), ('severity', state['severity']))
 
 
-def _alert_families(states, counters):
+def _alert_families(states, counters, delivery=None):
     """把告警状态整理成与 :func:`campus_glimmer.metrics._families` 同形的家族。
 
     样本统一走 metrics 的 :func:`plain_sample`：同一个形状意味着
     ``render_families`` 和 ``iter_samples`` 不需要为告警单开一条分支，而
     分支正是两侧口径漂移开始的地方。
+
+    ``delivery`` 缺省为关闭状态，只给直接构造告警家族的测试与调用方使用；
+    ``/metrics/`` 始终传入同一个 ``delivery_snapshot()``，避免一次抓取查询
+    两次 outbox 后看见两份互相矛盾的数字。
     """
+
+    if delivery is None:
+        delivery = {
+            'enabled': False,
+            'degraded': False,
+            'due': 0,
+            'status': {},
+        }
+    delivery_status = delivery.get('status') or {}
 
     return [
         (
@@ -895,6 +918,27 @@ def _alert_families(states, counters):
             '条件连续成立的秒数；firing 时即故障已持续的时长。',
             [plain_sample(_alert_labels(state), state['active_seconds'])
              for state in states if state['state'] != 'inactive'],
+        ),
+        (
+            PREFIX + '_alert_notification_queue', 'gauge',
+            '告警 Webhook outbox 中的记录数，按 pending/delivering/delivered/skipped/exhausted 区分。',
+            [plain_sample((('status', status),), delivery_status.get(status, 0))
+             for status in ALERT_DELIVERY_STATUSES],
+        ),
+        (
+            PREFIX + '_alert_notification_queue_due', 'gauge',
+            '告警 Webhook outbox 中已到重试时间、等待投递的记录数。',
+            [plain_sample((), delivery.get('due', 0))],
+        ),
+        (
+            PREFIX + '_alert_notification_queue_enabled', 'gauge',
+            '是否启用了数据库 Webhook outbox；0 表示通知未配置或退回一次性直投。',
+            [plain_sample((), 1 if delivery.get('enabled') else 0)],
+        ),
+        (
+            PREFIX + '_alert_notification_queue_degraded', 'gauge',
+            'outbox 摘要读取是否失败；为 1 时下面的状态计数均不可信。',
+            [plain_sample((), 1 if delivery.get('degraded') else 0)],
         ),
         (
             PREFIX + '_alert_notifications_total', 'counter',
@@ -932,7 +976,8 @@ def render_alerts(samples, now=None):
 
     engine = get_engine()
     states = engine.evaluate(samples, now=now)
-    return render_families(_alert_families(states, engine.counters()))
+    delivery = engine.delivery_snapshot()
+    return render_families(_alert_families(states, engine.counters(), delivery))
 
 
 def _current_gauges(samples):

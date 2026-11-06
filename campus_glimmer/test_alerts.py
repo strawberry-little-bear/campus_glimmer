@@ -25,6 +25,7 @@ from django.db import OperationalError
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from .alerts import (
+    ALERT_DELIVERY_STATUSES,
     ALERT_HISTORY_LIMIT,
     METRIC_BUCKET_MISMATCH,
     METRIC_DURATION_BUCKET,
@@ -61,7 +62,7 @@ from .metrics import (
 )
 from .test_metrics import find, parse_exposition
 from observability.history import DB_HISTORY_LIMIT, DatabaseAlertHistory
-from observability.models import AlertTransition
+from observability.models import AlertNotificationDelivery, AlertTransition
 
 TOKEN = 'top-secret-token'
 AUTH = {'HTTP_AUTHORIZATION': 'Bearer ' + TOKEN}
@@ -762,6 +763,10 @@ class MetricsExposureTests(SimpleTestCase):
         self.assertEqual(len(declared), len(set(declared)))
         for name in ('campus_glimmer_alert_firing', 'campus_glimmer_alert_pending',
                      'campus_glimmer_alert_active_seconds',
+                     'campus_glimmer_alert_notification_queue',
+                     'campus_glimmer_alert_notification_queue_due',
+                     'campus_glimmer_alert_notification_queue_enabled',
+                     'campus_glimmer_alert_notification_queue_degraded',
                      'campus_glimmer_alert_notifications_total',
                      'campus_glimmer_alert_transitions_total',
                      'campus_glimmer_alert_evaluations_total',
@@ -843,6 +848,77 @@ class MetricsExposureTests(SimpleTestCase):
         self.assertEqual(
             find(samples, 'campus_glimmer_alert_evaluation_errors_total'), [0])
 
+    def test_the_notification_queue_exposes_a_fixed_status_shape(self):
+        self.assertEqual(
+            ALERT_DELIVERY_STATUSES,
+            tuple(value for value, _label in AlertNotificationDelivery.STATUS_CHOICES),
+        )
+        queue = MagicMock()
+        queue.snapshot.return_value = {
+            'enabled': True,
+            'degraded': False,
+            'due': 2,
+            'status': {'pending': 3, 'delivered': 4},
+        }
+        with patch.object(get_engine(), '_delivery_queue', queue):
+            samples = parse_exposition(render_alerts([]))
+
+        queue.snapshot.assert_called_once_with()
+        self.assertEqual(
+            [find(samples, 'campus_glimmer_alert_notification_queue', status=status)[0]
+             for status in ALERT_DELIVERY_STATUSES],
+            [3, 0, 4, 0, 0],
+        )
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_due'), [2])
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_enabled'), [1])
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_degraded'), [0])
+
+    def test_a_disabled_notification_queue_still_exposes_zeroes(self):
+        with patch.object(get_engine(), '_delivery_queue', None):
+            samples = parse_exposition(render_alerts([]))
+        self.assertEqual(
+            [find(samples, 'campus_glimmer_alert_notification_queue', status=status)[0]
+             for status in ALERT_DELIVERY_STATUSES],
+            [0, 0, 0, 0, 0],
+        )
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_due'), [0])
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_enabled'), [0])
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_degraded'), [0])
+
+    def test_a_degraded_notification_queue_keeps_both_endpoints_responsive(self):
+        queue = MagicMock()
+        queue.snapshot.side_effect = OperationalError('outbox unavailable')
+        with patch.object(get_engine(), '_delivery_queue', queue), \
+                self.assertLogs('campus_glimmer.alerts', level='WARNING'):
+            metrics_response = self.client.get(METRICS_PATH, **AUTH)
+            alerts_response = self.client.get(ALERTS_PATH, **AUTH)
+
+        self.assertEqual(metrics_response.status_code, 200)
+        self.assertEqual(alerts_response.status_code, 200)
+        samples = parse_exposition(metrics_response.content.decode('utf-8'))
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_degraded'), [1])
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_notification_queue_enabled'), [1])
+        self.assertEqual(
+            [find(samples, 'campus_glimmer_alert_notification_queue', status=status)[0]
+             for status in ALERT_DELIVERY_STATUSES],
+            [0, 0, 0, 0, 0],
+        )
+        payload = json.loads(alerts_response.content.decode('utf-8'))
+        self.assertEqual(payload['notification_queue'], {
+            'enabled': True,
+            'degraded': True,
+            'due': 0,
+            'status': {},
+        })
+
     def test_the_alerts_are_appended_after_the_business_metrics(self):
         # 人从前往后读：先看业务数字，再看监控自己的状态。
         self.client.get('/healthz/')
@@ -851,10 +927,14 @@ class MetricsExposureTests(SimpleTestCase):
             line.split()[2] for line in text.split('\n')
             if line.startswith('# TYPE ')
         ]
-        self.assertEqual(declared[-8:], [
+        self.assertEqual(declared[-12:], [
             'campus_glimmer_alert_firing',
             'campus_glimmer_alert_pending',
             'campus_glimmer_alert_active_seconds',
+            'campus_glimmer_alert_notification_queue',
+            'campus_glimmer_alert_notification_queue_due',
+            'campus_glimmer_alert_notification_queue_enabled',
+            'campus_glimmer_alert_notification_queue_degraded',
             'campus_glimmer_alert_notifications_total',
             'campus_glimmer_alert_transitions_total',
             'campus_glimmer_alert_history_errors_total',
