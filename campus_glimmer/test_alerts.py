@@ -21,7 +21,8 @@ import math
 from unittest.mock import MagicMock, patch
 
 from django.conf import settings
-from django.test import SimpleTestCase, override_settings
+from django.db import OperationalError
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from .alerts import (
     ALERT_HISTORY_LIMIT,
@@ -59,6 +60,8 @@ from .metrics import (
     reset_registry,
 )
 from .test_metrics import find, parse_exposition
+from observability.history import DB_HISTORY_LIMIT, DatabaseAlertHistory
+from observability.models import AlertTransition
 
 TOKEN = 'top-secret-token'
 AUTH = {'HTTP_AUTHORIZATION': 'Bearer ' + TOKEN}
@@ -414,6 +417,7 @@ class SampleWindowTests(SimpleTestCase):
 
 
 @override_settings(METRICS_TOKEN=TOKEN)
+@override_settings(ALERT_HISTORY_DB_ENABLED=False)
 class AlertNotificationTests(SimpleTestCase):
     """Webhook 只在状态翻转时发一次，且它的故障不能外溢。"""
 
@@ -641,7 +645,7 @@ class AlertHistoryTests(SimpleTestCase):
             set(event),
             {
                 'event', 'name', 'severity', 'summary', 'state', 'value',
-                'detail', 'since', 'occurred_at', 'active_seconds',
+                'detail', 'since', 'occurred_at', 'active_seconds', 'instance',
             },
         )
 
@@ -739,6 +743,7 @@ class AlertHistoryTests(SimpleTestCase):
 
 
 @override_settings(METRICS_TOKEN=TOKEN)
+@override_settings(ALERT_HISTORY_DB_ENABLED=False)
 class MetricsExposureTests(SimpleTestCase):
     """告警状态在 /metrics/ 上的形状，以及与看板口径的一致性。"""
 
@@ -846,18 +851,19 @@ class MetricsExposureTests(SimpleTestCase):
             line.split()[2] for line in text.split('\n')
             if line.startswith('# TYPE ')
         ]
-        self.assertEqual(declared[-7:], [
+        self.assertEqual(declared[-8:], [
             'campus_glimmer_alert_firing',
             'campus_glimmer_alert_pending',
             'campus_glimmer_alert_active_seconds',
             'campus_glimmer_alert_notifications_total',
             'campus_glimmer_alert_transitions_total',
+            'campus_glimmer_alert_history_errors_total',
             'campus_glimmer_alert_evaluations_total',
             'campus_glimmer_alert_evaluation_errors_total',
         ])
 
 
-@override_settings(METRICS_TOKEN=TOKEN)
+@override_settings(METRICS_TOKEN=TOKEN, ALERT_HISTORY_DB_ENABLED=False)
 class AlertsEndpointTests(SimpleTestCase):
     """/alerts/ 是给人看的同一个数的另一种形状。"""
 
@@ -906,6 +912,8 @@ class AlertsEndpointTests(SimpleTestCase):
         self.assertEqual(payload['history_limit'], ALERT_HISTORY_LIMIT)
         self.assertEqual(payload['history_scope'], 'process')
         self.assertIs(payload['history_persistent'], False)
+        self.assertIs(payload['history_degraded'], False)
+        self.assertIsNone(payload['history_retention'])
         self.assertEqual(payload['history'][0]['event'], 'firing')
 
     def test_the_payload_history_never_contains_webhook_credentials(self):
@@ -943,7 +951,7 @@ class AlertsEndpointTests(SimpleTestCase):
         )
 
 
-@override_settings(METRICS_TOKEN=TOKEN)
+@override_settings(METRICS_TOKEN=TOKEN, ALERT_HISTORY_DB_ENABLED=False)
 class AlertSelfPreservationTests(SimpleTestCase):
     """监控自己出事时的表现，比它顺风顺水时的表现更值得钉住。"""
 
@@ -996,3 +1004,124 @@ class AlertSelfPreservationTests(SimpleTestCase):
         replaced = reset_engine()
         self.assertIsNot(replaced, first)
         self.assertIs(get_engine(), replaced)
+class _BrokenAlertHistory:
+    retention_limit = DB_HISTORY_LIMIT
+
+    def record(self, _event):
+        raise OperationalError('history database unavailable')
+
+    def recent(self, _limit):
+        raise OperationalError('history database unavailable')
+
+
+@override_settings(METRICS_TOKEN=TOKEN)
+class AlertHistoryPersistenceTests(TestCase):
+    """持久化历史跨重启可查，但数据库故障不能成为告警链路的单点。"""
+
+    def setUp(self):
+        reset_engine()
+        self.addCleanup(reset_engine)
+
+    def _rule(self, name='Persistent'):
+        return Rule(name, 'critical', '持久化测试', 0, _FakeProbe(on=True))
+
+    def test_a_transition_survives_a_new_engine(self):
+        first = AlertEngine(rules=[self._rule()], history_store=DatabaseAlertHistory())
+        first.evaluate([], now=10.0)
+        self.assertEqual(AlertTransition.objects.count(), 1)
+
+        restarted = AlertEngine(rules=[], history_store=DatabaseAlertHistory())
+        snapshot = restarted.history_snapshot()
+        self.assertEqual(snapshot['scope'], 'database')
+        self.assertIs(snapshot['persistent'], True)
+        self.assertIs(snapshot['degraded'], False)
+        self.assertEqual(snapshot['retention_limit'], DB_HISTORY_LIMIT)
+        self.assertEqual(snapshot['events'][0]['event'], 'firing')
+        self.assertEqual(snapshot['events'][0]['name'], 'Persistent')
+        self.assertEqual(snapshot['events'][0]['occurred_at'], 10.0)
+        self.assertTrue(snapshot['events'][0]['instance'])
+
+    def test_firing_and_resolution_are_both_persisted_newest_first(self):
+        probe = _FakeProbe(on=True)
+        engine = AlertEngine(
+            rules=[Rule('Cycle', 'warning', '周期测试', 0, probe)],
+            history_store=DatabaseAlertHistory(),
+        )
+        engine.evaluate([], now=1.0)
+        probe.on = False
+        engine.evaluate([], now=7.0)
+        history = engine.history()
+        self.assertEqual([item['event'] for item in history], ['resolved', 'firing'])
+        self.assertEqual(AlertTransition.objects.count(), 2)
+        self.assertEqual(history[0]['active_seconds'], 6.0)
+
+    def test_database_history_is_bounded(self):
+        with patch('observability.history.DB_HISTORY_LIMIT', 2):
+            store = DatabaseAlertHistory()
+            probe = _FakeProbe(on=True)
+            engine = AlertEngine(
+                rules=[Rule('Bounded', 'warning', '有界测试', 0, probe)],
+                history_store=store,
+            )
+            for step in range(4):
+                probe.on = step % 2 == 0
+                engine.evaluate([], now=float(step))
+            self.assertEqual(AlertTransition.objects.count(), 2)
+
+    def test_write_and_read_failures_fall_back_to_memory(self):
+        engine = AlertEngine(
+            rules=[self._rule('Degraded')],
+            history_store=_BrokenAlertHistory(),
+        )
+        states = engine.evaluate([], now=3.0)
+        self.assertEqual(states[0]['state'], 'firing')
+        snapshot = engine.history_snapshot()
+        self.assertEqual(snapshot['scope'], 'process')
+        self.assertIs(snapshot['persistent'], False)
+        self.assertIs(snapshot['degraded'], True)
+        self.assertEqual(snapshot['events'][0]['name'], 'Degraded')
+        self.assertEqual(
+            engine.counters()['history_errors'],
+            {'write': 1, 'read': 1},
+        )
+
+    def test_the_alerts_endpoint_uses_database_history_by_default(self):
+        engine = get_engine()
+        with patch.object(engine, '_rules', (self._rule('EndpointPersistent'),)):
+            response = self.client.get(ALERTS_PATH, **AUTH)
+        payload = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload['history_scope'], 'database')
+        self.assertIs(payload['history_persistent'], True)
+        self.assertIs(payload['history_degraded'], False)
+        self.assertEqual(payload['history_retention'], DB_HISTORY_LIMIT)
+        self.assertEqual(payload['history'][0]['name'], 'EndpointPersistent')
+
+    def test_database_failure_cannot_take_down_either_observability_endpoint(self):
+        engine = get_engine()
+        with patch.object(engine, '_history_store', _BrokenAlertHistory()), \
+                patch.object(engine, '_rules', (self._rule('OutageSafe'),)):
+            metrics = self.client.get(METRICS_PATH, **AUTH)
+            alerts = self.client.get(ALERTS_PATH, **AUTH)
+        self.assertEqual(metrics.status_code, 200)
+        self.assertEqual(alerts.status_code, 200)
+        payload = json.loads(alerts.content.decode('utf-8'))
+        self.assertEqual(payload['history_scope'], 'process')
+        self.assertIs(payload['history_persistent'], False)
+        self.assertIs(payload['history_degraded'], True)
+        self.assertEqual(payload['history'][0]['name'], 'OutageSafe')
+        samples = parse_exposition(metrics.content.decode('utf-8'))
+        self.assertEqual(
+            find(samples, 'campus_glimmer_alert_history_errors_total',
+                 operation='write'),
+            [1],
+        )
+
+    @override_settings(ALERT_HISTORY_DB_ENABLED=False)
+    def test_persistence_can_be_disabled_without_changing_the_engine_contract(self):
+        engine = reset_engine()
+        self.assertIsNone(engine._history_store)
+        with patch.object(engine, '_rules', (self._rule('MemoryOnly'),)):
+            engine.evaluate([], now=1.0)
+        self.assertEqual(AlertTransition.objects.count(), 0)
+        self.assertEqual(engine.history_snapshot()['scope'], 'process')

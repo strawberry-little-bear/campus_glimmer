@@ -24,7 +24,7 @@ jobs:
       - name: 安装依赖
         run: python -m pip install -r requirements.txt
       - name: Python 语法检查
-        run: python -m compileall -q accounts campus_glimmer chat_messages listings
+        run: python -m compileall -q accounts campus_glimmer chat_messages listings observability
       - name: Django 系统检查
         run: python manage.py check
       - name: 数据库迁移检查

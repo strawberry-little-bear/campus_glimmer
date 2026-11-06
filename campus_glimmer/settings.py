@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'accounts',
     'listings',
     'chat_messages',
+    'observability',
 ]
 
 MIDDLEWARE = [
@@ -231,6 +232,10 @@ if ALERT_WEBHOOK_URL:
         raise ImproperlyConfigured(
             'DJANGO_ALERT_WEBHOOK_URL 必须是完整的 http:// 或 https:// 地址'
         )
+
+# 告警翻转历史默认写入数据库，重启和多 worker 后仍可查；关闭后只保留进程内窗口。
+# 写入/读取都是尽力而为，数据库故障只降级历史，不影响告警评估和监控端点。
+ALERT_HISTORY_DB_ENABLED = _env_bool('DJANGO_ALERT_HISTORY_DB_ENABLED', True)
 
 # 跨副本指标聚合。留空表示按缓存后端自己判断：LocMem 是进程内的，多 worker 下各存
 # 各的，开了只会给出「只有我自己」的假象；Redis 一类跨进程后端默认开。启用后要把

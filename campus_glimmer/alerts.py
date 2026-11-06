@@ -37,6 +37,7 @@ from .metrics import (
     ALERTS_PATH,
     ALERTS_URL_NAME,
     PREFIX,
+    instance_id,
     is_authorised,
     iter_samples,
     plain_sample,
@@ -539,10 +540,11 @@ RULES = (
 class AlertEngine:
     """按规则评估样本，维护 pending → firing 的状态机。"""
 
-    def __init__(self, rules=RULES, window=None, notifier=None):
+    def __init__(self, rules=RULES, window=None, notifier=None, history_store=None):
         self._rules = tuple(rules)
         self._window = SampleWindow() if window is None else window
         self._notifier = notifier
+        self._history_store = history_store
         # 状态按需建，不在这里按当次的规则集合一次性建齐：两份集合一旦漂移
         # 就是一次 KeyError，而它只在运行期显形，启动时一点声音都没有。
         self._states = {}
@@ -551,6 +553,7 @@ class AlertEngine:
         self._errors = 0
         self._notifications = {'delivered': 0, 'failed': 0, 'skipped': 0}
         self._transitions = {'firing': 0, 'resolved': 0}
+        self._history_errors = {'write': 0, 'read': 0}
         self._history = deque(maxlen=ALERT_HISTORY_LIMIT)
         self._last = []
 
@@ -586,9 +589,26 @@ class AlertEngine:
             return self.states()
         with self._lock:
             self._last = results
+        self._persist_events(notifications)
         if notifications and self._notifier is not None:
             self._deliver_notifications(notifications, now)
         return results
+
+    def _persist_events(self, events):
+        """把翻转写入外部历史；失败只降级历史，不影响评估和通知。"""
+
+        if self._history_store is None or not events:
+            return
+        for event in events:
+            try:
+                self._history_store.record(event)
+            except Exception as error:
+                with self._lock:
+                    self._history_errors['write'] += 1
+                logger.warning(
+                    '告警历史写入失败，保留进程内记录：%s: %s',
+                    type(error).__name__, error,
+                )
 
     def _deliver_notifications(self, events, now):
         try:
@@ -614,8 +634,63 @@ class AlertEngine:
     def history(self):
         """返回最近的状态翻转，最新在前；调用方拿到的是副本。"""
 
+        return self.history_snapshot()['events']
+
+    def history_snapshot(self):
+        """返回历史及其真实来源；持久化故障时自动退回进程内窗口。"""
+
         with self._lock:
-            return [dict(event) for event in reversed(self._history)]
+            local = [dict(event) for event in reversed(self._history)]
+            write_errors = self._history_errors['write']
+        store = self._history_store
+        if store is None:
+            return {
+                'events': local,
+                'scope': 'process',
+                'persistent': False,
+                'degraded': False,
+                'retention_limit': None,
+            }
+        try:
+            persisted = store.recent(ALERT_HISTORY_LIMIT)
+        except Exception as error:
+            with self._lock:
+                self._history_errors['read'] += 1
+            logger.warning(
+                '告警历史读取失败，退回进程内记录：%s: %s',
+                type(error).__name__, error,
+            )
+            return {
+                'events': local,
+                'scope': 'process',
+                'persistent': False,
+                'degraded': True,
+                'retention_limit': getattr(store, 'retention_limit', None),
+            }
+        return {
+            'events': self._merge_history(persisted, local),
+            'scope': 'database',
+            'persistent': True,
+            'degraded': write_errors > 0,
+            'retention_limit': getattr(store, 'retention_limit', None),
+        }
+
+    @staticmethod
+    def _merge_history(persisted, local):
+        """数据库成功读回时也保留尚未写成功的最近内存事件。"""
+
+        merged = {}
+        for event in list(persisted) + list(local):
+            key = (
+                event.get('event'), event.get('name'), event.get('occurred_at'),
+                event.get('instance'), event.get('state'),
+            )
+            merged.setdefault(key, dict(event))
+        return sorted(
+            merged.values(),
+            key=lambda event: event.get('occurred_at') or 0.0,
+            reverse=True,
+        )[:ALERT_HISTORY_LIMIT]
 
     def counters(self):
         with self._lock:
@@ -624,6 +699,7 @@ class AlertEngine:
                 'errors': self._errors,
                 'notifications': dict(self._notifications),
                 'transitions': dict(self._transitions),
+                'history_errors': dict(self._history_errors),
             }
 
     def _advance(self, rule, fired, value, detail, now):
@@ -674,6 +750,7 @@ class AlertEngine:
             'since': since,
             'occurred_at': now,
             'active_seconds': active_seconds,
+            'instance': instance_id(),
         }
         # 历史和通知各拿一份副本：通知器是外部边界，不能让它的实现有机会
         # 改动排障窗口里的记录。
@@ -700,6 +777,18 @@ _engine = None
 _engine_lock = threading.Lock()
 
 
+def _new_engine():
+    history_store = None
+    if getattr(settings, 'ALERT_HISTORY_DB_ENABLED', True):
+        from observability.history import DatabaseAlertHistory
+
+        history_store = DatabaseAlertHistory()
+    return AlertEngine(
+        notifier=AlertNotifier.from_settings(),
+        history_store=history_store,
+    )
+
+
 def get_engine():
     """进程内唯一的评估器。"""
 
@@ -707,7 +796,7 @@ def get_engine():
     if _engine is None:
         with _engine_lock:
             if _engine is None:
-                _engine = AlertEngine(notifier=AlertNotifier.from_settings())
+                _engine = _new_engine()
     return _engine
 
 
@@ -716,7 +805,7 @@ def reset_engine():
 
     global _engine
     with _engine_lock:
-        _engine = AlertEngine(notifier=AlertNotifier.from_settings())
+        _engine = _new_engine()
     return _engine
 
 
@@ -764,6 +853,12 @@ def _alert_families(states, counters):
              for event in ('firing', 'resolved')],
         ),
         (
+            PREFIX + '_alert_history_errors_total', 'counter',
+            '告警历史持久化写入或读取失败的次数，按 operation 区分。',
+            [plain_sample((('operation', operation),), counters['history_errors'][operation])
+             for operation in ('write', 'read')],
+        ),
+        (
             PREFIX + '_alert_evaluations_total', 'counter',
             '告警评估完成的次数。',
             [plain_sample((), counters['evaluations'])],
@@ -798,6 +893,7 @@ def alerts_payload(states, samples, now):
     counts = {'firing': 0, 'pending': 0, 'inactive': 0}
     for state in states:
         counts[state['state']] += 1
+    history = get_engine().history_snapshot()
     return {
         'service': settings.METRICS_SERVICE_NAME,
         'generated_at': now,
@@ -805,10 +901,12 @@ def alerts_payload(states, samples, now):
         'instances': gauges.get(METRIC_INSTANCES, 1),
         'counts': counts,
         'alerts': states,
-        'history': get_engine().history(),
+        'history': history['events'],
         'history_limit': ALERT_HISTORY_LIMIT,
-        'history_scope': 'process',
-        'history_persistent': False,
+        'history_retention': history['retention_limit'],
+        'history_scope': history['scope'],
+        'history_persistent': history['persistent'],
+        'history_degraded': history['degraded'],
     }
 
 
