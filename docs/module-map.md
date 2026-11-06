@@ -573,7 +573,7 @@ campus_glimmer/
 ## docs/ 下与本项目运营口径相关的设计文档
 
 <details>
-<summary>设计文档清单（120 篇，持续更新）</summary>
+<summary>设计文档清单（121 篇，持续更新）</summary>
 
 - **`academic-phase-supply-preparation-design.md`**：阶段切换前的分类供给预热，只读历史同阶段需求与当前 7 天供给
 
