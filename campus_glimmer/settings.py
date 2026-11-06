@@ -237,6 +237,30 @@ if ALERT_WEBHOOK_URL:
 # 写入/读取都是尽力而为，数据库故障只降级历史，不影响告警评估和监控端点。
 ALERT_HISTORY_DB_ENABLED = _env_bool('DJANGO_ALERT_HISTORY_DB_ENABLED', True)
 
+# 配置 Webhook 后，状态翻转先写入数据库 outbox，再尝试立即投递；失败由
+# flush_alert_notifications 管理命令按指数退避重试。关闭后退回原先的一次性
+# best-effort 投递，仅适合本地调试。
+ALERT_NOTIFICATION_QUEUE_ENABLED = _env_bool(
+    'DJANGO_ALERT_NOTIFICATION_QUEUE_ENABLED', True,
+)
+ALERT_NOTIFICATION_MAX_ATTEMPTS = max(_env_int(
+    'DJANGO_ALERT_NOTIFICATION_MAX_ATTEMPTS', 5,
+), 1)
+ALERT_NOTIFICATION_RETRY_BASE_SECONDS = max(_env_float(
+    'DJANGO_ALERT_NOTIFICATION_RETRY_BASE_SECONDS', 30.0,
+), 0.1)
+ALERT_NOTIFICATION_RETRY_MAX_SECONDS = max(_env_float(
+    'DJANGO_ALERT_NOTIFICATION_RETRY_MAX_SECONDS', 3600.0,
+), ALERT_NOTIFICATION_RETRY_BASE_SECONDS)
+# 多副本没有共享状态机，同一次翻转的 occurred_at 会相差几秒；这个窗口用于
+# 生成跨副本一致的幂等键。窗口内的快速复发会被合并，这是当前方案的真实边界。
+ALERT_NOTIFICATION_DEDUPE_SECONDS = max(_env_float(
+    'DJANGO_ALERT_NOTIFICATION_DEDUPE_SECONDS', 60.0,
+), 0.1)
+ALERT_NOTIFICATION_LEASE_SECONDS = max(_env_float(
+    'DJANGO_ALERT_NOTIFICATION_LEASE_SECONDS', 120.0,
+), 0.1)
+
 # 跨副本指标聚合。留空表示按缓存后端自己判断：LocMem 是进程内的，多 worker 下各存
 # 各的，开了只会给出「只有我自己」的假象；Redis 一类跨进程后端默认开。启用后要把
 # Prometheus 的抓取目标只留一个 /metrics/——每个副本返回的都是同一份合并视图，

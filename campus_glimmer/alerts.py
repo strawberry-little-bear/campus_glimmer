@@ -103,8 +103,9 @@ SHARED_DISABLED_FOR = 600.0
 # 历史窗口必须不小于任何规则的窗口，否则规则会「忘了」它还需要的样本。
 WINDOW_MAX_AGE = 3900.0
 
-# Webhook 是状态翻转上的尽力而为通知，不是可靠消息队列：一次抓取最多发一个
-# 批次，超时必须短到即使远端挂住也不会把监控端点一起拖过常见 scrape timeout。
+# Webhook 单次请求必须足够短，即使远端挂住也不能把监控端点拖过常见 scrape
+# timeout。配置数据库 outbox 后，失败由管理命令重试；没有 outbox 时才退回
+# 原先的一次性尽力而为语义。
 WEBHOOK_TIMEOUT_SECONDS = 2.0
 
 # 最近一次进程生命周期内的状态翻转只保留一个有界尾部。它是给人排障的窗口，
@@ -147,12 +148,12 @@ def histogram_quantile(buckets, quantile):
 
 
 class AlertNotifier:
-    """把一次评估里的状态翻转投递成一个 JSON 批次。
+    """把一批状态翻转投递成一次 JSON POST。
 
     URL 未配置时什么都不发，但把事件记成 ``skipped``；配置了却失败时记成
     ``failed``。两种情况都不抛给调用方——监控端点不能因为喊人的渠道坏了而
-    返回 500。这里没有重试队列：下一轮评估已经没有这次翻转事件，重发需要
-    持久化 outbox，那是另一个可靠性问题，不在本轮悄悄假装已经解决。
+    返回 500。是否持久化、重试与去重由调用方的 outbox 决定；通知器本身只
+    负责一次网络请求。
     """
 
     def __init__(self, url='', token='', timeout=WEBHOOK_TIMEOUT_SECONDS,
@@ -540,18 +541,22 @@ RULES = (
 class AlertEngine:
     """按规则评估样本，维护 pending → firing 的状态机。"""
 
-    def __init__(self, rules=RULES, window=None, notifier=None, history_store=None):
+    def __init__(self, rules=RULES, window=None, notifier=None, history_store=None,
+                 delivery_queue=None):
         self._rules = tuple(rules)
         self._window = SampleWindow() if window is None else window
         self._notifier = notifier
         self._history_store = history_store
+        self._delivery_queue = delivery_queue
         # 状态按需建，不在这里按当次的规则集合一次性建齐：两份集合一旦漂移
         # 就是一次 KeyError，而它只在运行期显形，启动时一点声音都没有。
         self._states = {}
         self._lock = threading.Lock()
         self._evaluations = 0
         self._errors = 0
-        self._notifications = {'delivered': 0, 'failed': 0, 'skipped': 0}
+        self._notifications = {
+            'delivered': 0, 'failed': 0, 'skipped': 0, 'deduplicated': 0,
+        }
         self._transitions = {'firing': 0, 'resolved': 0}
         self._history_errors = {'write': 0, 'read': 0}
         self._history = deque(maxlen=ALERT_HISTORY_LIMIT)
@@ -611,18 +616,36 @@ class AlertEngine:
                 )
 
     def _deliver_notifications(self, events, now):
-        try:
-            outcomes = self._notifier.deliver(events, now)
-            if not isinstance(outcomes, dict):
-                raise TypeError('notifier result must be a dict')
-        except Exception as error:
-            # 通知器是监控端点的下游，不是它的前置条件。即使测试替身或未来
-            # 实现漏掉了异常处理，也只能让这次投递失败，不能把 /metrics/ 拽成 500。
-            logger.warning(
-                '告警 Webhook 通知器异常（%d 条）：%s',
-                len(events), type(error).__name__,
-            )
-            outcomes = {'failed': len(events)}
+        outcomes = None
+        if self._delivery_queue is not None:
+            try:
+                from datetime import datetime, timezone as datetime_timezone
+
+                outcomes = self._delivery_queue.enqueue_and_deliver(
+                    events,
+                    self._notifier,
+                    now=datetime.fromtimestamp(now, tz=datetime_timezone.utc),
+                )
+            except Exception as error:
+                # 队列数据库故障不能让告警通知彻底消失：退回一次直接投递，
+                # 同时不让监控端点因为一个附属存储而返回 500。
+                logger.warning(
+                    '告警 outbox 不可用，退回一次直接投递（%d 条）：%s',
+                    len(events), type(error).__name__,
+                )
+        if outcomes is None:
+            try:
+                outcomes = self._notifier.deliver(events, now)
+                if not isinstance(outcomes, dict):
+                    raise TypeError('notifier result must be a dict')
+            except Exception as error:
+                # 通知器是监控端点的下游，不是它的前置条件。即使测试替身或未来
+                # 实现漏掉了异常处理，也只能让这次投递失败，不能把 /metrics/ 拽成 500。
+                logger.warning(
+                    '告警 Webhook 通知器异常（%d 条）：%s',
+                    len(events), type(error).__name__,
+                )
+                outcomes = {'failed': len(events)}
         with self._lock:
             for result in self._notifications:
                 self._notifications[result] += outcomes.get(result, 0)
@@ -700,6 +723,30 @@ class AlertEngine:
                 'notifications': dict(self._notifications),
                 'transitions': dict(self._transitions),
                 'history_errors': dict(self._history_errors),
+            }
+
+    def delivery_snapshot(self):
+        """返回 Webhook outbox 摘要；未启用或存储故障时也不影响端点。"""
+
+        queue = self._delivery_queue
+        if queue is None:
+            return {
+                'enabled': False,
+                'degraded': False,
+                'due': 0,
+                'status': {},
+            }
+        try:
+            return queue.snapshot()
+        except Exception as error:
+            logger.warning(
+                '告警 outbox 摘要读取失败：%s', type(error).__name__,
+            )
+            return {
+                'enabled': True,
+                'degraded': True,
+                'due': 0,
+                'status': {},
             }
 
     def _advance(self, rule, fired, value, detail, now):
@@ -783,9 +830,18 @@ def _new_engine():
         from observability.history import DatabaseAlertHistory
 
         history_store = DatabaseAlertHistory()
+    delivery_queue = None
+    if (
+        getattr(settings, 'ALERT_NOTIFICATION_QUEUE_ENABLED', True)
+        and (getattr(settings, 'ALERT_WEBHOOK_URL', '') or '').strip()
+    ):
+        from observability.delivery import AlertDeliveryQueue
+
+        delivery_queue = AlertDeliveryQueue.from_settings()
     return AlertEngine(
         notifier=AlertNotifier.from_settings(),
         history_store=history_store,
+        delivery_queue=delivery_queue,
     )
 
 
@@ -907,6 +963,7 @@ def alerts_payload(states, samples, now):
         'history_scope': history['scope'],
         'history_persistent': history['persistent'],
         'history_degraded': history['degraded'],
+        'notification_queue': get_engine().delivery_snapshot(),
     }
 
 
