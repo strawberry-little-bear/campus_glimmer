@@ -83,8 +83,15 @@ class ItemFilterWorkspaceTests(TestCase):
 
         self.assertContains(response, '浏览全部商品')
         self.assertContains(response, '登录后保存关注')
-        self.assertContains(response, reverse('demand_list'))
+        self.assertContains(response, f'href="{reverse("new_demand")}?')
         self.assertContains(response, '清除筛选')
+        prefill = parse_qs(response.context['demand_prefill_query'])
+        self.assertEqual(prefill['q'], ['不存在的键盘'])
+        self.assertEqual(prefill['category'], [str(self.category.id)])
+        self.assertEqual(prefill['location'], [str(self.location.id)])
+        self.assertEqual(prefill['condition'], ['九成新'])
+        self.assertEqual(prefill['min_price'], ['50'])
+        self.assertEqual(prefill['max_price'], ['200'])
 
     def test_authenticated_empty_state_links_to_the_live_saved_search_form(self):
         self.client.force_login(self.user)

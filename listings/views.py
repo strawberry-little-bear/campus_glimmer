@@ -321,6 +321,26 @@ def _parse_price(value):
     return amount
 
 
+def _demand_prefill_params(*, query, condition, category, location, min_price, max_price):
+    """Build the allow-listed query string used by the search-to-demand handoff."""
+    params = {}
+    title = (query or '').strip()[:160]
+    if title:
+        params['q'] = title
+    if category is not None:
+        params['category'] = category.id
+    if location is not None:
+        params['location'] = location.id
+    condition = (condition or '').strip()[:120]
+    if condition:
+        params['condition'] = condition
+    if min_price is not None:
+        params['min_price'] = format(min_price, 'f')
+    if max_price is not None:
+        params['max_price'] = format(max_price, 'f')
+    return params
+
+
 def _expand_search_terms(query):
     """Expand a query with active operator-managed synonyms without changing the original query record."""
     query = (query or '').strip()[:120]
@@ -596,6 +616,14 @@ def item_list(request, category_id=None):
         'has_search_criteria': has_search_criteria,
         'item_active_filters': active_filters,
         'item_active_filter_count': len(active_filters),
+        'demand_prefill_query': urlencode(_demand_prefill_params(
+            query=query,
+            condition=condition,
+            category=category,
+            location=location,
+            min_price=min_price,
+            max_price=max_price,
+        )),
         'title': f'{category.name} · 商品集' if category else '发现校园好物',
         'favorite_ids': _favorite_ids(request),
         'search_query_id': search_query_record.id if search_query_record else None,
@@ -13969,6 +13997,7 @@ def demand_list(request, mine=False):
 
 @login_required
 def new_demand(request):
+    prefill_applied = False
     if request.method == 'POST':
         form = DemandPostForm(request.POST)
         if form.is_valid():
@@ -13978,11 +14007,44 @@ def new_demand(request):
             messages.success(request, '求购信息已发布，等待合适的同学来响应。')
             return redirect('demand_detail', demand_id=demand.id)
     else:
-        form = DemandPostForm()
+        category_id = request.GET.get('category', '').strip()
+        location_id = request.GET.get('location', '').strip()
+        category = (
+            Category.objects.filter(pk=int(category_id)).first()
+            if category_id.isdigit() else None
+        )
+        location = (
+            CampusLocation.objects.filter(pk=int(location_id), is_active=True).first()
+            if location_id.isdigit() else None
+        )
+        query = request.GET.get('q', '').strip()
+        condition = request.GET.get('condition', '').strip()
+        min_price = _parse_price(request.GET.get('min_price', '').strip())
+        max_price = _parse_price(request.GET.get('max_price', '').strip())
+        initial = {}
+        title = query[:160]
+        if title:
+            initial['title'] = title
+        if condition[:120]:
+            initial['description'] = (
+                f'期望成色：{condition[:120]}。\n\n'
+                '补充品牌、规格、用途和可接受替代方案。'
+            )
+        if category is not None:
+            initial['category'] = category.id
+        if location is not None:
+            initial['location'] = location.id
+        if min_price is not None:
+            initial['min_price'] = min_price
+        if max_price is not None:
+            initial['max_price'] = max_price
+        prefill_applied = bool(initial)
+        form = DemandPostForm(initial=initial)
     return render(request, 'listings/demand_form.html', {
         'form': form,
         'title': '发布求购',
         'submit_label': '发布求购信息',
+        'demand_prefill_applied': prefill_applied,
     })
 
 

@@ -23,6 +23,12 @@
         <form method="post" class="item-editor-form" data-demand-editor>
             {% csrf_token %}
             {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% if demand_prefill_applied %}
+            <div class="item-editor-trade-note" role="status">
+                <i class="bi bi-stars" aria-hidden="true"></i>
+                <span><strong>已带上刚才的搜索条件。</strong> 标题、分类、地点、预算和成色偏好已尽量填入，补充需求说明即可发布。</span>
+            </div>
+            {% endif %}
             {% include 'includes/form_error_summary.html' %}
 
             <section class="item-editor-section" aria-labelledby="demand-editor-basic-title">

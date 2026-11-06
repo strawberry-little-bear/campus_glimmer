@@ -137,7 +137,7 @@
                         <a href="{% url 'item_list' %}" class="btn btn-outline-primary"><i class="bi bi-grid me-1"></i>浏览全部商品</a>
                         {% if user.is_authenticated %}<a href="#saved-search-prompt" class="btn btn-light"><i class="bi bi-bell me-1"></i>保存这组关注</a>
                         {% else %}<a href="{% url 'login' %}?next={{ request.get_full_path|urlencode }}" class="btn btn-light"><i class="bi bi-bell me-1"></i>登录后保存关注</a>{% endif %}
-                        <a href="{% url 'demand_list' %}" class="btn btn-light"><i class="bi bi-megaphone me-1"></i>发布求购</a>
+                        <a href="{% url 'new_demand' %}?{{ demand_prefill_query }}" class="btn btn-light"><i class="bi bi-megaphone me-1"></i>发布求购</a>
                     </div>
                     {% else %}
                     <h2 class="h3">暂时还没有可浏览的商品</h2>
