@@ -1,0 +1,46 @@
+// Docker socket 只能在受控的宿主机上挂载；即使使用 :ro，Docker API 仍具备
+// 很高的宿主机权限。该叠加层面向单机小规模部署，不是高可用日志平台。
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "campus_glimmer" {
+  targets = discovery.docker.containers.targets
+
+  // 只采集本项目 compose 的容器，避免把宿主机上其他项目的日志送入 Loki。
+  // docker-compose.prod.yml 固定 name: campus-glimmer-prod；若改名请同步这里。
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "campus-glimmer-prod"
+    action        = "keep"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "service"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.campus_glimmer.output
+  labels     = { job = "docker" }
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

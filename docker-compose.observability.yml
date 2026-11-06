@@ -1,0 +1,75 @@
+# 可选日志汇聚叠加层。与 docker-compose.prod.yml 一起使用，不单独启动。
+# 所有管理端口只绑定宿主机 loopback；不要把 Loki、Alloy UI 或 Grafana 直接暴露公网。
+name: campus-glimmer-prod
+
+x-observability-log-defaults: &observability-log-defaults
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  loki:
+    image: grafana/loki:3.7.9
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yml"]
+    ports:
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./docker/observability/loki/config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    logging:
+      <<: *observability-log-defaults
+    networks:
+      - backend
+
+  alloy:
+    image: grafana/alloy:v1.6.1
+    restart: unless-stopped
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    ports:
+      - "127.0.0.1:${ALLOY_PORT:-12345}:12345"
+    volumes:
+      - ./docker/observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      <<: *observability-log-defaults
+    networks:
+      - backend
+
+  grafana:
+    image: grafana/grafana:13.3.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?请在 .env.production 中设置 GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      <<: *observability-log-defaults
+    networks:
+      - backend
+
+volumes:
+  loki_data:
+  alloy_data:
+  grafana_data:

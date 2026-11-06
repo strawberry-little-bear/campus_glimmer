@@ -15,5 +15,6 @@ fi
 exec gunicorn campus_glimmer.wsgi:application \
   --bind "0.0.0.0:${PORT:-8000}" \
   --workers "${WEB_CONCURRENCY:-2}" \
+  --logger-class campus_glimmer.log_format.JsonLogger \
   --access-logfile - \
   --access-logformat '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %({X-Request-ID}o)s %(L)s'

@@ -27,6 +27,12 @@ jobs:
         run: python -m compileall -q accounts campus_glimmer chat_messages listings observability
       - name: Django 系统检查
         run: python manage.py check
+      - name: 生产 Compose 编排校验
+        env:
+          APP_ENV_FILE: .env.production.example
+        run: |
+          docker compose --env-file .env.production.example             -f docker-compose.prod.yml config --quiet
+          docker compose --env-file .env.production.example             -f docker-compose.prod.yml             -f docker-compose.observability.yml config --quiet
       - name: 数据库迁移检查
         run: python manage.py makemigrations --check --dry-run
       - name: 运行测试

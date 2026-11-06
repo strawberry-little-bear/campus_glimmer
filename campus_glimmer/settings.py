@@ -211,6 +211,12 @@ validate_production_services(
 # 生产环境什么都不往 stdout 写，日志收集器只能收到空气。这里显式接管：
 # stdout 始终可用、每行都带请求关联 ID，级别由 DJANGO_LOG_LEVEL 控制。
 LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO').strip().upper() or 'INFO'
+LOG_FORMAT = os.getenv('DJANGO_LOG_FORMAT', 'text').strip().lower() or 'text'
+if LOG_FORMAT not in {'text', 'json'}:
+    raise ImproperlyConfigured(
+        'DJANGO_LOG_FORMAT 只能是 text 或 json，现在是 %r' % LOG_FORMAT
+    )
+LOG_FORMATTER = 'json' if LOG_FORMAT == 'json' else 'structured'
 
 # /metrics/ 的访问令牌。留空即整个端点返回 404——监控端点暴露的是内部拓扑
 # （有哪些路由、大致多快），不该默认对外可见。令牌只在这里读，不进任何模板。
@@ -296,18 +302,21 @@ LOGGING = {
             'format': '[%(asctime)s] %(message)s',
             'datefmt': '%d/%b/%Y %H:%M:%S',
         },
+        'json': {
+            '()': 'campus_glimmer.log_format.JsonLogFormatter',
+        },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
             'level': LOG_LEVEL,
-            'formatter': 'structured',
+            'formatter': LOG_FORMATTER,
             'filters': ['request_id'],
         },
         'django.server': {
             'class': 'logging.StreamHandler',
             'level': 'INFO',
-            'formatter': 'django.server',
+            'formatter': LOG_FORMATTER,
             'filters': ['request_id'],
         },
         # Django 默认行为：DEBUG=False 时才给管理员发邮件。

@@ -4,6 +4,7 @@ x-app-env: &app-env
   DJANGO_DEBUG: "0"
   DJANGO_REQUIRE_PRODUCTION_SERVICES: "1"
   DJANGO_SESSION_ENGINE: django.contrib.sessions.backends.cached_db
+  DJANGO_LOG_FORMAT: "json"
 
 # 单机长跑时 gunicorn 的 access log 与 Django 日志都写进容器 stdout，而 Docker 的 json-file 驱动默认不轮转。
 # 磁盘被日志写满之后整站一起宕机，所以这里给每个服务统一封顶。

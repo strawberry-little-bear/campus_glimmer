@@ -7,15 +7,19 @@
 容器（拼错一个选项只会在容器里以 unrecognized arguments 退出）。
 """
 
+import json
 import logging
 import re
 import shlex
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from django.conf import settings
 from django.http import HttpResponse
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
+from .log_format import JsonLogFormatter, build_access_log_record
 from .middleware import (
     NO_REQUEST_ID,
     REQUEST_ID_HEADER,
@@ -49,6 +53,7 @@ GUNICORN_LONG_OPTIONS = {
     '--keep-alive',
     '--limit-request-line',
     '--log-level',
+    '--logger-class',
     '--max-requests',
     '--max-requests-jitter',
     '--preload',
@@ -217,6 +222,23 @@ class LoggingConfigTests(SimpleTestCase):
         fmt = self.config['formatters']['structured']['format']
         self.assertIn('%(request_id)s', fmt)
 
+    def test_log_format_is_explicit_and_valid(self):
+        self.assertIn(settings.LOG_FORMAT, {'text', 'json'})
+        self.assertEqual(
+            settings.LOG_FORMATTER,
+            'json' if settings.LOG_FORMAT == 'json' else 'structured',
+        )
+        self.assertEqual(
+            self.config['handlers']['console']['formatter'],
+            settings.LOG_FORMATTER,
+        )
+
+    def test_json_formatter_is_registered(self):
+        self.assertEqual(
+            self.config['formatters']['json']['()'],
+            'campus_glimmer.log_format.JsonLogFormatter',
+        )
+
     def test_console_logging_is_not_gated_on_debug(self):
         # Django 默认把 console handler 挂在 require_debug_true 上，
         # DEBUG=False 时什么都不往 stdout 写，日志收集器只能收到空气。
@@ -243,6 +265,105 @@ class LoggingConfigTests(SimpleTestCase):
             'probe', logging.INFO, __file__, 1, 'no request here', None, None)
         self.assertTrue(RequestIdFilter().filter(record))
         self.assertEqual(record.request_id, NO_REQUEST_ID)
+
+
+class JsonLogFormatterTests(SimpleTestCase):
+    """JSON 日志行必须可解析、保留中文，并能带出异常与请求 ID。"""
+
+    def setUp(self):
+        self.formatter = JsonLogFormatter(service='campus-test')
+
+    def _record(self, message='hello', **extra):
+        record = logging.LogRecord(
+            'campus_glimmer.probe', logging.INFO, __file__, 12,
+            message, None, None,
+        )
+        for key, value in extra.items():
+            setattr(record, key, value)
+        return record
+
+    def test_one_line_is_a_complete_json_object(self):
+        record = self._record('校园日志', request_id='trace-42')
+        payload = json.loads(self.formatter.format(record))
+
+        self.assertEqual(payload['level'], 'INFO')
+        self.assertEqual(payload['logger'], 'campus_glimmer.probe')
+        self.assertEqual(payload['message'], '校园日志')
+        self.assertEqual(payload['request_id'], 'trace-42')
+        self.assertEqual(payload['service'], 'campus-test')
+        self.assertIsInstance(payload['pid'], int)
+        self.assertTrue(payload['timestamp'].endswith('Z'))
+
+    def test_unicode_is_not_escaped(self):
+        line = self.formatter.format(self._record('校园流转'))
+        self.assertIn('校园流转', line)
+        self.assertNotIn('\\u6821', line)
+
+    def test_exception_and_stack_remain_machine_readable(self):
+        try:
+            raise ValueError('boom')
+        except ValueError:
+            record = self._record('failed', request_id='trace-err')
+            record.exc_info = sys.exc_info()
+            payload = json.loads(self.formatter.format(record))
+
+        self.assertIn('ValueError: boom', payload['exception'])
+        self.assertEqual(payload['request_id'], 'trace-err')
+
+    def test_missing_request_id_uses_stable_placeholder(self):
+        payload = json.loads(self.formatter.format(self._record()))
+        self.assertEqual(payload['request_id'], NO_REQUEST_ID)
+
+
+class AccessLogRecordTests(SimpleTestCase):
+    """访问日志只保留排障所需字段，不复制可能含令牌的原始 URI。"""
+
+    def _atoms(self, **overrides):
+        atoms = {
+            'h': '203.0.113.9',
+            'm': 'GET',
+            'U': '/listings/42/',
+            'H': 'HTTP/1.1',
+            's': '200',
+            'b': '0',
+            'L': '0.123456',
+            'a': 'Probe/1.0',
+            '{x-request-id}o': 'trace-access',
+            'r': 'GET /listings/42/?token=top-secret HTTP/1.1',
+            '{authorization}i': 'Bearer top-secret',
+            '{cookie}i': 'session=top-secret',
+            'q': 'token=top-secret',
+        }
+        atoms.update(overrides)
+        return atoms
+
+    def test_access_payload_has_routing_and_latency_fields(self):
+        payload = build_access_log_record(
+            self._atoms(), occurred_at=datetime(2026, 11, 6, tzinfo=timezone.utc),
+            service='campus-test',
+        )
+
+        self.assertEqual(payload['path'], '/listings/42/')
+        self.assertEqual(payload['status'], 200)
+        self.assertEqual(payload['bytes'], 0)
+        self.assertEqual(payload['duration_seconds'], 0.123456)
+        self.assertEqual(payload['request_id'], 'trace-access')
+        self.assertEqual(payload['service'], 'campus-test')
+
+    def test_query_string_and_sensitive_headers_are_not_copied(self):
+        payload = build_access_log_record(self._atoms())
+        rendered = json.dumps(payload)
+
+        self.assertNotIn('top-secret', rendered)
+        self.assertNotIn('token', rendered)
+        self.assertNotIn('authorization', rendered)
+        self.assertNotIn('cookie', rendered)
+
+    def test_invalid_request_id_becomes_a_placeholder(self):
+        payload = build_access_log_record(self._atoms(**{
+            '{x-request-id}o': 'bad\nheader',
+        }))
+        self.assertEqual(payload['request_id'], NO_REQUEST_ID)
 
 
 class GunicornAccessLogContractTests(SimpleTestCase):
@@ -274,6 +395,12 @@ class GunicornAccessLogContractTests(SimpleTestCase):
         # 没有 --access-logfile，gunicorn 根本不输出 access log，
         # 上面几条断言守着的那条关联链会静默失效。
         self.assertEqual(self._options().get('--access-logfile'), '-')
+
+    def test_gunicorn_uses_the_shared_json_logger_class(self):
+        self.assertEqual(
+            self._options().get('--logger-class'),
+            'campus_glimmer.log_format.JsonLogger',
+        )
 
     def test_access_log_carries_the_request_id(self):
         fmt = self._options()['--access-logformat']
