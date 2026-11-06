@@ -107,7 +107,7 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 
 ## 覆盖范围
 
-告警测试共 82 项：`campus_glimmer/test_alerts.py` 的 74 项分十一组，`observability/tests.py` 的 8 项覆盖投递队列：
+`campus_glimmer/test_alerts.py` 共 74 项，分十一组：
 
 - **HistogramQuantileTests（6 项）**：没有分桶、没有 +Inf 桶、空档、零样本时的取值，以及 p95 的插值结果。
 - **AlertStateMachineTests（6 项）**：pending 不喊人、熬满 for 才 firing、中途恢复要重启计时、恢复要清掉 active_seconds、状态按副本交出、每条规则各自评估。
@@ -119,8 +119,9 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 - **AlertsEndpointTests（7 项）**：未配令牌 404、只允许 GET/HEAD、载荷带服务身份与计数、静默规则也在载荷里、有界历史与来源声明、历史不含 Webhook 凭据、JSON 与 `/metrics/` 给出同一个 firing 集合。
 - **AlertSelfPreservationTests（4 项）**：探针抛异常时端点仍 200 且计入评估错误、失败时沿用上一次结论、抓 `/alerts/` 不喂业务指标、单例可重置。
 - **AlertNotificationTests（10 项）**：pending 不发、首次 firing 只发一次、持续 firing 不重复、pending 恢复不发、firing 恢复发 resolved、多规则合并批次、载荷/请求头/Bearer 令牌、未配置时跳过、网络与非 2xx 失败不外溢、通知计数进入 Prometheus。
-- **AlertDeliveryQueueTests（8 项，`observability/tests.py`）**：立即投递、跨副本去重、退避后重试、重试耗尽、台账清理、队列摘要、数据库故障直投降级、管理命令重试与旧记录清理。
 - **AlertHistoryPersistenceTests（7 项）**：数据库写入与读回、1000 条上限、写入失败与读取失败降级、端点默认使用数据库历史、数据库故障不拖垮两个监控端点、显式关闭持久化。
+
+投递队列另有 `observability/tests.py` 的 8 项测试覆盖：立即投递、跨副本去重、退避后重试、重试耗尽、台账清理、队列摘要、数据库故障直投降级、管理命令重试与旧记录清理。两者合计 82 项。
 
 「规则读的名字与端点暴露的名字逐条相同」和「三族成员与状态机完全一致」是这里最值得留意的两条。前者防的是名字分裂（症状是规则永远不触发），后者防的是把 pending 也画成 firing（症状是看板把每条规则都显示成正在响，而所有数值本身毫无异常）。这两条在写完之后都用变异测试验证过：把对应判断改坏，有用例会红。
 
