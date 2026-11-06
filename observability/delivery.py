@@ -12,7 +12,7 @@ import math
 from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Count
 from django.utils import timezone
 
@@ -69,6 +69,13 @@ class AlertDeliveryQueue:
     def from_settings(cls):
         return cls()
 
+    def _dedupe_series(self, event):
+        return '|'.join((
+            str(event.get('name') or ''),
+            str(event.get('event') or ''),
+            str(event.get('state') or ''),
+        ))
+
     def dedupe_key(self, event):
         """同一规则、同一翻转、同一时间窗口在多副本上得到同一个键。
 
@@ -79,13 +86,38 @@ class AlertDeliveryQueue:
 
         occurred_at = float(event.get('occurred_at') or 0.0)
         bucket = math.floor(occurred_at / self.dedupe_seconds)
-        raw = '|'.join((
-            str(event.get('name') or ''),
-            str(event.get('event') or ''),
-            str(event.get('state') or ''),
-            str(bucket),
-        ))
+        raw = '|'.join((self._dedupe_series(event), str(bucket)))
         return hashlib.sha256(raw.encode('utf-8')).hexdigest()
+
+    def _recent_duplicate(self, event):
+        """返回窗口内同一翻转的行，覆盖时间分桶边界。
+
+        各副本观察到的 ``occurred_at`` 可能恰好落在相邻分桶。仅靠唯一键会把
+        同一次翻转拆成两行；因此在 PostgreSQL 上按规则串行化入队，并在当前
+        分桶没有命中的情况下检查窗口内最近一条等价事件。
+        """
+
+        latest = (
+            AlertNotificationDelivery.objects
+            .filter(
+                event=event.get('event') or '',
+                rule_name=event.get('name') or '',
+                state=event.get('state') or '',
+            )
+            .order_by('-created_at', '-id')
+            .only('id', 'dedupe_key', 'payload')
+            .first()
+        )
+        if latest is None:
+            return None
+        try:
+            previous_at = float((latest.payload or {}).get('occurred_at') or 0.0)
+            current_at = float(event.get('occurred_at') or 0.0)
+        except (TypeError, ValueError):
+            return None
+        if abs(current_at - previous_at) <= self.dedupe_seconds:
+            return latest
+        return None
 
     def enqueue(self, event, *, now=None):
         now = now or timezone.now()
@@ -97,10 +129,22 @@ class AlertDeliveryQueue:
             # 先留出一个租约，避免入队事务刚提交就被另一个重试进程抢走。
             'next_attempt_at': now + timedelta(seconds=self.lease_seconds),
         }
-        return AlertNotificationDelivery.objects.get_or_create(
-            dedupe_key=self.dedupe_key(event),
-            defaults=defaults,
-        )
+        with transaction.atomic():
+            # PostgreSQL 的 advisory lock 只串行化同一规则事件，不阻塞其它告警。
+            # SQLite 的测试运行是单写入者，沿用事务即可覆盖顺序执行场景。
+            if connection.vendor == 'postgresql':
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        'SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))',
+                        [self._dedupe_series(event)],
+                    )
+            duplicate = self._recent_duplicate(event)
+            if duplicate is not None:
+                return duplicate, False
+            return AlertNotificationDelivery.objects.get_or_create(
+                dedupe_key=self.dedupe_key(event),
+                defaults=defaults,
+            )
 
     def enqueue_and_deliver(self, events, notifier, *, now=None):
         """去重后立即尝试事件；到期未送达的行会在下一次抓取时继续重试。"""

@@ -149,7 +149,8 @@ class AlertDeliveryQueueTests(TestCase):
 
 class AlertDeliveryEngineIntegrationTests(TestCase):
     def test_two_engines_collapse_the_same_transition_into_one_delivery(self):
-        now = timezone.now().timestamp()
+        # 两个副本的观察时间跨过 60 秒分桶边界时也必须只入队一次。
+        now = 1_700_000_039.5
         notifier = MagicMock()
         notifier.deliver.return_value = _delivered()
         queue = AlertDeliveryQueue(
