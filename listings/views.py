@@ -500,6 +500,59 @@ def item_list(request, category_id=None):
     if sort != 'latest':
         filter_params['sort'] = sort
 
+    removable_params = request.GET.copy()
+    removable_params.pop('page', None)
+
+    def removal_url(parameter_names, base_path=None):
+        remaining = removable_params.copy()
+        for parameter_name in parameter_names:
+            remaining.pop(parameter_name, None)
+        query_string = remaining.urlencode()
+        target = base_path or request.path
+        return f'{target}?{query_string}' if query_string else target
+
+    def display_price(value):
+        return format(value.normalize(), 'f')
+
+    active_filters = []
+    if query:
+        active_filters.append({
+            'label': '关键词',
+            'value': query,
+            'remove_url': removal_url(('q',)),
+        })
+    if category:
+        active_filters.append({
+            'label': '分类',
+            'value': category.name,
+            'remove_url': removal_url((), reverse('item_list')),
+        })
+    if location:
+        active_filters.append({
+            'label': '地点',
+            'value': location.name,
+            'remove_url': removal_url(('location',)),
+        })
+    if condition:
+        active_filters.append({
+            'label': '成色',
+            'value': condition,
+            'remove_url': removal_url(('condition',)),
+        })
+    if min_price is not None or max_price is not None:
+        if min_price is not None and max_price is not None:
+            price_value = f'¥{display_price(min_price)}–¥{display_price(max_price)}'
+        elif min_price is not None:
+            price_value = f'不低于 ¥{display_price(min_price)}'
+        else:
+            price_value = f'不高于 ¥{display_price(max_price)}'
+        active_filters.append({
+            'label': '价格',
+            'value': price_value,
+            'remove_url': removal_url(('min_price', 'max_price')),
+        })
+
+    has_search_criteria = bool(active_filters)
     paginator = Paginator(items, 12)
     page_obj = paginator.get_page(request.GET.get('page'))
     if search_query_record:
@@ -540,10 +593,9 @@ def item_list(request, category_id=None):
             'min_price': min_price,
             'max_price': max_price,
         }),
-        'has_search_criteria': any((
-            query, condition, category, location,
-            min_price is not None, max_price is not None,
-        )),
+        'has_search_criteria': has_search_criteria,
+        'item_active_filters': active_filters,
+        'item_active_filter_count': len(active_filters),
         'title': f'{category.name} · 商品集' if category else '发现校园好物',
         'favorite_ids': _favorite_ids(request),
         'search_query_id': search_query_record.id if search_query_record else None,

@@ -4180,15 +4180,56 @@ a { color: inherit; text-decoration: none; }
 .catalog-search-bar .btn { flex: 0 0 auto; min-height: 44px; padding-inline: 20px; border-radius: 11px; }
 .catalog-clear-filter { flex: 0 0 auto; padding: 8px 10px; color: var(--muted); font-size: .7rem; white-space: nowrap; }
 .catalog-clear-filter:hover { color: var(--primary-dark); }
+.catalog-active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    width: min(100%, 920px);
+    padding: 10px 12px;
+    border: 1px solid #e2ece6;
+    border-radius: 14px;
+    background: #f8fbf9;
+}
+.catalog-active-filters-label { color: #61776b; font-size: .67rem; font-weight: 700; }
+.catalog-active-filter {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 8px 5px 10px;
+    border: 1px solid #d8e9df;
+    border-radius: 999px;
+    color: #3f735b;
+    background: #fff;
+    font-size: .67rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+.catalog-active-filter span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catalog-active-filter i { color: #789387; font-size: .58rem; }
+.catalog-active-filter:hover { border-color: #b7d8c7; color: var(--primary-dark); background: #eef8f2; }
+.catalog-active-clear { margin-left: auto; color: #77877e; font-size: .66rem; font-weight: 700; }
+.catalog-active-clear:hover { color: var(--primary-dark); }
+.catalog-active-filter:focus-visible,
+.catalog-active-clear:focus-visible { outline: 3px solid rgba(24, 122, 91, .2); outline-offset: 2px; }
+.catalog-empty-state { border-style: solid; background: linear-gradient(145deg, #fbfdfb, #f6faf7); }
+.catalog-empty-state > i { color: #6b9b82; }
+.catalog-empty-state p { max-width: 640px; margin: 0 auto 20px; line-height: 1.8; }
+.catalog-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 @media (max-width: 767.98px) {
     .catalog-search-bar { align-items: stretch; flex-wrap: wrap; padding: 7px; border-radius: 15px; }
     .catalog-search-field { flex-basis: calc(100% - 88px); }
     .catalog-search-bar .btn { padding-inline: 15px; }
     .catalog-clear-filter { width: 100%; padding: 5px 8px 2px; text-align: center; }
+    .catalog-active-clear { margin-left: 0; }
 }
 @media (max-width: 575.98px) {
     .catalog-search-field { flex-basis: 100%; }
     .catalog-search-bar .btn { width: 100%; }
+    .catalog-active-filters-label { width: 100%; }
+    .catalog-active-filter { max-width: 100%; }
+    .catalog-empty-actions .btn { width: 100%; }
 }
 
 /* --------------------------------------------------------------------------
