@@ -141,15 +141,27 @@ DJANGO_SECURE_HSTS_SECONDS=31536000
 - 镜像健康检查只调用 `/healthz/`（存活），`/readyz/`（就绪）由发布脚本、反向代理和人工验收调用；
 - Redis 开启 AOF，但 Redis 不是业务事实源；
 - 备份默认写入宿主机目录；异地镜像需显式配置 `BACKUP_OFFSITE_*`，默认关闭；
-- 没有自动故障转移、读写分离、对象跨区域复制，也没有把各副本的日志汇到一起；指标的跨副本联合视图和按指标告警都已经落地（口径见[按指标告警设计](metrics-alerting-design.md)）。配置 `DJANGO_ALERT_WEBHOOK_URL` 后，状态翻转会尽力投递一次；`/alerts/` 默认将翻转写入数据库并展示最近 100 条（表内保留最近 1000 条），数据库故障时自动降级为当前进程窗口；升级与值班策略仍在外层。
+- 没有自动故障转移、读写分离或对象跨区域复制；指标跨副本联合视图和按指标告警已经落地（口径见[按指标告警设计](metrics-alerting-design.md)）。配置 `DJANGO_ALERT_WEBHOOK_URL` 后，状态翻转会尽力投递一次；`/alerts/` 默认将翻转写入数据库并展示最近 100 条（表内保留最近 1000 条），数据库故障时自动降级为当前进程窗口；升级与值班策略仍在外层；
+- 集中日志是可选叠加层：Alloy 采集本项目 Docker 容器，Loki 默认保留 7 天，Grafana 只绑定宿主机 loopback。它适合单机排障，不替代异地归档或高可用日志平台。
 
-迁移已经是独立的一次性任务。会话（`cached_db` + Redis）、缓存（Redis）和上传文件（S3 兼容对象存储）都已经是副本间共享的外部依赖，`docker-compose.replicas.yml` 放开端口后 Web 即可横向扩容；仍未解决的是跨副本的日志汇总，以及数据库、对象存储、备份的独立监控；这些数字本身还没有任何通知渠道。
+迁移已经是独立的一次性任务。会话（`cached_db` + Redis）、缓存（Redis）和上传文件（S3 兼容对象存储）都已经是副本间共享的外部依赖，`docker-compose.replicas.yml` 放开端口后 Web 即可横向扩容；集中日志可以覆盖多个 Web 副本，但数据库、对象存储和备份的独立监控及通知渠道仍需外层补齐。
 
 ### 请求关联 ID 与日志轮转
 
 多副本下日志分散在各个容器里，没有关联 ID 时只能靠时间戳和 URL 猜。`campus_glimmer.middleware.RequestIdMiddleware` 给每个请求分配一个 ID：客户端带 `X-Request-ID` 就沿用（只接受 `[A-Za-z0-9._-]` 且不超过 64 字符，否则重新生成），否则自己生成；同一个值同时写进响应头和日志上下文，gunicorn 的 access log 也打同一个字段。
 
-`DJANGO_LOG_LEVEL` 控制级别（默认 `INFO`），健康探针日志单独压到 `WARNING`——它每 30 秒一条，比业务请求还吵。日志统一走 stdout，Compose 对全部服务按 `10m` × `5` 个文件轮转。关联关系、字符集校验与轮转参数由 `campus_glimmer/test_request_logging.py` 钉住。
+`DJANGO_LOG_LEVEL` 控制级别（默认 `INFO`），健康探针日志单独压到 `WARNING`——它每 30 秒一条，比业务请求还吵。本地默认输出文本；生产编排设置 `DJANGO_LOG_FORMAT=json`，Django 与 Gunicorn 的每行日志都是可解析 JSON，访问日志只保留路径而不会复制查询字符串、Cookie 或 Authorization。日志统一走 stdout，Compose 对全部服务按 `10m` × `5` 个文件轮转。关联关系、敏感字段排除与轮转参数由 `campus_glimmer/test_request_logging.py` 钉住。
+
+需要跨容器查找时，叠加集中日志组件：
+
+```powershell
+docker compose --env-file .env.production `
+  -f docker-compose.prod.yml `
+  -f docker-compose.observability.yml `
+  up -d --build
+```
+
+Grafana 位于 `http://127.0.0.1:3000`，Loki 位于 `http://127.0.0.1:3100`，Alloy UI 位于 `http://127.0.0.1:12345`。启动前必须在 `.env.production` 中设置 `GRAFANA_ADMIN_PASSWORD`；不要把 Docker socket、Loki 写入接口或 Grafana 管理入口暴露到公网。字段契约、LogQL 查询、保留期与回滚步骤见[集中日志设计](log-aggregation-design.md)。
 
 ### 进程级指标与 `/metrics/`
 
@@ -204,6 +216,7 @@ GitHub Actions 的 `quality` 任务在 SQLite 下执行语法、`check`、迁移
 ## 相关文档
 
 - [备份与恢复](backup-restore.md)
+- [集中日志设计](log-aggregation-design.md)
 - [健康端点演进](deployment-health-endpoints-design.md)
 - [按指标告警设计](metrics-alerting-design.md)
 - [跨副本指标聚合设计](metrics-fleet-view-design.md)

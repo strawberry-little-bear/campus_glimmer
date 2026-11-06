@@ -208,6 +208,7 @@ flowchart LR
 | 文件存储 | 本地 `media/`（开发）· S3 / MinIO（生产） |
 | 图片 | Pillow · EXIF 方向 · WebP 重编码 · 缩略图与响应式候选 |
 | 部署 | Docker Compose · Gunicorn · WhiteNoise · `/healthz/` 与 `/readyz/` |
+| 日志 | 逐行 JSON · 请求关联 ID · 可选 Loki / Alloy / Grafana 叠加层 |
 | 备份 | PostgreSQL custom dump · S3 对象镜像 · SHA-256 校验 · 增量恢复 · 可选异地镜像 |
 | 质量 | GitHub Actions · PostgreSQL/Redis 集成任务 · Django check · 迁移检查 · 自动化测试 |
 
@@ -363,6 +364,18 @@ cp .env.production.example .env.production
 docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
 ```
 
+需要集中查看多副本日志时，再叠加 Loki、Alloy 与 Grafana。三者只监听宿主机
+`127.0.0.1`，默认保留 7 天；启动前要在 `.env.production` 设置
+`GRAFANA_ADMIN_PASSWORD`：
+
+```bash
+docker compose --env-file .env.production \
+  -f docker-compose.prod.yml \
+  -f docker-compose.observability.yml up -d --build
+```
+
+日志字段契约、查询示例、Docker socket 权限边界和回滚步骤见[集中日志设计](docs/log-aggregation-design.md)。
+
 <details>
 <summary><strong>生产部署检查清单</strong></summary>
 
@@ -374,6 +387,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml up -d --bui
 - 需要不随宿主机一起损失的副本时配置 `BACKUP_OFFSITE_*`（留空即关闭，只填其中几项会报错），并定期做恢复演练；
 - 需要采集指标时再设置 `DJANGO_METRICS_TOKEN`，留空即保持 `/metrics/` 关闭；
 - 需要接收告警状态翻转时配置 `DJANGO_ALERT_WEBHOOK_URL` 和可选的 Bearer 令牌；留空即关闭通知，配置后默认由数据库 outbox 做有界重试；
+- 需要集中日志时设置 `GRAFANA_ADMIN_PASSWORD` 并叠加 `docker-compose.observability.yml`，只从受信任宿主机访问三个 loopback 管理端口；
+- 应用日志使用逐行 JSON，访问日志不会记录查询字符串、Cookie 或 Authorization；
 - 不提交生产数据库、上传文件、密钥或包含用户隐私的日志；
 - 当前生产编排是单机、小规模基线，不提供自动故障转移或异地容灾。
 
@@ -462,7 +477,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 - **治理与通知**：继续做治理分组、申诉质量和通知降噪；
 - **校园场景与信任**：完善认证体验、可信档案和地点维护；
 - **运营与数据质量**：加强导出一致性、样本审计与指标血缘；
-- **基础设施与体验**：进程级 `/metrics/`、跨副本联合视图、按指标告警、带健康指标的 Webhook outbox、跨副本去重与最近 100 条数据库持久化翻转历史（表内保留 1000 条）已落地，接下来补集中日志、默认启用的异机备份、恢复演练与外部升级路径；Web 侧的无状态依赖与多副本端口边界已经落地，继续优化移动端、无障碍和图片加载。
+- **基础设施与体验**：进程级 `/metrics/`、跨副本联合视图、按指标告警、带健康指标的 Webhook outbox、跨副本去重、最近 100 条数据库持久化翻转历史（表内保留 1000 条），以及 JSON 日志 + 可选 Loki / Alloy / Grafana 集中查询已经落地；接下来补默认启用的异机备份、恢复演练与外部升级路径。Web 侧的无状态依赖与多副本端口边界已经落地，继续优化移动端、无障碍和图片加载。
 
 每个方向都拆成可独立验证、独立回滚的小迭代。详细待办、已落地范围和不做某项功能的理由见
 [后续路线图](docs/roadmap.md)。

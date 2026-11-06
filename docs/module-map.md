@@ -19,10 +19,11 @@ campus_glimmer/
 ├── templates/                 # Django 模板和页面布局
 ├── static/                    # CSS、JavaScript、图标等静态资源
 ├── media/                     # 本地开发时的上传文件目录
-├── docker/                    # 容器相关辅助文件
+├── docker/                    # 容器辅助文件、健康检查与可观测组件配置
 ├── docs/                      # 架构图、业务流程图和项目文档
 ├── Dockerfile
 ├── docker-compose.yml
+├── docker-compose.observability.yml
 ├── init_data.py               # 本地演示数据初始化脚本
 ├── manage.py
 ├── requirements.txt
@@ -740,6 +741,7 @@ campus_glimmer/
 - **`dashboard-export-subhead-alignment-design.md`**：面板与下载件的标题必须是同一句话，以及第一版为什么选错了数——`field_total` 恒为 25、`rows|length` 空平台是 0，两者问的不是同一个问题
 - **`task-run-ledger-integrity-design.md`**：定时任务台账的时间、状态、失败备注与指标形状完整性审计口径
 - **`deployment-health-endpoints-design.md`**：存活检查与数据库就绪检查拆分，失败不泄露部署细节
+- **`log-aggregation-design.md`**：JSON 日志字段、请求关联、Loki / Alloy / Grafana 叠加层、7 天保留与 Docker socket 权限边界
 - **`metrics-alerting-design.md`**：八条规则为什么只在状态翻转时通知、数据库历史为什么是有界排障记录而不是可靠审计、for 时长按什么取、冷启动的基线回退，以及 Webhook 失败与多副本去重的边界
 - **`campaign-goals-funnel-design.md`**：专题目标的周期口径、实时进度、节奏偏差、严格漏斗与跨专题汇总边界
 - **`production-deployment.md`**：PostgreSQL、Redis、MinIO / S3、WhiteNoise、单机 Compose 拓扑与上线边界

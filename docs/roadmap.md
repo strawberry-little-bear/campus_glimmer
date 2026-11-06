@@ -342,7 +342,9 @@
   - 当前基线按单机小规模部署发布：启动任务已是一次性 `migrate` 服务，Web 侧也不再持有本机状态——会话走 `cached_db` + Redis、上传直连对象存储、媒体只在 `DEBUG` 下由本地盘提供；`docker-compose.replicas.yml` 用 `!reset` 放开固定宿主端口，因此 `--scale web=N` 可以直接起。仍未解决的是数据库与对象存储不是同一事务快照，以及异地备份默认未启用。
   - 每个请求都带关联 ID：客户端传入的 `X-Request-ID` 经字符集校验后沿用，否则自动生成；同一个值同时进响应头、结构化日志行和 gunicorn 的 access log。Django 默认在 `DEBUG=False` 时什么都不往 stdout 写，现在由 `LOGGING` 显式接管，`DJANGO_LOG_LEVEL` 可调级别，Compose 再对全部服务按 `10m` × `5` 个文件轮转。
 
-- **生产可靠性继续演进**：把单机基线推进到可运营的正式环境，仍需集中日志聚合、默认启用的异机备份与恢复演练，以及 PostgreSQL PITR；容器内已有请求关联 ID、结构化日志、日志轮转、进程级指标端点、跨副本联合视图和按指标告警，缺的是把各副本的日志汇到一起。
+- **生产可靠性继续演进**：把单机基线推进到可运营的正式环境，仍需默认启用的异机备份与恢复演练，以及 PostgreSQL PITR。
+  - 集中日志已落地：Django 与 Gunicorn 在生产输出逐行 JSON，带请求关联 ID、级别、服务与耗时；可选 `docker-compose.observability.yml` 用 Alloy 采集本项目容器，Loki 保留 7 天，Grafana 提供查询入口。管理端口只绑 `127.0.0.1`，Docker socket 的宿主机权限边界已写入[集中日志设计](log-aggregation-design.md)。
+  - 这仍是单机观测叠加层：Loki 所在磁盘或宿主故障时日志可能丢失，不替代异地日志归档；需要高可用时把 Alloy 指向外部日志平台。
   - 多实例无状态 Web 的配置契约已由 `MultiReplicaReadinessTests`（10 项）钉住：会话后端必须跨副本共享、缓存必须指向 Redis、上传必须落到对象存储、Web 不得挂载本地媒体目录、静态文件对所有副本保持共享只读、副本叠加文件只允许改端口发布。这套测试同时是负向护栏：把存储改回 `filesystem`、把缓存改回 LocMem、删掉副本叠加文件或去掉 `!reset`，都会当场失败。
   - 对象存储的真实上传链路已由 `object-storage` CI 任务覆盖：该任务在 runner 上直接启动 MinIO，真实执行上传、回源、匿名拒绝、签名 URL、过期与篡改签名的拒绝以及对象镜像恢复，口径见[对象存储 CI 集成设计](object-storage-ci-integration-design.md)。`backup-restore` 任务把「PostgreSQL dump 后隔离恢复」也接进了 CI：migrate 之后真实 dump、灌进一个全新的隔离库，再逐表比对行数、索引数与约束数，对象部分恢复到第二个桶后按原 key 逐字节比对；同一任务还用一份假的 17 客户端验证版本护栏真的会拦。备份脚本自身的失败分支（校验汇总、清单路径越权、版本护栏、保留期清理、失败时清空 staging、异地镜像的读回比对与保留期）已由 52 项离线测试钉住，口径见[备份脚本边界设计](backup-script-boundary-design.md)。日志侧的关联链路同样有测试钉住：中间件的 ID 透传与生成、日志注入拒绝、上下文泄漏、404/500 日志行与响应头同 ID、gunicorn 选项拼写与 access log 字段，共 30 项。仍然人工的部分：异地目标的真实演练、加密托管与密钥轮换，以及真实数据量下的恢复耗时。
   - 进程级指标也已落地：`/metrics/` 以 Prometheus 文本格式暴露请求量、耗时直方图、在途请求数与构建信息，路由标签只取 URL 模板并设 500 组序列上限，端点默认 404、需 Bearer 令牌；`campus_glimmer/test_metrics.py` 用 44 项契约测试钉住标签基数、暴露格式与端点鉴权。

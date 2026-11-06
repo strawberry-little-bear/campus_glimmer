@@ -132,7 +132,15 @@ python docker/healthcheck.py --readiness
 2026-10-31 12:00:00 INFO [3589d67bc0c5492d] django.request ...
 ```
 
-`DJANGO_LOG_LEVEL` 控制日志级别（默认 `INFO`），日志统一走 stdout，由 json-file 驱动按 `10m` × `5` 个文件轮转，不会无限涨满磁盘。要把一次投诉对回具体请求，先用响应头或用户提供的 ID 在各个副本里 grep。
+`DJANGO_LOG_LEVEL` 控制日志级别（默认 `INFO`）。本地默认仍是文本；生产 Compose 设置 `DJANGO_LOG_FORMAT=json`，Django 与 Gunicorn 每行输出可解析 JSON，包含时间、级别、logger、请求 ID、服务名与进程 ID。访问日志另外带方法、路径、状态码和耗时，但不会记录原始查询字符串、Cookie 或 Authorization。日志统一走 stdout，由 json-file 驱动按 `10m` × `5` 个文件轮转，不会无限涨满磁盘。
+
+需要跨容器查询时叠加可选日志汇聚层：
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.prod.yml -f docker-compose.observability.yml up -d
+```
+
+Alloy 只采集 `campus-glimmer-prod` 项目的容器，写入 Loki；Grafana 提供查询入口。三个管理端口都只绑定 `127.0.0.1`，Grafana 必须设置 `GRAFANA_ADMIN_PASSWORD`。Docker socket 具有接近宿主机 root 的权限，只应在受信任宿主机使用。字段、保留期和安全边界见[集中日志设计](../docs/log-aggregation-design.md)。
 
 ## 📈 指标与告警
 
@@ -173,16 +181,17 @@ docker compose --env-file .env.production -f docker-compose.prod.yml exec backup
 ## ⚠️ 真实部署边界
 
 - 当前生产拓扑是单机小规模基线，不是高可用、跨可用区或自动故障转移方案。
-- 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；会话、缓存和上传文件已经是副本间共享的依赖，`docker-compose.replicas.yml` 放开端口后即可横向扩容，但多副本的入口、日志汇总与告警仍由外层部署环境负责。
+- 启动任务已拆成独立的一次性 `migrate` 服务，Web 不再自行迁移；会话、缓存和上传文件已经是副本间共享的依赖，`docker-compose.replicas.yml` 放开端口后即可横向扩容。多副本入口与告警仍由外层负责，可选的 Loki 叠加层可以集中查询各副本日志。
 - Redis 的 AOF 用于进程重启后的缓存连续性，不替代 PostgreSQL 备份。
 - 数据库与对象存储不是同一事务快照；异地镜像默认关闭，需要显式配置 `BACKUP_OFFSITE_*`，且启用后仍不提供加密托管与密钥轮换。
-- TLS、反向代理、集中日志采集、指标告警、证书续期和安全补丁由外层部署环境承担；容器内已保证日志带请求关联 ID、按大小轮转，并提供带跨副本联合视图的 `/metrics/` 指标；把各副本的日志汇到一起、按阈值告警仍在外层。
+- TLS、反向代理、证书续期和安全补丁由外层部署环境承担；集中日志叠加层提供单机 Loki / Alloy / Grafana，指标端点带跨副本联合视图，但日志高可用、异地归档和按阈值通知仍不在这套单机基线内。
 - 正式上线前仍需做真实上传、签名 URL、恢复演练和端到端人工烟雾测试。
 
 ## 📚 继续阅读
 
 - [生产部署基线](../docs/production-deployment.md)
 - [跨副本指标聚合设计](../docs/metrics-fleet-view-design.md)
+- [集中日志设计](../docs/log-aggregation-design.md)
 - [备份与恢复](../docs/backup-restore.md)
 - [部署健康端点设计](../docs/deployment-health-endpoints-design.md)
 - [Django 项目配置](../campus_glimmer/README.md)
