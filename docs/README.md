@@ -367,6 +367,7 @@ docker compose down -v
 | `send_saved_search_digest` | 发送关注搜索汇总 | 按日/周频率运行 |
 | `send_campaign_update_digest` | 发送校园专题上新摘要 | 按日/周频率运行 |
 | `send_lifecycle_reminders` | 发送商品生命周期提醒 | 每日运行 |
+| `send_meeting_response_reminders` | 提醒长时间未回应的交付安排 | 每小时或周期性运行 |
 | `sync_academic_calendar` | 补齐学期阶段并刷新快照 | 开学前及每周运行 |
 | `backfill_item_thumbnails` | 回填历史图片变体和宽高 | 上线辅助、分批运行 |
 

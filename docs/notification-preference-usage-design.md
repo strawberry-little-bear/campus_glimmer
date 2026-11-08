@@ -1,6 +1,6 @@
 # 通知偏好开关：25 个开关各自的形状，第一次被运营读到
 
-> 本文记录面板最初只读 25 个通知类型开关时的设计。当前通知类型开关已扩展到 27 个，面板按 `Notification.KIND_CHOICES` 现读；标题与导出中的数量也会随代码变化。
+> 本文记录面板最初只读 25 个通知类型开关时的设计。当前通知类型开关已扩展到 28 个，面板按 `Notification.KIND_CHOICES` 现读；标题与导出中的数量也会随代码变化。
 
 状态：已实现（只报告，不改任何一处写入路径）
 模块：`listings/notification_preference_usage.py`
@@ -60,16 +60,17 @@
 
 ## 4. 按「关掉它有没有交易后果」分四组，不合成一个关闭率
 
-25 个开关不是一类东西。关掉 `order_created`（有人预约你的商品）有真实的交易后果：
+通知类型开关不是一类东西，而且会随代码增长。关掉 `order_created`（有人预约你的商品）有真实的交易后果：
 用户收不到通知，可能错过一笔成交。关掉 `moderation_update`（你违规了）没有任何交易
 后果。本模块按这个性质分四组报：
 
-- **交易类**（9 个）：`order_created`、`order_status`、`order_dispute`、
-  `meeting_incident`、`order_expiring`、`order_expired`、`gift_application`、
-  `gift_application_status`、`demand_response`；
+- **交易类**（10 个）：`order_created`、`order_status`、`order_dispute`、
+  `meeting_incident`、`order_expiring`、`order_expired`、`meeting_response_pending`、
+  `gift_application`、`gift_application_status`、`demand_response`；
 - **互动类**（3 个）：`message_received`、`comment_received`、`rating_received`；
-- **汇总类**（3 个）：`operations_digest`、`opportunity_digest`、`saved_search_digest`；
-- **其余**（10 个）：按原样列出，不强行归组。
+- **汇总类**（4 个）：`operations_digest`、`opportunity_digest`、`saved_search_digest`、
+  `campaign_update`；
+- **其余**（11 个）：按原样列出，不强行归组。
 
 合成一个全站关闭率会把「用户关掉了运营告警日报」和「用户关掉了新订单通知」读成
 同一件事。

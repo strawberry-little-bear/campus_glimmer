@@ -33,6 +33,7 @@ KNOWN_COMMANDS = (
     'expire_items',
     'process_order_timeouts',
     'send_lifecycle_reminders',
+    'send_meeting_response_reminders',
     'send_operations_digest',
     'send_opportunity_digest',
     'send_saved_search_digest',

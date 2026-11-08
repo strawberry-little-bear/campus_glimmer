@@ -2113,6 +2113,7 @@ class Notification(models.Model):
         ('campaign_update', '校园专题上新摘要'),
         ('lifecycle_reminder', '商品生命周期提醒'),
         ('mutual_aid_feedback', '互助完成反馈'),
+        ('meeting_response_pending', '交付安排待回应'),
     )
 
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name='接收人')
@@ -2258,6 +2259,10 @@ class NotificationPreference(models.Model):
     )
     order_expired = models.BooleanField(
         '交易预约已超时', default=True, help_text='交易预约因超时被释放时提醒。',
+    )
+    meeting_response_pending = models.BooleanField(
+        '交付安排待回应', default=True,
+        help_text='对方提出或修改交付安排后，长时间未回应时提醒。',
     )
     report_update = models.BooleanField(
         '举报处理更新', default=True, help_text='你提交的举报有处理进展时提醒。',

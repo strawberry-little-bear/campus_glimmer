@@ -109,7 +109,7 @@ MIN_PREFERENCE_ROWS = 12
 PREFERENCE_GROUPS = (
     ('transaction', '交易类', (
         'order_created', 'order_status', 'order_dispute', 'meeting_incident',
-        'order_expiring', 'order_expired',
+        'order_expiring', 'order_expired', 'meeting_response_pending',
         'gift_application', 'gift_application_status', 'demand_response',
     )),
     ('interaction', '互动类', (

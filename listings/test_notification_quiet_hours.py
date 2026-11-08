@@ -80,7 +80,7 @@ class NotificationQuietHoursTests(TestCase):
             for field_name in NotificationPreferenceForm.base_fields
             if not field_name.startswith('quiet_hours_')
         ]
-        self.assertEqual(len(notification_fields), 27)
+        self.assertEqual(len(notification_fields), 28)
 
         self.client.force_login(self.user)
         response = self.client.post(reverse('notification_preferences'), {
@@ -95,10 +95,10 @@ class NotificationQuietHoursTests(TestCase):
         self.assertFalse(any(getattr(preference, field_name) for field_name in notification_fields))
 
         response = self.client.get(reverse('notification_preferences'))
-        self.assertEqual(response.context['notification_kind_count'], 27)
+        self.assertEqual(response.context['notification_kind_count'], 28)
         self.assertEqual(response.context['enabled_notification_count'], 0)
         self.assertTrue(response.context['quiet_hours_enabled'])
-        self.assertContains(response, '当前已开启 0 / 27 类提醒')
+        self.assertContains(response, '当前已开启 0 / 28 类提醒')
         self.assertContains(response, '免打扰时段：已开启')
 
     def test_preference_form_rejects_identical_enabled_times(self):
