@@ -996,6 +996,35 @@ a { color: inherit; text-decoration: none; }
 .appointment-summary { display: grid; gap: 5px; padding: 13px 14px; border: 1px solid #dcece0; border-radius: 12px; background: #f5fbf6; color: #557064; font-size: .78rem; }
 .appointment-summary strong { color: #315746; font-size: .88rem; }
 .appointment-summary small { color: var(--muted); }
+.appointment-state-guidance { display: flex; align-items: flex-start; gap: 10px; margin-top: 10px; padding: 11px 12px; border: 1px solid #e4ece6; border-radius: 12px; color: #49685a; background: #fafcfb; }
+.appointment-state-guidance > i { flex: 0 0 auto; margin-top: 2px; color: #668c77; font-size: 1rem; }
+.appointment-state-guidance div { display: grid; gap: 2px; min-width: 0; }
+.appointment-state-guidance strong { color: #315746; font-size: .78rem; }
+.appointment-state-guidance span { color: var(--muted); font-size: .72rem; line-height: 1.55; }
+.appointment-state-guidance.is-my-turn { border-color: #ead6a8; color: #80642d; background: #fffbf0; }
+.appointment-state-guidance.is-my-turn > i, .appointment-state-guidance.is-my-turn strong { color: #8b6728; }
+.appointment-state-guidance.appointment-state-confirmed { border-color: #cfe6d6; background: #f3faf5; }
+.appointment-state-guidance.appointment-state-declined { border-color: #ead9c1; background: #fffaf3; }
+.meeting-negotiation-history { padding-top: 14px; border-top: 1px solid #edf2ee; }
+.meeting-negotiation-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #345c4a; font-size: .79rem; }
+.meeting-negotiation-heading span { color: var(--muted); font-size: .69rem; white-space: nowrap; }
+.meeting-history-boundary, .meeting-history-empty { margin: 10px 0 0; padding: 9px 11px; border-radius: 10px; color: #74684f; background: #fffaf0; font-size: .71rem; line-height: 1.6; }
+.meeting-event-list { position: relative; display: grid; gap: 0; margin: 12px 0 0; padding: 0; list-style: none; }
+.meeting-event-list::before { position: absolute; top: 8px; bottom: 8px; left: 5px; width: 1px; content: ''; background: #dbe7df; }
+.meeting-event { position: relative; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 10px; padding-bottom: 14px; }
+.meeting-event:last-child { padding-bottom: 0; }
+.meeting-event-marker { position: relative; z-index: 1; width: 11px; height: 11px; margin-top: 4px; border: 2px solid #9eb8aa; border-radius: 50%; background: #fff; }
+.meeting-event-accepted .meeting-event-marker { border-color: #4d9168; background: #edf8f0; }
+.meeting-event-declined .meeting-event-marker { border-color: #bb8d56; background: #fffaf0; }
+.meeting-event-cancelled .meeting-event-marker { border-color: #9e756c; background: #fff5f2; }
+.meeting-event-copy { min-width: 0; color: #587064; font-size: .73rem; line-height: 1.55; }
+.meeting-event-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 3px 10px; }
+.meeting-event-head strong { color: #345c4a; font-size: .77rem; }
+.meeting-event-head time { color: #8a988f; font-size: .67rem; font-variant-numeric: tabular-nums; }
+.meeting-event-copy p { margin: 4px 0 2px; }
+.meeting-event-copy small { color: var(--muted); font-size: .68rem; }
+.meeting-event-copy .meeting-event-reason { margin-top: 5px; padding: 6px 8px; border-radius: 8px; color: #8a6541; background: #fff8ec; }
+@media (max-width: 575px) { .appointment-state-guidance { padding: 10px; }.meeting-event-head { align-items: flex-start; flex-direction: column; }.meeting-negotiation-heading { align-items: flex-start; } }
 .appointment-status { display: inline-flex; margin-left: 6px; padding: 3px 7px; border-radius: 999px; font-size: .68rem; font-weight: 700; vertical-align: 1px; }
 .appointment-status-pending { color: #8c6b2d; background: #fff5d8; }
 .appointment-status-confirmed { color: #397555; background: #e3f5e8; }

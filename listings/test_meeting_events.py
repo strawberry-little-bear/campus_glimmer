@@ -251,3 +251,144 @@ class MeetingEventFlowTests(TestCase):
         self.assertEqual(round_stats['accepted_count'], 1)
         self.assertEqual(round_stats['declined_count'], 1)
         self.assertEqual(round_stats['unanswered_count'], 1)
+
+    def test_order_detail_shows_current_turn_and_the_complete_negotiation_chain(self):
+        initial_start = timezone.now() + timedelta(days=1)
+        self.propose(self.buyer, initial_start)
+
+        self.login(self.seller)
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+        self.assertContains(
+            response,
+            'class="appointment-state-guidance appointment-state-pending is-my-turn"',
+        )
+        self.assertContains(response, '轮到你回应')
+        self.assertContains(response, '协商记录')
+        self.assertContains(response, '提出安排')
+        self.assertContains(response, '事件原地点')
+
+        self.login(self.buyer)
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+        self.assertContains(response, '等待对方回应')
+        self.assertNotContains(response, '轮到你回应')
+
+        replacement_start = initial_start + timedelta(hours=2)
+        self.propose(self.seller, replacement_start, location=self.other_location)
+        self.login(self.buyer)
+        self.client.post(reverse('respond_meeting', args=[self.order.id, 'accept']))
+
+        final_start = replacement_start + timedelta(hours=3)
+        self.propose(self.seller, final_start, location=self.location)
+        self.login(self.buyer)
+        self.client.post(reverse('respond_meeting', args=[self.order.id, 'decline']))
+
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [event.event_type for event in response.context['meeting_events']],
+            ['proposed', 'rescheduled', 'accepted', 'rescheduled', 'declined'],
+        )
+        self.assertTrue(response.context['meeting_history_complete'])
+        self.assertContains(response, 'class="meeting-negotiation-history mt-3"')
+        self.assertContains(response, '改期')
+        self.assertContains(response, '接受安排')
+        self.assertContains(response, '未接受安排')
+        self.assertContains(response, '事件新地点')
+        self.assertContains(response, '未接受原因：对方暂未接受这次时间安排')
+        self.assertContains(response, '本次安排未被接受')
+
+    def test_legacy_appointment_without_events_does_not_invent_history(self):
+        start_at = timezone.now() + timedelta(days=1)
+        MeetingAppointment.objects.create(
+            order=self.order,
+            proposed_by=self.buyer,
+            location=self.location,
+            start_at=start_at,
+            end_at=start_at + timedelta(hours=1),
+            status='pending',
+        )
+
+        self.login(self.seller)
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+
+        self.assertEqual(response.context['meeting_events'], [])
+        self.assertFalse(response.context['meeting_history_complete'])
+        self.assertContains(response, '这笔预约创建于线上协商记录启用前')
+        self.assertContains(response, '之后的改期与回应会记录在这里')
+        self.assertNotContains(response, 'class="meeting-event-list"')
+
+    def test_legacy_appointment_first_rescheduled_after_launch_is_marked_partial(self):
+        start_at = timezone.now() + timedelta(days=1)
+        appointment = MeetingAppointment.objects.create(
+            order=self.order,
+            proposed_by=self.buyer,
+            location=self.location,
+            start_at=start_at,
+            end_at=start_at + timedelta(hours=1),
+            status='pending',
+        )
+        appointment.proposed_by = self.seller
+        appointment.location = self.other_location
+        appointment.start_at = start_at + timedelta(hours=2)
+        appointment.end_at = start_at + timedelta(hours=3)
+        appointment.save()
+        record_meeting_event(
+            appointment=appointment,
+            event_type='rescheduled',
+            actor=self.seller,
+            previous_status='pending',
+        )
+
+        self.login(self.buyer)
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+
+        self.assertFalse(response.context['meeting_history_complete'])
+        self.assertContains(response, '线上协商记录启用前已经存在')
+        self.assertContains(response, '之前的时间与地点不会补造')
+        self.assertContains(response, '改期')
+
+    def test_cancelled_order_keeps_negotiation_history_visible(self):
+        self.propose(self.buyer, timezone.now() + timedelta(days=1))
+        transition_order(
+            order_id=self.order.id,
+            actor=self.seller,
+            target_status='cancelled',
+        )
+
+        self.login(self.buyer)
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '当前订单已取消')
+        self.assertContains(response, '协商记录')
+        self.assertContains(response, '提出安排')
+        self.assertContains(response, '订单取消')
+        self.assertNotContains(response, '提出交付安排</button>')
+
+    def test_deleted_proposer_uses_a_safe_role_fallback(self):
+        start_at = timezone.now() + timedelta(days=1)
+        MeetingAppointment.objects.create(
+            order=self.order,
+            proposed_by=None,
+            location=self.location,
+            start_at=start_at,
+            end_at=start_at + timedelta(hours=1),
+            status='pending',
+        )
+
+        self.login(self.seller)
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '发起人（账号已删除）')
+
+    def test_non_participant_cannot_read_negotiation_history(self):
+        outsider = User.objects.create_user(
+            username='event-outsider', password='safe-password-123',
+        )
+        self.propose(self.buyer, timezone.now() + timedelta(days=1))
+        self.client.force_login(outsider)
+
+        response = self.client.get(reverse('order_detail', args=[self.order.id]))
+
+        self.assertRedirects(response, reverse('home'))

@@ -109,7 +109,11 @@ from .saved_search_limit_shape import build_saved_search_limit_shape
 from .saved_search_quiet_window import build_saved_search_quiet_window
 from .lost_found_matched_outcome import build_lost_found_matched_outcome
 from .lost_found_report_quality import build_lost_found_report_quality
-from .meeting_events import record_meeting_event
+from .meeting_events import (
+    has_complete_meeting_history,
+    load_meeting_events_by_order,
+    record_meeting_event,
+)
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
@@ -1528,6 +1532,8 @@ def order_detail(request, order_id):
     rating_form = RatingForm() if order.status in {'completed', 'returned'} and not my_rating else None
     ratings = order.ratings.select_related('rater', 'ratee').all()
     events = order.events.select_related('actor').all()
+    meeting_events = load_meeting_events_by_order([order.id]).get(order.id, [])
+    meeting_history_complete = has_complete_meeting_history(meeting_events)
     dispute = getattr(order, 'dispute', None)
     dispute_evidence = dispute.evidence.select_related('uploaded_by').all() if dispute else []
     next_step = order_next_step(order, request.user)
@@ -1544,6 +1550,8 @@ def order_detail(request, order_id):
         'rating_form': rating_form,
         'ratings': ratings,
         'events': events,
+        'meeting_events': meeting_events,
+        'meeting_history_complete': meeting_history_complete,
         'confirmation': confirmation,
         'delivery_code_form': delivery_code_form,
         'handoff_code_display': handoff_code_display,

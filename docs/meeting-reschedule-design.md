@@ -31,9 +31,16 @@ end_at            = DateTimeField('结束时间')
 回应时间、拒绝原因与前后状态快照，已保存记录不可修改。上线前的预约没有事件链，
 迁移不回填，也不从 `OrderEvent` 自由文本伪造历史。
 
-而读取路径只有四处，没有一条是统计：`admin.py` 列给管理员看，
-`order_detail.html` 显示给本人看，`meeting_attendance.py` 读响应时长与到场，
-`meeting_scheduling.py` 读推荐。
+订单详情现在先显示当前待办：提议人等待对方回应，另一方看到「轮到你回应」；
+接受后提示安排已确认，拒绝后允许重新提议，取消后停止协商。事件列表按真实发生
+顺序展示每次提议及其回应所指向的同一版时间、地点快照。旧预约没有事件时只显示
+当前安排；首条事件就是 `rescheduled` 时明确标为不完整记录，不把上线后的首个改期
+当作首个提议。
+
+当前读取路径集中在五处：`admin.py` 列给管理员看，
+`templates/listings/orders/_appointment.html` 只向订单买卖双方展示当前回合与真实事件链，
+`meeting_attendance.py` 读响应时长与到场，`meeting_reschedule.py` 读改期形状，
+`meeting_scheduling.py` 读推荐。用户页面先提交订单参与者校验，再读取事件。
 
 `meeting_attendance.py` 已经回答了两个问题：对方多久回应一个提议、约了时间的
 订单里有几个人真的到了现场。它读的是「一条提议从交上去到被回应」这一段。

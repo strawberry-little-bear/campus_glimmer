@@ -1,14 +1,24 @@
 {% comment %}
 交付安排分区：约定时间、到场登记、预约异常、智能建议和协商表单。
-只在订单进入 confirmed / meeting 时出现。
-{% endcomment %}{% if order.status == 'confirmed' or order.status == 'meeting' %}
+活动订单可继续协商；已完成、已取消但存在预约的订单保留真实历史。
+{% endcomment %}{% if appointment or order.status == 'confirmed' or order.status == 'meeting' %}
 <section class="content-card meeting-appointment-card mb-4">
     <div class="card-section-heading"><div><span class="eyebrow eyebrow-soft">交付安排</span><h2 class="mt-2">约定见面时间</h2></div><i class="bi bi-calendar2-week meeting-appointment-icon"></i></div>
     {% if appointment %}
         <div class="appointment-summary mt-3">
             <strong>{{ appointment.start_at|date:'Y年m月d日 H:i' }} – {{ appointment.end_at|date:'H:i' }}</strong>
             <span>{% if appointment.location %}{{ appointment.location.name }}{% else %}沿用订单交付地点{% endif %}</span>
-            <small>由 {{ appointment.proposed_by.username }} 提出 · {{ appointment.get_status_display }}</small>
+            <small>由 {% if appointment.proposed_by_id == order.buyer_id %}买家{% elif appointment.proposed_by_id == order.seller_id %}卖家{% else %}发起人（账号已删除）{% endif %} 提出 · {{ appointment.get_status_display }}</small>
+        </div>
+        <div class="appointment-state-guidance appointment-state-{{ appointment.status }}{% if appointment.status == 'pending' and appointment.proposed_by_id != user.id %} is-my-turn{% endif %}" role="status">
+            {% if order.status == 'cancelled' %}<i class="bi bi-x-circle" aria-hidden="true"></i><div><strong>当前订单已取消</strong><span>以下交付安排与协商记录保留作交易凭证。</span></div>
+            {% elif order.status == 'completed' or order.status == 'returned' %}<i class="bi bi-check2-circle" aria-hidden="true"></i><div><strong>交易已结束</strong><span>以下交付安排与协商记录保留作交易凭证。</span></div>
+            {% elif appointment.status == 'pending' and appointment.proposed_by_id != user.id %}<i class="bi bi-hourglass-split" aria-hidden="true"></i><div><strong>轮到你回应</strong><span>请确认这次时间与地点，或暂不接受并重新提出安排。</span></div>
+            {% elif appointment.status == 'pending' %}<i class="bi bi-send-check" aria-hidden="true"></i><div><strong>等待对方回应</strong><span>对方接受后，当前安排会更新为已确认。</span></div>
+            {% elif appointment.status == 'confirmed' %}<i class="bi bi-calendar-check" aria-hidden="true"></i><div><strong>安排已确认</strong><span>请按约定时间到场，到场后分别登记。</span></div>
+            {% elif appointment.status == 'declined' %}<i class="bi bi-arrow-repeat" aria-hidden="true"></i><div><strong>本次安排未被接受</strong><span>你可以重新提出一个双方方便的时间与地点。</span></div>
+            {% else %}<i class="bi bi-x-circle" aria-hidden="true"></i><div><strong>当前安排已取消</strong><span>以订单状态记录中的后续动作为准。</span></div>
+            {% endif %}
         </div>
         {% if appointment_service_evaluation %}
         <div class="service-window-note {% if appointment_service_evaluation.state == 'open' %}is-open{% elif appointment_service_evaluation.state == 'closed' %}is-closed{% endif %}">
@@ -17,6 +27,35 @@
             {% else %}<i class="bi bi-clock me-1"></i>该地点未登记每周开放时段，请自行确认现场安排。{% endif %}
         </div>
         {% endif %}
+        <section class="meeting-negotiation-history mt-3" aria-labelledby="meeting-negotiation-heading">
+            <div class="meeting-negotiation-heading"><strong id="meeting-negotiation-heading"><i class="bi bi-chat-square-text me-1" aria-hidden="true"></i>协商记录</strong>{% if meeting_events %}<span>{{ meeting_events|length }} 次动作</span>{% endif %}</div>
+            {% if meeting_events %}
+                {% if not meeting_history_complete %}<p class="meeting-history-boundary"><i class="bi bi-info-circle me-1"></i>这笔预约在线上协商记录启用前已经存在，下面只展示启用后发生的动作，之前的时间与地点不会补造。</p>{% endif %}
+                <ol class="meeting-event-list">
+                    {% for event in meeting_events %}
+                    <li class="meeting-event meeting-event-{{ event.event_type }}">
+                        <span class="meeting-event-marker" aria-hidden="true"></span>
+                        <div class="meeting-event-copy">
+                            <div class="meeting-event-head"><strong>{% if event.event_type == 'proposed' %}提出安排{% elif event.event_type == 'rescheduled' %}改期{% elif event.event_type == 'accepted' %}接受安排{% elif event.event_type == 'declined' %}未接受安排{% else %}订单取消{% endif %}</strong><time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:'Y-m-d H:i' }}</time></div>
+                            {% if event.event_type == 'proposed' or event.event_type == 'rescheduled' %}
+                            <p><i class="bi bi-calendar2-week me-1"></i>{{ event.proposed_start_at|date:'Y年m月d日 H:i' }} – {{ event.proposed_end_at|date:'H:i' }}<span aria-hidden="true">·</span>{% if event.location_name %}{{ event.location_name }}{% else %}沿用订单交付地点{% endif %}</p>
+                            <small>由 {% if event.proposed_by_id == order.buyer_id %}买家{% elif event.proposed_by_id == order.seller_id %}卖家{% else %}发起人（账号已删除）{% endif %} 提出</small>
+                            {% elif event.event_type == 'accepted' or event.event_type == 'declined' %}
+                            <p><i class="bi bi-calendar2-week me-1"></i>回应这一版：{{ event.proposed_start_at|date:'Y年m月d日 H:i' }} – {{ event.proposed_end_at|date:'H:i' }}<span aria-hidden="true">·</span>{% if event.location_name %}{{ event.location_name }}{% else %}沿用订单交付地点{% endif %}</p>
+                            <small>由 {% if event.responded_by_id == order.buyer_id %}买家{% elif event.responded_by_id == order.seller_id %}卖家{% else %}回应人（账号已删除）{% endif %} 回应</small>
+                            {% if event.event_type == 'declined' and event.decline_reason %}<p class="meeting-event-reason">未接受原因：{{ event.decline_reason }}</p>{% endif %}
+                            {% else %}
+                            <p class="mb-1">订单取消后，当前交付安排同步结束。</p>
+                            <small>由 {% if event.actor_id == order.buyer_id %}买家{% elif event.actor_id == order.seller_id %}卖家{% else %}系统或已删除账号{% endif %} 操作</small>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ol>
+            {% else %}
+                <p class="meeting-history-empty">这笔预约创建于线上协商记录启用前，目前只显示现有安排；之后的改期与回应会记录在这里。</p>
+            {% endif %}
+        </section>
         {% if appointment.status == 'confirmed' and order.status == 'meeting' %}
         <div class="meeting-attendance mt-3">
             <div class="meeting-attendance-row"><span><i class="bi bi-person-check me-1"></i>买家到场</span><strong>{% if appointment.buyer_arrived_at %}已登记 · {{ appointment.buyer_arrived_at|date:'H:i' }}{% else %}待登记{% endif %}</strong></div>

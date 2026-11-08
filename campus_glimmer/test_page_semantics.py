@@ -1433,6 +1433,9 @@ class GridFirstCellTests(SimpleTestCase):
         '.trade-order-card': (
             (('a', ('trade-order-thumb',)), ()),
         ),
+        '.meeting-event': (
+            (('span', ('meeting-event-marker',)), ()),
+        ),
         '.order-info-list': (
             (('dt', ()), ()),
         ),
