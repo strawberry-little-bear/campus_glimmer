@@ -5,7 +5,7 @@
 而 `Order` 那边什么都没发生。这个模块把它们读出来，只报告不改写。这些测试要
 钉住的是：
 
-1. 一笔订单算不算「这条响应带来的」，只认商品相同 + 买家是响应人 + 下单不早于确认。
+1. 一笔订单算不算「这条响应带来的」，只认商品相同 + 买家是求购发布者 + 下单不早于确认。
 2. 分母是已确认的响应数，排除 `withdrawn`，不是求购数也不是响应总数。
 3. 成交看 `completed` / `returned`，`cancelled` 单独一类。
 4. 从确认到下单的间隔按 `Order.created_at` 减响应的 `updated_at` 算，分档按小时起步。
@@ -100,7 +100,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder)
+        order = self.make_order(item, response.demand.requester)
         order.created_at = response.updated_at + timedelta(hours=3)
         order.save(update_fields=['created_at'])
 
@@ -114,7 +114,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder)
+        order = self.make_order(item, response.demand.requester)
         order.created_at = response.updated_at - timedelta(hours=1)
         order.save(update_fields=['created_at'])
 
@@ -123,12 +123,22 @@ class DemandResponseConversionTests(TestCase):
         self.assertEqual(report['blocked']['total'], 1)
 
     def test_order_by_someone_else_is_not_a_conversion(self):
-        # 商品相同但买家不是响应人：卖家卖给了别人，不是这条响应走完了那段路。
+        # 商品相同但买家不是求购发布者：卖家卖给了别人，不是这条响应走完了那段路。
+        demand = self.make_demand()
+        item = self.make_item()
+        self.make_response(demand, item)
+        stranger = make_user('conversion-stranger')
+        self.make_order(item, stranger)
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['conversion']['converted_count'], 0)
+
+    def test_order_by_item_seller_is_not_a_conversion(self):
+        # 响应人是商品卖家，不是买家。卖家给自己响应过的商品下单不能算转化。
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        stranger = make_user('conversion-stranger')
-        self.make_order(item, stranger)
+        self.make_order(item, response.responder)
 
         report = build_demand_response_conversion(days=30)
         self.assertEqual(report['conversion']['converted_count'], 0)
@@ -138,7 +148,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item()
         response = self.make_response(demand, item)
         other_item = self.make_item()
-        self.make_order(other_item, response.responder)
+        self.make_order(other_item, response.demand.requester)
 
         report = build_demand_response_conversion(days=30)
         self.assertEqual(report['conversion']['converted_count'], 0)
@@ -179,7 +189,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item(trade_mode='borrow')
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder, status='returned')
+        order = self.make_order(item, response.demand.requester, status='returned')
         order.created_at = response.updated_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
@@ -193,7 +203,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder, status='cancelled')
+        order = self.make_order(item, response.demand.requester, status='cancelled')
         order.created_at = response.updated_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
@@ -207,7 +217,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder, status='pending')
+        order = self.make_order(item, response.demand.requester, status='pending')
         order.created_at = response.updated_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
@@ -221,7 +231,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder)
+        order = self.make_order(item, response.demand.requester)
         order.created_at = response.updated_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
@@ -250,7 +260,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder)
+        order = self.make_order(item, response.demand.requester)
         order.created_at = response.updated_at + timedelta(days=30)
         order.save(update_fields=['created_at'])
 
@@ -356,7 +366,7 @@ class DemandResponseConversionTests(TestCase):
             demand = self.make_demand()
             item = self.make_item(trade_mode=trade_mode)
             response = self.make_response(demand, item)
-            order = self.make_order(item, response.responder)
+            order = self.make_order(item, response.demand.requester)
             order.created_at = response.updated_at + timedelta(hours=1)
             order.save(update_fields=['created_at'])
 
@@ -463,7 +473,7 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
-        order = self.make_order(item, response.responder)
+        order = self.make_order(item, response.demand.requester)
         order.created_at = response.updated_at + timedelta(hours=4)
         order.save(update_fields=['created_at'])
 

@@ -164,7 +164,7 @@ def _order_is_from_response(order, response):
     """一笔订单算不算这条响应带来的。
 
     `Order` 里没有一个字段指向 `DemandResponse`，只能用字段比对回推，三条同时满足才算：
-    商品相同、买家是响应人、下单不早于确认时刻。
+    商品相同、买家是求购发布者、下单不早于确认时刻。
 
     商品相同是硬条件。一件商品只能有一条 `accepted` 响应吗？不能，
     `UniqueConstraint` 只挡 `(demand, item)`——同一个人可以拿同一件商品响应两条求购，
@@ -180,7 +180,7 @@ def _order_is_from_response(order, response):
         return False
     return (
         order.item_id == response.item_id
-        and order.buyer_id == response.responder_id
+        and order.buyer_id == response.demand.requester_id
         and order.created_at >= response.updated_at
     )
 
@@ -233,7 +233,9 @@ def _fetch_confirmed_responses(days, now):
     candidate_orders = list(
         Order.objects.select_related('item', 'buyer', 'seller').filter(
             item_id__in={response.item_id for response in responses},
-            buyer_id__in={response.responder_id for response in responses},
+            buyer_id__in={
+                response.demand.requester_id for response in responses
+            },
         ).order_by('created_at', 'id')
     )
 
