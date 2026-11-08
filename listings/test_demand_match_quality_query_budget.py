@@ -77,10 +77,11 @@ class DemandMatchQualityOracleTests(TestCase):
             demand=demand, item=item, responder=self.seller, status=status,
             match_score=score, match_reason=reason,
         )
-        DemandResponse.objects.filter(pk=response.pk).update(
-            created_at=self.now - timedelta(days=days_ago),
-            updated_at=self.now - timedelta(days=days_ago),
-        )
+        decided_at = self.now - timedelta(days=days_ago)
+        update_fields = {'created_at': decided_at, 'updated_at': decided_at}
+        if status in {'accepted', 'superseded'}:
+            update_fields['accepted_at'] = decided_at
+        DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
         return response
 
     def seed_a_mixed_window(self):
@@ -314,10 +315,11 @@ class DemandMatchQueryBudgetTests(TestCase):
                 status='accepted' if index % 2 else 'rejected',
                 match_score=2 + (index % 10), match_reason='分类一致、地点一致',
             )
-            DemandResponse.objects.filter(pk=response.pk).update(
-                created_at=self.now - timedelta(days=1),
-                updated_at=self.now - timedelta(days=1),
-            )
+            decided_at = self.now - timedelta(days=1)
+            update_fields = {'created_at': decided_at, 'updated_at': decided_at}
+            if index % 2 == 0:
+                update_fields['accepted_at'] = decided_at
+            DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
 
     def test_a_populated_window_stays_within_budget(self):
         self.seed_enough_to_be_measurable()

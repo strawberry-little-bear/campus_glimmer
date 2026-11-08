@@ -73,19 +73,20 @@ class DemandMatchQualitySetupTests(TestCase):
         )
 
     def respond(self, demand, item, score, status, reason='分类一致、地点一致', days_ago=1):
-        """造一条已决断的响应，并把更新时间回填到窗口内。
+        """造一条已决断的响应，并把决断时间回填到窗口内。
 
-        这个模块按 updated_at 数已决断响应——求购人是点了「采纳」或「未采纳」
-        那一刻才做出判断的，创建时间只说得出卖家什么时候响应。
+        这个模块按 accepted_at 或 rejected 状态的 updated_at 数已决断响应；
+        创建时间只说得出卖家什么时候响应。
         """
         response = DemandResponse.objects.create(
             demand=demand, item=item, responder=item.seller, status=status,
             match_score=score, match_reason=reason,
         )
-        DemandResponse.objects.filter(pk=response.pk).update(
-            created_at=self.now - timedelta(days=days_ago),
-            updated_at=self.now - timedelta(days=days_ago),
-        )
+        decided_at = self.now - timedelta(days=days_ago)
+        update_fields = {'created_at': decided_at, 'updated_at': decided_at}
+        if status in {'accepted', 'superseded'}:
+            update_fields['accepted_at'] = decided_at
+        DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
         return DemandResponse.objects.get(pk=response.pk)
 
     def test_an_empty_history_reports_no_data_rather_than_zeroes(self):
