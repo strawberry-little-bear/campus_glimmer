@@ -291,7 +291,7 @@ campus_glimmer/
 
 - **`test_demand_match_quality.py`**：分档采纳率、单调性、高分被拒、维度效果与看板导出
 
-- **`test_demand_filter_workspace.py`**：求购广场筛选工作台的关键词、分类、地点与状态组合，以及空态测试
+- **`test_demand_filter_workspace.py`**：求购广场与「我的求购」筛选工作台的关键词、分类、地点、状态组合，用户隔离、响应待办、生命周期动作与空态测试
 
 - **`test_demand_match_quality_query_budget.py`**：需求匹配质量聚合的 oracle——每个上报数字都用 values_list 加纯 Python 重算，filter 搬进 Count 时漏一个字段这里先红
 
