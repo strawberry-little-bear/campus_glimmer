@@ -80,10 +80,12 @@ class DemandResponseConversionTests(TestCase):
         response.refresh_from_db()
         return response
 
-    def make_order(self, item, buyer, *, status='completed', delay_hours=2):
+    def make_order(self, item, buyer, *, status='completed', delay_hours=2,
+                   demand_response=None):
         """按响应确认之后 `delay_hours` 小时建一笔订单。"""
         order = Order.objects.create(
             item=item, buyer=buyer, seller=item.seller,
+            demand_response=demand_response,
             meeting_location=self.location, agreed_price='50.00', status=status,
         )
         # `created_at` 是 auto_now_add，建行时拿到的是真实墙上时间，回填成
@@ -142,6 +144,33 @@ class DemandResponseConversionTests(TestCase):
 
         report = build_demand_response_conversion(days=30)
         self.assertEqual(report['conversion']['converted_count'], 0)
+
+    def test_explicit_response_link_counts_without_guessing(self):
+        demand = self.make_demand()
+        item = self.make_item()
+        response = self.make_response(demand, item)
+        self.make_order(
+            item, self.requester, demand_response=response,
+        )
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['conversion']['converted_count'], 1)
+
+    def test_explicit_link_disambiguates_same_item_and_buyer(self):
+        # 同一件商品可以响应两条不同求购，且两条都由同一发布者确认。显式来源只把订单
+        # 归给真正发起交易的那一条，不能让两条响应同时凭空变成成交。
+        first_demand = self.make_demand()
+        second_demand = self.make_demand()
+        item = self.make_item()
+        first_response = self.make_response(first_demand, item)
+        self.make_response(second_demand, item)
+        self.make_order(
+            item, self.requester, demand_response=first_response,
+        )
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['conversion']['total'], 2)
+        self.assertEqual(report['conversion']['converted_count'], 1)
 
     def test_order_for_a_different_item_is_not_a_conversion(self):
         demand = self.make_demand()

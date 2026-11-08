@@ -1065,12 +1065,69 @@ def report_item(request, item_id):
     return render(request, 'listings/report_form.html', {'form': form, 'item': item, 'title': '举报商品'})
 
 
+def _demand_response_source_for_order(request, item):
+    """Resolve the optional accepted response that led to this order flow."""
+    raw_response_id = None
+    if request.method == 'POST':
+        raw_response_id = request.POST.get('demand_response')
+    else:
+        raw_response_id = request.GET.get('demand_response')
+    if not raw_response_id:
+        return None, None
+    try:
+        response_id = int(raw_response_id)
+    except (TypeError, ValueError):
+        return None, '这条求购响应链接无效。'
+
+    response = DemandResponse.objects.select_related(
+        'demand', 'item',
+    ).filter(pk=response_id).first()
+    if response is None or response.demand.requester_id != request.user.id:
+        return None, '只能从自己的求购匹配继续完成交易。'
+    if response.status != 'accepted':
+        return None, '只有已确认的求购响应才能继续交易。'
+    if response.item_id != item.id:
+        return None, '这条求购响应与当前商品不一致。'
+    return response, None
+
+
+def _existing_response_transaction_redirect(request, response):
+    """Send a repeated response-backed handoff to the record already created."""
+    linked_order = Order.objects.filter(demand_response=response).only('id').first()
+    if linked_order is not None:
+        messages.info(request, '这次求购匹配已经创建了交易预约。')
+        return redirect('order_detail', order_id=linked_order.id)
+    linked_application = GiftApplication.objects.select_related('order').filter(
+        demand_response=response,
+    ).first()
+    if linked_application is not None:
+        if linked_application.order_id:
+            messages.info(request, '这次求购匹配已经创建了交易预约。')
+            return redirect('order_detail', order_id=linked_application.order_id)
+        messages.info(request, '这次求购匹配已经提交了领取申请，请等待发布者选择。')
+        return redirect('my_gift_applications')
+    return None
+
+
 @login_required
 def create_order(request, item_id):
-    item = get_object_or_404(Item.objects.available().select_related('seller', 'location'), id=item_id)
+    item = get_object_or_404(
+        Item.objects.select_related('seller', 'location'), id=item_id,
+    )
     if item.seller == request.user:
         messages.error(request, '不能预约自己的商品。')
         return redirect('item_detail', item_id=item.id)
+
+    demand_response, response_error = _demand_response_source_for_order(request, item)
+    if response_error:
+        messages.error(request, response_error)
+        return redirect('item_detail', item_id=item.id)
+    if demand_response is not None:
+        existing_redirect = _existing_response_transaction_redirect(request, demand_response)
+        if existing_redirect is not None:
+            return existing_redirect
+    if not item.is_available_now:
+        raise Http404
 
     # Free gifts use an application queue instead of reserving the item for
     # the first person who clicks. The seller can review the queue and select
@@ -1081,20 +1138,44 @@ def create_order(request, item_id):
             if form.is_valid():
                 try:
                     with transaction.atomic():
+                        locked_response = None
+                        if demand_response is not None:
+                            locked_response, response_error = _lock_order_demand_response(
+                                request, demand_response.id, item,
+                            )
+                            if response_error:
+                                messages.error(request, response_error)
+                                return redirect('item_detail', item_id=item.id)
+                            existing_redirect = _existing_response_transaction_redirect(
+                                request, locked_response,
+                            )
+                            if existing_redirect is not None:
+                                return existing_redirect
                         locked_item = Item.objects.select_for_update(of=('self',)).select_related('seller', 'location').get(id=item.id)
                         if not locked_item.is_available_now:
                             messages.info(request, '这个免费商品刚刚结束展示或已被选中。')
                             return redirect('item_detail', item_id=item.id)
-                        if GiftApplication.objects.filter(
+                        existing_application = GiftApplication.objects.select_for_update(
+                            of=('self',),
+                        ).filter(
                             item=locked_item, applicant=request.user, status='pending',
-                        ).exists():
-                            messages.info(request, '你已经提交过这个商品的领取申请。')
+                        ).first()
+                        if existing_application is not None:
+                            if locked_response is not None and existing_application.demand_response_id is None:
+                                existing_application.demand_response = locked_response
+                                existing_application.save(update_fields=[
+                                    'demand_response', 'updated_at',
+                                ])
+                                messages.success(request, '领取申请已关联到这次求购匹配。')
+                            else:
+                                messages.info(request, '你已经提交过这个商品的领取申请。')
                             return redirect('my_gift_applications')
                         application = GiftApplication.objects.create(
                             item=locked_item,
                             applicant=request.user,
                             meeting_location=form.cleaned_data.get('meeting_location') or locked_item.location,
                             applicant_note=form.cleaned_data.get('buyer_note', ''),
+                            demand_response=locked_response,
                         )
                         create_notification(
                             locked_item.seller, actor=request.user, kind='gift_application',
@@ -1110,7 +1191,12 @@ def create_order(request, item_id):
                 return redirect('my_gift_applications')
         else:
             form = OrderForm(initial={'meeting_location': item.location_id})
-        return render(request, 'listings/order_form.html', {'form': form, 'item': item, 'title': '申请领取'})
+        return render(request, 'listings/order_form.html', {
+            'form': form,
+            'item': item,
+            'demand_response': demand_response,
+            'title': '申请领取',
+        })
 
     active_order = Order.objects.filter(
         item_id=item.id, status__in=Order.ACTIVE_STATUS_VALUES,
@@ -1123,6 +1209,19 @@ def create_order(request, item_id):
         if form.is_valid():
             try:
                 with transaction.atomic():
+                    locked_response = None
+                    if demand_response is not None:
+                        locked_response, response_error = _lock_order_demand_response(
+                            request, demand_response.id, item,
+                        )
+                        if response_error:
+                            messages.error(request, response_error)
+                            return redirect('item_detail', item_id=item.id)
+                        existing_redirect = _existing_response_transaction_redirect(
+                            request, locked_response,
+                        )
+                        if existing_redirect is not None:
+                            return existing_redirect
                     locked_item = Item.objects.select_for_update(of=('self',)).select_related('seller').get(id=item.id)
                     if (
                         not locked_item.is_available_now
@@ -1136,6 +1235,7 @@ def create_order(request, item_id):
                     order.item = locked_item
                     order.buyer = request.user
                     order.seller = locked_item.seller
+                    order.demand_response = locked_response
                     order.agreed_price = Decimal('0.00') if locked_item.trade_mode == 'borrow' else locked_item.price
                     order.deposit_amount = locked_item.deposit_amount if locked_item.trade_mode == 'borrow' else Decimal('0.00')
                     order.return_due_at = (
@@ -1171,9 +1271,25 @@ def create_order(request, item_id):
     else:
         form = OrderForm(initial={'meeting_location': item.location_id})
     return render(request, 'listings/order_form.html', {
-        'form': form, 'item': item,
+        'form': form,
+        'item': item,
+        'demand_response': demand_response,
         'title': '申请借用' if item.trade_mode == 'borrow' else '预约交易',
     })
+
+
+def _lock_order_demand_response(request, response_id, item):
+    """Lock and revalidate a response-backed handoff inside a transaction."""
+    response = DemandResponse.objects.select_for_update(of=('self',)).select_related(
+        'demand', 'item',
+    ).filter(pk=response_id).first()
+    if response is None or response.demand.requester_id != request.user.id:
+        return None, '只能从自己的求购匹配继续完成交易。'
+    if response.status != 'accepted':
+        return None, '只有已确认的求购响应才能继续交易。'
+    if response.item_id != item.id:
+        return None, '这条求购响应与当前商品不一致。'
+    return response, None
 
 
 @login_required
@@ -1280,6 +1396,7 @@ def accept_gift_application(request, application_id):
                 item=locked_item,
                 buyer=locked_application.applicant,
                 seller=locked_item.seller,
+                demand_response=locked_application.demand_response,
                 meeting_location=locked_application.meeting_location or locked_item.location,
                 agreed_price=locked_item.price,
                 buyer_note=locked_application.applicant_note,
@@ -14304,12 +14421,12 @@ def review_demand_response(request, response_id, action):
                 actor=request.user,
                 kind='demand_response',
                 title='你的求购响应已被确认',
-                message=f'“{locked_demand.title}”已确认使用你的商品“{locked_item.title}”，请继续进入商品详情完成预约或领取申请。',
+                message=f'“{locked_demand.title}”已确认使用你的商品“{locked_item.title}”，求购发布者将继续完成预约或领取申请。',
                 item=locked_item,
                 demand=locked_demand,
-                target_url=reverse('item_detail', args=[locked_item.id]),
+                target_url=reverse('demand_detail', args=[locked_demand.id]),
             )
-            messages.success(request, '已确认这条响应，请继续进入商品详情完成交易。')
+            messages.success(request, '已确认这条响应，可以从下方继续完成交易。')
         else:
             locked_response.status = 'rejected'
             locked_response.save(update_fields=['status', 'updated_at'])
@@ -14402,6 +14519,7 @@ def demand_detail(request, demand_id):
     if is_demand_owner:
         demand_responses = demand.responses.select_related(
             'item', 'item__category', 'item__location', 'responder', 'feedback',
+            'order', 'gift_application', 'gift_application__order',
         ).all()
         accepted_response = next(
             (response for response in demand_responses if response.status == 'accepted'),

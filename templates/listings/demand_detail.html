@@ -60,7 +60,28 @@
                 <form method="post" action="{% url 'review_demand_response' response.id 'accept' %}">{% csrf_token %}<button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-check2 me-1"></i>确认匹配</button></form>
                 <form method="post" action="{% url 'review_demand_response' response.id 'reject' %}">{% csrf_token %}<button class="btn btn-sm btn-outline-secondary" type="submit">暂不采纳</button></form>
             </div>
-            {% elif response.status == 'accepted' %}<div class="small text-success mt-2">已确认匹配，请进入商品详情继续完成预约或领取申请。</div>{% if response.feedback %}<div class="mutual-aid-feedback-summary mt-3"><strong><i class="bi bi-check2-all me-1"></i>互助结果：{{ response.feedback.get_outcome_display }}</strong>{% if response.feedback.tags %}<div class="small text-muted mt-1">{% for tag in response.feedback.tags %}{% for value, label in response.feedback.TAG_CHOICES %}{% if tag == value %}<span class="badge rounded-pill text-bg-light me-1">{{ label }}</span>{% endif %}{% endfor %}{% endfor %}</div>{% endif %}</div>{% elif is_demand_owner and demand_feedback_form %}<div class="content-card mt-3 p-3 bg-light-subtle"><div class="small fw-semibold mb-2">这次互助后来怎么样了？</div><form method="post" action="{% url 'submit_demand_feedback' response.id %}">{% csrf_token %}{% include "listings/_mutual_aid_feedback_fields.html" with form=demand_feedback_form %}<button class="btn btn-sm btn-success" type="submit">记录互助结果</button></form></div>{% endif %}{% endif %}
+            {% elif response.status == 'accepted' %}
+            <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+                {% if response.order %}
+                <span class="small text-success"><i class="bi bi-check2-circle me-1"></i>这次匹配已创建交易预约</span>
+                <a class="btn btn-sm btn-outline-success" href="{% url 'order_detail' response.order.id %}">查看交易</a>
+                {% elif response.gift_application %}
+                    {% if response.gift_application.order %}
+                    <span class="small text-success"><i class="bi bi-check2-circle me-1"></i>这次匹配已创建交易预约</span>
+                    <a class="btn btn-sm btn-outline-success" href="{% url 'order_detail' response.gift_application.order.id %}">查看交易</a>
+                    {% else %}
+                    <span class="small text-success"><i class="bi bi-inbox me-1"></i>领取申请已提交，等待发布者选择</span>
+                    <a class="btn btn-sm btn-outline-success" href="{% url 'my_gift_applications' %}">查看领取申请</a>
+                    {% endif %}
+                {% elif not response.item.is_available_now %}
+                <span class="small text-muted"><i class="bi bi-slash-circle me-1"></i>响应商品当前不可预约</span>
+                {% else %}
+                <span class="small text-success"><i class="bi bi-check2-circle me-1"></i>已确认匹配，可以直接继续交易</span>
+                <a class="btn btn-sm btn-success" href="{% url 'create_order' response.item.id %}?demand_response={{ response.id }}">{% if response.item.trade_mode == 'free' %}<i class="bi bi-gift me-1"></i>申请领取{% elif response.item.trade_mode == 'borrow' %}<i class="bi bi-arrow-repeat me-1"></i>继续借用{% else %}<i class="bi bi-calendar2-check me-1"></i>继续预约{% endif %}</a>
+                {% endif %}
+            </div>
+            {% if response.feedback %}<div class="mutual-aid-feedback-summary mt-3"><strong><i class="bi bi-check2-all me-1"></i>互助结果：{{ response.feedback.get_outcome_display }}</strong>{% if response.feedback.tags %}<div class="small text-muted mt-1">{% for tag in response.feedback.tags %}{% for value, label in response.feedback.TAG_CHOICES %}{% if tag == value %}<span class="badge rounded-pill text-bg-light me-1">{{ label }}</span>{% endif %}{% endfor %}{% endfor %}</div>{% endif %}</div>{% elif is_demand_owner and demand_feedback_form %}<div class="content-card mt-3 p-3 bg-light-subtle"><div class="small fw-semibold mb-2">这次互助后来怎么样了？</div><form method="post" action="{% url 'submit_demand_feedback' response.id %}">{% csrf_token %}{% include "listings/_mutual_aid_feedback_fields.html" with form=demand_feedback_form %}<button class="btn btn-sm btn-success" type="submit">记录互助结果</button></form></div>{% endif %}
+            {% endif %}
         </article>
         {% endfor %}
     </div>

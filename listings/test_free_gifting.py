@@ -5,7 +5,10 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .forms import ItemForm
-from .models import Category, CampusLocation, CommunityContribution, GiftApplication, Item, Notification, Order
+from .models import (
+    CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse,
+    GiftApplication, Item, Notification, Order,
+)
 
 
 class FreeGiftingTests(TestCase):
@@ -105,6 +108,56 @@ class FreeGiftingTests(TestCase):
         self.assertEqual(
             CommunityContribution.objects.filter(user=self.buyer, kind='gift_completed').values_list('points', flat=True).get(),
             8,
+        )
+
+    def test_accepted_response_provenance_survives_gift_selection(self):
+        item = Item.objects.create(
+            title='免费收纳盒', description='装书正好', trade_mode='free', price='0.00',
+            category=self.category, location=self.location, condition='8成新',
+            seller=self.seller,
+        )
+        demand = DemandPost.objects.create(
+            requester=self.buyer,
+            title='求购宿舍收纳盒',
+            description='需要一个可以装书的收纳盒',
+            category=self.category,
+            location=self.location,
+            max_price='0.00',
+        )
+        demand_response = DemandResponse.objects.create(
+            demand=demand, item=item, responder=self.seller,
+            status='accepted', match_score=90, match_reason='分类、地点一致',
+        )
+
+        self.client.force_login(self.buyer)
+        created = self.client.post(
+            reverse('create_order', args=[item.id]),
+            {
+                'meeting_location': self.location.id,
+                'buyer_note': '可以今天晚上领取',
+                'demand_response': demand_response.id,
+            },
+        )
+        application = GiftApplication.objects.get(item=item, applicant=self.buyer)
+        self.assertRedirects(created, reverse('my_gift_applications'))
+        self.assertEqual(application.demand_response, demand_response)
+        self.assertContains(
+            self.client.get(reverse('demand_detail', args=[demand.id])),
+            '领取申请已提交，等待发布者选择',
+        )
+
+        self.client.force_login(self.seller)
+        selected = self.client.post(
+            reverse('accept_gift_application', args=[application.id]),
+        )
+        order = Order.objects.get(item=item)
+        self.assertRedirects(selected, reverse('order_detail', args=[order.id]))
+        self.assertEqual(order.buyer, self.buyer)
+        self.assertEqual(order.demand_response, demand_response)
+        self.client.force_login(self.buyer)
+        self.assertContains(
+            self.client.get(reverse('demand_detail', args=[demand.id])),
+            '这次匹配已创建交易预约',
         )
 
     def test_same_user_cannot_submit_two_pending_applications(self):

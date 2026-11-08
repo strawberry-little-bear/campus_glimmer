@@ -40,6 +40,7 @@
 from collections import namedtuple
 from datetime import time as dt_time, timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import DemandPost, DemandResponse, Item, Order
@@ -163,21 +164,16 @@ def _bucket_index(seconds, buckets):
 def _order_is_from_response(order, response):
     """一笔订单算不算这条响应带来的。
 
-    `Order` 里没有一个字段指向 `DemandResponse`，只能用字段比对回推，三条同时满足才算：
-    商品相同、买家是求购发布者、下单不早于确认时刻。
+    新订单直接保存 `demand_response`，以这条显式来源为准：即使同一件商品、同一个求购
+    发布者后来确认了多条响应，订单也不会被错归给旁边的响应。
 
-    商品相同是硬条件。一件商品只能有一条 `accepted` 响应吗？不能，
-    `UniqueConstraint` 只挡 `(demand, item)`——同一个人可以拿同一件商品响应两条求购，
-    两条都被确认（不同发布者），于是一件商品上可能挂着两条已确认响应。这时「同一件商品
-    + 同一个买家」会同时命中两条响应。
-
-    **所以按响应逐条判定，不按订单归属**：一条响应只要能找到满足条件的订单就算转化，
-    一条订单可以同时算作两条响应的转化。这个口径会让「转化响应数」和「有订单的响应数」
-    在极少数重叠场景下不一致，但宁可重复计数也不假装能分清——把两笔说不清的成交硬派给
-    其中一条，会让另一条的转化率凭空变成零，而它是真的转化了。
+    迁移前没有来源字段的旧订单才回退到三条推断：商品相同、买家是求购发布者、下单不早于
+    确认时刻。响应人是商品卖家，不能拿 `responder` 当买家。
     """
     if order is None:
         return False
+    if order.demand_response_id is not None:
+        return order.demand_response_id == response.pk
     return (
         order.item_id == response.item_id
         and order.buyer_id == response.demand.requester_id
@@ -228,14 +224,21 @@ def _fetch_confirmed_responses(days, now):
     if not responses:
         return []
 
-    # 候选订单只取这些响应涉及的商品、由这些响应人买下的那一些，再逐条比对。全表扫一遍
-    # 会在一个成熟站点上变成一次没有索引可用的全表关联，而这里要的只是三条字段相等。
+    # 新订单按显式来源取；迁移前的旧订单才用商品和求购发布者推断。候选集仍按响应涉及的
+    # 商品和买家收窄，避免在成熟站点上扫描整张订单表。
+    response_ids = {response.pk for response in responses}
     candidate_orders = list(
         Order.objects.select_related('item', 'buyer', 'seller').filter(
-            item_id__in={response.item_id for response in responses},
-            buyer_id__in={
-                response.demand.requester_id for response in responses
-            },
+            Q(demand_response_id__in=response_ids)
+            | (
+                Q(demand_response__isnull=True)
+                & Q(
+                    item_id__in={response.item_id for response in responses},
+                    buyer_id__in={
+                        response.demand.requester_id for response in responses
+                    },
+                )
+            )
         ).order_by('created_at', 'id')
     )
 

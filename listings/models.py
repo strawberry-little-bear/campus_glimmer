@@ -1275,6 +1275,10 @@ class GiftApplication(models.Model):
     )
     applicant_note = models.TextField('申请说明', blank=True)
     status = models.CharField('申请状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    demand_response = models.OneToOneField(
+        'DemandResponse', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='gift_application', verbose_name='来源求购响应',
+    )
     order = models.OneToOneField(
         'Order', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='gift_application', verbose_name='生成订单',
@@ -1328,6 +1332,10 @@ class Order(models.Model):
     return_due_at = models.DateTimeField('预计归还时间', null=True, blank=True)
     returned_at = models.DateTimeField('实际归还时间', null=True, blank=True)
     buyer_note = models.TextField('买家备注', blank=True)
+    demand_response = models.OneToOneField(
+        'DemandResponse', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='order', verbose_name='来源求购响应',
+    )
     status = models.CharField('订单状态', max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField('下单时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)

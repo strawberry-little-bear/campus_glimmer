@@ -2,7 +2,10 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse, Item, Notification
+from .models import (
+    CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse,
+    Item, Notification, Order,
+)
 
 
 class DemandResponseFlowTests(TestCase):
@@ -126,6 +129,97 @@ class DemandResponseFlowTests(TestCase):
             recipient=self.other_seller, kind='demand_response', item=other_item,
             title='求购响应未被采纳',
         ).exists())
+
+    def _accept_response(self):
+        self._respond()
+        demand_response = DemandResponse.objects.get(
+            demand=self.demand, item=self.item,
+        )
+        self.client.logout()
+        self.client.login(username='demand-requester', password='safe-password-123')
+        accepted = self.client.post(
+            reverse('review_demand_response', args=[demand_response.id, 'accept']),
+        )
+        self.assertEqual(accepted.status_code, 302)
+        demand_response.refresh_from_db()
+        self.assertEqual(demand_response.status, 'accepted')
+        return demand_response
+
+    def test_accepted_response_owner_can_continue_to_order(self):
+        demand_response = self._accept_response()
+        detail_url = reverse('demand_detail', args=[self.demand.id])
+        self.assertContains(
+            self.client.get(detail_url),
+            f'?demand_response={demand_response.id}',
+        )
+
+        order_url = reverse('create_order', args=[self.item.id])
+        response = self.client.post(order_url, {
+            'meeting_location': self.location.id,
+            'buyer_note': '按求购约定在图书馆见',
+            'demand_response': demand_response.id,
+        })
+
+        order = Order.objects.get(item=self.item)
+        self.assertRedirects(response, reverse('order_detail', args=[order.id]))
+        self.assertEqual(order.buyer, self.requester)
+        self.assertEqual(order.seller, self.seller)
+        self.assertEqual(order.demand_response, demand_response)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'reserved')
+        self.assertContains(self.client.get(detail_url), '这次匹配已创建交易预约')
+        self.assertContains(self.client.get(detail_url), '查看交易')
+
+        duplicate = self.client.post(order_url, {
+            'meeting_location': self.location.id,
+            'buyer_note': '重复提交',
+            'demand_response': demand_response.id,
+        })
+        self.assertRedirects(duplicate, reverse('order_detail', args=[order.id]))
+        self.assertEqual(Order.objects.filter(item=self.item).count(), 1)
+
+    def test_response_handoff_rejects_another_user(self):
+        demand_response = self._accept_response()
+        outsider = User.objects.create_user(
+            username='demand-outsider', password='safe-password-123',
+        )
+        self.client.force_login(outsider)
+        response = self.client.post(
+            reverse('create_order', args=[self.item.id]),
+            {
+                'meeting_location': self.location.id,
+                'demand_response': demand_response.id,
+            },
+        )
+
+        self.assertRedirects(response, reverse('item_detail', args=[self.item.id]))
+        self.assertFalse(Order.objects.filter(item=self.item).exists())
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'available')
+
+    def test_response_handoff_rejects_a_different_item(self):
+        demand_response = self._accept_response()
+        other_item = Item.objects.create(
+            seller=self.seller,
+            title='另一件教材',
+            description='不是这条响应对应的商品',
+            category=self.category,
+            location=self.location,
+            condition='8成新',
+            price='35.00',
+        )
+        response = self.client.post(
+            reverse('create_order', args=[other_item.id]),
+            {
+                'meeting_location': self.location.id,
+                'demand_response': demand_response.id,
+            },
+        )
+
+        self.assertRedirects(response, reverse('item_detail', args=[other_item.id]))
+        self.assertFalse(Order.objects.filter(item=other_item).exists())
+        other_item.refresh_from_db()
+        self.assertEqual(other_item.status, 'available')
 
     def test_non_matching_item_cannot_respond(self):
         other_location = CampusLocation.objects.create(name='其他响应地点')
