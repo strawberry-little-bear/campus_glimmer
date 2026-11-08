@@ -121,6 +121,39 @@ class SharedOperationsDashboardAssemblyTests(SimpleTestCase):
             ['operations_core', 'first_panel', 'second_panel'],
         )
 
+    def test_a_panel_already_built_with_core_is_reused_once(self):
+        calls = []
+
+        def base_builder(*, days):
+            calls.append(('core', days))
+            return {
+                'period_days': days,
+                'metrics': {},
+                'demand_response_conversion': {'has_data': True},
+            }
+
+        def duplicate_panel(*, days):
+            calls.append(('duplicate', days))
+            return {'has_data': False}
+
+        dashboard = _build_shared_operations_dashboard(
+            days=30,
+            base_builder=base_builder,
+            panel_builders=(
+                ('demand_response_conversion', '求购响应转化', duplicate_panel),
+            ),
+        )
+        report = dashboard['dashboard_build_performance']
+
+        self.assertEqual(calls, [('core', 30)])
+        self.assertEqual(
+            dashboard['demand_response_conversion'], {'has_data': True},
+        )
+        self.assertEqual(report['metrics']['builder_total'], 1)
+        self.assertEqual(report['metrics']['duplicate_key_total'], 0)
+        self.assertEqual(
+            [row['key'] for row in report['rows']], ['operations_core'],
+        )
     def test_the_production_registry_has_unique_shared_keys(self):
         keys = [row[0] for row in OPERATIONS_DASHBOARD_SHARED_BUILDERS]
 

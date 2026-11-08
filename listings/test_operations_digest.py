@@ -1,4 +1,5 @@
 from io import StringIO
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
@@ -43,6 +44,32 @@ class OperationsDigestTests(TestCase):
         self.assertEqual(notification.target_url, f"{reverse('operations_dashboard')}?days=7")
         self.assertIn('举报审核队列积压', notification.message)
 
+    def test_digest_links_to_the_first_anchored_alert(self):
+        alerts = [
+            {
+                'title': '举报审核队列积压',
+                'action_url_name': 'operations_dashboard',
+            },
+            {
+                'title': '重新选择后的再次确认持续下滑',
+                'action_url_name': 'operations_dashboard',
+                'action_anchor': 'ops-reopen-funnel',
+            },
+        ]
+        with patch(
+            'listings.operations_digest.build_operations_dashboard',
+            return_value={'operational_alerts': alerts},
+        ):
+            result = send_operations_digest(days=7)
+
+        self.assertEqual(result['alerts'], 2)
+        notification = Notification.objects.get(
+            recipient=self.staff, kind='operations_digest',
+        )
+        self.assertEqual(
+            notification.target_url,
+            f"{reverse('operations_dashboard')}?days=7#ops-reopen-funnel",
+        )
     def test_digest_is_idempotent_for_same_day_and_period(self):
         first = send_operations_digest(days=7)
         second = send_operations_digest(days=7)

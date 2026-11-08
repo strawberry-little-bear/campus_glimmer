@@ -21,7 +21,7 @@ import re
 from django.contrib.auth.models import User
 from django.middleware.csrf import get_token
 from django.template.loader import render_to_string
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.test.client import RequestFactory
 from django.urls import reverse
 
@@ -249,6 +249,27 @@ class OperationsFragmentTableTests(TestCase):
         self.assertEqual(mismatches, [], '\n'.join(mismatches))
 
 
+class OperationsAlertAnchorTemplateTests(SimpleTestCase):
+    def test_alert_link_can_open_the_matching_dashboard_section(self):
+        html = render_to_string('listings/operations/_alerts.html', {
+            'period_days': 30,
+            'operational_alerts': [{
+                'severity': 'warning',
+                'severity_label': '需要关注',
+                'title': '重新选择后的再次确认持续下滑',
+                'message': '三个周期连续下降。',
+                'metric': '66.7%',
+                'metric_label': '当前再次确认率',
+                'action_label': '核对重新选择漏斗',
+                'action_url_name': 'operations_dashboard',
+                'action_anchor': 'ops-reopen-funnel',
+            }],
+        })
+
+        self.assertIn(
+            f'{reverse("operations_dashboard")}?days=30#ops-reopen-funnel',
+            html,
+        )
 class OperationsFragmentEndpointTests(TestCase):
     """取回端点的权限与内容。"""
 

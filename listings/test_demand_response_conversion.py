@@ -19,13 +19,13 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .demand_response_conversion import (
     CONVERSION_LATENCY_BUCKETS, MIN_MEASURED_RESPONSES, STUCK_LIST_LIMIT,
-    build_demand_response_conversion,
+    build_demand_response_conversion, build_reopen_funnel_alerts,
 )
 from .models import (
     CampusLocation, Category, DemandPost, DemandReopenEvent, DemandResponse,
@@ -37,6 +37,105 @@ def make_user(username):
     return User.objects.create_user(username=username, password='safe-password-123')
 
 
+class DemandReopenTrendAlertTests(SimpleTestCase):
+    """Pin the two trend decisions without depending on database timing."""
+
+    @staticmethod
+    def period(event_count, reconfirmed_count, order_count):
+        return {
+            'event_count': event_count,
+            'reconfirmed_count': reconfirmed_count,
+            'order_count': order_count,
+            'reconfirmation_rate_value': (
+                reconfirmed_count / event_count * 100 if event_count else 0
+            ),
+            'order_conversion_rate_value': (
+                order_count / reconfirmed_count * 100
+                if reconfirmed_count else 0
+            ),
+        }
+
+    def build(self, prior, previous, current):
+        return build_reopen_funnel_alerts(current, previous, prior)
+
+    def test_each_rate_has_its_own_twelve_sample_floor(self):
+        # 再次确认率的分母是事件，订单转化率的分母是再次确认。后一项不足 12
+        # 时，即使两次下降都超过 8 个百分点，也只能出现前一项告警。
+        alerts = self.build(
+            self.period(11, 11, 11),
+            self.period(12, 10, 8),
+            self.period(12, 9, 6),
+        )
+        self.assertEqual(alerts, [])
+
+        alerts = self.build(
+            self.period(12, 11, 8),
+            self.period(12, 10, 7),
+            self.period(12, 9, 6),
+        )
+        self.assertEqual(
+            [alert['key'] for alert in alerts],
+            ['reopen_reconfirmation_decline'],
+        )
+
+    def test_one_decline_or_a_current_recovery_does_not_alert(self):
+        only_one_decline = self.build(
+            self.period(20, 18, 16),
+            self.period(20, 18, 16),
+            self.period(20, 16, 14),
+        )
+        recovered = self.build(
+            self.period(20, 18, 16),
+            self.period(20, 16, 14),
+            self.period(20, 17, 15),
+        )
+
+        self.assertEqual(only_one_decline, [])
+        self.assertEqual(recovered, [])
+
+    def test_exact_eight_point_drops_alert_but_seven_point_drops_do_not(self):
+        exact = self.build(
+            self.period(25, 20, 16),
+            self.period(25, 18, 14),
+            self.period(25, 16, 12),
+        )
+        near = self.build(
+            self.period(13, 7, 7),
+            self.period(13, 6, 6),
+            self.period(13, 5, 5),
+        )
+
+        self.assertEqual(
+            [alert['key'] for alert in exact],
+            ['reopen_reconfirmation_decline'],
+        )
+        self.assertEqual(near, [])
+
+    def test_both_rates_can_alert_with_their_own_exact_evidence(self):
+        alerts = self.build(
+            self.period(20, 18, 16),
+            self.period(30, 24, 18),
+            self.period(40, 28, 18),
+        )
+
+        self.assertEqual(
+            [alert['key'] for alert in alerts],
+            [
+                'reopen_reconfirmation_decline',
+                'reopen_order_conversion_decline',
+            ],
+        )
+        self.assertTrue(all(
+            alert['action_url_name'] == 'operations_dashboard'
+            and alert['action_anchor'] == 'ops-reopen-funnel'
+            and alert['severity'] == 'warning'
+            for alert in alerts
+        ))
+        self.assertIn('20 → 30 → 40 次', alerts[0]['message'])
+        self.assertIn('90.0%、80.0%、70.0%', alerts[0]['message'])
+        self.assertEqual(alerts[0]['metric'], '70.0%')
+        self.assertEqual(alerts[0]['metric_label'], '当前再次确认率')
+        self.assertEqual(alerts[1]['metric_label'], '当前订单转化率')
 class DemandResponseConversionTests(TestCase):
     def setUp(self):
         self.requester = make_user('conversion-requester')
@@ -679,7 +778,193 @@ class DemandResponseConversionTests(TestCase):
         self.assertEqual(funnel['backfill_event_count'], 1)
         self.assertEqual(funnel['event_count'], 0)
         self.assertEqual(funnel['reconfirmed_count'], 0)
+        current = funnel['trend']['periods'][-1]
+        self.assertEqual(current['event_count'], 0)
+        self.assertEqual(current['backfill_event_count'], 1)
+        self.assertEqual(funnel['trend']['alerts'], [])
 
+    def test_previous_period_reopen_keeps_a_later_confirmation(self):
+        now = timezone.now()
+        period_start = build_demand_response_conversion(
+            days=7, now=now,
+        )['period_start']
+        previous_start = period_start - timedelta(days=7)
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=previous_start + timedelta(hours=1),
+        )
+        self.make_reopen_event(
+            demand, replaced,
+            reopened_at=previous_start + timedelta(hours=2), count=1,
+        )
+        self.make_response(
+            demand, self.make_item(),
+            accepted_at=period_start + timedelta(hours=1),
+        )
+
+        periods = {
+            row['key']: row
+            for row in build_demand_response_conversion(
+                days=7, now=now,
+            )['reopen_funnel']['trend']['periods']
+        }
+        self.assertEqual(periods['previous']['event_count'], 1)
+        self.assertEqual(periods['previous']['reconfirmed_count'], 1)
+        self.assertEqual(periods['current']['event_count'], 0)
+        self.assertEqual(periods['current']['reconfirmed_count'], 0)
+
+    def test_a_later_reopen_stops_an_earlier_event_claiming_the_newer_confirmation(self):
+        now = timezone.now()
+        period_start = build_demand_response_conversion(
+            days=7, now=now,
+        )['period_start']
+        previous_start = period_start - timedelta(days=7)
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=previous_start + timedelta(hours=1),
+        )
+        self.make_reopen_event(
+            demand, replaced,
+            reopened_at=previous_start + timedelta(hours=2), count=1,
+        )
+        intermediate = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=period_start + timedelta(hours=1),
+        )
+        self.make_reopen_event(
+            demand, intermediate,
+            reopened_at=period_start + timedelta(hours=2), count=2,
+        )
+        self.make_response(
+            demand, self.make_item(),
+            accepted_at=period_start + timedelta(hours=3),
+        )
+
+        periods = {
+            row['key']: row
+            for row in build_demand_response_conversion(
+                days=7, now=now,
+            )['reopen_funnel']['trend']['periods']
+        }
+        self.assertEqual(periods['previous']['event_count'], 1)
+        self.assertEqual(periods['previous']['reconfirmed_count'], 1)
+        self.assertEqual(periods['current']['event_count'], 1)
+        self.assertEqual(periods['current']['reconfirmed_count'], 1)
+
+    def test_trend_windows_are_contiguous_and_labels_hide_open_ends(self):
+        now = timezone.now()
+        trend = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']['trend']
+        prior, previous, current = trend['periods']
+
+        self.assertEqual(prior['period_end'], previous['period_start'])
+        self.assertEqual(previous['period_end'], current['period_start'])
+        self.assertEqual(
+            previous['period_end_label'],
+            timezone.localtime(
+                previous['period_end'] - timedelta(days=1),
+            ).strftime('%m-%d'),
+        )
+        self.assertEqual(
+            current['period_end_label'],
+            timezone.localtime(now).strftime('%m-%d'),
+        )
+
+    def test_historical_runtime_event_keeps_the_panel_visible(self):
+        now = timezone.now()
+        period_start = build_demand_response_conversion(
+            days=7, now=now,
+        )['period_start']
+        previous_start = period_start - timedelta(days=7)
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=previous_start + timedelta(hours=1),
+        )
+        self.make_reopen_event(
+            demand, replaced,
+            reopened_at=previous_start + timedelta(hours=2), count=1,
+        )
+
+        report = build_demand_response_conversion(days=7, now=now)
+        self.assertTrue(report['has_data'])
+        self.assertTrue(report['reopen_funnel']['trend']['has_data'])
+        self.assertEqual(report['reopen_funnel']['event_count'], 0)
+        self.assertEqual(
+            report['reopen_funnel']['trend']['periods'][1]['event_count'],
+            1,
+        )
+
+        staff = make_user('conversion-history-staff')
+        staff.is_staff = True
+        staff.save(update_fields=['is_staff'])
+        self.client.force_login(staff)
+        fragment = self.client.get(
+            reverse(
+                'operations_dashboard_fragment',
+                kwargs={'anchor': 'ops-deal-outcomes'},
+            ),
+            {'days': 7},
+        )
+        self.assertContains(fragment, 'id="ops-reopen-funnel"')
+        self.assertContains(fragment, '三个周期里的重新选择闭环')
+
+    def test_trend_alert_is_built_from_runtime_periods(self):
+        now = timezone.now()
+        period_start = build_demand_response_conversion(
+            days=30, now=now,
+        )['period_start']
+        prior_start = period_start - timedelta(days=60)
+        previous_start = period_start - timedelta(days=30)
+        periods = (
+            (prior_start, 12, 12),
+            (previous_start, 10, 8),
+            (period_start, 8, 6),
+        )
+        for window_start, reconfirmed_count, order_count in periods:
+            event_at = window_start + timedelta(days=1)
+            for index in range(12):
+                demand = self.make_demand()
+                replaced = self.make_response(
+                    demand, self.make_item(status='unavailable'),
+                    status='superseded',
+                    accepted_at=event_at - timedelta(hours=1),
+                )
+                self.make_reopen_event(
+                    demand, replaced, reopened_at=event_at, count=index + 1,
+                )
+                if index >= reconfirmed_count:
+                    continue
+                confirmation = self.make_response(
+                    demand, self.make_item(),
+                    accepted_at=event_at + timedelta(hours=2),
+                )
+                if index < order_count:
+                    order = self.make_order(
+                        confirmation.item, self.requester,
+                        demand_response=confirmation,
+                    )
+                    order.created_at = event_at + timedelta(hours=3)
+                    order.save(update_fields=['created_at'])
+
+        trend = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']['trend']
+        self.assertEqual(
+            [row['reconfirmed_count'] for row in trend['periods']],
+            [12, 10, 8],
+        )
+        self.assertEqual(
+            [row['order_count'] for row in trend['periods']],
+            [12, 8, 6],
+        )
+        self.assertEqual(
+            [alert['key'] for alert in trend['alerts']],
+            ['reopen_reconfirmation_decline'],
+        )
     def test_reopen_event_count_is_not_the_same_as_affected_demand_count(self):
         now = timezone.now()
         demand = self.make_demand()

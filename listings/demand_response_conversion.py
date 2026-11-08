@@ -14,6 +14,7 @@
 
 from collections import namedtuple
 from datetime import time as dt_time, timedelta
+from fractions import Fraction
 
 from django.db.models import Q
 from django.utils import timezone
@@ -134,6 +135,11 @@ ReopenSample = namedtuple('ReopenSample', [
 
 def _percent(part, whole):
     return round(part / whole * 100, 1) if whole else 0
+
+
+def _rate_percent(part, whole):
+    """Unrounded percentage for threshold decisions; templates still use ``_percent``."""
+    return part / whole * 100 if whole else 0
 
 
 def _period_start(days, today):
@@ -277,8 +283,8 @@ def _blocked_reason(response, gift_application=None):
     return 'still_walking'
 
 
-def _fetch_confirmed_responses(days, now):
-    """按显式排序取出周期内确认的响应，连订单和领取申请一起取回来。
+def _fetch_confirmed_responses(start, end, *, inclusive_end=True):
+    """按显式时刻取出窗口内确认的响应，连订单和领取申请一起取回来。
 
     统计窗口按显式记录的 `accepted_at` 切，不按 `created_at` 切：一条窗口前提交、窗口内
     才被确认的响应，它的转化发生在窗口内。重开后的历史响应会从 `accepted` 变成
@@ -286,8 +292,11 @@ def _fetch_confirmed_responses(days, now):
     误算成一次新确认。
 
     显式排序不是洁癖：同一份数据在不同时刻给出不同的榜单，比一份错的榜单更难用。
+    历史比较窗口用右开区间，当前窗口包含查询时刻，三个窗口因此严格衔接且不重叠。
     """
-    start = _period_start(days, timezone.localtime(now).date())
+    end_lookup = {'accepted_at__lte': end} if inclusive_end else {
+        'accepted_at__lt': end,
+    }
     responses = list(
         DemandResponse.objects.select_related(
             'demand', 'demand__requester', 'item', 'item__category',
@@ -295,7 +304,7 @@ def _fetch_confirmed_responses(days, now):
         ).filter(
             status__in=CONFIRMED_STATUSES,
             accepted_at__gte=start,
-            accepted_at__lte=now,
+            **end_lookup,
         ).order_by('accepted_at', 'id')
     )
     if not responses:
@@ -374,18 +383,22 @@ def _transaction_at(confirmation):
     return min(timestamps) if timestamps else None
 
 
-def _fetch_reopen_events(days, now):
-    """按重新选择事件时间切窗，历史兼容回填单独计数。"""
-    start = _period_start(days, timezone.localtime(now).date())
+def _fetch_reopen_events(start, end, *, inclusive_end=True):
+    """按重新选择事件时间切窗，并单独返回历史兼容回填事件。"""
+    end_lookup = {'reopened_at__lte': end} if inclusive_end else {
+        'reopened_at__lt': end,
+    }
     events = list(
         DemandReopenEvent.objects.filter(
-            source='runtime', reopened_at__gte=start, reopened_at__lte=now,
+            source='runtime', reopened_at__gte=start, **end_lookup,
         ).order_by('reopened_at', 'id')
     )
-    backfill_count = DemandReopenEvent.objects.filter(
-        source='backfill', reopened_at__gte=start, reopened_at__lte=now,
-    ).count()
-    return events, backfill_count
+    backfill_events = list(
+        DemandReopenEvent.objects.filter(
+            source='backfill', reopened_at__gte=start, **end_lookup,
+        ).only('id', 'reopened_at').order_by('reopened_at', 'id')
+    )
+    return events, backfill_events
 
 
 def _build_reopen_samples(events, confirmed):
@@ -479,19 +492,21 @@ def _reopen_group_stats(samples):
         'demand_count': len({sample.event.demand_id for sample in samples}),
         'reconfirmed_count': len(reconfirmed),
         'reconfirmation_rate': _percent(len(reconfirmed), len(samples)),
+        'reconfirmation_rate_value': _rate_percent(len(reconfirmed), len(samples)),
         'order_count': len(orders),
         'order_conversion_rate': _percent(len(orders), len(reconfirmed)),
+        'order_conversion_rate_value': _rate_percent(len(orders), len(reconfirmed)),
         'gift_application_count': len(gift_only),
         'transaction_count': len(transactions),
         'transaction_rate': _percent(len(transactions), len(reconfirmed)),
+        'transaction_rate_value': _rate_percent(len(transactions), len(reconfirmed)),
         'no_transaction_count': len(reconfirmed) - len(transactions),
         'is_small_sample': len(samples) < MIN_MEASURED_RESPONSES,
     }
 
 
-def _build_reopen_funnel(events, confirmed, backfill_count):
-    """把每次重新选择做成独立样本，回答再次确认和交易是否真的接上。"""
-    samples = _build_reopen_samples(events, confirmed)
+def _build_reopen_funnel_from_samples(samples, backfill_count):
+    """用已经按完整边界建好的样本生成重新选择漏斗。"""
     reconfirmed = [sample for sample in samples if sample.confirmation is not None]
     orders = [sample for sample in reconfirmed if sample.confirmation.order is not None]
     orderless = [sample for sample in reconfirmed if sample.confirmation.order is None]
@@ -573,8 +588,10 @@ def _build_reopen_funnel(events, confirmed, backfill_count):
         'not_reconfirmed_count': event_count - len(reconfirmed),
         'reconfirmed_count': len(reconfirmed),
         'reconfirmation_rate': _percent(len(reconfirmed), event_count),
+        'reconfirmation_rate_value': _rate_percent(len(reconfirmed), event_count),
         'order_count': len(orders),
         'order_conversion_rate': _percent(len(orders), len(reconfirmed)),
+        'order_conversion_rate_value': _rate_percent(len(orders), len(reconfirmed)),
         'gift_application_count': len(gift_only),
         'gift_application_rate': _percent(len(gift_only), len(reconfirmed)),
         'transaction_count': len(transactions),
@@ -593,6 +610,139 @@ def _build_reopen_funnel(events, confirmed, backfill_count):
         'is_small_sample': event_count < MIN_MEASURED_RESPONSES,
         'min_measured_responses': MIN_MEASURED_RESPONSES,
     }
+
+
+def _build_reopen_funnel(events, confirmed, backfill_count):
+    """把每次重新选择做成独立样本，回答再次确认和交易是否真的接上。"""
+    return _build_reopen_funnel_from_samples(
+        _build_reopen_samples(events, confirmed), backfill_count,
+    )
+
+
+def _reopen_trend_period(key, label, start, end, funnel, *, inclusive_end=True):
+    """Compact one-period view used by both the trend table and alert decisions."""
+    label_end = end if inclusive_end else end - timedelta(days=1)
+    return {
+        'key': key,
+        'label': label,
+        'period_start': start,
+        'period_end': end,
+        'period_start_label': timezone.localtime(start).strftime('%m-%d'),
+        'period_end_label': timezone.localtime(label_end).strftime('%m-%d'),
+        'event_count': funnel['event_count'],
+        'reconfirmed_count': funnel['reconfirmed_count'],
+        'reconfirmation_rate': funnel['reconfirmation_rate'],
+        'reconfirmation_rate_value': funnel['reconfirmation_rate_value'],
+        'order_count': funnel['order_count'],
+        'order_conversion_rate': funnel['order_conversion_rate'],
+        'order_conversion_rate_value': funnel['order_conversion_rate_value'],
+        'backfill_event_count': funnel['backfill_event_count'],
+    }
+
+
+def _build_reopen_trend_period(
+    key, label, start, end, samples, backfill_count, *, inclusive_end=True,
+):
+    """Build one period from samples whose reopen event falls in this window."""
+    period_samples = [
+        sample for sample in samples
+        if start <= sample.event.reopened_at
+        and (
+            sample.event.reopened_at <= end if inclusive_end
+            else sample.event.reopened_at < end
+        )
+    ]
+    funnel = _build_reopen_funnel_from_samples(period_samples, backfill_count)
+    return _reopen_trend_period(
+        key, label, start, end, funnel, inclusive_end=inclusive_end,
+    )
+
+
+def _decline_points(periods, numerator_key, denominator_key):
+    """Return two exact point drops only when all samples and declines qualify."""
+    if any(period[denominator_key] < MIN_MEASURED_RESPONSES for period in periods):
+        return None
+    rates = [
+        Fraction(period[numerator_key], period[denominator_key])
+        for period in periods
+    ]
+    drops = [
+        (earlier - later) * 100
+        for earlier, later in zip(rates, rates[1:])
+    ]
+    if any(later >= earlier for earlier, later in zip(rates, rates[1:])):
+        return None
+    if any(drop < NOISE_POINTS for drop in drops):
+        return None
+    return rates, drops
+
+
+def build_reopen_funnel_alerts(current, previous, prior):
+    """Build warnings for two consecutive meaningful declines across three periods.
+
+    Both rates have their own denominator threshold. Comparisons use exact
+    fractions so a 7.96-point display value cannot round into an alert. Every
+    qualifying metric gets its own warning; neither one implies that a
+    particular person caused the change.
+    """
+    periods = (prior, previous, current)
+    alerts = []
+    definitions = (
+        (
+            'reopen_reconfirmation_decline',
+            'reconfirmation_rate_value',
+            'reconfirmed_count',
+            'event_count',
+            '重新选择后的再次确认持续下滑',
+            '重新选择事件分别为 {samples} 次；再次确认率从 {rates}，'
+            '两次分别下降 {drops} 个百分点。请打开漏斗核对重新匹配后的确认路径。',
+            '当前再次确认率',
+        ),
+        (
+            'reopen_order_conversion_decline',
+            'order_conversion_rate_value',
+            'order_count',
+            'reconfirmed_count',
+            '重新选择后的订单转化持续下滑',
+            '再次确认分别为 {confirmed} 次，其中接出订单 {orders} 次；'
+            '订单转化率从 {rates}，两次分别下降 {drops} 个百分点。'
+            '请打开漏斗核对再次确认后的交易入口。',
+            '当前订单转化率',
+        ),
+    )
+    for key, value_key, numerator_key, denominator_key, title, template, metric_label in definitions:
+        decision = _decline_points(periods, numerator_key, denominator_key)
+        if decision is None:
+            continue
+        rates, drops = decision
+        rates_text = '、'.join(f'{round(float(rate) * 100, 1)}%' for rate in rates)
+        drops_text = '、'.join(f'{round(float(drop), 1)}' for drop in drops)
+        if denominator_key == 'event_count':
+            message = template.format(
+                samples=' → '.join(str(period['event_count']) for period in periods),
+                rates=rates_text,
+                drops=drops_text,
+            )
+        else:
+            message = template.format(
+                confirmed=' → '.join(str(period['reconfirmed_count']) for period in periods),
+                orders=' → '.join(str(period['order_count']) for period in periods),
+                rates=rates_text,
+                drops=drops_text,
+            )
+        alerts.append({
+            'key': key,
+            'severity': 'warning',
+            'severity_label': '需要关注',
+            'title': title,
+            'message': message,
+            'metric': f'{current[value_key]:.1f}%',
+            'metric_label': metric_label,
+            'action_label': '核对重新选择漏斗',
+            'action_url_name': 'operations_dashboard',
+            'action_anchor': 'ops-reopen-funnel',
+        })
+    return alerts
 
 
 def _build_conversion_stats(confirmed):
@@ -931,11 +1081,63 @@ def build_demand_response_conversion(days=30, now=None):
         days = 30
     now = now or timezone.now()
 
-    confirmed = _fetch_confirmed_responses(days, now)
-    reopen_events, backfill_count = _fetch_reopen_events(days, now)
-    reopen_funnel = _build_reopen_funnel(
-        reopen_events, confirmed, backfill_count,
+    period_start = _period_start(days, timezone.localtime(now).date())
+    prior_start = period_start - timedelta(days=2 * days)
+    previous_start = period_start - timedelta(days=days)
+
+    # 一次取回三个周期的事件和三周期内完成的确认，先按完整重开边界建样本，
+    # 再把样本归到事件所在周期。这样上一周期的重开即使到当前周期才确认，
+    # 仍能落回上一周期；窗口仍严格左闭右开，当前周期包含查询时刻。
+    trend_confirmed = _fetch_confirmed_responses(prior_start, now)
+    confirmed = [
+        row for row in trend_confirmed
+        if _confirmed_at(row.response) >= period_start
+    ]
+    trend_events, trend_backfill_events = _fetch_reopen_events(prior_start, now)
+    trend_samples = _build_reopen_samples(trend_events, trend_confirmed)
+    current_samples = [
+        sample for sample in trend_samples
+        if sample.event.reopened_at >= period_start
+    ]
+    current_backfill_count = sum(
+        1 for event in trend_backfill_events
+        if event.reopened_at >= period_start
     )
+    reopen_funnel = _build_reopen_funnel_from_samples(
+        current_samples, current_backfill_count,
+    )
+    prior_period = _build_reopen_trend_period(
+        'prior', '较早周期', prior_start, previous_start, trend_samples,
+        sum(
+            1 for event in trend_backfill_events
+            if prior_start <= event.reopened_at < previous_start
+        ),
+        inclusive_end=False,
+    )
+    previous_period = _build_reopen_trend_period(
+        'previous', '上一周期', previous_start, period_start, trend_samples,
+        sum(
+            1 for event in trend_backfill_events
+            if previous_start <= event.reopened_at < period_start
+        ),
+        inclusive_end=False,
+    )
+    current_period = _reopen_trend_period(
+        'current', '当前周期', period_start, now, reopen_funnel,
+    )
+    trend_periods = [prior_period, previous_period, current_period]
+    reopen_funnel['trend'] = {
+        'periods': trend_periods,
+        'alerts': build_reopen_funnel_alerts(
+            current_period, previous_period, prior_period,
+        ),
+        'has_data': any(
+            period['event_count'] or period['backfill_event_count']
+            for period in trend_periods
+        ),
+        'min_measured_responses': MIN_MEASURED_RESPONSES,
+        'noise_points': NOISE_POINTS,
+    }
     conversion = _build_conversion_stats(confirmed)
     latency = _build_latency_stats(confirmed)
     dealt = _build_dealt_stats(conversion)
@@ -947,11 +1149,12 @@ def build_demand_response_conversion(days=30, now=None):
 
     return {
         'period_days': days,
-        'period_start': _period_start(days, timezone.localtime(now).date()),
+        'period_start': period_start,
         'period_end': now,
         'has_data': bool(
             confirmed or reopen_funnel['event_count']
             or reopen_funnel['backfill_event_count']
+            or reopen_funnel['trend']['has_data']
         ),
         'summary': _summary(
             conversion, latency, dealt, blocked, gift_applications, reopen_funnel,

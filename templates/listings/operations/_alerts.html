@@ -16,7 +16,7 @@
             <div class="ops-alert-body">
                 <div class="ops-alert-title"><strong>{{ alert.title }}</strong><span>{{ alert.severity_label }}</span></div>
                 <p>{{ alert.message }}</p>
-                <a class="ops-inline-link" href="{% url alert.action_url_name %}?days={{ period_days }}">{{ alert.action_label }} <i class="bi bi-arrow-up-right"></i></a>
+                <a class="ops-inline-link" href="{% url alert.action_url_name %}?days={{ period_days }}{% if alert.action_anchor %}#{{ alert.action_anchor }}{% endif %}">{{ alert.action_label }} <i class="bi bi-arrow-up-right"></i></a>
             </div>
             <div class="ops-alert-metric"><strong>{{ alert.metric }}</strong><small>{{ alert.metric_label }}</small></div>
         </article>

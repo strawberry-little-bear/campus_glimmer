@@ -74,6 +74,9 @@ DYNAMIC_HASH_PAGES = {
     'listings/operations_dashboard.html':
         '落点是 38 个 <section class="ops-section">，由 .ops-section 规则避让'
         '（140px，因为还要避开上方那条吸顶跳转条）',
+    'listings/operations/_alerts.html':
+        '落点是告警的 action_anchor；当前重新选择告警跳到 #ops-reopen-funnel，'
+        '该落点由 .reopen-response-funnel 按 140px 避让',
     'includes/form_error_summary.html':
         '落点是字段 id，由 FormWidgetReservationTests 渲染全部表单盯住',
     'listings/_personal_queue_pagination.html':
@@ -231,6 +234,22 @@ class DynamicHashLinkTests(SimpleTestCase):
         stale = sorted(set(DYNAMIC_HASH_PAGES) - self._pages_with_dynamic_hash())
 
         self.assertEqual(stale, [], '登记表里有模板已经不再拼 hash：' + ', '.join(stale))
+
+    def test_operations_alert_hash_target_reserves_room(self):
+        covered_ids, covered_classes = _css_reservations()
+        source = _read(os.path.join(
+            TEMPLATES_DIR, 'listings', 'operations', '_deal_outcome_demand_response.html',
+        ))
+        occurrences = _id_occurrences(source).get('ops-reopen-funnel', [])
+
+        self.assertTrue(occurrences, '运营告警登记了 #ops-reopen-funnel，模板里却没有落点')
+        for class_names, line in occurrences:
+            self.assertTrue(
+                _reserved('ops-reopen-funnel', class_names, covered_ids, covered_classes),
+                '#ops-reopen-funnel（_deal_outcome_demand_response.html:%d，class="%s"）'
+                '没有 scroll-margin-top，告警跳转后标题会被吸顶导航盖住'
+                % (line, ' '.join(class_names)),
+            )
 
     def test_dashboard_jump_targets_reserve_room(self):
         covered_ids, covered_classes = _css_reservations()

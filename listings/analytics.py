@@ -14,6 +14,7 @@ from .models import BrowsingHistory, CampusLocation, Category, CommunityContribu
 from .campus_pulse import build_campus_pulse
 from .campaign_analytics import build_campaign_analytics
 from .demand_radar import build_demand_radar
+from .demand_response_conversion import build_demand_response_conversion
 from .demand_radar_outcome import build_demand_radar_outcomes
 from .academic_calendar import build_academic_calendar
 from .notification_response import build_notification_response_insights
@@ -773,6 +774,7 @@ def _build_user_retention(start, previous_start, end):
 def build_operational_alerts(
     metrics, period_comparisons, demand_radar=None, governance_sla=None,
     demand_radar_outcomes=None, task_run_failure_causes=None,
+    demand_response_conversion=None,
 ):
     """Turn dashboard signals into a short, actionable operations queue."""
     alerts = []
@@ -989,6 +991,13 @@ def build_operational_alerts(
                 'action_label': '查看失败原因分类',
                 'action_url_name': 'operations_dashboard',
             })
+    # 重新选择漏斗的告警也使用同一个运营提醒队列。它只在三个周期各自达到
+    # 分母门槛、且同一比例连续两次明显下降时出现，不把回填事件算入方向。
+    reopen_trend = (demand_response_conversion or {}).get(
+        'reopen_funnel', {},
+    ).get('trend', {})
+    alerts.extend(reopen_trend.get('alerts') or [])
+
     severity_order = {'critical': 0, 'warning': 1, 'info': 2}
     return sorted(alerts, key=lambda alert: severity_order.get(alert['severity'], 9))
 
@@ -1768,9 +1777,12 @@ def build_operations_dashboard(days=30):
     demand_radar_outcomes = build_demand_radar_outcomes(days=days, now=now)
     governance_sla = build_governance_sla(days=days, now=now)
     task_run_failure_causes = build_task_run_failure_causes(days=days, now=now)
+    demand_response_conversion = build_demand_response_conversion(
+        days=days, now=now,
+    )
     operational_alerts = build_operational_alerts(
         metrics, period_comparisons, demand_radar, governance_sla, demand_radar_outcomes,
-        task_run_failure_causes,
+        task_run_failure_causes, demand_response_conversion,
     )
     campus_pulse = build_campus_pulse(days=days, now=now)
     campaign_analytics = build_campaign_analytics(days=days, now=now)
@@ -1792,6 +1804,7 @@ def build_operations_dashboard(days=30):
         'previous_period_end': start - timedelta(days=1),
         'period_comparisons': period_comparisons,
         'operational_alerts': operational_alerts,
+        'demand_response_conversion': demand_response_conversion,
         'activity_segments': activity_segments,
         'user_retention': user_retention,
         'metrics': metrics,

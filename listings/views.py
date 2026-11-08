@@ -3937,6 +3937,10 @@ def _build_shared_operations_dashboard(
         if wanted is not None:
             builders = [row for row in builders if row[0] in wanted]
     for key, label, builder in builders:
+        # 核心统计可能已经构建了同名面板。再跑一次会覆盖同一份结果，也会在
+        # 耗时报告里留下一个无法解释的重复键；已经有结果时直接复用。
+        if key in dashboard:
+            continue
         started = perf_counter()
         dashboard[key] = builder(days=days)
         runs.append({

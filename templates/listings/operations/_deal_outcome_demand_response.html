@@ -133,8 +133,8 @@
             <p class="small text-muted mt-2 mb-0"><code>message</code> 是自由文本，可能写着电话、微信、宿舍号。<strong>只报「写了没写」和长度，一个字符的内容都不读</strong>——不切词、不聚类、不推断语义。写了与没写相差 {{ demand_response_conversion.message.gap_points }} 个百分点，{% if demand_response_conversion.message.gap_is_meaningful %}差值超过了噪声阈值，可作为参考；{% else %}两组各至少 {{ demand_response_conversion.message.min_measured_responses }} 条才给方向，目前只报数字。{% endif %}<strong>而且这只是对照，不给因果</strong>——一个愿意写清楚「我这个还有发票和盒子」的卖家可能本来就更认真，平台没有能力把「说明起了作用」和「这个人本来就靠谱」分开。</p>
         </div>
     </div>
-    {% if demand_response_conversion.reopen_funnel.event_count or demand_response_conversion.reopen_funnel.backfill_event_count %}
-    <div class="mt-4 pt-4 border-top reopen-response-funnel">
+    {% if demand_response_conversion.reopen_funnel.trend.has_data %}
+    <div id="ops-reopen-funnel" class="mt-4 pt-4 border-top reopen-response-funnel">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
             <div>
                 <span class="eyebrow eyebrow-soft">Demand reopen follow-through</span>
@@ -142,6 +142,27 @@
                 <p class="small text-muted mb-0">每次重新选择是一条独立事件；按 <code>reopened_at</code> 切窗，再看同一求购在下一次重新选择之前的首次有效确认。</p>
             </div>
             <span class="badge text-bg-light">事件数不等于求购数</span>
+        </div>
+        <div class="table-responsive mt-3 mb-4">
+            <h4 class="h6 mb-2">三个周期里的重新选择闭环</h4>
+            <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">重新选择之后，响应闭环接上了吗 · 三个周期趋势</caption>
+                <thead><tr><th>周期</th><th>事件</th><th>再次确认</th><th>再次确认率</th><th>订单</th><th>订单转化率</th><th>回填事件</th></tr></thead>
+                <tbody>
+                    {% for row in demand_response_conversion.reopen_funnel.trend.periods %}
+                    <tr>
+                        <td><strong>{{ row.label }}</strong><small class="d-block text-muted">{{ row.period_start_label }} 至 {{ row.period_end_label }}</small></td>
+                        <td>{{ row.event_count }}</td>
+                        <td>{{ row.reconfirmed_count }}</td>
+                        <td>{% if row.event_count %}{{ row.reconfirmation_rate }}%{% else %}—{% endif %}</td>
+                        <td>{{ row.order_count }}</td>
+                        <td>{% if row.reconfirmed_count %}{{ row.order_conversion_rate }}%{% else %}—{% endif %}</td>
+                        <td>{{ row.backfill_event_count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class="small text-muted mb-0"><i class="bi bi-info-circle me-1"></i>三个周期严格衔接，只比较 <code>source=runtime</code> 的事件；回填事件仅披露。再次确认率每个周期至少 {{ demand_response_conversion.reopen_funnel.trend.min_measured_responses }} 次事件，订单转化率每个周期至少 {{ demand_response_conversion.reopen_funnel.trend.min_measured_responses }} 次再次确认；三周期中同一比例连续两次各下降至少 {{ demand_response_conversion.reopen_funnel.trend.noise_points }} 个百分点，才进入运营提醒。判断使用未取整比例，当前恢复或只下降一次都不告警。</p>
         </div>
         {% if demand_response_conversion.reopen_funnel.event_count %}
         <div class="row g-3 mb-3">

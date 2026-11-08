@@ -24,12 +24,19 @@ def build_operations_digest(days=DEFAULT_DIGEST_DAYS):
     alert_titles = '、'.join(alert['title'] for alert in top_alerts)
     suffix = f' 等 {len(alerts)} 项' if len(alerts) > len(top_alerts) else ''
     message = f"最近 {days} 天发现 {alert_titles}{suffix}，建议及时打开运营看板处理。"
+    target_url = f"{reverse('operations_dashboard')}?{urlencode({'days': days})}"
+    action_anchor = next(
+        (alert.get('action_anchor') for alert in alerts if alert.get('action_anchor')),
+        None,
+    )
+    if action_anchor:
+        target_url = f'{target_url}#{action_anchor}'
     return {
         'dashboard': dashboard,
         'alerts': alerts,
         'title': '运营告警日报',
         'message': message[:255],
-        'target_url': f"{reverse('operations_dashboard')}?{urlencode({'days': days})}",
+        'target_url': target_url,
     }
 
 
