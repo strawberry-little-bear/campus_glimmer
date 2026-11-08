@@ -1,33 +1,25 @@
 # -*- coding: utf-8 -*-
-"""约好的那一次见面，第一次被运营读到。
+"""交付预约的首次回应、轮次结果和到场情况。
 
-交付预约从上线那天起就在记两段时间：对方多久回应一个提议，以及双方各自什么时候
-登记到场。前一段写在 ``responded_at`` 里，后一段写在 ``buyer_arrived_at`` 与
-``seller_arrived_at`` 里。四个字段全都有写入路径，而读取路径只有一处——订单详情页
-把它们显示给用户本人看。运营侧一条统计都没有：没有人知道提议交上去之后对方多久
-才理，也没有人知道约了时间的订单里到底有几个人真的到了现场。
+运行时的 ``MeetingAppointmentEvent`` 记录首次提议、改期及每轮回应。新预约的
+首次回应时延取首次提议到首次回应的真实间隔，后续改期不会污染它；上线前没有
+事件链的旧预约继续使用 ``responded_at - created_at`` 的兼容口径，并单独披露。
 
-于是"约好了"和"见着了"在数据里被当成同一件事，而它们显然不是。一个把全部预约都
-算成履约的平台，会一直以为自己的交付环节很健康，直到有人开始提交异常。
-
-这个模块把这两段时间读出来，只报告，不改写。它回答四个问题：对方多久回应、有
-没有人到、迟到多久，以及一条"对方未到场"的异常到底有没有到场记录作支撑。第四问
-是这个模块最该被写下来的理由：提交人说的是主观陈述，而签到记录是系统里另一方亲
-手留下的动作，两者对不上的那一条，恰恰是最该被运营看见的。
-
-几个口径上的取舍比数字本身更要紧。到场统计的分母是"已经过了约定结束时间"的预约：
-还没到结束时间的约会谈不到"有没有人到"，把它算进分母只会让到场率凭空变小，这是
-右删失样本，和订单阶段流模块同一个道理。迟到按签到时间减去约定开始时间算，提前
-到不算迟到——一个提前二十分钟到的人不该被记成"准点"，那会让准点率虚高。未接受
-原因单独一节报出来，因为这个字段唯一的写入路径是视图里的一句硬编码，用户从来
-没有机会填它，所以它的取值分布只可能有一个值；如实报告这件事，比给它编一个
-分布图要诚实。
+到场统计仍读当前预约快照。它只报告，不改签到窗口，也不自动判定爽约。
 """
 
 from datetime import time as dt_time, timedelta
 
 from django.utils import timezone
 
+from .meeting_events import (
+    first_response_seconds,
+    has_complete_meeting_history,
+    load_meeting_events_by_order,
+    proposal_events,
+    proposal_response_pairs,
+    response_events,
+)
 from .models import MeetingAppointment, MeetingIncident
 
 PERIOD_CHOICES = (
@@ -37,8 +29,6 @@ PERIOD_CHOICES = (
     (365, '最近 1 年'),
 )
 
-# 响应时长分档。按天切而不是按小时：一次交付安排的时间尺度是天，报"回应用了 37
-# 小时"对一个按周排期的用户没有意义。
 RESPONSE_BUCKETS = (
     (3600, '1 小时内'),
     (86400, '1 天内'),
@@ -46,8 +36,6 @@ RESPONSE_BUCKETS = (
     (None, '3 天以上'),
 )
 
-# 迟到分档。第一档是提前到，它和准点必须分开：把提前到的人记成准点，会让"大家都
-# 很守时"这句话变成一句被统计口径制造出来的好话。
 LATENESS_BUCKETS = (
     (None, '提前到'),
     (900, '准点'),
@@ -56,26 +44,12 @@ LATENESS_BUCKETS = (
     (None, '迟到 1 小时以上'),
 )
 
-# 一组预约至少要这么多条，分档占比才给方向。和其余模块同一个量级：几十条样本上
-# 几个百分点的差距是噪声。
 MIN_MEASURED_APPOINTMENTS = 12
-
-# 两个方向相差小于这个百分点视为噪声。
 NOISE_POINTS = 8
-
-# 矛盾异常清单最多列这么多条。清单是给"现在去核实"用的，不是给归档用的。
 CONTRADICTION_LIMIT = 20
-
 STATUS_LABELS = dict(MeetingAppointment.STATUS_CHOICES)
-
-# 已经谈成的一次安排。只有它才谈得上"到没到"：待确认的还没约定成，未接受和已取消
-# 的则根本不会发生见面。
 CONFIRMED_STATUS = 'confirmed'
-
-# 预约异常里和到场登记直接相关的那一类。其余类型（安全问题、其他）与到没到无关，
-# 不参与对照，硬把它们拉进来只会得到一堆没有意义的"无依据"。
 ATTENDANCE_RELATED_REASON = 'no_show'
-
 INCIDENT_STATUS_LABELS = dict(MeetingIncident.STATUS_CHOICES)
 INCIDENT_REASON_LABELS = dict(MeetingIncident.REASON_CHOICES)
 
@@ -85,11 +59,6 @@ def _percent(part, whole):
 
 
 def _period_start(days, today):
-    """统计窗口的第一天零点，按项目时区解释。
-
-    写 ``datetime.min`` 会当场报错——``combine`` 第二个参数要的是 ``time``，
-    不是 ``datetime``，而 ``timezone.datetime`` re-export 的是 ``datetime`` 类本身。
-    """
     start_date = today - timedelta(days=days - 1)
     return timezone.make_aware(
         timezone.datetime.combine(start_date, dt_time.min),
@@ -98,11 +67,6 @@ def _period_start(days, today):
 
 def _fetch_appointments(*, created_after=None, created_before=None,
                         start_after=None, start_before=None):
-    """按显式排序取出预约，查询条件由调用方给。
-
-    显式排序不是洁癖：同一份数据在不同时刻给出不同的榜单，比一份错的榜单更难用。
-    查询没有 order_by 时数据库的返回顺序是不确定的，任何"第一名"都会随机漂移。
-    """
     appointments = MeetingAppointment.objects.select_related(
         'order', 'order__item', 'order__buyer', 'order__seller', 'location',
         'proposed_by',
@@ -131,19 +95,10 @@ def _fetch_incidents(*, created_after=None, created_before=None):
     return list(incidents)
 
 
-def _response_seconds(appointment):
-    """从提议交上去到对方回话的秒数，没回应返回 None。
-
-    只认 ``responded_at``：``updated_at`` 也会在重新提议时被写，拿它算会让"多久
-    回应"和"多久改主意"混在一起。
-    """
+def _legacy_response_seconds(appointment):
     if not appointment.responded_at or not appointment.created_at:
         return None
     return max((appointment.responded_at - appointment.created_at).total_seconds(), 0.0)
-
-
-def _is_responded(appointment):
-    return appointment.responded_at is not None
 
 
 def _is_confirmed(appointment):
@@ -151,16 +106,10 @@ def _is_confirmed(appointment):
 
 
 def _has_ended(appointment, now):
-    """约定结束时间是否已经过去。
-
-    到场统计的分母只收这一类。还没到结束时间的约会谈不到"有没有人到"，把它算进
-    分母会让到场率凭空变小——这是右删失样本，和订单阶段流模块同一个道理。
-    """
     return appointment.end_at is not None and appointment.end_at <= now
 
 
 def _arrival_offset_seconds(appointment, field_name):
-    """某个角色的签到时间减去约定开始时间，负数表示提前到，没签到返回 None。"""
     arrived_at = getattr(appointment, field_name)
     if not arrived_at or not appointment.start_at:
         return None
@@ -168,7 +117,6 @@ def _arrival_offset_seconds(appointment, field_name):
 
 
 def _lateness_bucket_index(offset_seconds):
-    """迟到分档。提前到单独一档，它和准点不是一回事。"""
     if offset_seconds is None:
         return None
     if offset_seconds < 0:
@@ -202,7 +150,6 @@ def _format_duration(seconds):
 
 
 def _format_offset(seconds):
-    """把签到相对约定开始时间的偏移讲成人话，负数读成"提前"。"""
     if seconds is None:
         return '—'
     if seconds == 0:
@@ -217,7 +164,6 @@ def _format_offset(seconds):
 
 
 def _percentile(values, fraction):
-    """Nearest-rank percentile over a list of numbers."""
     if not values:
         return None
     ordered = sorted(values)
@@ -229,44 +175,110 @@ def _mean(values):
     return sum(values) / len(values) if values else None
 
 
-def _build_response_stats(appointments):
-    """对方多久回应一个提议。"""
-    responded = [a for a in appointments if _is_responded(a)]
-    pending = [a for a in appointments if not _is_responded(a)]
-    seconds_list = [s for s in (_response_seconds(a) for a in responded) if s is not None]
-
+def _bucket_rows(seconds_list):
     buckets = [{'label': label, 'count': 0} for _limit, label in RESPONSE_BUCKETS]
     for seconds in seconds_list:
         buckets[_bucket_index(seconds)]['count'] += 1
     for bucket in buckets:
         bucket['share'] = _percent(bucket['count'], len(seconds_list))
+    return buckets
 
+
+def _build_round_stats(complete_items):
+    """按完整事件链数每轮提议后的第一次接受/拒绝。"""
+    accepted = 0
+    declined = 0
+    unanswered = 0
+    proposals = 0
+    for events in complete_items:
+        proposals_for_order = proposal_events(events)
+        proposals += len(proposals_for_order)
+        pairs = proposal_response_pairs(events)
+        accepted += sum(1 for _proposal, response in pairs if response.event_type == 'accepted')
+        declined += sum(1 for _proposal, response in pairs if response.event_type == 'declined')
+        unanswered += len(proposals_for_order) - len(pairs)
+    answered = accepted + declined
+    return {
+        'proposal_count': proposals,
+        'responded_count': len(
+            [pair for events in complete_items for pair in proposal_response_pairs(events)]
+        ),
+        'accepted_count': accepted,
+        'declined_count': declined,
+        'unanswered_count': unanswered,
+        'accept_rate': _percent(accepted, answered),
+        'decline_rate': _percent(declined, answered),
+    }
+
+
+def _build_response_stats(appointments, events_by_order):
+    """分别计算完整事件链和旧快照，总计只用于样本覆盖说明。"""
+    exact_items = []
+    legacy_items = []
+    exact_seconds = []
+    legacy_seconds = []
+    exact_accepted_current = 0
+    exact_declined_current = 0
+    legacy_accepted_current = 0
+    legacy_declined_current = 0
+
+    for appointment in appointments:
+        events = events_by_order.get(appointment.order_id, [])
+        if has_complete_meeting_history(events):
+            exact_items.append(events)
+            seconds = first_response_seconds(events)
+            if seconds is not None:
+                exact_seconds.append(seconds)
+            if appointment.status == 'confirmed':
+                exact_accepted_current += 1
+            elif appointment.status == 'declined':
+                exact_declined_current += 1
+        else:
+            legacy_items.append(appointment)
+            seconds = _legacy_response_seconds(appointment)
+            if seconds is not None:
+                legacy_seconds.append(seconds)
+            if appointment.status == 'confirmed':
+                legacy_accepted_current += 1
+            elif appointment.status == 'declined':
+                legacy_declined_current += 1
+
+    responded_count = len(exact_seconds) + len(legacy_seconds)
+    pending_count = sum(1 for a in appointments if a.status == 'pending')
+    round_stats = _build_round_stats(exact_items)
     return {
         'total': len(appointments),
-        'responded_count': len(responded),
-        'pending_count': len(pending),
-        'response_rate': _percent(len(responded), len(appointments)),
-        'average_seconds': _mean(seconds_list),
-        'average_label': _format_duration(_mean(seconds_list)),
-        'median_label': _format_duration(_percentile(seconds_list, 0.5)),
-        'p90_label': _format_duration(_percentile(seconds_list, 0.9)),
-        'fastest_label': _format_duration(min(seconds_list)) if seconds_list else '—',
-        'slowest_label': _format_duration(max(seconds_list)) if seconds_list else '—',
-        'bucket_rows': buckets,
-        'accepted_count': sum(1 for a in responded if _is_confirmed(a)),
-        'declined_count': sum(1 for a in responded if a.status == 'declined'),
+        'exact_total': len(exact_items),
+        'legacy_total': len(legacy_items),
+        'responded_count': responded_count,
+        'exact_responded_count': len(exact_seconds),
+        'legacy_responded_count': len(legacy_seconds),
+        'pending_count': pending_count,
+        'response_rate': _percent(responded_count, len(appointments)),
+        'average_seconds': _mean(exact_seconds),
+        'average_label': _format_duration(_mean(exact_seconds)),
+        'median_label': _format_duration(_percentile(exact_seconds, 0.5)),
+        'p90_label': _format_duration(_percentile(exact_seconds, 0.9)),
+        'fastest_label': _format_duration(min(exact_seconds)) if exact_seconds else '—',
+        'slowest_label': _format_duration(max(exact_seconds)) if exact_seconds else '—',
+        # 兼容现有模板的总体分档；它只含完整事件链。
+        'bucket_rows': _bucket_rows(exact_seconds),
+        'exact_bucket_rows': _bucket_rows(exact_seconds),
+        'legacy_bucket_rows': _bucket_rows(legacy_seconds),
+        'legacy_median_label': _format_duration(_percentile(legacy_seconds, 0.5)),
+        'accepted_count': exact_accepted_current + legacy_accepted_current,
+        'declined_count': exact_declined_current + legacy_declined_current,
         'accept_rate': _percent(
-            sum(1 for a in responded if _is_confirmed(a)), len(responded),
+            exact_accepted_current + legacy_accepted_current,
+            responded_count,
         ),
+        'round_stats': round_stats,
+        'is_small_sample': len(exact_seconds) < MIN_MEASURED_APPOINTMENTS,
+        'min_measured_appointments': MIN_MEASURED_APPOINTMENTS,
     }
 
 
 def _merge_lateness_buckets(lateness_rows):
-    """把两个角色的迟到分档合成一张表，供模板按行渲染。
-
-    分档本来就该按行对齐：面板上"提前到"这一行要同时看得见买家和卖家两个人各有多少，
-    分两张表看的话，运营得自己在脑子里把两行的数字对上，而人脑对行的能力并不好。
-    """
     if not lateness_rows:
         return []
     rows = []
@@ -280,16 +292,9 @@ def _merge_lateness_buckets(lateness_rows):
 
 
 def _build_attendance_stats(appointments, now):
-    """已经过了约定结束时间的预约，双方各自到了没有、迟到了多久。
-
-    分母只收"约定结束时间已经过去"的预约。一个还没到结束时间的约会谈不到有没有
-    人到，把它算进分母会让到场率凭空变小；这些样本单独数出来，报成"还没到核对
-    时间"，而不是被悄悄并进到场率。
-    """
     ended = [a for a in appointments if _has_ended(a, now)]
     still_open = [a for a in appointments if not _has_ended(a, now)]
     confirmed_ended = [a for a in ended if _is_confirmed(a)]
-
     buyer_arrived = [a for a in confirmed_ended if a.buyer_arrived_at]
     seller_arrived = [a for a in confirmed_ended if a.seller_arrived_at]
     both_arrived = [a for a in confirmed_ended if a.buyer_arrived_at and a.seller_arrived_at]
@@ -347,7 +352,6 @@ def _build_attendance_stats(appointments, now):
 
 
 def _accused_arrived_at(appointment, accused):
-    """被指控的那一方在系统里留下的到场登记，没有就返回 None。"""
     if not appointment or not accused:
         return None
     order = appointment.order
@@ -359,29 +363,13 @@ def _accused_arrived_at(appointment, accused):
 
 
 def _build_incident_crosscheck(incidents, now):
-    """提交人说的"对方未到场"，和系统里另一方的到场登记对得上吗。
-
-    这是这个模块最该被写下来的部分。提交人说的是一句主观陈述，而签到记录是系统里
-    另一方亲手留下的动作。两者对不上的那一条，不是要判定谁在说谎——平台没有能力也
-    不该去判定——而是要被运营看见：说没到的人自己也没到，或者说没到的那一方其实在
-    约定开始前三十分钟就登记了。这类记录不改变任何状态，只是从"一个待处理工单"
-    变成"一个待核实的矛盾"。
-
-    只对照"对方未到场"这一类异常。安全问题和"其他"与到没到无关，硬把它们拉进来
-    只会得到一堆没有意义的"无依据"。
-    """
-    relevant = [
-        incident for incident in incidents
-        if incident.reason == ATTENDANCE_RELATED_REASON
-    ]
+    relevant = [i for i in incidents if i.reason == ATTENDANCE_RELATED_REASON]
     rows = []
     for incident in relevant:
         appointment = incident.appointment
         accused = incident.accused
         accused_arrived_at = _accused_arrived_at(appointment, accused)
-        reporter_arrived_at = _accused_arrived_at(
-            appointment, incident.reported_by,
-        )
+        reporter_arrived_at = _accused_arrived_at(appointment, incident.reported_by)
         if accused_arrived_at:
             verdict = 'contradicted'
             verdict_label = '被指控方有到场登记'
@@ -416,14 +404,10 @@ def _build_incident_crosscheck(incidents, now):
             'incident_status': incident.status,
         })
 
-    # 显式排序：榜单的先后不能取决于数据库这一次返回行的顺序。先排没处理的，
-    # 再排提交时间，同一天提交的按主键。
     rows.sort(key=lambda row: (row['is_closed'], row['submitted_at'], row['incident_id']))
-
     by_verdict = {}
     for row in rows:
         by_verdict.setdefault(row['verdict'], []).append(row)
-
     open_rows = [row for row in rows if not row['is_closed']]
     return {
         'total': len(rows),
@@ -443,51 +427,53 @@ def _build_incident_crosscheck(incidents, now):
     }
 
 
-def _build_decline_stats(appointments):
-    """未接受原因：如实报告这个字段只有一个取值。
-
-    ``decline_reason`` 的字段名是"未接受原因"，而全库唯一的写入路径是
-    ``views.py`` 里的一句硬编码"对方暂未接受这次时间安排"。用户从来没有机会填它，
-    表单里也没有这个字段。所以它的取值分布只可能有一个值——这不是一个分布，这是
-    一个常量。
-
-    把它单独报出来，而不是顺手画一张分布图：一个只有一个取值的字段，画出来的分布
-    图是 100% 的一根柱子，那张图除了让人以为这里有过选择之外不提供任何信息。运营
-    该知道的是"这个字段目前没有收集到任何用户输入"，而不是"所有人都因为同一个原因
-    拒绝"。
-    """
-    declined = [a for a in appointments if a.status == 'declined']
+def _build_decline_stats(appointments, events_by_order):
+    """完整链读历史拒绝事件，旧快照读当前拒绝字段。"""
+    records = []
+    for appointment in appointments:
+        events = events_by_order.get(appointment.order_id, [])
+        if has_complete_meeting_history(events):
+            records.extend(
+                event.decline_reason or '' for event in response_events(events)
+                if event.event_type == 'declined'
+            )
+        elif appointment.status == 'declined':
+            records.append(appointment.decline_reason or '')
     reasons = {}
-    for appointment in declined:
-        reason = (appointment.decline_reason or '').strip()
+    for reason in records:
+        reason = reason.strip()
         reasons[reason] = reasons.get(reason, 0) + 1
     rows = [
         {'reason': reason or '（空）', 'count': count}
         for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
     ]
+    filled_count = sum(1 for reason in records if reason.strip())
     return {
-        'declined_count': len(declined),
-        'filled_count': sum(1 for a in declined if (a.decline_reason or '').strip()),
-        'fill_rate': _percent(
-            sum(1 for a in declined if (a.decline_reason or '').strip()), len(declined),
-        ),
+        'declined_count': len(records),
+        'filled_count': filled_count,
+        'fill_rate': _percent(filled_count, len(records)),
         'distinct_count': len(rows),
         'is_constant_value': len(rows) <= 1,
         'reason_rows': rows,
     }
 
 
-def _summary(response_stats, attendance_stats, crosscheck, decline_stats):
-    """一段话把这个模块的读数讲完，样本不足的地方明说。"""
+def _summary(response_stats, attendance_stats, crosscheck):
     parts = []
     if response_stats['total']:
         parts.append(
             f"周期内 {response_stats['total']} 次交付安排，"
-            f"{response_stats['responded_count']} 次得到了回应"
+            f"完整事件链 {response_stats['exact_total']} 次；"
+            f"得到首次回应 {response_stats['responded_count']} 次"
             f"（{response_stats['response_rate']}%）"
         )
-        if response_stats['responded_count']:
-            parts.append(f"，回应中位耗时 {response_stats['median_label']}")
+        if response_stats['exact_responded_count']:
+            parts.append(f"，完整链首次回应中位 {response_stats['median_label']}")
+        if response_stats['legacy_total']:
+            parts.append(
+                f"；旧快照 {response_stats['legacy_total']} 次，"
+                f"其中 {response_stats['legacy_responded_count']} 次可读快照回应时间，单独计算"
+            )
     else:
         parts.append('当前周期还没有交付时间安排。')
 
@@ -503,8 +489,8 @@ def _summary(response_stats, attendance_stats, crosscheck, decline_stats):
             parts.append(f"，双方都没到场 {attendance_stats['neither_arrived_count']} 次")
         if attendance_stats['is_small_sample']:
             parts.append(
-                f"；不足 {attendance_stats['min_measured_appointments']} 次"
-                f"确认预约，占比只作参考"
+                f"；不足 {attendance_stats['min_measured_appointments']} 次确认预约，"
+                f"占比只作参考"
             )
     else:
         parts.append('。当前没有已过约定结束时间的确认预约，到场统计暂无可核对的样本。')
@@ -520,7 +506,7 @@ def _summary(response_stats, attendance_stats, crosscheck, decline_stats):
 
 
 def build_meeting_attendance(days=30, now=None):
-    '''统计交付安排的响应时长、到场情况与异常和到场登记的交叉，只报告不改任何字段。'''
+    """统计首次回应、轮次结果、到场和异常记录，只读不改业务数据。"""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
         days = 30
@@ -529,18 +515,19 @@ def build_meeting_attendance(days=30, now=None):
     start = _period_start(days, timezone.localtime(now).date())
     appointments = _fetch_appointments(created_after=start, created_before=now)
     incidents = _fetch_incidents(created_after=start, created_before=now)
+    events_by_order = load_meeting_events_by_order(a.order_id for a in appointments)
 
-    response_stats = _build_response_stats(appointments)
+    response_stats = _build_response_stats(appointments, events_by_order)
     attendance_stats = _build_attendance_stats(appointments, now)
     crosscheck = _build_incident_crosscheck(incidents, now)
-    decline_stats = _build_decline_stats(appointments)
+    decline_stats = _build_decline_stats(appointments, events_by_order)
 
     return {
         'period_days': days,
         'period_start': start,
         'period_end': now,
         'has_data': bool(appointments),
-        'summary': _summary(response_stats, attendance_stats, crosscheck, decline_stats),
+        'summary': _summary(response_stats, attendance_stats, crosscheck),
         'response_stats': response_stats,
         'attendance_stats': attendance_stats,
         'incident_crosscheck': crosscheck,

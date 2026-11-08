@@ -1,28 +1,25 @@
 # -*- coding: utf-8 -*-
 """一次交付安排被改了几次才定下来。
 
-`MeetingAppointment` 是 `OneToOneField(order)`——一笔订单最多一条安排，摆在
-那里的时间是「当前这一版」。`propose_meeting`（`views.py` 936 行起）对同一笔
-订单第二次提交时走的是 `if not created:` 分支：把 `proposed_by`、`start_at`、
-`end_at`、`location` 全部改写，`status` 打回 `pending`，`responded_by` /
-`responded_at` 清空。前几版被原地覆盖，没有版本表。
+``MeetingAppointment`` 仍是每笔订单的当前快照；上线后的首次提议、每次改期
+以及接受/拒绝会写入不可变的 ``MeetingAppointmentEvent``。本模块只对从首次
+提议开始记录的事件链给出精确改期次数，旧预约继续用 ``OrderEvent`` 备注做
+兼容下界，并把两类样本分开披露。
 
-所以「改期」在库里不是一条记录，是一条痕迹：`OrderEvent` 里那句
-`更新了交付时间安排，等待对方确认`。这个模块把那句痕迹数出来。
-
-它回答四件事：一次安排平均改几次才定下来、改期之后对方的回应变快了还是变慢
-了、改期时地点换没换、以及谁在改期（只按角色）。四件事都是对照，不给因果——
-改期多的订单可能本来就是难谈的商品，而不是改期本身让事情变难。
-
-`meeting_attendance.py` 已经报过响应时长的总体中位数和到场率，本模块不复述
-那两个数，只报「改过 vs 一次谈成」的对照。两边的分档表必须对得上，否则运营
-会以为其中一个看板是错的。
+它回答四件事：一次安排改几次才定下来、改期之后对方的回应是快还是慢、改期时
+地点换没换、以及谁在改期（只按角色）。这些都是对照，不给因果。
 """
 
 from datetime import time as dt_time, timedelta
 
 from django.utils import timezone
 
+from .meeting_events import (
+    first_response_seconds,
+    has_complete_meeting_history,
+    load_meeting_events_by_order,
+    proposal_events,
+)
 from .models import MeetingAppointment, OrderEvent
 
 PERIOD_CHOICES = (
@@ -32,13 +29,10 @@ PERIOD_CHOICES = (
     (365, '最近 1 年'),
 )
 
-# `propose_meeting` 的 update 分支写下的事件备注。第一次提交写的是「提出了新的
-# 交付时间安排」，只多一个字，所以匹配必须写全「更新了」三个字——写成「新的
-# 交付时间安排」会把第一次提议也算成一次改期。
+# 上线前的改期只能从这句订单事件备注反推。第一次提交写的是“提出了新的……”，
+# 所以匹配必须包含“更新了”，否则首次提议也会被误算成改期。
 RESCHEDULE_NOTE = '更新了交付时间安排'
 
-# 改期次数分档。0 次是「一次谈成」，它是这一列的主档，不是补集：平台关心的
-# 恰恰是「有多少安排根本不用改」。
 RESCHEDULE_BUCKETS = (
     (1, '一次谈成'),
     (2, '改过一次'),
@@ -46,9 +40,7 @@ RESCHEDULE_BUCKETS = (
     (None, '改过 4 次以上'),
 )
 
-# 改期之后对方的回应时长分档。和 `meeting_attendance` 的 `RESPONSE_BUCKETS`
-# 刻意保持同一组上界——两边的响应时长必须是同一个尺度，运营才能把两个面板的
-# 数字对上。改这里的任何一档，都要同时改那边。
+# 与 meeting_attendance 保持同一组分档上界。
 RESPONSE_BUCKETS = (
     (3600, '1 小时内'),
     (86400, '1 天内'),
@@ -56,20 +48,9 @@ RESPONSE_BUCKETS = (
     (None, '3 天以上'),
 )
 
-# 一组订单至少要这么多条，占比和对照才给方向。和其余模块同一个量级。
 MIN_MEASURED_ORDERS = 12
-
-# 两个方向相差小于这个百分点视为噪声。
 NOISE_POINTS = 8
-
-# 清单最多列这么多条。清单是给「现在去核实」用的，不是给归档用的。
 RESCHEDULE_LIST_LIMIT = 20
-
-# 有过一条交付安排的订单状态。这份名单记录的是「一笔订单只要排过交付时间，它就
-# 已经进过分母了」这个决策——分母由预约本身的存在性决定，不由订单状态决定。
-# 连一次都没约上的订单不进分母：它谈不到改期，属于订单阶段流的领域，这里只报规模。
-# 这里不做按状态的过滤，只把名单留在常量里：一旦有人想按订单状态筛分母，先看见
-# 这份名单，再看见上面那段说明，就不会把它当成一次随手加的条件。
 SCHEDULED_STATUSES = ('confirmed', 'meeting', 'completed', 'borrowed', 'returned', 'cancelled')
 
 
@@ -78,11 +59,6 @@ def _percent(part, whole):
 
 
 def _period_start(days, today):
-    """统计窗口的第一天零点，按项目时区解释。
-
-    写 ``datetime.min`` 会当场报错——``combine`` 第二个参数要的是 ``time``，
-    不是 ``datetime``，而 ``timezone.datetime`` re-export 的是 ``datetime`` 类本身。
-    """
     start_date = today - timedelta(days=days - 1)
     return timezone.make_aware(
         timezone.datetime.combine(start_date, dt_time.min),
@@ -94,7 +70,7 @@ def _format_duration(seconds):
         return '—'
     seconds = int(seconds)
     if seconds < 60:
-        return f'{seconds} 分钟'
+        return f'{seconds} 秒'
     if seconds < 3600:
         return f'{seconds // 60} 分钟'
     if seconds < 86400:
@@ -112,25 +88,15 @@ def _median(values):
     return (ordered[middle - 1] + ordered[middle]) / 2.0
 
 
-def _bucket_index(buckets, seconds):
-    """值落在哪一档。左闭右开，最后一档收尾。
-
-    第一档的上界写 1 而不是 ``None``：改期次数是整数，0 次要单独一档，
-    写 ``None`` 会让第一档变成兜底档把所有次数都吸进去。
-    """
+def _bucket_index(buckets, value):
     for index, bucket in enumerate(buckets):
         limit = bucket[0]
-        if limit is None or seconds < limit:
+        if limit is None or value < limit:
             return index
     return len(buckets) - 1
 
 
 def _fetch_appointments(*, created_after=None, created_before=None):
-    """按显式排序取出预约，查询条件由调用方给。
-
-    显式排序不是洁癖：同一份数据在不同时刻给出不同的榜单，比一份错的榜单更难用。
-    查询没有 order_by 时数据库的返回顺序是不确定的，任何「第一名」都会随机漂移。
-    """
     appointments = MeetingAppointment.objects.select_related(
         'order', 'order__item', 'order__buyer', 'order__seller', 'location',
         'proposed_by', 'responded_by',
@@ -142,105 +108,150 @@ def _fetch_appointments(*, created_after=None, created_before=None):
     return list(appointments)
 
 
-def _reschedule_counts_by_order(orders):
-    """每笔订单的改期次数，只认 `OrderEvent` 里那句备注的条数。
-
-    这是本模块唯一能证明「改过」的证据，所以只能给下界。两条丢失要记住：
-    `OrderEvent` 是后来才有的表，上线之前的改动没有痕迹；备注是自由文本，
-    按子串匹配，那句话一旦被改，这里会静默少算。报出来的数是下界，不是精确值。
-    """
+def _legacy_note_counts(orders):
+    """只给没有完整事件链的订单取兼容下界。"""
     order_ids = [order.id for order in orders]
     if not order_ids:
         return {}
     counts = {}
-    events = OrderEvent.objects.filter(
+    notes = OrderEvent.objects.filter(
         order_id__in=order_ids, note__contains=RESCHEDULE_NOTE,
     ).values_list('order_id', flat=True)
-    for order_id in events:
+    for order_id in notes:
         counts[order_id] = counts.get(order_id, 0) + 1
     return counts
 
 
-def _response_seconds(appointment):
-    """从这一版提议交上去到对方回话的秒数，没回应返回 None。
+def _build_evidence(appointments, events_by_order):
+    """逐单决定使用精确事件链还是旧备注下界，绝不在同一条链上混算。"""
+    legacy_notes = _legacy_note_counts([a.order for a in appointments])
+    evidence = {}
+    for appointment in appointments:
+        events = events_by_order.get(appointment.order_id, [])
+        complete = has_complete_meeting_history(events)
+        proposals = proposal_events(events)
+        if complete:
+            count = max(len(proposals) - 1, 0)
+            source = 'events'
+        else:
+            count = legacy_notes.get(appointment.order_id, 0)
+            source = 'legacy_note' if count else 'legacy_missing'
+        evidence[appointment.order_id] = {
+            'appointment': appointment,
+            'events': events,
+            'proposals': proposals,
+            'is_complete': complete,
+            'count': count,
+            'source': source,
+        }
+    return evidence
 
-    只认 `responded_at`：`updated_at` 也会在改期时被写，拿它算会让「多久回应」
-    和「多久改主意」混在一起——那正是这个模块要分开的两件事。
-    """
+
+def _response_seconds(evidence):
+    """完整链取首次提议到首次回应；旧链退回当前快照的兼容口径。"""
+    if evidence['is_complete']:
+        return first_response_seconds(evidence['events'])
+    appointment = evidence['appointment']
     if not appointment.responded_at or not appointment.created_at:
         return None
     return max((appointment.responded_at - appointment.created_at).total_seconds(), 0.0)
 
 
-def _role_of(appointment, order):
-    """这一版是谁提的。只分买家、卖家、看不出三种，不落到具体的人。"""
-    if not appointment.proposed_by_id:
+def _role_of_event(event, order):
+    if not event.proposed_by_id:
         return 'unknown'
-    if appointment.proposed_by_id == order.buyer_id:
+    if event.proposed_by_id == order.buyer_id:
         return 'buyer'
-    if appointment.proposed_by_id == order.seller_id:
+    if event.proposed_by_id == order.seller_id:
         return 'seller'
     return 'unknown'
 
 
-def _build_reschedule_stats(appointments, reschedule_counts):
-    """一次安排改几次才定下来。"""
-    bucket_counts = [0] * len(RESCHEDULE_BUCKETS)
-    for appointment in appointments:
-        count = reschedule_counts.get(appointment.order_id, 0)
-        bucket_counts[_bucket_index(RESCHEDULE_BUCKETS, count)] += 1
-    total = sum(bucket_counts)
+def _role_of_appointment(appointment):
+    if not appointment.proposed_by_id:
+        return 'unknown'
+    if appointment.proposed_by_id == appointment.order.buyer_id:
+        return 'buyer'
+    if appointment.proposed_by_id == appointment.order.seller_id:
+        return 'seller'
+    return 'unknown'
 
-    counts = [reschedule_counts.get(a.order_id, 0) for a in appointments]
-    settled_once = sum(1 for count in counts if count == 0)
-    changed_once = sum(1 for count in counts if count == 1)
-    changed_thrice_or_more = sum(1 for count in counts if count >= 2)
+
+def _build_bucket_rows(counts):
+    buckets = [0] * len(RESCHEDULE_BUCKETS)
+    for count in counts:
+        buckets[_bucket_index(RESCHEDULE_BUCKETS, count)] += 1
+    total = len(counts)
+    return [
+        {
+            'label': label,
+            'count': count,
+            'share': _percent(count, total),
+        }
+        for (_limit, label), count in zip(RESCHEDULE_BUCKETS, buckets)
+    ]
+
+
+def _build_reschedule_stats(evidence):
+    exact = [item for item in evidence.values() if item['is_complete']]
+    legacy = [item for item in evidence.values() if not item['is_complete']]
+    exact_counts = [item['count'] for item in exact]
+    legacy_counts = [item['count'] for item in legacy]
+    exact_settled = sum(1 for count in exact_counts if count == 0)
+    legacy_settled = sum(1 for count in legacy_counts if count == 0)
+    exact_changed = len(exact_counts) - exact_settled
+    legacy_changed = len(legacy_counts) - legacy_settled
+    legacy_note_backed = sum(1 for item in legacy if item['source'] == 'legacy_note')
+    legacy_missing = len(legacy) - legacy_note_backed
 
     return {
-        'total': total,
-        'settled_once_count': settled_once,
-        'settled_once_rate': _percent(settled_once, total),
-        'changed_count': total - settled_once,
-        'changed_rate': _percent(total - settled_once, total),
-        'changed_once_count': changed_once,
-        'changed_thrice_or_more_count': changed_thrice_or_more,
-        'changed_thrice_or_more_rate': _percent(changed_thrice_or_more, total),
-        'max_label': str(max(counts)) if counts else '—',
-        'bucket_rows': [
-            {
-                'label': label,
-                'count': count,
-                'share': _percent(count, total),
-            }
-            for (limit, label), count in zip(RESCHEDULE_BUCKETS, bucket_counts)
-        ],
-        'is_small_sample': total < MIN_MEASURED_ORDERS,
+        'scheduled_total': len(evidence),
+        # 兼容旧键名，但含义明确限定为精确事件链样本。
+        'total': len(exact),
+        'exact_total': len(exact),
+        'legacy_total': len(legacy),
+        'legacy_note_backed_count': legacy_note_backed,
+        'legacy_missing_count': legacy_missing,
+        'settled_once_count': exact_settled,
+        'settled_once_rate': _percent(exact_settled, len(exact)),
+        'changed_count': exact_changed,
+        'changed_rate': _percent(exact_changed, len(exact)),
+        'changed_once_count': sum(1 for count in exact_counts if count == 1),
+        'changed_thrice_or_more_count': sum(1 for count in exact_counts if count >= 2),
+        'changed_thrice_or_more_rate': _percent(
+            sum(1 for count in exact_counts if count >= 2), len(exact),
+        ),
+        'max_label': str(max(exact_counts)) if exact_counts else '—',
+        'bucket_rows': _build_bucket_rows(exact_counts),
+        'legacy_settled_once_count': legacy_settled,
+        'legacy_settled_once_rate': _percent(legacy_settled, len(legacy)),
+        'legacy_changed_count': legacy_changed,
+        'legacy_changed_rate': _percent(legacy_changed, len(legacy)),
+        'legacy_max_label': str(max(legacy_counts)) if legacy_counts else '—',
+        'legacy_bucket_rows': _build_bucket_rows(legacy_counts),
+        'is_small_sample': len(exact) < MIN_MEASURED_ORDERS,
         'min_measured_orders': MIN_MEASURED_ORDERS,
     }
 
 
-def _build_response_contrast(appointments, reschedule_counts):
-    """改过的订单和一次谈成的订单，对方回应当初那一版各花了多久。
-
-    和 `meeting_attendance` 的响应时长是同一个尺度、同一组上界，但问的不是
-    一件事：那边问「总体上对方多久理」，这里问「改过的订单是不是更难谈」。
-    两组各自过门槛、差值超过噪声带才给方向，否则只报数字。
-    """
+def _build_response_contrast(evidence):
+    """只在完整事件链上做对照，旧快照不混进方向计算。"""
     groups = {
         'changed': {'label': '改过一次以上', 'seconds': []},
         'settled': {'label': '一次谈成', 'seconds': []},
     }
-    for appointment in appointments:
-        seconds = _response_seconds(appointment)
+    for item in evidence.values():
+        if not item['is_complete']:
+            continue
+        seconds = _response_seconds(item)
         if seconds is None:
             continue
-        key = 'changed' if reschedule_counts.get(appointment.order_id, 0) else 'settled'
+        key = 'changed' if item['count'] else 'settled'
         groups[key]['seconds'].append(seconds)
 
     rows = []
     for key in ('changed', 'settled'):
-        group = groups[key]
-        seconds_list = group['seconds']
+        seconds_list = groups[key]['seconds']
         buckets = [{'label': label, 'count': 0} for _limit, label in RESPONSE_BUCKETS]
         for seconds in seconds_list:
             buckets[_bucket_index(RESPONSE_BUCKETS, seconds)]['count'] += 1
@@ -248,7 +259,7 @@ def _build_response_contrast(appointments, reschedule_counts):
             bucket['share'] = _percent(bucket['count'], len(seconds_list))
         rows.append({
             'key': key,
-            'label': group['label'],
+            'label': groups[key]['label'],
             'total': len(seconds_list),
             'median_label': _format_duration(_median(seconds_list)),
             'bucket_rows': buckets,
@@ -265,6 +276,10 @@ def _build_response_contrast(appointments, reschedule_counts):
         gap_points = round(
             (changed_median - settled_median) / settled_median * 100, 1,
         )
+    legacy_measured = sum(
+        1 for item in evidence.values()
+        if not item['is_complete'] and _response_seconds(item) is not None
+    )
     return {
         'rows': rows,
         'changed_total': len(groups['changed']['seconds']),
@@ -277,56 +292,66 @@ def _build_response_contrast(appointments, reschedule_counts):
         ),
         'both_measured': both_measured,
         'is_small_sample': not both_measured,
+        'legacy_measured_count': legacy_measured,
         'min_measured_orders': MIN_MEASURED_ORDERS,
         'noise_points': NOISE_POINTS,
     }
 
 
-def _build_location_shift_stats(appointments, reschedule_counts):
-    """改期时地点换没换。
+def _location_key(event):
+    if event.location_id:
+        return ('id', event.location_id)
+    name = (event.location_name or '').strip()
+    return ('name', name) if name else None
 
-    只能和「当前这一版」比：前几版的地点被 `propose_meeting` 的 update 分支
-    原地覆盖了，库里没有。所以这一节报的是「最后一次改期时，地点和现在这一版
-    不一样」的订单占多少，而不是「地点改过几次」。这个上界是硬的——平台没有
-    存过历史地点，报「改过几次地点」是编数据。
 
-    订单上的 `meeting_location` 由 `propose_meeting` 同步写入，所以拿它当
-    「当前这一版」的参照。两者都没有地点的订单，答不了换没换，单独数。
-    """
+def _build_location_shift_stats(evidence):
+    """完整链逐轮比较相邻提议；地点名快照兜住地点被删除的情况。"""
     measurable = 0
     shifted = 0
-    both_missing = 0
-    for appointment in appointments:
-        if not reschedule_counts.get(appointment.order_id, 0):
+    unmeasurable = 0
+    rescheduled_orders = 0
+    shifted_orders = 0
+    for item in evidence.values():
+        if not item['is_complete'] or item['count'] == 0:
             continue
-        order_location = getattr(appointment.order, 'meeting_location_id', None)
-        appointment_location = appointment.location_id
-        if not order_location or not appointment_location:
-            both_missing += 1
-            continue
-        measurable += 1
-        if order_location != appointment_location:
-            shifted += 1
+        rescheduled_orders += 1
+        order_shifted = False
+        proposals = item['proposals']
+        for previous, current in zip(proposals, proposals[1:]):
+            previous_key = _location_key(previous)
+            current_key = _location_key(current)
+            if previous_key is None or current_key is None:
+                unmeasurable += 1
+                continue
+            measurable += 1
+            if previous_key != current_key:
+                shifted += 1
+                order_shifted = True
+        if order_shifted:
+            shifted_orders += 1
     return {
         'measurable_count': measurable,
         'shifted_count': shifted,
         'shift_rate': _percent(shifted, measurable),
-        'both_missing_count': both_missing,
+        'unmeasurable_count': unmeasurable,
+        'rescheduled_order_count': rescheduled_orders,
+        'orders_with_shift_count': shifted_orders,
         'is_small_sample': measurable < MIN_MEASURED_ORDERS,
         'min_measured_orders': MIN_MEASURED_ORDERS,
+        'legacy_comparable_count': 0,
     }
 
 
-def _build_role_stats(appointments, reschedule_counts):
-    """谁在改期。只按角色分：买家提的、卖家提的、双方都提过。
-
-    `proposed_by` 在改期时被改写，所以一笔订单改过两次以上时，库里只剩最后
-    一版的提议人。这里能报的只是「最后一版是谁提的」，不是「谁提的次数多」——
-    后者需要版本表，而平台没有。如实报前者，不给后者。
-    """
+def _build_role_stats(evidence):
+    """完整链精确数每一次改期由哪个角色提出，不输出用户名。"""
     counts = {'buyer': 0, 'seller': 0, 'unknown': 0}
-    for appointment in appointments:
-        counts[_role_of(appointment, appointment.order)] += 1
+    for item in evidence.values():
+        if not item['is_complete']:
+            continue
+        for event in item['events']:
+            if event.event_type == 'rescheduled':
+                counts[_role_of_event(event, item['appointment'].order)] += 1
     total = sum(counts.values())
     return {
         'buyer_count': counts['buyer'],
@@ -338,70 +363,94 @@ def _build_role_stats(appointments, reschedule_counts):
     }
 
 
-def _build_reschedule_rows(appointments, reschedule_counts):
-    """改过两次以上的订单逐笔列出。只带订单号、商品、改了几次、当前版本归谁。"""
-    rows = []
-    for appointment in appointments:
-        count = reschedule_counts.get(appointment.order_id, 0)
-        if count < 2:
+def _build_legacy_role_stats(evidence):
+    """旧快照只能说明最后一版归谁，单独披露，不冒充历史次数。"""
+    counts = {'buyer': 0, 'seller': 0, 'unknown': 0}
+    for item in evidence.values():
+        if item['is_complete']:
             continue
+        counts[_role_of_appointment(item['appointment'])] += 1
+    total = sum(counts.values())
+    return {
+        'buyer_count': counts['buyer'],
+        'seller_count': counts['seller'],
+        'unknown_count': counts['unknown'],
+        'buyer_share': _percent(counts['buyer'], total),
+        'seller_share': _percent(counts['seller'], total),
+        'total': total,
+    }
+
+
+def _build_reschedule_rows(evidence):
+    rows = []
+    role_labels = {'buyer': '买家', 'seller': '卖家', 'unknown': '—'}
+    for item in evidence.values():
+        if item['count'] < 2:
+            continue
+        appointment = item['appointment']
+        if item['is_complete'] and item['proposals']:
+            role = _role_of_event(item['proposals'][-1], appointment.order)
+        else:
+            role = _role_of_appointment(appointment)
         rows.append({
             'order_id': appointment.order_id,
             'item_title': appointment.order.item.title if appointment.order.item_id else '',
-            'count': count,
+            'count': item['count'],
+            'count_label': str(item['count']) if item['is_complete'] else f'至少 {item["count"]}',
             'status_label': appointment.get_status_display(),
-            'proposed_by_role': {
-                'buyer': '买家', 'seller': '卖家', 'unknown': '—',
-            }[_role_of(appointment, appointment.order)],
+            'proposed_by_role': role_labels[role],
+            'history_label': '完整事件链' if item['is_complete'] else '旧备注下界',
             'start_at': appointment.start_at,
         })
     rows.sort(key=lambda row: (-row['count'], row['order_id']))
     return rows[:RESCHEDULE_LIST_LIMIT]
 
 
-def _build_summary(reschedule_stats, response_contrast, location_stats, role_stats):
-    """一段话把这个模块的读数讲完，样本不足的地方明说。"""
-    if not reschedule_stats['total']:
+def _build_summary(reschedule_stats, response_contrast, location_stats):
+    if not reschedule_stats['scheduled_total']:
         return '当前周期还没有已安排的交付时间，改期统计暂无可核对的样本。'
     parts = [
-        f"周期内 {reschedule_stats['total']} 笔订单排过交付时间，"
-        f"{reschedule_stats['settled_once_count']} 笔一次谈成"
-        f"（{reschedule_stats['settled_once_rate']}%）"
+        f"周期内 {reschedule_stats['scheduled_total']} 笔订单排过交付时间；"
+        f"其中完整事件链 {reschedule_stats['exact_total']} 笔，"
+        f"旧快照 {reschedule_stats['legacy_total']} 笔"
     ]
-    if reschedule_stats['changed_count']:
+    if reschedule_stats['exact_total']:
         parts.append(
-            f"，改过 {reschedule_stats['changed_count']} 笔，"
-            f"其中改过两次以上 {reschedule_stats['changed_thrice_or_more_count']} 笔"
+            f"。完整链中 {reschedule_stats['settled_once_count']} 笔一次谈成"
+            f"（{reschedule_stats['settled_once_rate']}%），"
+            f"{reschedule_stats['changed_count']} 笔改过"
         )
-    if response_contrast['gap_points'] is not None:
+    if reschedule_stats['legacy_total']:
         parts.append(
-            f"。改过的一次以上订单中位回应 {response_contrast['changed_median_label']}，"
-            f"一次谈成的 {response_contrast['settled_median_label']}"
+            f"。旧快照中 {reschedule_stats['legacy_note_backed_count']} 笔能从备注确认改过，"
+            f"{reschedule_stats['legacy_missing_count']} 笔没有可核对的改期痕迹"
         )
-        if response_contrast['gap_is_meaningful']:
-            parts.append('，差值超过噪声阈值')
-        else:
-            parts.append('，两组差距在噪声范围内，只报数字')
-    else:
+    if response_contrast['both_measured']:
         parts.append(
-            f"。改期与回应对照至少各需 {response_contrast['min_measured_orders']} 条"
-            f"已回应样本，目前不足，暂不给方向"
+            f"。完整链中改过订单的中位首次回应 "
+            f"{response_contrast['changed_median_label']}，一次谈成为 "
+            f"{response_contrast['settled_median_label']}"
         )
-    if location_stats['measurable_count']:
+    elif reschedule_stats['exact_total']:
         parts.append(
-            f"。改期时地点也换了的 {location_stats['shifted_count']} / "
-            f"{location_stats['measurable_count']} 笔"
+            f"。完整链的改期与回应对照还不足各 {response_contrast['min_measured_orders']} 条，"
+            f"暂不给方向"
+        )
+    if location_stats['rescheduled_order_count']:
+        parts.append(
+            f"。逐轮比较后，地点发生变化的提议轮次 "
+            f"{location_stats['shifted_count']} / {location_stats['measurable_count']}"
         )
     if reschedule_stats['is_small_sample']:
         parts.append(
-            f"；不足 {reschedule_stats['min_measured_orders']} 笔已安排订单，"
+            f"；完整事件链不足 {reschedule_stats['min_measured_orders']} 笔，"
             f"占比只作参考"
         )
     return ''.join(parts)
 
 
 def build_meeting_reschedule(days=30, now=None):
-    '''一次交付安排被改了几次才定下来，只报告，不改写任何字段。'''
+    """生成改期报告；只读事件与当前快照，不改写任何业务字段。"""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
         days = 30
@@ -409,27 +458,27 @@ def build_meeting_reschedule(days=30, now=None):
 
     start = _period_start(days, timezone.localtime(now).date())
     appointments = _fetch_appointments(created_after=start, created_before=now)
-    orders = [appointment.order for appointment in appointments]
-    reschedule_counts = _reschedule_counts_by_order(orders)
+    events_by_order = load_meeting_events_by_order(a.order_id for a in appointments)
+    evidence = _build_evidence(appointments, events_by_order)
 
-    reschedule_stats = _build_reschedule_stats(appointments, reschedule_counts)
-    response_contrast = _build_response_contrast(appointments, reschedule_counts)
-    location_stats = _build_location_shift_stats(appointments, reschedule_counts)
-    role_stats = _build_role_stats(appointments, reschedule_counts)
-    reschedule_rows = _build_reschedule_rows(appointments, reschedule_counts)
+    reschedule_stats = _build_reschedule_stats(evidence)
+    response_contrast = _build_response_contrast(evidence)
+    location_stats = _build_location_shift_stats(evidence)
+    role_stats = _build_role_stats(evidence)
+    legacy_role_stats = _build_legacy_role_stats(evidence)
+    reschedule_rows = _build_reschedule_rows(evidence)
 
     return {
         'period_days': days,
         'period_start': start,
         'period_end': now,
         'has_data': bool(appointments),
-        'summary': _build_summary(
-            reschedule_stats, response_contrast, location_stats, role_stats,
-        ),
+        'summary': _build_summary(reschedule_stats, response_contrast, location_stats),
         'reschedule_stats': reschedule_stats,
         'response_contrast': response_contrast,
         'location_stats': location_stats,
         'role_stats': role_stats,
+        'legacy_role_stats': legacy_role_stats,
         'reschedule_rows': reschedule_rows,
         'reschedule_row_limit': RESCHEDULE_LIST_LIMIT,
         'min_measured_orders': MIN_MEASURED_ORDERS,

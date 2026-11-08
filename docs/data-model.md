@@ -22,7 +22,7 @@
 | 校园活动与报名 | `CampusCampaign`、`CampaignRegistration`、`CampaignUpdateMatch` | 有起止时间的专题活动、专题与在售商品的可选关联、用户逐次加入和退出的参与区间，以及主动订阅后的上新摘要命中缓冲；报名不创建订单或占用库存，命中也不预约商品 |
 | 学期日历 | `AcademicTerm`、`AcademicPhase`、`AcademicTermSnapshot` | 学期起止日期、按偏移天数划分的阶段规则、阶段级统计快照（已结束阶段由 `build_academic_calendar` 读取，进行中阶段实时算） |
 | 互动 | `Favorite`、`ItemAvailabilityWatch`、`Comment`、`PrivateMessage` | 收藏、有货提醒、公开留言和私信 |
-| 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`DeliveryConfirmation`、`Rating` | 交易预约、交付时间协商、状态事件、双方确认和完成后的评价；求购承接生成的订单通过 `Order.demand_response` 保存来源 |
+| 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`MeetingAppointmentEvent`、`DeliveryConfirmation`、`Rating` | `MeetingAppointment` 保存当前交付安排；不可变的 `MeetingAppointmentEvent` 保存上线后的提议、改期、接受、拒绝和订单取消快照；配合订单事件、双方确认和完成后的评价跑完整交易链。求购承接生成的订单通过 `Order.demand_response` 保存来源，旧预约不补造事件历史 |
 | 交付开放时段风险 | 不新增表，读 `MeetingAppointment`、`CampusLocationServiceWindow`、`CampusLocationServiceException` | 把未来待确认或已确认的交付安排对照地点每周规则与单日例外，只提示人工核对，不改预约或地点配置 |
 | 校园开放规则配置审计 | 不新增表，读 `CampusLocation`、`CampusLocationServiceWindow`、`CampusLocationServiceException`、`CampusLocationServiceExceptionWindow` | 解释每周时段、跨午夜、重叠或相邻、单日例外形状与生命周期；五类配置信号只提示人工确认，不自动修复规则 |
 | 交易安全确认 | `OrderSafetyAcknowledgement` | 买卖双方对当前安全卡的版本化确认记录，按订单、角色和安全卡指纹唯一；历史记录保留用于审计 |

@@ -1648,7 +1648,8 @@ class DemandResponseConversionTests(TestCase):
         self.assertIn('双方确认交付,1,100.0', content)
         self.assertIn('来源订单的预约阶段', content)
         self.assertIn('双方已确认交付,1,100.0', content)
-        self.assertIn('MeetingAppointment 每个订单只有当前版本', content)
+        self.assertIn('MeetingAppointment 保存每笔订单的当前版本', content)
+        self.assertIn('MeetingAppointmentEvent', content)
 
     def test_operations_csv_exports_runtime_reopen_funnel(self):
         now = timezone.now()

@@ -2,7 +2,8 @@ from django.db import transaction
 from django.urls import reverse
 
 from .availability import notify_item_available
-from .models import Order, OrderEvent
+from .meeting_events import record_meeting_event
+from .models import MeetingAppointment, Order, OrderEvent
 from .notifications import create_notification
 
 
@@ -72,6 +73,21 @@ def transition_order(*, order_id, actor, target_status):
         )
 
         if target_status == 'cancelled':
+            appointment = MeetingAppointment.objects.select_for_update(
+                of=('self',),
+            ).select_related('location', 'proposed_by', 'responded_by').filter(
+                order=order,
+            ).first()
+            if appointment and appointment.status != 'cancelled':
+                previous_appointment_status = appointment.status
+                appointment.status = 'cancelled'
+                appointment.save(update_fields=['status', 'updated_at'])
+                record_meeting_event(
+                    appointment=appointment,
+                    event_type='cancelled',
+                    actor=actor,
+                    previous_status=previous_appointment_status,
+                )
             previous_item_status = order.item.status
             order.item.status = 'available'
             order.item.save(update_fields=['status', 'updated_at'])

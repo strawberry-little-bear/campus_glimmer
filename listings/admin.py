@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingAppointmentEvent, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -282,6 +282,28 @@ class MeetingAppointmentAdmin(admin.ModelAdmin):
     search_fields = ('order__item__title', 'proposed_by__username', 'responded_by__username')
     autocomplete_fields = ('order', 'proposed_by', 'responded_by', 'location')
     readonly_fields = ('created_at', 'updated_at', 'responded_at', 'buyer_arrived_at', 'seller_arrived_at')
+
+
+@admin.register(MeetingAppointmentEvent)
+class MeetingAppointmentEventAdmin(admin.ModelAdmin):
+    list_display = ('order', 'event_type', 'occurred_at', 'proposed_by', 'responded_by', 'new_status')
+    list_filter = ('event_type', 'new_status', 'occurred_at')
+    search_fields = ('order__item__title', 'location_name', 'proposed_by__username', 'responded_by__username')
+    readonly_fields = (
+        'order', 'appointment', 'event_type', 'occurred_at', 'actor', 'proposed_by',
+        'proposed_start_at', 'proposed_end_at', 'location', 'location_name',
+        'responded_by', 'responded_at', 'decline_reason', 'previous_status',
+        'new_status', 'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(MeetingIncident)

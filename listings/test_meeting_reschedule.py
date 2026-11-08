@@ -34,6 +34,7 @@ from .models import (
     Category,
     Item,
     MeetingAppointment,
+    MeetingAppointmentEvent,
     Order,
     OrderEvent,
 )
@@ -61,6 +62,30 @@ def local_noon():
 
 def make_user(username):
     return User.objects.create_user(username=username, password='safe-password-123')
+
+
+def make_event(appointment, event_type, occurred_at, *, proposed_by=UNSET,
+               location=UNSET, responded_by=None, previous_status='pending',
+               new_status='pending'):
+    """为统计测试造一条已落库的事件快照。"""
+    event_proposer = appointment.proposed_by if proposed_by is UNSET else proposed_by
+    event_location = appointment.location if location is UNSET else location
+    return MeetingAppointmentEvent.objects.create(
+        order=appointment.order,
+        appointment=appointment,
+        event_type=event_type,
+        occurred_at=occurred_at,
+        actor=event_proposer,
+        proposed_by=event_proposer,
+        proposed_start_at=appointment.start_at,
+        proposed_end_at=appointment.end_at,
+        location=event_location,
+        location_name=event_location.name if event_location else '',
+        responded_by=responded_by,
+        responded_at=occurred_at if responded_by else None,
+        previous_status=previous_status,
+        new_status=new_status,
+    )
 
 
 class RescheduleSetupTests(TestCase):
@@ -152,7 +177,7 @@ class RescheduleSetupTests(TestCase):
 
 
 class EvidenceTests(TestCase):
-    """改期次数是下界：证据是事件备注，不是一条记录。"""
+    """完整事件链精确计数，旧备注只作兼容下界。"""
 
     def setUp(self):
         self.now = local_noon()
@@ -187,7 +212,15 @@ class EvidenceTests(TestCase):
         MeetingAppointment.objects.filter(pk=appointment.pk).update(
             created_at=self.now - timedelta(days=days_ago),
         )
-        for _index in range(reschedule_count):
+        make_event(
+            appointment, 'proposed', self.now - timedelta(hours=12),
+            previous_status='', new_status='pending',
+        )
+        for index in range(reschedule_count):
+            make_event(
+                appointment, 'rescheduled',
+                self.now - timedelta(hours=11) + timedelta(minutes=index),
+            )
             OrderEvent.objects.create(
                 order=order, actor=self.seller, from_status='confirmed',
                 to_status='confirmed', note=RESCHEDULE_NOTE + '，等待对方确认',
@@ -225,20 +258,61 @@ class EvidenceTests(TestCase):
             order=order, actor=self.seller, from_status='confirmed', to_status='confirmed',
             note='提出了新的交付时间安排',
         )
+        make_event(
+            appointment, 'proposed', self.now - timedelta(hours=12),
+            previous_status='', new_status='pending',
+        )
 
         report = build_meeting_reschedule(days=30, now=self.now)
 
         self.assertEqual(report['reschedule_stats']['settled_once_count'], 1)
         self.assertEqual(report['reschedule_stats']['changed_count'], 0)
 
-    def test_an_order_without_any_event_is_settled_once(self):
-        """没有痕迹的订单归「一次谈成」——这是下界，宁可偏大也不编。"""
-        self.make_appointment(reschedule_count=0)
+    def test_an_order_without_any_event_stays_in_the_legacy_group(self):
+        """没有事件链的旧预约不能被当成精确的一次谈成。"""
+        item = self.make_item('没有事件链')
+        order = Order.objects.create(
+            item=item, buyer=self.buyer, seller=self.seller,
+            meeting_location=self.location, agreed_price='30.00', status='confirmed',
+        )
+        Order.objects.filter(pk=order.pk).update(created_at=self.now - timedelta(days=1))
+        appointment = MeetingAppointment.objects.create(
+            order=order, proposed_by=self.seller, location=self.location,
+            start_at=self.now + timedelta(hours=24), end_at=self.now + timedelta(hours=25),
+            status='pending',
+        )
+        MeetingAppointment.objects.filter(pk=appointment.pk).update(
+            created_at=self.now - timedelta(days=1),
+        )
 
         report = build_meeting_reschedule(days=30, now=self.now)
 
-        self.assertEqual(report['reschedule_stats']['settled_once_count'], 1)
-        self.assertEqual(report['reschedule_stats']['changed_rate'], 0)
+        self.assertEqual(report['reschedule_stats']['exact_total'], 0)
+        self.assertEqual(report['reschedule_stats']['legacy_total'], 1)
+        self.assertEqual(report['reschedule_stats']['settled_once_count'], 0)
+
+    def test_a_legacy_reschedule_is_not_promoted_to_a_complete_chain(self):
+        item = self.make_item('上线后才改期的旧预约')
+        order = Order.objects.create(
+            item=item, buyer=self.buyer, seller=self.seller,
+            meeting_location=self.location, agreed_price='30.00', status='confirmed',
+        )
+        Order.objects.filter(pk=order.pk).update(created_at=self.now - timedelta(days=1))
+        appointment = MeetingAppointment.objects.create(
+            order=order, proposed_by=self.seller, location=self.location,
+            start_at=self.now + timedelta(hours=24), end_at=self.now + timedelta(hours=25),
+            status='pending',
+        )
+        MeetingAppointment.objects.filter(pk=appointment.pk).update(
+            created_at=self.now - timedelta(days=1),
+        )
+        make_event(appointment, 'rescheduled', self.now - timedelta(hours=1))
+
+        report = build_meeting_reschedule(days=30, now=self.now)
+
+        self.assertEqual(report['reschedule_stats']['exact_total'], 0)
+        self.assertEqual(report['reschedule_stats']['legacy_total'], 1)
+        self.assertEqual(report['reschedule_stats']['legacy_note_backed_count'], 0)
 
 
 class DenominatorTests(TestCase):
@@ -324,14 +398,25 @@ class ResponseContrastTests(TestCase):
             responded_at=created_at + timedelta(hours=responded_hours_after),
         )
         appointment.refresh_from_db()
+        make_event(
+            appointment, 'proposed', created_at,
+            previous_status='', new_status='pending',
+        )
+        response_at = created_at + timedelta(hours=responded_hours_after)
+        make_event(
+            appointment, 'accepted', response_at, responded_by=self.buyer,
+            previous_status='pending', new_status='confirmed',
+        )
         for index in range(reschedule_count):
+            make_event(
+                appointment, 'rescheduled',
+                response_at + timedelta(seconds=index + 1),
+                previous_status='confirmed', new_status='pending',
+            )
             OrderEvent.objects.create(
                 order=order, actor=self.seller, from_status='confirmed',
                 to_status='confirmed', note=RESCHEDULE_NOTE + '，等待对方确认',
             )
-            OrderEvent.objects.filter(
-                pk=OrderEvent.objects.filter(order=order).latest('id').pk,
-            ).update(created_at=appointment.created_at + timedelta(hours=index + 1))
         return appointment
 
     def test_the_response_buckets_match_the_attendance_module(self):
@@ -359,6 +444,11 @@ class ResponseContrastTests(TestCase):
             order=order, actor=self.seller, from_status='confirmed', to_status='confirmed',
             note=RESCHEDULE_NOTE + '，等待对方确认',
         )
+        make_event(
+            appointment, 'proposed', self.now - timedelta(hours=12),
+            previous_status='', new_status='pending',
+        )
+        make_event(appointment, 'rescheduled', self.now - timedelta(hours=11))
 
         report = build_meeting_reschedule(days=30, now=self.now)
 
@@ -421,7 +511,7 @@ class LocationShiftTests(TestCase):
 
     def make_appointment(self, *, title='地点商品', reschedule_count=1,
                          order_location=UNSET, appointment_location=UNSET):
-        """造一条安排，地点可以显式传 None——`or self.location` 会把 None 吃掉。"""
+        """造一条完整提议链，地点可以显式传 None。"""
         item = self.make_item(title)
         order = Order.objects.create(
             item=item, buyer=self.buyer, seller=self.seller,
@@ -438,7 +528,17 @@ class LocationShiftTests(TestCase):
         MeetingAppointment.objects.filter(pk=appointment.pk).update(
             created_at=self.now - timedelta(days=1),
         )
+        make_event(
+            appointment, 'proposed', self.now - timedelta(days=1, hours=-1),
+            location=order.meeting_location,
+            previous_status='', new_status='pending',
+        )
         for _index in range(reschedule_count):
+            make_event(
+                appointment, 'rescheduled',
+                self.now - timedelta(hours=12) + timedelta(minutes=_index),
+                location=appointment.location,
+            )
             OrderEvent.objects.create(
                 order=order, actor=self.seller, from_status='confirmed',
                 to_status='confirmed', note=RESCHEDULE_NOTE + '，等待对方确认',
@@ -480,7 +580,8 @@ class LocationShiftTests(TestCase):
 
         stats = report['location_stats']
         self.assertEqual(stats['measurable_count'], 0)
-        self.assertEqual(stats['both_missing_count'], 1)
+        self.assertEqual(stats['unmeasurable_count'], 1)
+        self.assertEqual(stats['rescheduled_order_count'], 1)
         self.assertIsNone(stats['shift_rate'])
 
     def test_an_order_that_was_never_rescheduled_is_not_measured(self):
@@ -511,7 +612,8 @@ class RoleTests(TestCase):
             location=self.location,
         )
 
-    def make_appointment(self, *, title='角色商品', proposed_by=None):
+    def make_appointment(self, *, title='角色商品', proposed_by=None,
+                         reschedule_count=1, record_events=True):
         self.counter += 1
         item = self.make_item(title)
         order = Order.objects.create(
@@ -527,6 +629,17 @@ class RoleTests(TestCase):
         MeetingAppointment.objects.filter(pk=appointment.pk).update(
             created_at=self.now - timedelta(days=1),
         )
+        if record_events:
+            make_event(
+                appointment, 'proposed', self.now - timedelta(days=1, hours=-1),
+                previous_status='', new_status='pending',
+            )
+            for index in range(reschedule_count):
+                make_event(
+                    appointment, 'rescheduled',
+                    self.now - timedelta(hours=12) + timedelta(minutes=index),
+                    proposed_by=proposed_by,
+                )
         return appointment
 
     def test_the_proposer_role_is_split_by_side_not_by_name(self):
@@ -540,6 +653,7 @@ class RoleTests(TestCase):
         self.assertEqual(role_stats['seller_count'], 1)
         self.assertEqual(role_stats['unknown_count'], 0)
         self.assertEqual(role_stats['buyer_share'], 50.0)
+        self.assertEqual(role_stats['total'], 2)
 
     def test_a_missing_proposer_is_unknown_not_a_guess(self):
         self.make_appointment(title='没有提议人', proposed_by=None)
@@ -548,18 +662,22 @@ class RoleTests(TestCase):
 
         self.assertEqual(report['role_stats']['unknown_count'], 1)
 
+    def test_legacy_snapshot_roles_are_reported_separately(self):
+        self.make_appointment(
+            title='旧快照', proposed_by=self.buyer, record_events=False,
+        )
+
+        report = build_meeting_reschedule(days=30, now=self.now)
+
+        self.assertEqual(report['role_stats']['total'], 0)
+        self.assertEqual(report['legacy_role_stats']['buyer_count'], 1)
+        self.assertEqual(report['legacy_role_stats']['total'], 1)
+
     def test_rows_only_list_orders_rescheduled_twice_or_more(self):
         self.make_appointment(title='改过一次', proposed_by=self.buyer)
-        self.make_appointment(title='改过三次', proposed_by=self.seller)
-        # 给第二笔补三条改期痕迹。
-        order = Order.objects.filter(
-            item__title='改过三次',
-        ).first()
-        for _index in range(3):
-            OrderEvent.objects.create(
-                order=order, actor=self.seller, from_status='confirmed',
-                to_status='confirmed', note=RESCHEDULE_NOTE + '，等待对方确认',
-            )
+        self.make_appointment(
+            title='改过三次', proposed_by=self.seller, reschedule_count=3,
+        )
 
         report = build_meeting_reschedule(days=30, now=self.now)
 
@@ -568,6 +686,7 @@ class RoleTests(TestCase):
         self.assertEqual(rows[0]['count'], 3)
         self.assertEqual(rows[0]['proposed_by_role'], '卖家')
         self.assertEqual(rows[0]['item_title'], '改过三次')
+        self.assertEqual(rows[0]['history_label'], '完整事件链')
 
 
 class ReportOnlyTests(TestCase):

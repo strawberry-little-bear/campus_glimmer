@@ -1402,7 +1402,7 @@ class ListingFlowTests(TestCase):
         order.refresh_from_db()
         appointment = MeetingAppointment.objects.get(order=order)
         self.assertEqual(order.status, 'cancelled')
-        self.assertEqual(appointment.status, 'pending')
+        self.assertEqual(appointment.status, 'cancelled')
 
     def test_meeting_proposal_rejects_past_or_oversized_window(self):
         self.client.login(username='bob', password='safe-password-123')

@@ -4,40 +4,56 @@
 {% endcomment %}<section class="content-card ops-panel mb-4 meeting-attendance-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Handover reality</span><h2>约好的那一次见面</h2></div>
-        <span class="ops-panel-hint">响应时长与到场登记，第一次被运营读到</span>
+    <span class="ops-panel-hint">首次回应按事件链计算，旧快照单独兼容</span>
     </div>
-    <p class="search-rhythm-note mb-3"><i class="bi bi-people me-1"></i>交付预约一直在记两段时间：对方多久回应一个提议（<code>responded_at</code>），以及双方各自什么时候登记到场。四个字段全都有写入路径，而读取路径只有一处——订单详情页把它们显示给用户本人看。运营侧一条统计都没有：没有人知道提议交上去之后对方多久才理，也没有人知道约了时间的订单里到底有几个人真的到了现场。</p>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-people me-1"></i>上线后的交付安排会把首次提议、每次改期及回应写成不可变事件。<strong>首次回应固定取首次提议到首次回应</strong>，后来再改期也不会改写这段时长。上线前已有、没有完整事件链的预约继续读取当前快照，可能丢过前几版，单独标为“旧快照”，不与完整链混成一个精确中位。</p>
     {% if not meeting_attendance.has_data %}
     <div class="empty-inline">{{ meeting_attendance.summary }}</div>
     {% else %}
     <div class="row g-3 mb-4">
         <div class="col-md-3"><div class="ops-mini-stat"><span>得到回应</span><strong>{{ meeting_attendance.response_stats.responded_count }}</strong><small>共 {{ meeting_attendance.response_stats.total }} 次安排 · {{ meeting_attendance.response_stats.response_rate }}%</small></div></div>
-        <div class="col-md-3"><div class="ops-mini-stat"><span>回应中位耗时</span><strong>{{ meeting_attendance.response_stats.median_label }}</strong><small>P90 {{ meeting_attendance.response_stats.p90_label }}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>完整链首次回应中位</span><strong>{{ meeting_attendance.response_stats.median_label }}</strong><small>{{ meeting_attendance.response_stats.exact_responded_count }} 次可读 · P90 {{ meeting_attendance.response_stats.p90_label }}</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>双方都到场</span><strong>{{ meeting_attendance.attendance_stats.both_arrived_count }}</strong><small>占已结束确认预约 {{ meeting_attendance.attendance_stats.both_arrival_rate }}%</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>与到场记录矛盾的异常</span><strong>{{ meeting_attendance.incident_crosscheck.contradicted_count }}</strong><small>共 {{ meeting_attendance.incident_crosscheck.total }} 条未到场异常</small></div></div>
     </div>
     <div class="row g-4">
         <div class="col-lg-6">
-            <h3 class="h6 mb-3">对方多久回应一个提议</h3>
+            <h3 class="h6 mb-3">完整事件链：首次提议后多久回应</h3>
+            <p class="small text-muted">完整链 {{ meeting_attendance.response_stats.exact_total }} 次，其中 {{ meeting_attendance.response_stats.exact_responded_count }} 次已有首次回应。这里的分档只含完整链。</p>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
-                <caption class="visually-hidden">约好的那一次见面 · 对方多久回应一个提议</caption>
+                <caption class="visually-hidden">约好的那一次见面 · 完整链首次回应分档</caption>
                     <thead><tr><th>回应耗时</th><th>安排数</th><th>占比（%）</th></tr></thead>
                     <tbody>
-                        {% for row in meeting_attendance.response_stats.bucket_rows %}
+                        {% for row in meeting_attendance.response_stats.exact_bucket_rows %}
                         <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <table class="table table-sm align-middle ops-table mt-3 meeting-attendance-mini-table">
-            <caption class="visually-hidden">约好的那一次见面 · 对方多久回应一个提议（回应后确认）</caption>
+            <h3 class="h6 mb-3 mt-4">完整事件链：每一轮的结果</h3>
+            <table class="table table-sm align-middle ops-table meeting-attendance-mini-table">
+            <caption class="visually-hidden">约好的那一次见面 · 每轮提议后的首次回应</caption>
                 <tbody>
-                    <tr><th scope="row">回应后确认</th><td>{{ meeting_attendance.response_stats.accepted_count }}</td><td>{{ meeting_attendance.response_stats.accept_rate }}%</td></tr>
-                    <tr><th scope="row">回应后未接受</th><td>{{ meeting_attendance.response_stats.declined_count }}</td><td>&mdash;</td></tr>
-                    <tr><th scope="row">周期结束仍未回应</th><td>{{ meeting_attendance.response_stats.pending_count }}</td><td>&mdash;</td></tr>
+                    <tr><th scope="row">提议轮次</th><td>{{ meeting_attendance.response_stats.round_stats.proposal_count }}</td><td>&mdash;</td></tr>
+                    <tr><th scope="row">接受</th><td>{{ meeting_attendance.response_stats.round_stats.accepted_count }}</td><td>{{ meeting_attendance.response_stats.round_stats.accept_rate }}%</td></tr>
+                    <tr><th scope="row">未接受</th><td>{{ meeting_attendance.response_stats.round_stats.declined_count }}</td><td>{{ meeting_attendance.response_stats.round_stats.decline_rate }}%</td></tr>
+                    <tr><th scope="row">周期结束仍未回应</th><td>{{ meeting_attendance.response_stats.round_stats.unanswered_count }}</td><td>&mdash;</td></tr>
                 </tbody>
             </table>
+            <h3 class="h6 mb-3 mt-4">旧快照：可读到的回应时间</h3>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">约好的那一次见面 · 旧快照回应时间</caption>
+                    <thead><tr><th>回应耗时</th><th>安排数</th><th>占比（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in meeting_attendance.response_stats.legacy_bucket_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{{ row.share }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2">旧快照 {{ meeting_attendance.response_stats.legacy_total }} 次，其中 {{ meeting_attendance.response_stats.legacy_responded_count }} 次可读回应时间，中位 {{ meeting_attendance.response_stats.legacy_median_label }}。旧预约没有完整事件链，这段兼容口径可能包含改期影响，不参与上面的首次回应判断。</p>
             <h3 class="h6 mb-3 mt-4">到场与迟到</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
@@ -132,10 +148,10 @@
                     </tbody>
                 </table>
             </div>
-            <p class="small text-muted mt-2 mb-0">{% if meeting_attendance.decline_stats.is_constant_value and meeting_attendance.decline_stats.declined_count %}当前只有一个取值——这个字段的写入路径是视图里的一句硬编码，用户从来没有机会填它。{% else %}被对方未接受的安排，当前还没有取值分布可言。{% endif %}</p>
+            <p class="small text-muted mt-2 mb-0">{% if meeting_attendance.decline_stats.is_constant_value and meeting_attendance.decline_stats.declined_count %}完整链读取每次拒绝事件，旧快照读取当前字段；当前记录只有一个取值，因为现有写入路径仍使用固定文案。{% else %}被对方未接受的安排，当前还没有取值分布可言。{% endif %}</p>
         </div>
     </div>
-    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>到场统计的分母只收"约定结束时间已经过去"的确认预约：还没到结束时间的约会谈不到"有没有人到"，把它算进分母会让到场率凭空变小，{{ meeting_attendance.attendance_stats.still_open_count }} 次还没到核对时间的预约已单独排除。双方都没到场不等于爽约——爽约只能由用户提交异常，系统不自动判定。这里只报告，不改签到窗口、不新增提醒、不把统计写回任何记录。</div>
+    <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>到场统计的分母只收“约定结束时间已经过去”的确认预约；{{ meeting_attendance.attendance_stats.still_open_count }} 次还没到核对时间的预约已单独排除。完整事件链用于首次回应，旧快照只作兼容展示。双方都没到场不等于爽约——爽约只能由用户提交异常，系统不自动判定。这里只报告，不改签到窗口、不新增提醒、不把统计写回任何记录。</div>
     {% endif %}
 </section>
 

@@ -1528,6 +1528,101 @@ class MeetingAppointment(models.Model):
         return f'{self.order.item.title} · {self.start_at:%Y-%m-%d %H:%M}'
 
 
+class MeetingAppointmentEvent(models.Model):
+    """不可变的交付安排事件，保留每次提议与回应时的现场快照。
+
+    ``MeetingAppointment`` 只保存当前安排；改期会覆盖时间、地点和提议人。
+    这个事件表从运行时写入路径开始记录完整历史，不回填上线前的旧预约，也
+    不从自由文本备注伪造旧提议。
+    """
+
+    EVENT_CHOICES = (
+        ('proposed', '提出安排'),
+        ('rescheduled', '改期'),
+        ('accepted', '接受安排'),
+        ('declined', '未接受安排'),
+        ('cancelled', '订单取消'),
+    )
+
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE,
+        related_name='meeting_appointment_events', verbose_name='订单',
+    )
+    appointment = models.ForeignKey(
+        MeetingAppointment, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='events', verbose_name='交付安排',
+    )
+    event_type = models.CharField('事件类型', max_length=20, choices=EVENT_CHOICES)
+    occurred_at = models.DateTimeField('发生时间')
+    actor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='meeting_appointment_events', verbose_name='操作人',
+    )
+    proposed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='proposed_meeting_appointment_events', verbose_name='提议人快照',
+    )
+    proposed_start_at = models.DateTimeField('提议开始时间快照')
+    proposed_end_at = models.DateTimeField('提议结束时间快照')
+    location = models.ForeignKey(
+        CampusLocation, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='meeting_appointment_events', verbose_name='地点快照',
+    )
+    location_name = models.CharField('地点名称快照', max_length=100, blank=True)
+    responded_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='responded_meeting_appointment_events', verbose_name='回应人快照',
+    )
+    responded_at = models.DateTimeField('回应时间快照', null=True, blank=True)
+    decline_reason = models.CharField('未接受原因快照', max_length=200, blank=True)
+    previous_status = models.CharField(
+        '变更前状态', max_length=20, choices=MeetingAppointment.STATUS_CHOICES, blank=True,
+    )
+    new_status = models.CharField(
+        '变更后状态', max_length=20, choices=MeetingAppointment.STATUS_CHOICES,
+    )
+    created_at = models.DateTimeField('记录时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '交付安排事件'
+        verbose_name_plural = '交付安排事件'
+        ordering = ['occurred_at', 'pk']
+        indexes = [
+            models.Index(fields=['order', 'occurred_at', 'id']),
+            models.Index(fields=['appointment', 'occurred_at']),
+            models.Index(fields=['event_type', 'occurred_at']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(proposed_end_at__gt=models.F('proposed_start_at')),
+                name='meeting_event_end_after_start',
+            ),
+        ]
+
+    def clean(self):
+        if (
+            self.appointment_id and self.order_id
+            and self.appointment.order_id != self.order_id
+        ):
+            raise ValidationError('交付安排事件必须与预约属于同一笔订单。')
+        if self.proposed_by_id and self.order_id:
+            participant_ids = {self.order.buyer_id, self.order.seller_id}
+            if self.proposed_by_id not in participant_ids:
+                raise ValidationError('提议人必须是这笔订单的买家或卖家。')
+        if self.responded_by_id and self.order_id:
+            participant_ids = {self.order.buyer_id, self.order.seller_id}
+            if self.responded_by_id not in participant_ids:
+                raise ValidationError('回应人必须是这笔订单的买家或卖家。')
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            raise ValidationError('交付安排事件是不可变历史，不能修改。')
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.order_id} · {self.get_event_type_display()} · {self.occurred_at:%Y-%m-%d %H:%M}'
+
+
 class MeetingIncident(models.Model):
     REASON_CHOICES = (
         ('no_show', '对方未到场'),

@@ -109,6 +109,7 @@ from .saved_search_limit_shape import build_saved_search_limit_shape
 from .saved_search_quiet_window import build_saved_search_quiet_window
 from .lost_found_matched_outcome import build_lost_found_matched_outcome
 from .lost_found_report_quality import build_lost_found_report_quality
+from .meeting_events import record_meeting_event
 from .campus_verification_friction import build_campus_verification_friction
 from .gift_application_queue import build_gift_application_queue
 # 商品图片覆盖度：在架商品到底配了几张图，以前没人数过
@@ -1673,6 +1674,7 @@ def propose_meeting(request, order_id):
                 'location': form.cleaned_data['location'],
             },
         )
+        previous_appointment_status = '' if created else appointment.status
         if not created:
             appointment.proposed_by = request.user
             appointment.start_at = form.cleaned_data['start_at']
@@ -1689,6 +1691,12 @@ def propose_meeting(request, order_id):
         if locked_order.meeting_location_id != appointment.location_id:
             locked_order.meeting_location_id = appointment.location_id
             locked_order.save(update_fields=['meeting_location', 'updated_at'])
+        record_meeting_event(
+            appointment=appointment,
+            event_type='proposed' if created else 'rescheduled',
+            actor=request.user,
+            previous_status=previous_appointment_status,
+        )
         OrderEvent.objects.create(
             order=locked_order,
             actor=request.user,
@@ -1748,12 +1756,20 @@ def respond_meeting(request, order_id, decision):
             return redirect('order_detail', order_id=locked_order.id)
 
         now = timezone.now()
+        previous_appointment_status = appointment.status
         appointment.responded_by = request.user
         appointment.responded_at = now
         appointment.status = 'confirmed' if decision == 'accept' else 'declined'
         if decision == 'decline':
             appointment.decline_reason = '对方暂未接受这次时间安排'
         appointment.save(update_fields=['status', 'responded_by', 'responded_at', 'decline_reason', 'updated_at'])
+        record_meeting_event(
+            appointment=appointment,
+            event_type='accepted' if decision == 'accept' else 'declined',
+            actor=request.user,
+            previous_status=previous_appointment_status,
+            occurred_at=now,
+        )
 
         proposer = appointment.proposed_by
         if decision == 'accept':
@@ -5950,7 +5966,7 @@ def operations_dashboard_export(request):
     writer.writerow(['约好的那一次见面', '数值', '说明'])
     writer.writerow([
         '口径与门槛', attendance['summary'],
-        '只读 responded_at 与到场登记，不改写任何字段，也不自动判定爽约',
+        '完整事件链按首次提议到首次回应计算；旧快照按 responded_at - created_at 兼容读取，不自动判定爽约',
     ])
     writer.writerow([
         '已过约定结束时间的确认预约', attendance['attendance_stats']['confirmed_ended_count'],
@@ -5966,11 +5982,11 @@ def operations_dashboard_export(request):
     response_stats = attendance['response_stats']
     writer.writerow([
         '交付安排', response_stats['total'], '',
-        '周期内创建的交付时间安排',
+        f"周期内创建的交付时间安排；完整事件链 {response_stats['exact_total']} 次，旧快照 {response_stats['legacy_total']} 次",
     ])
     writer.writerow([
         '得到回应', response_stats['responded_count'], response_stats['response_rate'],
-        '回应时间以 responded_at 为准，不用 updated_at——它也会在重新提议时被写',
+        '完整链取事件时间；旧快照取 responded_at - created_at。两类样本都计入覆盖数',
     ])
     writer.writerow([
         '仍未回应', response_stats['pending_count'],
@@ -5978,17 +5994,17 @@ def operations_dashboard_export(request):
         '周期结束时仍在等待对方回应的安排',
     ])
     writer.writerow([
-        '回应后确认', response_stats['accepted_count'], response_stats['accept_rate'],
-        '以已回应的安排为分母',
+        '当前状态为已确认', response_stats['accepted_count'], response_stats['accept_rate'],
+        '当前快照状态；每轮提议的接受/未接受另见下方事件轮次',
     ])
     writer.writerow([
-        '回应后未接受', response_stats['declined_count'], '',
-        '对方看过这个时间，但选择重新协商',
+        '当前状态为未接受', response_stats['declined_count'], '',
+        '当前快照状态；历史拒绝次数由事件链单独统计',
     ])
 
     writer.writerow([])
-    writer.writerow(['回应耗时', '安排数', '占比（%）'])
-    for row in response_stats['bucket_rows']:
+    writer.writerow(['完整事件链首次回应耗时', '安排数', '占比（%）'])
+    for row in response_stats['exact_bucket_rows']:
         writer.writerow([row['label'], row['count'], row['share']])
     writer.writerow([
         '中位耗时', response_stats['median_label'], '',
@@ -5998,6 +6014,21 @@ def operations_dashboard_export(request):
     ])
     writer.writerow([
         '最快 / 最慢', f"{response_stats['fastest_label']} / {response_stats['slowest_label']}", '',
+    ])
+    writer.writerow([])
+    writer.writerow(['完整事件链每一轮提议', '次数', '占比（%）'])
+    round_stats = response_stats['round_stats']
+    writer.writerow(['提议轮次', round_stats['proposal_count'], ''])
+    writer.writerow(['接受', round_stats['accepted_count'], round_stats['accept_rate']])
+    writer.writerow(['未接受', round_stats['declined_count'], round_stats['decline_rate']])
+    writer.writerow(['周期结束仍未回应', round_stats['unanswered_count'], ''])
+    writer.writerow([])
+    writer.writerow(['旧快照可读回应耗时', '安排数', '占比（%）'])
+    for row in response_stats['legacy_bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+    writer.writerow([
+        '旧快照回应中位', response_stats['legacy_median_label'], '',
+        f"共 {response_stats['legacy_total']} 次旧快照，其中 {response_stats['legacy_responded_count']} 次可读回应时间",
     ])
 
     writer.writerow([])
@@ -6781,48 +6812,64 @@ def operations_dashboard_export(request):
     writer.writerow(['一次交付安排被改了几次才定下来', '数值', '说明'])
     writer.writerow([
         '口径与门槛', reschedule['summary'],
-        '改期次数从 OrderEvent 里那句「更新了交付时间安排，等待对方确认」反推，'
-        '报的是下界：MeetingAppointment 是 OneToOneField(order)，'
-        '前几版被原地覆盖，没有版本表；OrderEvent 上线之前的改动没有痕迹',
+        '上线后的完整事件链逐次记录首次提议和改期，改期次数精确；'
+        '上线前的旧预约没有完整历史，只从 OrderEvent 固定备注读取兼容下界，并单独披露',
     ])
     writer.writerow([
-        '周期内排过交付时间的订单', reschedule['reschedule_stats']['total'], '',
+        '周期内排过交付时间的订单', reschedule['reschedule_stats']['scheduled_total'], '',
         '分母只收已经有了一条安排的订单；连一次都没约上的订单谈不到改期，'
         '单独数出来，属于订单阶段流的领域',
     ])
     writer.writerow([
-        '一次谈成', reschedule['reschedule_stats']['settled_once_count'],
+        '完整事件链样本', reschedule['reschedule_stats']['exact_total'], '',
+        '从首次 proposed 事件开始，后续每次改期写 rescheduled 事件',
+    ])
+    writer.writerow([
+        '旧快照样本', reschedule['reschedule_stats']['legacy_total'], '',
+        f"其中 {reschedule['reschedule_stats']['legacy_note_backed_count']} 笔有固定备注可确认改过，"
+        f"{reschedule['reschedule_stats']['legacy_missing_count']} 笔没有可核对的改期痕迹",
+    ])
+    writer.writerow([
+        '完整链一次谈成', reschedule['reschedule_stats']['settled_once_count'],
         reschedule['reschedule_stats']['settled_once_rate'],
         '0 次改期。它是这一列的主档，不是补集——平台关心的恰恰是'
         '「有多少安排根本不用改」',
     ])
     writer.writerow([
-        '改过一次以上', reschedule['reschedule_stats']['changed_count'],
+        '完整链改过一次以上', reschedule['reschedule_stats']['changed_count'],
         reschedule['reschedule_stats']['changed_rate'],
         '双方至少有一方改过一次主意',
     ])
     writer.writerow([
-        '其中改过两次以上', reschedule['reschedule_stats']['changed_thrice_or_more_count'],
+        '完整链其中改过两次以上', reschedule['reschedule_stats']['changed_thrice_or_more_count'],
         reschedule['reschedule_stats']['changed_thrice_or_more_rate'],
         '最难谈的一批：一个时间对其中一方一直不合适，而另一方一直在迁就',
     ])
     writer.writerow([
-        '最多改过几次', reschedule['reschedule_stats']['max_label'], '',
-        '同一笔订单的改期痕迹条数，报下界',
+        '完整链最多改过几次', reschedule['reschedule_stats']['max_label'], '',
+        '由同一笔订单的 rescheduled 事件数计算，是精确值',
     ])
 
     writer.writerow([])
-    writer.writerow(['改了几次才定下来', '笔数', '占比（%）', '这一档说明什么'])
+    writer.writerow(['完整事件链：改了几次才定下来', '笔数', '占比（%）'])
     for row in reschedule['reschedule_stats']['bucket_rows']:
-        writer.writerow(['', row['label'], row['count'], row['share'], ''])
+        writer.writerow([row['label'], row['count'], row['share']])
+    writer.writerow([])
+    writer.writerow(['旧快照兼容下界：至少改了几次', '笔数', '占比（%）'])
+    for row in reschedule['reschedule_stats']['legacy_bucket_rows']:
+        writer.writerow([row['label'], row['count'], row['share']])
+    writer.writerow([
+        '说明', '旧快照里 0 次不能证明真的一次谈成，可能只是上线前没有留下痕迹；'
+        '因此它不能和完整链合并成一个精确改期率。',
+    ])
 
     writer.writerow([])
     writer.writerow(['改过的 vs 一次谈成的：对方多久回应', '中位耗时', '已回应条数', '口径说明'])
     for row in reschedule['response_contrast']['rows']:
         writer.writerow([
             '', row['label'], row['median_label'], row['total'],
-            '响应时长只认 responded_at 减 created_at；updated_at 也会在改期时被写，'
-            '拿它算会让「多久回应」和「多久改主意」混在一起',
+            '两组都只取完整事件链；首次回应固定为首次提议到首次接受/拒绝，'
+            '后续改期不会改写这个时长',
         ])
     writer.writerow([
         '', '两组相差', reschedule['response_contrast']['gap_points'], '',
@@ -6835,48 +6882,60 @@ def operations_dashboard_export(request):
     writer.writerow(['改期时地点换没换', '笔数', '占比（%）', '这一档说明什么'])
     location_stats = reschedule['location_stats']
     writer.writerow([
-        '', '可比对的订单', location_stats['measurable_count'], '',
-        '分母是改过期、且订单和安排两边都有地点的订单',
+        '', '改期订单', location_stats['rescheduled_order_count'], '',
+        '只含从首次提议开始记录、至少改期一次的完整事件链订单',
     ])
     writer.writerow([
-        '', '地点也换了的', location_stats['shifted_count'],
+        '', '可比对的相邻提议', location_stats['measurable_count'], '',
+        '每次改期比较上一版和当前版提议，两边都有地点快照才可比',
+    ])
+    writer.writerow([
+        '', '地点发生变化的轮次', location_stats['shifted_count'],
         location_stats['shift_rate'],
-        '只能和「当前这一版」比：前几版的地点被原地覆盖了，库里没有。'
-        '所以这一节报的是「最后一次改期时地点和现在这一版不一样」，'
-        '不是「地点改过几次」——后者平台答不了',
+        '按相邻提议事件逐轮比较，不再只看最后一版',
     ])
     writer.writerow([
-        '', '两边都没地点', location_stats['both_missing_count'], '',
-        '答不了换没换，单独数，不并进「没换」',
+        '', '地点快照不完整的轮次', location_stats['unmeasurable_count'], '',
+        '至少一侧没有地点快照，答不了换没换，不并进「没换」',
     ])
 
     writer.writerow([])
-    writer.writerow(['最后一版是谁提的', '笔数', '占比（%）', '这一档说明什么'])
+    writer.writerow(['完整事件链：改期由谁发起', '改期次数', '占比（%）', '这一档说明什么'])
     role_stats = reschedule['role_stats']
     writer.writerow([
-        '', '买家提的', role_stats['buyer_count'], role_stats['buyer_share'],
-        'proposed_by 在改期时被改写，所以能报的只是「最后一版是谁提的」，'
-        '不是「谁提的次数多」——后者需要版本表，而平台没有',
+        '', '买家发起', role_stats['buyer_count'], role_stats['buyer_share'],
+        '逐条 rescheduled 事件读取提议人快照，精确聚合改期次数',
     ])
     writer.writerow([
-        '', '卖家提的', role_stats['seller_count'], role_stats['seller_share'],
+        '', '卖家发起', role_stats['seller_count'], role_stats['seller_share'],
         '只按角色分，不按用户名、不排名、不列是谁：一份「谁在反复改期」的清单'
         '是考勤表，不是运营数据',
     ])
     writer.writerow(['', '提议人已删除', role_stats['unknown_count'], '', ''])
+    writer.writerow([])
+    writer.writerow(['旧快照：最后一版归谁', '订单数', '占比（%）'])
+    legacy_role_stats = reschedule['legacy_role_stats']
+    writer.writerow(['买家', legacy_role_stats['buyer_count'], legacy_role_stats['buyer_share']])
+    writer.writerow(['卖家', legacy_role_stats['seller_count'], legacy_role_stats['seller_share']])
+    writer.writerow(['提议人已删除', legacy_role_stats['unknown_count'], ''])
+    writer.writerow([
+        '说明', '旧表的 proposed_by 在改期时被覆盖，只能说明最后一版归谁，'
+        '不能回填此前每次改期由谁发起。',
+    ])
 
     writer.writerow([])
     writer.writerow([
-        '改过两次以上的订单', '订单号', '商品', '改过几次', '最后一版归谁',
+        '改过两次以上的订单', '订单号', '商品', '改过几次', '统计来源', '最后提议角色', '当前安排',
     ])
     if reschedule['reschedule_rows']:
         for row in reschedule['reschedule_rows']:
             writer.writerow([
                 '', row['order_id'], row['item_title'], row['count'],
-                row['proposed_by_role'],
+                row['history_label'], row['proposed_by_role'],
+                timezone.localtime(row['start_at']).strftime('%Y-%m-%d %H:%M'),
             ])
     else:
-        writer.writerow(['', '—', '当前周期没有改过两次以上的交付安排', '', ''])
+        writer.writerow(['', '—', '当前周期没有改过两次以上的交付安排', '', '', '', ''])
     if len(reschedule['reschedule_rows']) > reschedule['reschedule_row_limit']:
         writer.writerow([
             '', '—', f"清单最多列 {reschedule['reschedule_row_limit']} 条，完整的在数据库里", '', '',
@@ -6885,18 +6944,13 @@ def operations_dashboard_export(request):
     writer.writerow([])
     writer.writerow([
         '说明',
-        '改期次数是下界，不是精确值：MeetingAppointment 是 OneToOneField(order)，'
-        'propose_meeting 对同一笔订单第二次提交时把时间、地点、提议人原地覆盖，'
-        'status 打回 pending，前几版不在任何表里。唯一能证明「改过」的是 OrderEvent '
-        '里那句备注，所以 OrderEvent 上线之前的改动没有痕迹，会被算成一次谈成；'
-        '备注是自由文本，按子串匹配，那句话一旦被改，这里会静默少算。'
-        '匹配必须写全「更新了」三个字——第一次提交写的是「提出了新的…」，'
-        '只多一个字，少写一个字就会把第一次提议也算成一次改期。'
-        '响应时长和 meeting_attendance 用同一组分档上界：两边读的是同一类字段，'
-        '尺度不一致会让运营以为其中一个看板是错的。'
-        '本模块只报告，不改 propose_meeting 的 update 分支、不引入版本表、不加字段、'
-        '不自动改任何一条交付安排、不自动重发通知、不按用户做任何聚合或排名、'
-        '不改 meeting_scheduling 的推荐逻辑，也不把统计写回任何记录。',
+        'MeetingAppointment 继续保存当前快照；历史由不可变的 MeetingAppointmentEvent '
+        '保存。上线后的 proposed、rescheduled 和回应事件可形成完整链，改期次数、'
+        '相邻地点变化及发起角色都是精确值。上线前没有事件链的旧预约无法可靠补齐，'
+        '只能从 OrderEvent 固定备注读到下界，缺失部分不回填、不猜测，也不与完整链'
+        '混算。CSV 中“改过几次”的 0 次在旧快照组只代表没有可核对痕迹。'
+        '本模块只报告，不修改任何交付安排，不自动重发通知，不按用户排名，'
+        '也不把统计写回任何记录。',
     ])
     writer.writerow([])
     first_viewed = dashboard['first_viewed']
@@ -8878,8 +8932,8 @@ def operations_dashboard_export(request):
             ])
         writer.writerow([
             '口径限制', '', '',
-            'MeetingAppointment 每个订单只有当前版本，改期会覆盖状态与时间；'
-            '当前没有发起预约历史，不伪造预约确认时延',
+            'MeetingAppointment 保存每笔订单的当前版本，MeetingAppointmentEvent '
+            '保存上线后的提议、改期与回应历史；上线前旧预约没有完整链，不回填、不伪造确认时延',
         ])
 
     reopen = conversion['reopen_funnel']
