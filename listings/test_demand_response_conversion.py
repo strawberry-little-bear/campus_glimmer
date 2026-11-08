@@ -28,8 +28,9 @@ from .demand_response_conversion import (
     build_demand_response_conversion, build_reopen_funnel_alerts,
 )
 from .models import (
-    CampusLocation, Category, DemandPost, DemandReopenEvent, DemandResponse,
-    GiftApplication, Item, Order,
+    CampusLocation, Category, DeliveryConfirmation, DemandPost,
+    DemandReopenEvent, DemandResponse, GiftApplication, Item,
+    MeetingAppointment, Order,
 )
 
 
@@ -199,6 +200,40 @@ class DemandResponseConversionTests(TestCase):
         )
         order.refresh_from_db()
         return order
+
+    def make_appointment(
+        self, order, *, status='confirmed', ended=True,
+        buyer_arrived=False, seller_arrived=False,
+    ):
+        now = timezone.now()
+        if ended:
+            start_at = now - timedelta(hours=2)
+            end_at = now - timedelta(hours=1)
+        else:
+            start_at = now + timedelta(hours=1)
+            end_at = now + timedelta(hours=2)
+        return MeetingAppointment.objects.create(
+            order=order,
+            proposed_by=self.requester,
+            location=self.location,
+            start_at=start_at,
+            end_at=end_at,
+            status=status,
+            buyer_arrived_at=(now - timedelta(hours=2, minutes=5)
+                              if buyer_arrived else None),
+            seller_arrived_at=(now - timedelta(hours=2, minutes=3)
+                               if seller_arrived else None),
+        )
+
+    def make_delivery_confirmation(
+        self, order, *, buyer=False, seller=False,
+    ):
+        now = timezone.now()
+        return DeliveryConfirmation.objects.create(
+            order=order,
+            buyer_confirmed_at=now if buyer else None,
+            seller_confirmed_at=now if seller else None,
+        )
 
     def make_gift_application(
         self, response, *, status='pending', demand_response='source',
@@ -712,16 +747,209 @@ class DemandResponseConversionTests(TestCase):
             report['blocked']['total'],
         )
 
+    def test_delivery_funnel_deduplicates_legacy_orders_and_excludes_no_order_rows(self):
+        demand = self.make_demand()
+        item = self.make_item()
+        first = self.make_response(demand, item, accepted_at=timezone.now() - timedelta(days=5))
+        second = self.make_response(
+            self.make_demand(), item, accepted_at=first.accepted_at,
+        )
+        # 迁移前订单没有显式来源。两条同商品、同发布者、确认后下单的响应都能兼容看见
+        # 它；交付阶段必须只把这个真实订单数一次。
+        self.make_order(item, self.requester, status='confirmed')
+        no_order = self.make_response(
+            self.make_demand(), self.make_item(), accepted_at=timezone.now() - timedelta(days=4),
+        )
+
+        report = build_demand_response_conversion(days=30)
+        delivery = report['delivery_funnel']
+
+        self.assertEqual(no_order.order if hasattr(no_order, 'order') else None, None)
+        self.assertEqual(report['conversion']['converted_count'], 2)
+        self.assertEqual(delivery['converted_response_count'], 2)
+        self.assertEqual(delivery['order_count'], 1)
+        self.assertEqual(delivery['appointment_count'], 0)
+        stages = {row['key']: row['count'] for row in delivery['appointment_stage_rows']}
+        self.assertEqual(stages['active_without_appointment'], 1)
+
+    def test_orders_without_appointments_split_pending_active_and_ended_states(self):
+        cases = (
+            ('pending', 'pending_without_appointment'),
+            ('confirmed', 'active_without_appointment'),
+            ('cancelled', 'ended_without_appointment'),
+            ('completed', 'ended_without_appointment'),
+        )
+        for status, _key in cases:
+            demand = self.make_demand()
+            item = self.make_item()
+            response = self.make_response(demand, item)
+            self.make_order(
+                item, self.requester, status=status, demand_response=response,
+            )
+
+        delivery = build_demand_response_conversion(days=30)['delivery_funnel']
+        stages = {row['key']: row['count'] for row in delivery['appointment_stage_rows']}
+        self.assertEqual(stages['pending_without_appointment'], 1)
+        self.assertEqual(stages['active_without_appointment'], 1)
+        self.assertEqual(stages['ended_without_appointment'], 2)
+        self.assertEqual(delivery['order_count'], 4)
+        self.assertEqual(delivery['appointment_count'], 0)
+        self.assertEqual(delivery['appointment_rate'], 0.0)
+
+    def test_every_current_appointment_state_has_its_own_stage(self):
+        cases = (
+            ('pending', True, 'appointment_pending'),
+            ('declined', True, 'appointment_declined'),
+            ('cancelled', True, 'appointment_cancelled'),
+            ('confirmed', False, 'appointment_confirmed_open'),
+            ('confirmed', True, 'appointment_confirmed_ended'),
+        )
+        for status, ended, _key in cases:
+            demand = self.make_demand()
+            item = self.make_item()
+            response = self.make_response(demand, item)
+            order = self.make_order(
+                item, self.requester, status='meeting', demand_response=response,
+            )
+            self.make_appointment(order, status=status, ended=ended)
+
+        delivery = build_demand_response_conversion(days=30)['delivery_funnel']
+        stages = {row['key']: row['count'] for row in delivery['appointment_stage_rows']}
+        for _status, _ended, key in cases:
+            self.assertEqual(stages[key], 1)
+        self.assertEqual(delivery['appointment_count'], 5)
+        self.assertEqual(delivery['appointment_rate'], 100.0)
+        self.assertEqual(delivery['confirmed_open_count'], 1)
+        self.assertEqual(delivery['confirmed_ended_count'], 1)
+        self.assertEqual(delivery['both_arrived_count'], 0)
+
+    def test_attendance_and_delivery_confirmation_split_do_not_guess_abandonment(self):
+        arrival_cases = (
+            (True, True),
+            (True, False),
+            (False, True),
+            (False, False),
+        )
+        for index, (buyer, seller) in enumerate(arrival_cases):
+            demand = self.make_demand()
+            item = self.make_item()
+            response = self.make_response(demand, item)
+            order = self.make_order(
+                item, self.requester, status='completed',
+                demand_response=response,
+            )
+            self.make_appointment(
+                order, status='confirmed', ended=True,
+                buyer_arrived=buyer, seller_arrived=seller,
+            )
+            if index == 0:
+                self.make_delivery_confirmation(order, buyer=True, seller=True)
+            elif index == 1:
+                self.make_delivery_confirmation(order, buyer=True)
+            elif index == 2:
+                self.make_delivery_confirmation(order, seller=True)
+
+        # 尚未结束的确认预约是右删失样本，不能提前算成双方都没有到场。
+        demand = self.make_demand()
+        item = self.make_item()
+        response = self.make_response(demand, item)
+        open_order = self.make_order(
+            item, self.requester, status='meeting', demand_response=response,
+        )
+        self.make_appointment(open_order, status='confirmed', ended=False)
+
+        delivery = build_demand_response_conversion(days=30)['delivery_funnel']
+        attendance = {
+            row['key']: row['count'] for row in delivery['attendance_rows']
+        }
+        confirmations = {
+            row['key']: row['count']
+            for row in delivery['delivery_confirmation_rows']
+        }
+
+        self.assertEqual(delivery['confirmed_ended_count'], 4)
+        self.assertEqual(delivery['confirmed_open_count'], 1)
+        self.assertEqual(attendance, {
+            'both_arrived': 1,
+            'buyer_only': 1,
+            'seller_only': 1,
+            'neither_arrived': 1,
+        })
+        self.assertEqual(delivery['both_arrived_rate'], 25.0)
+        self.assertEqual(confirmations, {
+            'both_confirmed': 1,
+            'buyer_only': 1,
+            'seller_only': 1,
+            'not_started': 2,
+        })
+        self.assertEqual(delivery['delivery_completion_rate'], 20.0)
+
+    def test_order_reached_through_a_selected_gift_application_enters_delivery(self):
+        demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        response = self.make_response(demand, item)
+        application = self.make_gift_application(response, status='selected')
+        order = self.make_order(
+            item, self.requester, status='meeting', demand_response=None,
+        )
+        GiftApplication.objects.filter(pk=application.pk).update(order=order)
+        self.make_appointment(order, status='confirmed', ended=True)
+
+        delivery = build_demand_response_conversion(days=30)['delivery_funnel']
+        self.assertEqual(delivery['order_count'], 1)
+        self.assertEqual(delivery['appointment_count'], 1)
+        self.assertEqual(delivery['confirmed_ended_count'], 1)
+
     def test_gift_stage_report_uses_a_fixed_number_of_queries(self):
         for _ in range(5):
             demand = self.make_demand()
             item = self.make_item(trade_mode='free')
             response = self.make_response(demand, item)
+            order = self.make_order(
+                item, self.requester, status='meeting',
+                demand_response=response,
+            )
+            self.make_appointment(order, status='confirmed', ended=True)
+            self.make_delivery_confirmation(order)
             self.make_gift_application(response)
 
         with self.assertNumQueries(5):
             report = build_demand_response_conversion(days=30)
-        self.assertEqual(report['gift_applications']['pending_count'], 5)
+        self.assertEqual(report['delivery_funnel']['order_count'], 5)
+
+    def test_operations_fragment_renders_delivery_funnel_without_guessing(self):
+        demand = self.make_demand()
+        item = self.make_item()
+        response = self.make_response(demand, item)
+        order = self.make_order(
+            item, self.requester, status='completed', demand_response=response,
+        )
+        self.make_appointment(
+            order, status='confirmed', ended=True,
+            buyer_arrived=True, seller_arrived=True,
+        )
+        self.make_delivery_confirmation(order, buyer=True, seller=True)
+
+        staff = make_user('conversion-delivery-staff')
+        staff.is_staff = True
+        staff.save(update_fields=['is_staff'])
+        self.client.force_login(staff)
+        fragment = self.client.get(
+            reverse(
+                'operations_dashboard_fragment',
+                kwargs={'anchor': 'ops-deal-outcomes'},
+            ),
+            {'days': 30},
+        )
+
+        self.assertEqual(fragment.status_code, 200)
+        self.assertContains(fragment, 'id="ops-demand-delivery"')
+        self.assertContains(fragment, '确认之后，预约和交付走完了吗')
+        self.assertContains(fragment, '订单数作分母')
+        self.assertContains(fragment, '预约已确认且已结束')
+        self.assertContains(fragment, '双方到场')
+        self.assertContains(fragment, '双方确认交付')
+        self.assertContains(fragment, '作为右删失样本单列')
 
     # --- 重新选择后的响应闭环 ------------------------------------------
 
@@ -1388,6 +1616,39 @@ class DemandResponseConversionTests(TestCase):
         self.assertIn('确认后未生成订单的响应阶段', content)
         self.assertNotIn('确认之后没有订单的，卡在哪', content)
         self.assertNotIn('两边都没动', content)
+
+    def test_operations_csv_exports_delivery_funnel(self):
+        demand = self.make_demand()
+        item = self.make_item()
+        response = self.make_response(demand, item)
+        order = self.make_order(
+            item, self.requester, status='completed', demand_response=response,
+        )
+        self.make_appointment(
+            order, status='confirmed', ended=True,
+            buyer_arrived=True, seller_arrived=True,
+        )
+        self.make_delivery_confirmation(order, buyer=True, seller=True)
+
+        admin = make_user('conversion-delivery-export-admin')
+        admin.is_staff = True
+        admin.save(update_fields=['is_staff'])
+        self.client.force_login(admin)
+        export = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        )
+
+        self.assertEqual(export.status_code, 200)
+        content = export.content.decode('utf-8-sig')
+        self.assertIn('确认响应后的交付漏斗', content)
+        self.assertIn('去重来源订单,1', content)
+        self.assertIn('提出过预约,1,100.0', content)
+        self.assertIn('已结束确认预约,1', content)
+        self.assertIn('双方到场,1,100.0', content)
+        self.assertIn('双方确认交付,1,100.0', content)
+        self.assertIn('来源订单的预约阶段', content)
+        self.assertIn('双方已确认交付,1,100.0', content)
+        self.assertIn('MeetingAppointment 每个订单只有当前版本', content)
 
     def test_operations_csv_exports_runtime_reopen_funnel(self):
         now = timezone.now()

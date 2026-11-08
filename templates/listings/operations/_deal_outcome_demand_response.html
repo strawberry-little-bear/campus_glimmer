@@ -133,6 +133,71 @@
             <p class="small text-muted mt-2 mb-0"><code>message</code> 是自由文本，可能写着电话、微信、宿舍号。<strong>只报「写了没写」和长度，一个字符的内容都不读</strong>——不切词、不聚类、不推断语义。写了与没写相差 {{ demand_response_conversion.message.gap_points }} 个百分点，{% if demand_response_conversion.message.gap_is_meaningful %}差值超过了噪声阈值，可作为参考；{% else %}两组各至少 {{ demand_response_conversion.message.min_measured_responses }} 条才给方向，目前只报数字。{% endif %}<strong>而且这只是对照，不给因果</strong>——一个愿意写清楚「我这个还有发票和盒子」的卖家可能本来就更认真，平台没有能力把「说明起了作用」和「这个人本来就靠谱」分开。</p>
         </div>
     </div>
+    {% if demand_response_conversion.delivery_funnel.order_count %}
+    <div id="ops-demand-delivery" class="mt-4 pt-4 border-top demand-delivery-funnel">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+                <span class="eyebrow eyebrow-soft">Demand delivery follow-through</span>
+                <h3 class="h5 mb-1">确认之后，预约和交付走完了吗</h3>
+                <p class="small text-muted mb-0">从确认响应接出的<strong>去重来源订单</strong>继续往下看：首次提出预约、对方确认、预约结束、到场，再到双方确认交付。</p>
+            </div>
+            <span class="badge text-bg-light">订单数作分母</span>
+        </div>
+        <div class="row g-3 mb-4">
+            <div class="col-md-3"><div class="ops-mini-stat"><span>来源订单</span><strong>{{ demand_response_conversion.delivery_funnel.order_count }}</strong><small>{{ demand_response_conversion.delivery_funnel.converted_response_count }} 条已转化响应去重后</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>提出过预约</span><strong>{{ demand_response_conversion.delivery_funnel.appointment_rate }}%</strong><small>{{ demand_response_conversion.delivery_funnel.appointment_count }} / {{ demand_response_conversion.delivery_funnel.order_count }} 笔</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>双方到场</span><strong>{{ demand_response_conversion.delivery_funnel.both_arrived_rate }}%</strong><small>{{ demand_response_conversion.delivery_funnel.both_arrived_count }} / {{ demand_response_conversion.delivery_funnel.confirmed_ended_count }} 个已结束确认预约</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>双方确认交付</span><strong>{{ demand_response_conversion.delivery_funnel.delivery_completion_rate }}%</strong><small>{{ demand_response_conversion.delivery_funnel.delivery_both_confirmed_count }} / {{ demand_response_conversion.delivery_funnel.order_count }} 笔来源订单</small></div></div>
+        </div>
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <h4 class="h6 mb-3">每笔来源订单当前停在哪个预约阶段</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">确认之后，预约和交付走完了吗 · 来源订单的预约阶段</caption>
+                        <thead><tr><th>阶段</th><th>订单数</th><th>占来源订单（%）</th></tr></thead>
+                        <tbody>
+                            {% for row in demand_response_conversion.delivery_funnel.appointment_stage_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if demand_response_conversion.delivery_funnel.order_count %}{{ row.share }}{% else %}—{% endif %}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">没有预约时只按订单当前状态分档：待卖家确认、已进入可预约阶段、已结束。已结束却没有预约记录的事实无法反推出先取消还是先没约成，因此不排先后。预约表当前只保留最新版本，改期会覆盖状态与时间，今天的统计也不伪造预约响应时延。</p>
+            </div>
+            <div class="col-lg-5">
+                <h4 class="h6 mb-3">确认预约结束后的到场分布</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">确认之后，预约和交付走完了吗 · 到场分布</caption>
+                        <thead><tr><th>到场组合</th><th>预约数</th><th>占已结束确认预约（%）</th></tr></thead>
+                        <tbody>
+                            {% for row in demand_response_conversion.delivery_funnel.attendance_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if demand_response_conversion.delivery_funnel.confirmed_ended_count %}{{ row.share }}{% else %}—{% endif %}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">到场率只收 <code>status=confirmed</code> 且约定结束时间已经过去的预约；另有 <strong>{{ demand_response_conversion.delivery_funnel.confirmed_open_count }}</strong> 个已确认预约尚未结束，作为右删失样本单列，不提前算进「双方都未到场」。单方到场也不等于交易完成。</p>
+            </div>
+        </div>
+        <div class="mt-3">
+            <h4 class="h6 mb-3">双方交付确认</h4>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle ops-table">
+                <caption class="visually-hidden">确认之后，预约和交付走完了吗 · 双方交付确认</caption>
+                    <thead><tr><th>交付确认阶段</th><th>订单数</th><th>占来源订单（%）</th></tr></thead>
+                    <tbody>
+                        {% for row in demand_response_conversion.delivery_funnel.delivery_confirmation_rows %}
+                        <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if demand_response_conversion.delivery_funnel.order_count %}{{ row.share }}{% else %}—{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mt-2 mb-0">只有买卖双方都留下交付确认才计入完成；单方确认和双方未确认分别展示。这个比例描述当前订单走到了哪一步，不把未走完的订单评价成失败，也不做「疑似爽约」判断。</p>
+        </div>
+    </div>
+    {% endif %}
     {% if demand_response_conversion.reopen_funnel.trend.has_data %}
     <div id="ops-reopen-funnel" class="mt-4 pt-4 border-top reopen-response-funnel">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">

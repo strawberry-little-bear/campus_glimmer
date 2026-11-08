@@ -19,6 +19,7 @@ from fractions import Fraction
 from django.db.models import Q
 from django.utils import timezone
 
+from .meeting_attendance import _has_ended
 from .models import (
     DemandPost, DemandReopenEvent, DemandResponse, GiftApplication, Item, Order,
 )
@@ -87,6 +88,20 @@ DEMAND_DONE_STATUSES = ('closed', 'expired')
 
 # 清单上限。清单是给「现在去处理」用的，不是给归档用的。
 STUCK_LIST_LIMIT = 20
+
+# 来源订单进入交付后的阶段。订单尚未被卖家确认时，没有预约不能说明发布者放弃了；
+# 已结束却仍无预约记录，也不能反推是“先取消”还是“先没约成”，必须单独披露。
+DELIVERY_APPOINTMENT_STAGES = (
+    ('pending_without_appointment', '订单待卖家确认，尚未提出预约'),
+    ('active_without_appointment', '订单已确认及以后，尚未提出预约'),
+    ('ended_without_appointment', '订单已结束且无预约记录'),
+    ('appointment_pending', '已提出预约，等待对方确认'),
+    ('appointment_declined', '对方未接受预约'),
+    ('appointment_cancelled', '预约已取消'),
+    ('appointment_confirmed_open', '预约已确认，尚未结束'),
+    ('appointment_confirmed_ended', '预约已确认且已结束'),
+    ('appointment_unknown', '预约状态不在已知范围'),
+)
 
 # 响应说明的长度分档。固定四档，和其余模块同一个思路。
 MESSAGE_LENGTH_BUCKETS = (
@@ -317,7 +332,9 @@ def _fetch_confirmed_responses(start, end, *, inclusive_end=True):
     # 新订单按显式来源取；迁移前的旧订单才用商品和求购发布者推断。领取申请那一侧
     # 也有显式来源和旧记录兼容推断，三种查询都按响应集合收窄。
     candidate_orders = list(
-        Order.objects.select_related('item', 'buyer', 'seller').filter(
+        Order.objects.select_related(
+            'item', 'buyer', 'seller', 'appointment', 'delivery_confirmation',
+        ).filter(
             Q(demand_response_id__in=response_ids)
             | Q(gift_application__demand_response_id__in=response_ids)
             | (
@@ -329,6 +346,7 @@ def _fetch_confirmed_responses(start, end, *, inclusive_end=True):
     candidate_applications = list(
         GiftApplication.objects.select_related(
             'item', 'applicant', 'order', 'demand_response',
+            'order__appointment', 'order__delivery_confirmation',
         ).filter(
             Q(demand_response_id__in=response_ids)
             | (
@@ -809,6 +827,171 @@ def _build_latency_stats(confirmed):
     }
 
 
+def _delivery_stage_key(order, now):
+    """订单当前落在哪个交付阶段。只看结构与显式状态，不猜测行为动机。"""
+    appointment = getattr(order, 'appointment', None)
+    if appointment is None:
+        if order.status == 'pending':
+            return 'pending_without_appointment'
+        if order.status in DEALT_STATUSES + (CANCELLED_STATUS,):
+            return 'ended_without_appointment'
+        return 'active_without_appointment'
+    if appointment.status == 'pending':
+        return 'appointment_pending'
+    if appointment.status == 'declined':
+        return 'appointment_declined'
+    if appointment.status == 'cancelled':
+        return 'appointment_cancelled'
+    if appointment.status == 'confirmed':
+        if _has_ended(appointment, now):
+            return 'appointment_confirmed_ended'
+        return 'appointment_confirmed_open'
+    return 'appointment_unknown'
+
+
+def _build_delivery_funnel_stats(confirmed, now):
+    """确认响应之后，去重来源订单在预约和交付确认里走到了哪一步。
+
+    响应数是转化入口的分母，但同一历史订单可能因旧兼容推断被多个响应看见。
+    交付阶段改用去重订单作分母，避免一个真实订单在预约、到场和确认里被重复计数。
+    """
+    orders_by_id = {
+        row.order.pk: row.order
+        for row in confirmed
+        if row.order is not None
+    }
+    orders = sorted(
+        orders_by_id.values(),
+        key=lambda order: (order.created_at, order.pk),
+    )
+
+    stage_counts = {key: 0 for key, _label in DELIVERY_APPOINTMENT_STAGES}
+    for order in orders:
+        stage_counts[_delivery_stage_key(order, now)] += 1
+    stage_rows = [
+        {
+            'key': key,
+            'label': label,
+            'count': stage_counts[key],
+            'share': _percent(stage_counts[key], len(orders)),
+        }
+        for key, label in DELIVERY_APPOINTMENT_STAGES
+    ]
+
+    confirmed_appointments = [
+        order.appointment for order in orders
+        if getattr(order, 'appointment', None) is not None
+        and order.appointment.status == 'confirmed'
+    ]
+    ended_appointments = [
+        appointment for appointment in confirmed_appointments
+        if _has_ended(appointment, now)
+    ]
+    open_appointments = [
+        appointment for appointment in confirmed_appointments
+        if not _has_ended(appointment, now)
+    ]
+    both_arrived = sum(
+        1 for appointment in ended_appointments
+        if appointment.buyer_arrived_at and appointment.seller_arrived_at
+    )
+    buyer_only = sum(
+        1 for appointment in ended_appointments
+        if appointment.buyer_arrived_at and not appointment.seller_arrived_at
+    )
+    seller_only = sum(
+        1 for appointment in ended_appointments
+        if appointment.seller_arrived_at and not appointment.buyer_arrived_at
+    )
+    neither_arrived = len(ended_appointments) - both_arrived - buyer_only - seller_only
+    attendance_rows = [
+        {
+            'key': 'both_arrived',
+            'label': '双方到场',
+            'count': both_arrived,
+            'share': _percent(both_arrived, len(ended_appointments)),
+        },
+        {
+            'key': 'buyer_only',
+            'label': '仅买家到场',
+            'count': buyer_only,
+            'share': _percent(buyer_only, len(ended_appointments)),
+        },
+        {
+            'key': 'seller_only',
+            'label': '仅卖家到场',
+            'count': seller_only,
+            'share': _percent(seller_only, len(ended_appointments)),
+        },
+        {
+            'key': 'neither_arrived',
+            'label': '双方都未到场',
+            'count': neither_arrived,
+            'share': _percent(neither_arrived, len(ended_appointments)),
+        },
+    ]
+
+    delivery_stage_counts = {
+        'both_confirmed': 0,
+        'buyer_only': 0,
+        'seller_only': 0,
+        'not_started': 0,
+    }
+    for order in orders:
+        confirmation = getattr(order, 'delivery_confirmation', None)
+        buyer_confirmed = bool(
+            confirmation and confirmation.buyer_confirmed_at
+        )
+        seller_confirmed = bool(
+            confirmation and confirmation.seller_confirmed_at
+        )
+        if buyer_confirmed and seller_confirmed:
+            delivery_stage_counts['both_confirmed'] += 1
+        elif buyer_confirmed:
+            delivery_stage_counts['buyer_only'] += 1
+        elif seller_confirmed:
+            delivery_stage_counts['seller_only'] += 1
+        else:
+            delivery_stage_counts['not_started'] += 1
+    delivery_stage_rows = [
+        {
+            'key': key,
+            'label': label,
+            'count': delivery_stage_counts[key],
+            'share': _percent(delivery_stage_counts[key], len(orders)),
+        }
+        for key, label in (
+            ('both_confirmed', '双方已确认交付'),
+            ('buyer_only', '仅买家已确认'),
+            ('seller_only', '仅卖家已确认'),
+            ('not_started', '双方尚未确认交付'),
+        )
+    ]
+
+    appointment_count = sum(
+        1 for order in orders if getattr(order, 'appointment', None) is not None
+    )
+    return {
+        'converted_response_count': sum(
+            1 for row in confirmed if row.order is not None
+        ),
+        'order_count': len(orders),
+        'appointment_count': appointment_count,
+        'appointment_rate': _percent(appointment_count, len(orders)),
+        'appointment_stage_rows': stage_rows,
+        'confirmed_ended_count': len(ended_appointments),
+        'confirmed_open_count': len(open_appointments),
+        'attendance_rows': attendance_rows,
+        'both_arrived_count': both_arrived,
+        'both_arrived_rate': _percent(both_arrived, len(ended_appointments)),
+        'delivery_confirmation_rows': delivery_stage_rows,
+        'delivery_both_confirmed_count': delivery_stage_counts['both_confirmed'],
+        'delivery_completion_rate': _percent(
+            delivery_stage_counts['both_confirmed'], len(orders),
+        ),
+    }
+
+
 def _build_dealt_stats(conversion):
     """变成了订单的那些，最后成交了吗。
 
@@ -1006,7 +1189,8 @@ def _build_stuck_rows(confirmed):
     }
 
 
-def _summary(conversion, latency, dealt, blocked, gift_applications, reopen=None):
+def _summary(conversion, latency, dealt, blocked, gift_applications, reopen=None,
+             delivery=None):
     if not conversion['total']:
         if reopen and reopen['event_count']:
             return (
@@ -1036,6 +1220,13 @@ def _summary(conversion, latency, dealt, blocked, gift_applications, reopen=None
             f"这些订单里 {dealt['dealt_count']} 条已经成交"
             f"（{dealt['dealt_rate']}%），{dealt['cancelled_count']} 条被取消，"
             f"{dealt['still_open_count']} 条还在进行中。"
+        )
+    if delivery and delivery['order_count']:
+        parts.append(
+            f"去重后共有 {delivery['order_count']} 笔来源订单，"
+            f"{delivery['appointment_count']} 笔提出过预约；"
+            f"已结束的确认预约中 {delivery['both_arrived_count']} 笔双方到场，"
+            f"{delivery['delivery_both_confirmed_count']} 笔来源订单完成双方交付确认。"
         )
     if latency['total']:
         parts.append(
@@ -1140,6 +1331,7 @@ def build_demand_response_conversion(days=30, now=None):
     }
     conversion = _build_conversion_stats(confirmed)
     latency = _build_latency_stats(confirmed)
+    delivery_funnel = _build_delivery_funnel_stats(confirmed, now)
     dealt = _build_dealt_stats(conversion)
     gift_applications = _build_gift_application_stage_stats(confirmed)
     blocked = _build_blocked_stats(confirmed)
@@ -1158,8 +1350,10 @@ def build_demand_response_conversion(days=30, now=None):
         ),
         'summary': _summary(
             conversion, latency, dealt, blocked, gift_applications, reopen_funnel,
+            delivery_funnel,
         ),
         'conversion': conversion,
+        'delivery_funnel': delivery_funnel,
         'latency': latency,
         'dealt': dealt,
         'gift_applications': gift_applications,

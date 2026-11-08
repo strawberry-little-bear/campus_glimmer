@@ -8657,6 +8657,8 @@ def operations_dashboard_export(request):
         'DemandPost 的 status，Item 的 is_available_now、trade_mode，'
         'Order 的 demand_response_id、item_id、buyer_id、created_at、status，'
         '以及 GiftApplication 的 demand_response_id、item_id、applicant_id、status、created_at、order_id，'
+        'MeetingAppointment 的 order_id、status、start_at、end_at、buyer_arrived_at、seller_arrived_at，'
+        '以及 DeliveryConfirmation 的 order_id、buyer_confirmed_at、seller_confirmed_at，'
         '不改写任何一条响应、任何一条求购、任何一笔订单，'
         '不自动建订单、不把 fulfilled 的写入时机推到订单完成之后，'
         '不按用户做任何聚合或排名',
@@ -8806,6 +8808,79 @@ def operations_dashboard_export(request):
         f"{blocked_total} 条 = 周期内确认响应 "
         f"{conversion['conversion']['total']} 条",
     ])
+
+    delivery = conversion['delivery_funnel']
+    if delivery['order_count']:
+        writer.writerow([])
+        writer.writerow(['确认响应后的交付漏斗'])
+        writer.writerow(['指标', '数值', '占比（%）', '口径与说明'])
+        writer.writerow([
+            '已转化响应', delivery['converted_response_count'], '',
+            '确认之后至少被一笔订单承接；历史兼容推断可能让多条响应看见同一订单',
+        ])
+        writer.writerow([
+            '去重来源订单', delivery['order_count'], '',
+            '交付阶段统一用去重订单作分母，一笔真实订单只数一次',
+        ])
+        writer.writerow([
+            '提出过预约', delivery['appointment_count'],
+            delivery['appointment_rate'],
+            '一笔订单当前最多只有一个 MeetingAppointment 记录',
+        ])
+        writer.writerow([
+            '已结束确认预约', delivery['confirmed_ended_count'], '',
+            '只收 status=confirmed 且 end_at 已过去的预约，进入到场分布',
+        ])
+        writer.writerow([
+            '尚未结束确认预约', delivery['confirmed_open_count'], '',
+            '右删失样本，单独披露，不提前算成双方未到场',
+        ])
+        writer.writerow([
+            '双方到场', delivery['both_arrived_count'],
+            delivery['both_arrived_rate'],
+            '占已结束确认预约；到场不等于交付完成',
+        ])
+        writer.writerow([
+            '双方确认交付', delivery['delivery_both_confirmed_count'],
+            delivery['delivery_completion_rate'],
+            '占全部去重来源订单；只有买卖双方都确认才计入',
+        ])
+
+        writer.writerow([])
+        writer.writerow([
+            '来源订单的预约阶段', '订单数', '占来源订单（%）', '说明',
+        ])
+        for row in delivery['appointment_stage_rows']:
+            writer.writerow([
+                row['label'], row['count'], row['share'],
+                '无预约时只按订单当前状态分档；已结束且无预约不推断先后',
+            ])
+
+        writer.writerow([])
+        writer.writerow([
+            '已结束确认预约的到场分布', '预约数',
+            '占已结束确认预约（%）', '说明',
+        ])
+        for row in delivery['attendance_rows']:
+            writer.writerow([
+                row['label'], row['count'], row['share'],
+                '仅统计确认且约定结束时间已过去的预约',
+            ])
+
+        writer.writerow([])
+        writer.writerow([
+            '来源订单双方交付确认', '订单数', '占来源订单（%）', '说明',
+        ])
+        for row in delivery['delivery_confirmation_rows']:
+            writer.writerow([
+                row['label'], row['count'], row['share'],
+                '单方确认不算完成；未走完不推断失败或爽约',
+            ])
+        writer.writerow([
+            '口径限制', '', '',
+            'MeetingAppointment 每个订单只有当前版本，改期会覆盖状态与时间；'
+            '当前没有发起预约历史，不伪造预约确认时延',
+        ])
 
     reopen = conversion['reopen_funnel']
     if reopen['event_count'] or reopen['backfill_event_count']:
