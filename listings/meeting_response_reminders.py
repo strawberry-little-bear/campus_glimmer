@@ -20,6 +20,7 @@ from .meeting_events import (
 )
 from .models import (
     MeetingAppointment,
+    MeetingResponseReminderEvent,
     Notification,
     NotificationPreference,
     Order,
@@ -79,7 +80,7 @@ def _preference_disabled(recipient_id):
     return bool(preference and not getattr(preference, NOTIFICATION_KIND))
 
 
-def _process_candidate(*, appointment_id, order_id, cutoff, dry_run):
+def _process_candidate(*, appointment_id, order_id, cutoff, response_hours, dry_run):
     """Revalidate one candidate under the same locks used by meeting writes."""
     with transaction.atomic():
         # Every meeting write locks the order first. Following that order here
@@ -112,12 +113,21 @@ def _process_candidate(*, appointment_id, order_id, cutoff, dry_run):
             return 'skipped'
 
         dedupe_key = f'meeting-response:{proposal.pk}'
-        already_reminded = Notification.objects.filter(
+        already_reminded = MeetingResponseReminderEvent.objects.filter(
+            proposal_event_id=proposal.pk,
+        ).exists()
+        if already_reminded:
+            return 'reminded'
+
+        # Fallback for reminders written before the explicit ledger existed.
+        # The ledger is authoritative once present; the dedupe string remains a
+        # create_notification helper rather than the long-term analysis key.
+        legacy_reminded = Notification.objects.filter(
             recipient_id=recipient.pk,
             kind=NOTIFICATION_KIND,
             dedupe_key=dedupe_key,
         ).exists()
-        if already_reminded:
+        if legacy_reminded:
             return 'reminded'
 
         # A dry run reports what would be sent but writes neither notification
@@ -140,7 +150,22 @@ def _process_candidate(*, appointment_id, order_id, cutoff, dry_run):
             dedupe_key=dedupe_key,
             dedupe_forever=True,
         )
-        return 'sent' if notification else 'skipped'
+        if not notification:
+            return 'skipped'
+
+        reminder_event = MeetingResponseReminderEvent(
+            proposal_event=proposal,
+            notification=notification,
+            recipient=recipient,
+            recipient_role=(
+                'buyer' if recipient.pk == order.buyer_id else 'seller'
+            ),
+            sent_at=notification.created_at,
+            response_hours=response_hours,
+        )
+        reminder_event.full_clean()
+        reminder_event.save()
+        return 'sent'
 
 
 def send_meeting_response_reminders(*, response_hours=DEFAULT_RESPONSE_HOURS,
@@ -180,6 +205,7 @@ def send_meeting_response_reminders(*, response_hours=DEFAULT_RESPONSE_HOURS,
                 appointment_id=appointment_id,
                 order_id=order_id,
                 cutoff=cutoff,
+                response_hours=response_hours,
                 dry_run=dry_run,
             )
         except Exception:

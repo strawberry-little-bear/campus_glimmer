@@ -126,7 +126,7 @@ flowchart LR
 | [`forms.py`](forms.py) | 商品、搜索、订单、通知偏好等表单 |
 | [`admin.py`](admin.py) | Django 后台维护入口 |
 | [`meeting_events.py`](meeting_events.py) | 预约事件写入、有序读取、完整历史判定与逐轮配对；订单详情只展示真实事件，旧快照不补造历史 |
-| [`meeting_response_reminders.py`](meeting_response_reminders.py) | 从完整事件链识别最新未回应提议，按 24 小时阈值发送一次站内提醒；不自动接受、拒绝、改期或推进订单 |
+| [`meeting_response_reminders.py`](meeting_response_reminders.py) | 从完整事件链识别最新未回应提议，按 24 小时阈值发送一次站内提醒，并写入关联具体提议与通知的不可变台账；不自动接受、拒绝、改期或推进订单 |
 | [`order_presentation.py`](order_presentation.py) | 订单详情页「下一步」卡片的标题与图标，按订单状态和查看者角色给出 |
 | [`../templates/listings/orders/`](../templates/listings/orders/) | 订单详情页拆分出的分区片段，主模板只负责拼接 |
 | [`management/commands/`](management/commands/) | 定时任务与数据回填命令 |

@@ -2209,6 +2209,91 @@ class Notification(models.Model):
         return f'{self.recipient.username} · {self.title}'
 
 
+
+class MeetingResponseReminderEvent(models.Model):
+    """不可变的交付安排待回应提醒台账。
+
+    通知本身只回答“用户看到过什么”，去重键也只是一个写入辅助字段。这个台账
+    把一次提醒明确绑定到触发它的提议和送达通知，为后续计算阅读、回应与等待时长
+    保留稳定分母。通知或接收人之后被清理时，台账仍保留发送事实与接收角色。
+    """
+
+    RECIPIENT_ROLE_CHOICES = (
+        ('buyer', '买家'),
+        ('seller', '卖家'),
+    )
+
+    proposal_event = models.OneToOneField(
+        MeetingAppointmentEvent, on_delete=models.CASCADE,
+        related_name='response_reminder_event', verbose_name='触发提醒的提议',
+    )
+    notification = models.OneToOneField(
+        Notification, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='meeting_response_reminder_event', verbose_name='站内通知',
+    )
+    recipient = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='meeting_response_reminder_events', verbose_name='接收人',
+    )
+    recipient_role = models.CharField(
+        '接收角色', max_length=10, choices=RECIPIENT_ROLE_CHOICES,
+    )
+    sent_at = models.DateTimeField('发送时间')
+    response_hours = models.PositiveSmallIntegerField('触发等待小时数')
+    created_at = models.DateTimeField('记录时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '交付安排待回应提醒'
+        verbose_name_plural = '交付安排待回应提醒'
+        ordering = ['-sent_at', '-pk']
+        indexes = [
+            models.Index(fields=['-sent_at']),
+            models.Index(fields=['recipient', '-sent_at']),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(response_hours__gt=0),
+                name='meeting_response_reminder_hours_positive',
+            ),
+        ]
+
+    def clean(self):
+        errors = {}
+        if self.proposal_event_id:
+            proposal = self.proposal_event
+            if proposal.event_type not in {'proposed', 'rescheduled'}:
+                errors['proposal_event'] = '提醒只能关联首次提议或改期事件。'
+            if proposal.proposed_by_id and self.recipient_id:
+                order = proposal.order
+                if self.recipient_id not in {
+                    order.buyer_id, order.seller_id,
+                }:
+                    errors['recipient'] = '提醒接收人必须是订单买家或卖家。'
+                if self.recipient_id == proposal.proposed_by_id:
+                    errors['recipient'] = '提醒接收人不能是本次提议人。'
+        if self.notification_id:
+            notification = self.notification
+            if notification.kind != 'meeting_response_pending':
+                errors['notification'] = '台账只能关联交付安排待回应通知。'
+            if self.recipient_id and notification.recipient_id != self.recipient_id:
+                errors['notification'] = '通知接收人与台账接收人不一致。'
+            if (
+                self.proposal_event_id
+                and notification.order_id != self.proposal_event.order_id
+            ):
+                errors['notification'] = '通知与触发提醒的提议不属于同一订单。'
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            raise ValidationError('交付安排待回应提醒是不可变台账，不能修改。')
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.proposal_event_id} · {self.get_recipient_role_display()} · {self.sent_at:%Y-%m-%d %H:%M}'
+
+
 class NotificationPreference(models.Model):
     """Per-user switches for the notification channels created by the app."""
 

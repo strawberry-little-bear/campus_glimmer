@@ -7,6 +7,7 @@ from io import StringIO
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import TestCase
 from django.urls import reverse
@@ -20,6 +21,7 @@ from .models import (
     Item,
     MeetingAppointment,
     MeetingAppointmentEvent,
+    MeetingResponseReminderEvent,
     Notification,
     NotificationPreference,
     Order,
@@ -114,6 +116,13 @@ class MeetingResponseReminderTests(TestCase):
             reverse('order_detail', args=[self.order.id]),
         )
         self.assertEqual(notification.dedupe_key, f'meeting-response:{proposal.pk}')
+        reminder = MeetingResponseReminderEvent.objects.get()
+        self.assertEqual(reminder.proposal_event, proposal)
+        self.assertEqual(reminder.notification, notification)
+        self.assertEqual(reminder.recipient, self.seller)
+        self.assertEqual(reminder.recipient_role, 'seller')
+        self.assertEqual(reminder.sent_at, notification.created_at)
+        self.assertEqual(reminder.response_hours, 24)
 
     def test_seller_proposal_reminds_buyer(self):
         self.appointment.proposed_by = self.seller
@@ -124,6 +133,9 @@ class MeetingResponseReminderTests(TestCase):
 
         self.assertEqual(result['sent'], 1)
         self.assertEqual(Notification.objects.get().recipient, self.buyer)
+        reminder = MeetingResponseReminderEvent.objects.get()
+        self.assertEqual(reminder.recipient, self.buyer)
+        self.assertEqual(reminder.recipient_role, 'buyer')
 
     def test_recent_proposal_waits_for_the_threshold(self):
         self.add_event(hours_ago=23)
@@ -143,6 +155,21 @@ class MeetingResponseReminderTests(TestCase):
         self.assertEqual(second['reminded'], 1)
         self.assertEqual(Notification.objects.count(), 1)
         self.assertEqual(Notification.objects.get().occurrence_count, 1)
+        self.assertEqual(MeetingResponseReminderEvent.objects.count(), 1)
+
+    def test_ledger_deduplicates_without_depending_on_notification_key(self):
+        proposal = self.add_event()
+
+        first = send_meeting_response_reminders(now=self.now)
+        Notification.objects.filter(
+            dedupe_key=f'meeting-response:{proposal.pk}',
+        ).update(dedupe_key='rewritten-helper-key')
+        second = send_meeting_response_reminders(now=self.now)
+
+        self.assertEqual(first['sent'], 1)
+        self.assertEqual(second['reminded'], 1)
+        self.assertEqual(Notification.objects.count(), 1)
+        self.assertEqual(MeetingResponseReminderEvent.objects.count(), 1)
 
     def test_accepted_or_declined_proposal_is_not_reminded(self):
         self.add_event()
@@ -245,6 +272,7 @@ class MeetingResponseReminderTests(TestCase):
         self.assertEqual(result['sent'], 1)
         self.assertFalse(Notification.objects.exists())
         self.assertFalse(NotificationPreference.objects.exists())
+        self.assertFalse(MeetingResponseReminderEvent.objects.exists())
 
     def test_mismatched_current_snapshot_is_not_trusted(self):
         self.add_event()
@@ -255,6 +283,34 @@ class MeetingResponseReminderTests(TestCase):
 
         self.assertEqual(result['skipped'], 1)
         self.assertFalse(Notification.objects.exists())
+
+    def test_ledger_rejects_a_non_recipient_and_cannot_be_rewritten(self):
+        proposal = self.add_event()
+        send_meeting_response_reminders(now=self.now)
+        reminder = MeetingResponseReminderEvent.objects.get()
+
+        reminder.recipient = self.buyer
+        with self.assertRaises(ValidationError):
+            reminder.full_clean()
+
+        stored = MeetingResponseReminderEvent.objects.get(pk=reminder.pk)
+        stored.response_hours = 48
+        with self.assertRaises(ValidationError):
+            stored.save()
+
+    def test_deleting_notification_keeps_the_sent_fact(self):
+        self.add_event()
+        send_meeting_response_reminders(now=self.now)
+        reminder = MeetingResponseReminderEvent.objects.get()
+        sent_at = reminder.sent_at
+        proposal_id = reminder.proposal_event_id
+
+        reminder.notification.delete()
+
+        reminder.refresh_from_db()
+        self.assertIsNone(reminder.notification_id)
+        self.assertEqual(reminder.proposal_event_id, proposal_id)
+        self.assertEqual(reminder.sent_at, sent_at)
 
     def test_notification_kind_preference_and_form_stay_aligned(self):
         choice_values = {value for value, _ in Notification.KIND_CHOICES}
