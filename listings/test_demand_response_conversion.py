@@ -28,8 +28,8 @@ from .demand_response_conversion import (
     build_demand_response_conversion,
 )
 from .models import (
-    CampusLocation, Category, DemandPost, DemandResponse, GiftApplication, Item,
-    Order,
+    CampusLocation, Category, DemandPost, DemandReopenEvent, DemandResponse,
+    GiftApplication, Item, Order,
 )
 
 
@@ -67,7 +67,7 @@ class DemandResponseConversionTests(TestCase):
         )
 
     def make_response(self, demand, item, *, responder=None, status='accepted',
-                      confirmed_days_ago=5, message=''):
+                      confirmed_days_ago=5, accepted_at=None, message=''):
         """建一条响应，并显式回填确认时刻。"""
         response = DemandResponse.objects.create(
             demand=demand, item=item, responder=responder or item.seller,
@@ -75,7 +75,9 @@ class DemandResponseConversionTests(TestCase):
         )
         response.status = status
         response.save(update_fields=['status'])
-        confirmed_at = timezone.now() - timedelta(days=confirmed_days_ago)
+        confirmed_at = accepted_at or (
+            timezone.now() - timedelta(days=confirmed_days_ago)
+        )
         DemandResponse.objects.filter(pk=response.pk).update(
             updated_at=confirmed_at,
             accepted_at=confirmed_at if status in {'accepted', 'superseded'} else None,
@@ -123,6 +125,21 @@ class DemandResponseConversionTests(TestCase):
         )
         application.refresh_from_db()
         return application
+
+    def make_reopen_event(
+        self, demand, response, *, reopened_at=None, count=1, source='runtime',
+    ):
+        return DemandReopenEvent.objects.create(
+            demand=demand,
+            response=response,
+            previous_item=response.item,
+            previous_item_title=response.item.title,
+            previous_trade_mode=response.item.trade_mode,
+            previous_accepted_at=response.accepted_at,
+            reopened_at=reopened_at or timezone.now(),
+            reopen_count_after=count,
+            source=source,
+        )
 
     # --- 转化判定 -------------------------------------------------------
 
@@ -603,9 +620,337 @@ class DemandResponseConversionTests(TestCase):
             response = self.make_response(demand, item)
             self.make_gift_application(response)
 
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(5):
             report = build_demand_response_conversion(days=30)
         self.assertEqual(report['gift_applications']['pending_count'], 5)
+
+    # --- 重新选择后的响应闭环 ------------------------------------------
+
+    def test_reopen_funnel_cuts_on_the_reopen_moment(self):
+        now = timezone.now()
+        old_demand = self.make_demand()
+        old_item = self.make_item()
+        old_response = self.make_response(
+            old_demand, old_item, status='superseded',
+            accepted_at=now - timedelta(days=20),
+        )
+        self.make_reopen_event(
+            old_demand, old_response, reopened_at=now - timedelta(days=40), count=1,
+        )
+        self.make_response(
+            old_demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=6),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=4), count=1,
+        )
+        self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+
+        report = build_demand_response_conversion(days=30, now=now)
+        funnel = report['reopen_funnel']
+        self.assertEqual(funnel['event_count'], 1)
+        self.assertEqual(funnel['reconfirmed_count'], 1)
+
+    def test_backfill_events_are_disclosed_but_excluded_from_exact_funnel(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=5),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=3),
+            count=1, source='backfill',
+        )
+        self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+
+        report = build_demand_response_conversion(days=30, now=now)
+        funnel = report['reopen_funnel']
+        self.assertTrue(report['has_data'])
+        self.assertEqual(funnel['backfill_event_count'], 1)
+        self.assertEqual(funnel['event_count'], 0)
+        self.assertEqual(funnel['reconfirmed_count'], 0)
+
+    def test_reopen_event_count_is_not_the_same_as_affected_demand_count(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        first_replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=8),
+        )
+        self.make_reopen_event(
+            demand, first_replaced, reopened_at=now - timedelta(days=6), count=1,
+        )
+        first_confirmation = self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=5),
+        )
+        DemandResponse.objects.filter(pk=first_confirmation.pk).update(
+            status='superseded',
+        )
+        first_confirmation.refresh_from_db()
+        self.make_reopen_event(
+            demand, first_confirmation, reopened_at=now - timedelta(days=4), count=2,
+        )
+        self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        self.assertEqual(funnel['event_count'], 2)
+        self.assertEqual(funnel['affected_demand_count'], 1)
+        self.assertEqual(funnel['reconfirmed_count'], 2)
+
+    def test_first_confirmation_after_reopen_wins(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=7),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=5), count=1,
+        )
+        first = self.make_response(
+            demand, self.make_item(trade_mode='free'),
+            accepted_at=now - timedelta(days=4),
+        )
+        self.make_gift_application(first, status='pending', hours_after_confirmation=1)
+        DemandResponse.objects.filter(pk=first.pk).update(status='superseded')
+        first.refresh_from_db()
+        later = self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+        order = self.make_order(
+            later.item, self.requester, demand_response=later,
+        )
+        order.created_at = later.accepted_at + timedelta(hours=1)
+        order.save(update_fields=['created_at'])
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        self.assertEqual(funnel['reconfirmed_count'], 1)
+        self.assertEqual(funnel['gift_application_count'], 1)
+        self.assertEqual(funnel['order_count'], 0)
+
+    def test_confirmation_before_reopen_is_ignored(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        item = self.make_item()
+        replaced = self.make_response(
+            demand, item, status='superseded',
+            accepted_at=now - timedelta(days=5),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=3), count=1,
+        )
+        self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=4),
+        )
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        self.assertEqual(funnel['event_count'], 1)
+        self.assertEqual(funnel['reconfirmed_count'], 0)
+        self.assertEqual(funnel['not_reconfirmed_count'], 1)
+
+    def test_confirmation_after_the_next_reopen_belongs_to_the_later_event(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        first_replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=8),
+        )
+        self.make_reopen_event(
+            demand, first_replaced, reopened_at=now - timedelta(days=6), count=1,
+        )
+        second_replaced = self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=9),
+        )
+        DemandResponse.objects.filter(pk=second_replaced.pk).update(
+            status='superseded',
+        )
+        second_replaced.refresh_from_db()
+        self.make_reopen_event(
+            demand, second_replaced, reopened_at=now - timedelta(days=4), count=2,
+        )
+        self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        rows = {row['key']: row for row in funnel['reopen_count_rows']}
+        self.assertEqual(rows['1']['reconfirmed_count'], 0)
+        self.assertEqual(rows['2']['reconfirmed_count'], 1)
+
+    def test_reconfirmed_order_contributes_once_even_with_a_gift_application(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=6),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=4), count=1,
+        )
+        confirmation = self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=3),
+        )
+        order = self.make_order(
+            confirmation.item, self.requester, demand_response=confirmation,
+        )
+        order.created_at = confirmation.accepted_at + timedelta(hours=2)
+        order.save(update_fields=['created_at'])
+        self.make_gift_application(confirmation, status='pending')
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        self.assertEqual(funnel['order_count'], 1)
+        self.assertEqual(funnel['gift_application_count'], 0)
+        self.assertEqual(funnel['transaction_count'], 1)
+
+    def test_reconfirmed_gift_application_is_not_an_order(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=6),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=4), count=1,
+        )
+        confirmation = self.make_response(
+            demand, self.make_item(trade_mode='free'),
+            accepted_at=now - timedelta(days=3),
+        )
+        self.make_gift_application(confirmation, status='pending')
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        self.assertEqual(funnel['reconfirmed_count'], 1)
+        self.assertEqual(funnel['order_count'], 0)
+        self.assertEqual(funnel['gift_application_count'], 1)
+        self.assertEqual(funnel['transaction_count'], 1)
+        self.assertEqual(funnel['no_transaction_count'], 0)
+
+    def test_reconfirmed_without_transaction_reports_why(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=6),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=4), count=1,
+        )
+        confirmation_item = self.make_item()
+        self.make_response(
+            demand, confirmation_item, accepted_at=now - timedelta(days=3),
+        )
+        confirmation_item.status = 'sold'
+        confirmation_item.save(update_fields=['status', 'updated_at'])
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        stages = {row['key']: row for row in funnel['no_order_stage_rows']}
+        self.assertEqual(funnel['reconfirmed_count'], 1)
+        self.assertEqual(funnel['transaction_count'], 0)
+        self.assertEqual(funnel['no_transaction_count'], 1)
+        self.assertEqual(stages['item_gone']['count'], 1)
+
+    def test_reopen_latencies_are_measured_from_the_event(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=6),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=3), count=1,
+        )
+        confirmation = self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+        order = self.make_order(
+            confirmation.item, self.requester, demand_response=confirmation,
+        )
+        order.created_at = confirmation.accepted_at + timedelta(hours=4)
+        order.save(update_fields=['created_at'])
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        self.assertEqual(funnel['reopen_to_reconfirmation']['total'], 1)
+        self.assertEqual(funnel['reopen_to_reconfirmation']['same_day_count'], 0)
+        self.assertEqual(funnel['reconfirmation_to_transaction']['total'], 1)
+        self.assertEqual(
+            funnel['reconfirmation_to_transaction']['same_day_count'], 1,
+        )
+
+    def test_reopen_strata_and_conservation_cover_every_event(self):
+        now = timezone.now()
+        for index, trade_mode in enumerate(('sale', 'free', 'borrow'), start=1):
+            demand = self.make_demand()
+            replaced = self.make_response(
+                demand, self.make_item(trade_mode=trade_mode), status='superseded',
+                accepted_at=now - timedelta(days=8),
+            )
+            self.make_reopen_event(
+                demand, replaced,
+                reopened_at=now - timedelta(days=6 + index), count=index,
+            )
+            confirmation = self.make_response(
+                demand, self.make_item(trade_mode=trade_mode),
+                accepted_at=now - timedelta(days=3),
+            )
+            if trade_mode == 'sale':
+                order = self.make_order(
+                    confirmation.item, self.requester,
+                    demand_response=confirmation,
+                )
+                order.created_at = confirmation.accepted_at + timedelta(hours=2)
+                order.save(update_fields=['created_at'])
+            elif trade_mode == 'free':
+                self.make_gift_application(confirmation, status='pending')
+
+        funnel = build_demand_response_conversion(
+            days=30, now=now,
+        )['reopen_funnel']
+        self.assertEqual(funnel['event_count'], 3)
+        self.assertEqual(
+            sum(row['event_count'] for row in funnel['reopen_count_rows']),
+            funnel['event_count'],
+        )
+        self.assertEqual(
+            sum(row['event_count'] for row in funnel['trade_mode_rows']),
+            funnel['event_count'],
+        )
+        self.assertEqual(
+            funnel['order_count'] + funnel['no_transaction_count'],
+            funnel['reconfirmed_count'],
+        )
+        self.assertEqual(
+            sum(row['count'] for row in funnel['order_stage_rows'])
+            + sum(row['count'] for row in funnel['no_order_stage_rows']),
+            funnel['reconfirmed_count'],
+        )
 
     # --- 交易方式 ------------------------------------------------------
 
@@ -758,3 +1103,42 @@ class DemandResponseConversionTests(TestCase):
         self.assertIn('确认后未生成订单的响应阶段', content)
         self.assertNotIn('确认之后没有订单的，卡在哪', content)
         self.assertNotIn('两边都没动', content)
+
+    def test_operations_csv_exports_runtime_reopen_funnel(self):
+        now = timezone.now()
+        demand = self.make_demand()
+        replaced = self.make_response(
+            demand, self.make_item(), status='superseded',
+            accepted_at=now - timedelta(days=6),
+        )
+        self.make_reopen_event(
+            demand, replaced, reopened_at=now - timedelta(days=4), count=1,
+        )
+        reconfirmed = self.make_response(
+            demand, self.make_item(), accepted_at=now - timedelta(days=2),
+        )
+        order = self.make_order(
+            reconfirmed.item, self.requester, demand_response=reconfirmed,
+        )
+        order.created_at = reconfirmed.accepted_at + timedelta(hours=2)
+        order.save(update_fields=['created_at'])
+
+        admin = make_user('conversion-reopen-export-admin')
+        admin.is_staff = True
+        admin.save(update_fields=['is_staff'])
+        self.client.force_login(admin)
+        export = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        )
+
+        self.assertEqual(export.status_code, 200)
+        content = export.content.decode('utf-8-sig')
+        self.assertIn('重新选择后的响应闭环漏斗', content)
+        self.assertIn('周期内精确事件,1', content)
+        self.assertIn('事件后再次确认,1', content)
+        self.assertIn(
+            '再次确认 1 次 = 订单 1 次 + 未发起交易入口 0 次',
+            content,
+        )
+        self.assertIn('历史兼容回填事件,0', content)
+        self.assertIn('由迁移从旧 superseded_at 重建', content)

@@ -155,7 +155,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, LostFoundReportForm, LostFoundReportReviewForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandReopenEvent, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -8803,6 +8803,118 @@ def operations_dashboard_export(request):
         f"{conversion['conversion']['total']} 条",
     ])
 
+    reopen = conversion['reopen_funnel']
+    if reopen['event_count'] or reopen['backfill_event_count']:
+        writer.writerow([])
+        writer.writerow(['重新选择后的响应闭环漏斗'])
+        writer.writerow(['指标', '数值', '口径与说明'])
+        writer.writerow([
+            '周期内精确事件', reopen['event_count'], '',
+            '只收 DemandReopenEvent.source=runtime，按 reopened_at 切窗口；'
+            '每次重新选择是一个独立样本，事件数不等于求购数',
+        ])
+        writer.writerow([
+            '受影响求购', reopen['affected_demand_count'], '',
+            '同一条求购重新选择多次，会在事件数里出现多次，在求购数里只算一次',
+        ])
+        writer.writerow([
+            '事件后再次确认', reopen['reconfirmed_count'], '',
+            f"占事件 {reopen['reconfirmation_rate']}%；只认同一求购在事件之后、"
+            '下一次重新选择之前的首次有效确认',
+        ])
+        writer.writerow([
+            '没有再次确认', reopen['not_reconfirmed_count'], '',
+            '事件发生到当前查询时刻仍没有满足边界条件的确认',
+        ])
+        writer.writerow([
+            '再次确认后接出订单', reopen['order_count'], '',
+            f"占再次确认 {reopen['order_conversion_rate']}%；订单优先于领取申请",
+        ])
+        writer.writerow([
+            '再次确认后只发起免费领取申请', reopen['gift_application_count'], '',
+            f"占再次确认 {reopen['gift_application_rate']}%；领取申请不算订单转化",
+        ])
+        writer.writerow([
+            '再次确认后已发起交易入口', reopen['transaction_count'], '',
+            '订单或免费领取申请至少存在一项；一份订单即使同时关联领取申请也只数一次',
+        ])
+        writer.writerow([
+            '再次确认后未发起交易入口', reopen['no_transaction_count'], '',
+            '用当前商品、求购状态解释发生在哪一步，不推断责任',
+        ])
+        writer.writerow([
+            '漏斗守恒', '', '',
+            f"再次确认 {reopen['reconfirmed_count']} 次 = 订单 "
+            f"{reopen['order_count']} 次 + 未发起交易入口 "
+            f"{reopen['no_transaction_count']} 次",
+        ])
+
+        writer.writerow([])
+        writer.writerow(['再次确认后订单结局', '笔数', '占再次确认订单（%）', '说明'])
+        for row in reopen['order_stage_rows']:
+            writer.writerow([
+                row['label'], row['count'], row['share'],
+                'completed / returned 算已成交，cancelled 单列，其余为进行中',
+            ])
+
+        writer.writerow([])
+        writer.writerow([
+            '再次确认后没有交易入口的阶段', '事件数', '占再次确认无交易（%）', '说明',
+        ])
+        for row in reopen['no_order_stage_rows']:
+            writer.writerow([
+                row['label'], row['count'], row['share'],
+                '订单优先；没有订单后才检查领取申请、商品和求购状态',
+            ])
+
+        writer.writerow([])
+        writer.writerow(['重新选择漏斗时延', '样本数', '中位', 'P90', '平均', '当天内'])
+        for label, stats in (
+            ('重新选择到再次确认', reopen['reopen_to_reconfirmation']),
+            ('再次确认到交易入口', reopen['reconfirmation_to_transaction']),
+        ):
+            writer.writerow([
+                label, stats['total'], stats['median_label'], stats['p90_label'],
+                stats['average_label'], stats['same_day_count'],
+            ])
+
+        writer.writerow([])
+        writer.writerow([
+            '按重新选择次数分层', '事件数', '受影响求购', '再次确认', '订单',
+            '仅领取申请', '未发起交易入口',
+        ])
+        for row in reopen['reopen_count_rows']:
+            writer.writerow([
+                row['label'], row['event_count'], row['demand_count'],
+                row['reconfirmed_count'], row['order_count'],
+                row['gift_application_count'], row['no_transaction_count'],
+            ])
+
+        writer.writerow([])
+        writer.writerow([
+            '按原交易方式分层', '事件数', '受影响求购', '再次确认', '订单',
+            '仅领取申请', '未发起交易入口',
+        ])
+        for row in reopen['trade_mode_rows']:
+            writer.writerow([
+                row['label'], row['event_count'], row['demand_count'],
+                row['reconfirmed_count'], row['order_count'],
+                row['gift_application_count'], row['no_transaction_count'],
+            ])
+
+        writer.writerow([])
+        writer.writerow([
+            '历史兼容回填事件', reopen['backfill_event_count'], '',
+            '由迁移从旧 superseded_at 重建，属于兼容推断；仅披露，'
+            '不进入上面的精确事件分母、再次确认、订单和时延漏斗',
+        ])
+        if reopen['is_small_sample']:
+            writer.writerow([
+                '样本不足', '', '',
+                f"精确事件不足 {reopen['min_measured_responses']} 次，"
+                '比例只报数字不给方向',
+            ])
+
     writer.writerow([])
     writer.writerow(['响应说明写了没写'])
     writer.writerow(['文字长度', '响应数', '占填写了的（%）', '说明'])
@@ -14604,6 +14716,17 @@ def reopen_demand_response(request, demand_id, response_id):
         locked_demand.save(update_fields=[
             'status', 'reopen_count', 'last_reopened_at', 'updated_at',
         ])
+        DemandReopenEvent.objects.create(
+            demand=locked_demand,
+            response=locked_response,
+            previous_item=locked_item,
+            previous_item_title=locked_item.title,
+            previous_trade_mode=locked_item.trade_mode,
+            previous_accepted_at=locked_response.accepted_at,
+            reopened_at=now,
+            reopen_count_after=locked_demand.reopen_count,
+            source='runtime',
+        )
 
         reactivated = []
         deferred_responses = DemandResponse.objects.select_for_update(of=('self',)).filter(

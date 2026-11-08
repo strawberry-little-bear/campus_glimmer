@@ -18,7 +18,9 @@ from datetime import time as dt_time, timedelta
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import DemandPost, DemandResponse, GiftApplication, Item, Order
+from .models import (
+    DemandPost, DemandReopenEvent, DemandResponse, GiftApplication, Item, Order,
+)
 
 PERIOD_CHOICES = (
     (7, '最近 7 天'),
@@ -93,6 +95,26 @@ MESSAGE_LENGTH_BUCKETS = (
     (None, '150 字以上'),
 )
 
+
+REOPEN_COUNT_BUCKETS = (
+    ('1', '第 1 次重新选择'),
+    ('2', '第 2 次重新选择'),
+    ('3plus', '第 3 次及以后'),
+)
+
+# 重开后再次确认的样本，先看是否接出了订单；没有订单后才进入领取阶段和
+# 商品/求购状态推断。订单优先，避免一份同时关联领取申请的订单被重复分类。
+REOPEN_NO_ORDER_STAGES = (
+    ('gift_pending', '等待卖家选择领取申请'),
+    ('gift_rejected', '领取申请未选中'),
+    ('gift_withdrawn', '领取申请已撤回'),
+    ('gift_selected_without_order', '领取已选中但缺订单'),
+    ('gift_unknown', '领取申请状态未知'),
+    ('item_gone', '再次确认的商品已不可交易'),
+    ('demand_closed', '求购已关闭或过期'),
+    ('still_walking', '商品与求购仍可推进，尚未发起交易'),
+)
+
 TRADE_MODE_LABELS = dict(Item.TRADE_MODE_CHOICES)
 
 # 一条已确认的响应，加上它接出的订单、领取申请和当前阶段。一次查完固定下来：
@@ -104,6 +126,10 @@ ConfirmedResponse = namedtuple('ConfirmedResponse', [
 
 # 阶段清单的一行。`blocked_label` 是预先对好的名字，模板不需要知道 `BLOCKED_LABELS`。
 StuckRow = namedtuple('StuckRow', ['response', 'blocked_reason', 'blocked_label'])
+
+ReopenSample = namedtuple('ReopenSample', [
+    'event', 'confirmation', 'reopen_latency_seconds', 'transaction_latency_seconds',
+])
 
 
 def _percent(part, whole):
@@ -336,6 +362,237 @@ def _fetch_confirmed_responses(days, now):
             latency_seconds=latency,
         ))
     return confirmed
+
+
+def _transaction_at(confirmation):
+    """一次再次确认之后最早的交易入口时间。订单和领取申请都算发起交易。"""
+    timestamps = []
+    if confirmation.order is not None:
+        timestamps.append(confirmation.order.created_at)
+    if confirmation.gift_application is not None:
+        timestamps.append(confirmation.gift_application.created_at)
+    return min(timestamps) if timestamps else None
+
+
+def _fetch_reopen_events(days, now):
+    """按重新选择事件时间切窗，历史兼容回填单独计数。"""
+    start = _period_start(days, timezone.localtime(now).date())
+    events = list(
+        DemandReopenEvent.objects.filter(
+            source='runtime', reopened_at__gte=start, reopened_at__lte=now,
+        ).order_by('reopened_at', 'id')
+    )
+    backfill_count = DemandReopenEvent.objects.filter(
+        source='backfill', reopened_at__gte=start, reopened_at__lte=now,
+    ).count()
+    return events, backfill_count
+
+
+def _build_reopen_samples(events, confirmed):
+    """为一个重开事件匹配同一求购在下一事件前的首次有效确认。
+
+    `confirmed` 已经按 `accepted_at` 排序，且只含窗口内的确认。事件按发生
+    时间顺序处理；同一求购若在窗口内又重开一次，后一次事件就是前一次观察的
+    上界，避免把后来才发生的确认倒挂到更早的事件上。
+    """
+    rows_by_demand = {}
+    for row in confirmed:
+        rows_by_demand.setdefault(row.response.demand_id, []).append(row)
+    events_by_demand = {}
+    for event in events:
+        if event.demand_id is not None:
+            events_by_demand.setdefault(event.demand_id, []).append(event)
+
+    next_boundary = {}
+    for group in events_by_demand.values():
+        for index in range(len(group) - 1):
+            next_boundary[group[index].pk] = group[index + 1].reopened_at
+
+    samples = []
+    for event in events:
+        confirmation = None
+        boundary = next_boundary.get(event.pk)
+        for row in rows_by_demand.get(event.demand_id, []):
+            accepted_at = _confirmed_at(row.response)
+            if accepted_at < event.reopened_at:
+                continue
+            if boundary is not None and accepted_at >= boundary:
+                break
+            confirmation = row
+            break
+        reopen_latency = None
+        transaction_latency = None
+        if confirmation is not None:
+            accepted_at = _confirmed_at(confirmation.response)
+            reopen_latency = (accepted_at - event.reopened_at).total_seconds()
+            transaction_at = _transaction_at(confirmation)
+            if transaction_at is not None:
+                transaction_latency = (
+                    transaction_at - accepted_at
+                ).total_seconds()
+        samples.append(ReopenSample(
+            event=event,
+            confirmation=confirmation,
+            reopen_latency_seconds=reopen_latency,
+            transaction_latency_seconds=transaction_latency,
+        ))
+    return samples
+
+
+def _duration_stats(values):
+    """重新选择漏斗里的时延摘要，只使用非负的明确时间戳。"""
+    valid = [value for value in values if value is not None and value >= 0]
+    return {
+        'total': len(valid),
+        'median_label': _format_span(_percentile(valid, 0.5)),
+        'p90_label': _format_span(_percentile(valid, 0.9)),
+        'average_label': _format_span(_mean(valid)),
+        'same_day_count': sum(1 for value in valid if value < 86400),
+        'same_day_rate': _percent(
+            sum(1 for value in valid if value < 86400), len(valid),
+        ),
+    }
+
+
+def _reopen_bucket(event):
+    count = event.reopen_count_after
+    if count >= 3:
+        return '3plus'
+    return str(count) if count in {1, 2} else '1'
+
+
+def _reopen_group_stats(samples):
+    reconfirmed = [sample for sample in samples if sample.confirmation is not None]
+    orders = [sample for sample in reconfirmed if sample.confirmation.order is not None]
+    gift_only = [
+        sample for sample in reconfirmed
+        if sample.confirmation.order is None
+        and sample.confirmation.gift_application is not None
+    ]
+    transactions = [
+        sample for sample in reconfirmed
+        if sample.confirmation.order is not None
+        or sample.confirmation.gift_application is not None
+    ]
+    return {
+        'event_count': len(samples),
+        'demand_count': len({sample.event.demand_id for sample in samples}),
+        'reconfirmed_count': len(reconfirmed),
+        'reconfirmation_rate': _percent(len(reconfirmed), len(samples)),
+        'order_count': len(orders),
+        'order_conversion_rate': _percent(len(orders), len(reconfirmed)),
+        'gift_application_count': len(gift_only),
+        'transaction_count': len(transactions),
+        'transaction_rate': _percent(len(transactions), len(reconfirmed)),
+        'no_transaction_count': len(reconfirmed) - len(transactions),
+        'is_small_sample': len(samples) < MIN_MEASURED_RESPONSES,
+    }
+
+
+def _build_reopen_funnel(events, confirmed, backfill_count):
+    """把每次重新选择做成独立样本，回答再次确认和交易是否真的接上。"""
+    samples = _build_reopen_samples(events, confirmed)
+    reconfirmed = [sample for sample in samples if sample.confirmation is not None]
+    orders = [sample for sample in reconfirmed if sample.confirmation.order is not None]
+    orderless = [sample for sample in reconfirmed if sample.confirmation.order is None]
+    gift_only = [
+        sample for sample in orderless
+        if sample.confirmation.gift_application is not None
+    ]
+    transactions = [
+        sample for sample in reconfirmed
+        if sample.confirmation.order is not None
+        or sample.confirmation.gift_application is not None
+    ]
+
+    stage_rows = []
+    for key, label in REOPEN_NO_ORDER_STAGES:
+        count = sum(
+            1 for sample in orderless
+            if sample.confirmation.blocked_reason == key
+        )
+        stage_rows.append({
+            'key': key,
+            'label': label,
+            'count': count,
+            'share': _percent(count, len(orderless)),
+        })
+
+    order_stage_rows = []
+    for key, label, statuses in (
+        ('dealt', '已成交', DEALT_STATUSES),
+        ('cancelled', '已取消', (CANCELLED_STATUS,)),
+        ('open', '仍在进行中', ()),
+    ):
+        if key == 'open':
+            count = sum(
+                1 for sample in orders
+                if sample.confirmation.order.status not in DEALT_STATUSES
+                and sample.confirmation.order.status != CANCELLED_STATUS
+            )
+        else:
+            count = sum(
+                1 for sample in orders
+                if sample.confirmation.order.status in statuses
+            )
+        order_stage_rows.append({
+            'key': key,
+            'label': label,
+            'count': count,
+            'share': _percent(count, len(orders)),
+        })
+
+    count_rows = []
+    for key, label in REOPEN_COUNT_BUCKETS:
+        group = [sample for sample in samples if _reopen_bucket(sample.event) == key]
+        count_rows.append({'key': key, 'label': label, **_reopen_group_stats(group)})
+
+    trade_mode_rows = []
+    for key, label in Item.TRADE_MODE_CHOICES:
+        group = [
+            sample for sample in samples
+            if sample.event.previous_trade_mode == key
+        ]
+        trade_mode_rows.append({
+            'key': key, 'label': label, **_reopen_group_stats(group),
+        })
+    unknown_mode = [
+        sample for sample in samples
+        if sample.event.previous_trade_mode not in TRADE_MODE_LABELS
+    ]
+    if unknown_mode:
+        trade_mode_rows.append({
+            'key': 'unknown', 'label': '交易方式未知',
+            **_reopen_group_stats(unknown_mode),
+        })
+
+    event_count = len(samples)
+    return {
+        'event_count': event_count,
+        'affected_demand_count': len({sample.event.demand_id for sample in samples}),
+        'not_reconfirmed_count': event_count - len(reconfirmed),
+        'reconfirmed_count': len(reconfirmed),
+        'reconfirmation_rate': _percent(len(reconfirmed), event_count),
+        'order_count': len(orders),
+        'order_conversion_rate': _percent(len(orders), len(reconfirmed)),
+        'gift_application_count': len(gift_only),
+        'gift_application_rate': _percent(len(gift_only), len(reconfirmed)),
+        'transaction_count': len(transactions),
+        'no_transaction_count': len(reconfirmed) - len(transactions),
+        'order_stage_rows': order_stage_rows,
+        'no_order_stage_rows': stage_rows,
+        'reopen_count_rows': count_rows,
+        'trade_mode_rows': trade_mode_rows,
+        'reopen_to_reconfirmation': _duration_stats([
+            sample.reopen_latency_seconds for sample in reconfirmed
+        ]),
+        'reconfirmation_to_transaction': _duration_stats([
+            sample.transaction_latency_seconds for sample in reconfirmed
+        ]),
+        'backfill_event_count': backfill_count,
+        'is_small_sample': event_count < MIN_MEASURED_RESPONSES,
+        'min_measured_responses': MIN_MEASURED_RESPONSES,
+    }
 
 
 def _build_conversion_stats(confirmed):
@@ -599,8 +856,20 @@ def _build_stuck_rows(confirmed):
     }
 
 
-def _summary(conversion, latency, dealt, blocked, gift_applications):
+def _summary(conversion, latency, dealt, blocked, gift_applications, reopen=None):
     if not conversion['total']:
+        if reopen and reopen['event_count']:
+            return (
+                f"当前周期没有确认过的求购响应，但记录了 {reopen['event_count']} 次重新选择；"
+                f"其中 {reopen['reconfirmed_count']} 次随后再次确认，"
+                f"{reopen['order_count']} 次接出订单，"
+                f"{reopen['gift_application_count']} 次只发起了免费领取申请。"
+            )
+        if reopen and reopen['backfill_event_count']:
+            return (
+                f"当前周期没有新的重新选择事件；另有 {reopen['backfill_event_count']} 条"
+                f"历史兼容回填，只用于核对，不进入精确漏斗。"
+            )
         return '当前周期没有确认过的求购响应，转化也就无从谈起。'
     parts = [
         f"周期内确认了 {conversion['total']} 条求购响应，"
@@ -644,6 +913,14 @@ def _summary(conversion, latency, dealt, blocked, gift_applications):
             blocked['item_gone_count'] + blocked['demand_closed_count']
         ):
             parts.append(f"其余 {token_other} 条停在商品不可交易或求购已结束。")
+    if reopen and reopen['event_count']:
+        parts.append(
+            f"另外，周期内记录了 {reopen['event_count']} 次重新选择，"
+            f"{reopen['reconfirmed_count']} 次随后再次确认"
+            f"（{reopen['reconfirmation_rate']}%）；再次确认后 "
+            f"{reopen['order_count']} 次接出订单，"
+            f"{reopen['gift_application_count']} 次只发起了免费领取申请。"
+        )
     return ''.join(parts)
 
 
@@ -655,6 +932,10 @@ def build_demand_response_conversion(days=30, now=None):
     now = now or timezone.now()
 
     confirmed = _fetch_confirmed_responses(days, now)
+    reopen_events, backfill_count = _fetch_reopen_events(days, now)
+    reopen_funnel = _build_reopen_funnel(
+        reopen_events, confirmed, backfill_count,
+    )
     conversion = _build_conversion_stats(confirmed)
     latency = _build_latency_stats(confirmed)
     dealt = _build_dealt_stats(conversion)
@@ -668,9 +949,12 @@ def build_demand_response_conversion(days=30, now=None):
         'period_days': days,
         'period_start': _period_start(days, timezone.localtime(now).date()),
         'period_end': now,
-        'has_data': bool(confirmed),
+        'has_data': bool(
+            confirmed or reopen_funnel['event_count']
+            or reopen_funnel['backfill_event_count']
+        ),
         'summary': _summary(
-            conversion, latency, dealt, blocked, gift_applications,
+            conversion, latency, dealt, blocked, gift_applications, reopen_funnel,
         ),
         'conversion': conversion,
         'latency': latency,
@@ -678,6 +962,7 @@ def build_demand_response_conversion(days=30, now=None):
         'gift_applications': gift_applications,
         'blocked': blocked,
         'trade_modes': trade_modes,
+        'reopen_funnel': reopen_funnel,
         'message': message,
         'stuck_rows': stuck_rows,
         'blocked_labels': BLOCKED_LABELS,

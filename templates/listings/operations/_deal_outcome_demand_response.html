@@ -133,6 +133,98 @@
             <p class="small text-muted mt-2 mb-0"><code>message</code> 是自由文本，可能写着电话、微信、宿舍号。<strong>只报「写了没写」和长度，一个字符的内容都不读</strong>——不切词、不聚类、不推断语义。写了与没写相差 {{ demand_response_conversion.message.gap_points }} 个百分点，{% if demand_response_conversion.message.gap_is_meaningful %}差值超过了噪声阈值，可作为参考；{% else %}两组各至少 {{ demand_response_conversion.message.min_measured_responses }} 条才给方向，目前只报数字。{% endif %}<strong>而且这只是对照，不给因果</strong>——一个愿意写清楚「我这个还有发票和盒子」的卖家可能本来就更认真，平台没有能力把「说明起了作用」和「这个人本来就靠谱」分开。</p>
         </div>
     </div>
+    {% if demand_response_conversion.reopen_funnel.event_count or demand_response_conversion.reopen_funnel.backfill_event_count %}
+    <div class="mt-4 pt-4 border-top reopen-response-funnel">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <div>
+                <span class="eyebrow eyebrow-soft">Demand reopen follow-through</span>
+                <h3 class="h5 mb-1">重新选择之后，响应闭环接上了吗</h3>
+                <p class="small text-muted mb-0">每次重新选择是一条独立事件；按 <code>reopened_at</code> 切窗，再看同一求购在下一次重新选择之前的首次有效确认。</p>
+            </div>
+            <span class="badge text-bg-light">事件数不等于求购数</span>
+        </div>
+        {% if demand_response_conversion.reopen_funnel.event_count %}
+        <div class="row g-3 mb-3">
+            <div class="col-md-3"><div class="ops-mini-stat"><span>重新选择事件</span><strong>{{ demand_response_conversion.reopen_funnel.event_count }}</strong><small>涉及 {{ demand_response_conversion.reopen_funnel.affected_demand_count }} 条求购</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>随后再次确认</span><strong>{{ demand_response_conversion.reopen_funnel.reconfirmation_rate }}%</strong><small>{{ demand_response_conversion.reopen_funnel.reconfirmed_count }} / {{ demand_response_conversion.reopen_funnel.event_count }} 次</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>再次确认后接出订单</span><strong>{{ demand_response_conversion.reopen_funnel.order_count }}</strong><small>只发起领取申请 {{ demand_response_conversion.reopen_funnel.gift_application_count }} 次</small></div></div>
+            <div class="col-md-3"><div class="ops-mini-stat"><span>选择到再次确认（中位）</span><strong>{{ demand_response_conversion.reopen_funnel.reopen_to_reconfirmation.median_label }}</strong><small>P90 {{ demand_response_conversion.reopen_funnel.reopen_to_reconfirmation.p90_label }}</small></div></div>
+        </div>
+        {% if demand_response_conversion.reopen_funnel.is_small_sample %}
+        <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>精确事件不足 {{ demand_response_conversion.reopen_funnel.min_measured_responses }} 次，比例只报数字不给方向。</p>
+        {% endif %}
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <h4 class="h6 mb-3">再次确认后接出了什么</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">重新选择之后，响应闭环接上了吗 · 再次确认后接出了什么</caption>
+                        <thead><tr><th>阶段</th><th>事件数</th><th>占再次确认（%）</th></tr></thead>
+                        <tbody>
+                            {% for row in demand_response_conversion.reopen_funnel.order_stage_rows %}
+                            <tr><td>订单 · {{ row.label }}</td><td>{{ row.count }}</td><td>{% if demand_response_conversion.reopen_funnel.order_count %}{{ row.share }}{% else %}—{% endif %}</td></tr>
+                            {% endfor %}
+                            {% for row in demand_response_conversion.reopen_funnel.no_order_stage_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.count }}</td><td>{% if demand_response_conversion.reopen_funnel.no_transaction_count %}{{ row.share }}{% else %}—{% endif %}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0"><strong>订单优先。</strong>再次确认后同时有订单和领取申请时，只算订单；没有订单后才看领取申请和商品、求购状态。订单与无交易入口两部分相加严格等于再次确认数。</p>
+            </div>
+            <div class="col-lg-6">
+                <h4 class="h6 mb-3">再次确认到交易入口，隔了多久</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">重新选择之后，响应闭环接上了吗 · 时延</caption>
+                        <thead><tr><th>区段</th><th>样本</th><th>中位</th><th>P90</th><th>当天内</th></tr></thead>
+                        <tbody>
+                            <tr><td>重新选择 → 再次确认</td><td>{{ demand_response_conversion.reopen_funnel.reopen_to_reconfirmation.total }}</td><td>{{ demand_response_conversion.reopen_funnel.reopen_to_reconfirmation.median_label }}</td><td>{{ demand_response_conversion.reopen_funnel.reopen_to_reconfirmation.p90_label }}</td><td>{{ demand_response_conversion.reopen_funnel.reopen_to_reconfirmation.same_day_count }}</td></tr>
+                            <tr><td>再次确认 → 交易入口</td><td>{{ demand_response_conversion.reopen_funnel.reconfirmation_to_transaction.total }}</td><td>{{ demand_response_conversion.reopen_funnel.reconfirmation_to_transaction.median_label }}</td><td>{{ demand_response_conversion.reopen_funnel.reconfirmation_to_transaction.p90_label }}</td><td>{{ demand_response_conversion.reopen_funnel.reconfirmation_to_transaction.same_day_count }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0"><strong>交易入口</strong>取订单或领取申请中较早的明确创建时间；两者都没有时不伪造时延。重新选择只说明上一次匹配失效，不推断谁耽误了这件事。</p>
+            </div>
+            <div class="col-lg-6">
+                <h4 class="h6 mb-3">按重新选择次数分层</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">重新选择之后，响应闭环接上了吗 · 按次数分层</caption>
+                        <thead><tr><th>次数</th><th>事件</th><th>求购</th><th>再确认</th><th>订单</th><th>仅领取</th><th>无交易入口</th></tr></thead>
+                        <tbody>
+                            {% for row in demand_response_conversion.reopen_funnel.reopen_count_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.event_count }}</td><td>{{ row.demand_count }}</td><td>{{ row.reconfirmed_count }}</td><td>{{ row.order_count }}</td><td>{{ row.gift_application_count }}</td><td>{{ row.no_transaction_count }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <h4 class="h6 mb-3">按原交易方式分层</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle ops-table">
+                    <caption class="visually-hidden">重新选择之后，响应闭环接上了吗 · 按原交易方式分层</caption>
+                        <thead><tr><th>方式</th><th>事件</th><th>求购</th><th>再确认</th><th>订单</th><th>仅领取</th><th>无交易入口</th></tr></thead>
+                        <tbody>
+                            {% for row in demand_response_conversion.reopen_funnel.trade_mode_rows %}
+                            <tr><td>{{ row.label }}</td><td>{{ row.event_count }}</td><td>{{ row.demand_count }}</td><td>{{ row.reconfirmed_count }}</td><td>{{ row.order_count }}</td><td>{{ row.gift_application_count }}</td><td>{{ row.no_transaction_count }}</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-2 mb-0">分层按被替代商品当时的交易方式快照，不跟随商品后来编辑；出售、免费和借用的交易动力不同，不合并成一个成功率。</p>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-inline">当前周期只有历史兼容回填的重新选择事件，暂时没有可进入精确漏斗的运行时事件。</div>
+        {% endif %}
+        {% if demand_response_conversion.reopen_funnel.backfill_event_count %}
+        <p class="small text-muted mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>另有 <strong>{{ demand_response_conversion.reopen_funnel.backfill_event_count }}</strong> 条历史兼容回填事件。它们由迁移依据旧 <code>superseded_at</code> 重建，只用于披露历史轨迹，<strong>不计入上面的精确事件、再次确认、订单和时延口径</strong>。</p>
+        {% endif %}
+        <p class="small text-muted mt-2 mb-0">这个漏斗不推荐响应人、不自动催办、也不替求购发布者选择领取人。没有再次确认或没有交易入口只说明当前链路停在哪里，不构成对任何用户的评价。</p>
+    </div>
+    {% endif %}
     {% if demand_response_conversion.stuck_rows.row_total %}
     <div class="mt-3">
         <h3 class="h6 mb-3">确认后未生成订单的响应阶段</h3>

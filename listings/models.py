@@ -3069,6 +3069,82 @@ class DemandResponse(models.Model):
         return f'{self.demand.title} · {self.item.title} · {self.get_status_display()}'
 
 
+class DemandReopenEvent(models.Model):
+    """An immutable record of one explicit demand-response replacement.
+
+    ``DemandPost.reopen_count`` is useful for display, but it cannot tell us
+    which response was replaced or when the next confirmation happened. Each
+    event snapshots the replaced response and item so later listing edits do
+    not rewrite the history of the replacement that was actually observed.
+    """
+
+    SOURCE_CHOICES = (
+        ('runtime', '发布者重新选择'),
+        ('backfill', '历史兼容回填'),
+    )
+
+    demand = models.ForeignKey(
+        DemandPost, on_delete=models.SET_NULL, null=True,
+        related_name='reopen_events', verbose_name='求购信息',
+    )
+    response = models.ForeignKey(
+        DemandResponse, on_delete=models.SET_NULL, null=True,
+        related_name='reopen_events', verbose_name='被替代的响应',
+    )
+    previous_item = models.ForeignKey(
+        Item, on_delete=models.SET_NULL, null=True,
+        related_name='demand_reopen_events', verbose_name='原响应商品',
+    )
+    previous_item_title = models.CharField('原商品标题快照', max_length=160, blank=True)
+    previous_trade_mode = models.CharField(
+        '原交易方式快照', max_length=20, choices=Item.TRADE_MODE_CHOICES, blank=True,
+    )
+    previous_accepted_at = models.DateTimeField('原确认时间快照', null=True, blank=True)
+    reopened_at = models.DateTimeField('重新选择时间')
+    reopen_count_after = models.PositiveIntegerField('重新选择后累计次数')
+    source = models.CharField(
+        '事件来源', max_length=20, choices=SOURCE_CHOICES, default='runtime',
+    )
+    created_at = models.DateTimeField('记录时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '求购重新选择事件'
+        verbose_name_plural = '求购重新选择事件'
+        ordering = ['-reopened_at', '-pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['demand', 'reopen_count_after'],
+                condition=models.Q(demand__isnull=False),
+                name='unique_demand_reopen_count_after',
+            ),
+            models.CheckConstraint(
+                condition=models.Q(reopen_count_after__gte=1),
+                name='demand_reopen_count_after_positive',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['reopened_at', 'source']),
+            models.Index(fields=['demand', 'reopened_at']),
+        ]
+
+    def clean(self):
+        if self.demand_id and self.response_id and self.demand_id != self.response.demand_id:
+            raise ValidationError('重新选择事件与被替代响应必须属于同一条求购。')
+        if (
+            self.response_id and self.previous_item_id
+            and self.response.item_id != self.previous_item_id
+        ):
+            raise ValidationError('原商品快照必须与被替代响应的商品一致。')
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            raise ValidationError('重新选择事件是不可变历史，不能修改。')
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.demand_id or "—"} · 第 {self.reopen_count_after} 次 · {self.get_source_display()}'
+
+
 class BorrowReturnEscalation(models.Model):
     """Track how far an overdue borrow has been escalated, and when.
 

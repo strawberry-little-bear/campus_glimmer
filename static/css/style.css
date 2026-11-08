@@ -1927,6 +1927,8 @@ a { color: inherit; text-decoration: none; }
 .demand-response-conversion-panel .ops-mini-stat { background: #fff; }
 .demand-response-conversion-panel .ops-mini-stat strong { color: #8c3a5e; }
 .demand-response-conversion-panel .badge { font-weight: 600; }
+.demand-response-conversion-panel .reopen-response-funnel { border-top-color: #e7cbd7; }
+.reopen-response-funnel .ops-mini-stat { height: 100%; }
 /* 商品图片覆盖度面板。
  * 为什么自成一套颜色：前面几十个面板分别占了红粉（礼贾申请）、紫（求购响应转化）、
  * 绿（会面到场）等色相，图片覆盖度讲的是“商品资料完整度”，和商品本身的存储、

@@ -1,16 +1,23 @@
 from datetime import timedelta
+from importlib import import_module
+from unittest.mock import patch
 
+from django.apps import apps
 from django.contrib.auth.models import User
-from django.db import connection
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
-    CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse,
-    GiftApplication, Item, Notification, Order,
+    CampusLocation, Category, CommunityContribution, DemandPost, DemandReopenEvent,
+    DemandResponse, GiftApplication, Item, Notification, Order,
 )
+
+
+reopen_backfill_migration = import_module('listings.migrations.0084_demand_reopen_event')
 
 
 class DemandResponseFlowTests(TestCase):
@@ -325,6 +332,129 @@ class DemandResponseFlowTests(TestCase):
             title='求购已重新选择响应',
             demand=self.demand,
         ).count(), 1)
+        self.assertEqual(DemandReopenEvent.objects.filter(demand=self.demand).count(), 1)
+
+    def test_reopen_event_snapshots_the_replaced_response(self):
+        accepted = self._accept_response()
+        self.item.trade_mode = 'borrow'
+        self.item.save(update_fields=['trade_mode', 'updated_at'])
+        self._make_confirmed_item_unavailable()
+
+        self._reopen(accepted)
+        accepted.refresh_from_db()
+        event = DemandReopenEvent.objects.get(demand=self.demand)
+
+        self.assertEqual(event.response_id, accepted.id)
+        self.assertEqual(event.previous_item_id, self.item.id)
+        self.assertEqual(event.previous_item_title, self.item.title)
+        self.assertEqual(event.previous_trade_mode, 'borrow')
+        self.assertEqual(event.previous_accepted_at, accepted.accepted_at)
+        self.assertEqual(event.reopened_at, accepted.superseded_at)
+        self.assertEqual(event.reopen_count_after, 1)
+        self.assertEqual(event.source, 'runtime')
+
+    def test_event_snapshot_is_immutable(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+        self._reopen(accepted)
+        event = DemandReopenEvent.objects.get(demand=self.demand)
+        event.previous_item_title = '试图改写历史'
+
+        with self.assertRaisesMessage(ValidationError, '不可变历史'):
+            event.save()
+
+    def test_database_rejects_duplicate_reopen_ordinal(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+        self._reopen(accepted)
+        accepted.refresh_from_db()
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                DemandReopenEvent.objects.create(
+                    demand=self.demand,
+                    response=accepted,
+                    previous_item=self.item,
+                    previous_item_title=self.item.title,
+                    previous_trade_mode=self.item.trade_mode,
+                    previous_accepted_at=accepted.accepted_at,
+                    reopened_at=timezone.now(),
+                    reopen_count_after=1,
+                    source='runtime',
+                )
+
+    def test_backfill_migration_rebuilds_legacy_superseded_history(self):
+        now = timezone.now()
+        first_accepted_at = now - timedelta(days=6)
+        first_reopened_at = now - timedelta(days=4)
+        second_accepted_at = now - timedelta(days=3)
+        second_reopened_at = now - timedelta(days=1)
+        first = DemandResponse.objects.create(
+            demand=self.demand,
+            item=self.item,
+            responder=self.seller,
+            status='superseded',
+        )
+        second_item = Item.objects.create(
+            seller=self.other_seller,
+            title='高等数学教材备用本',
+            description='另一本同类教材',
+            category=self.category,
+            location=self.location,
+            condition='8成新',
+            price='45.00',
+        )
+        second = DemandResponse.objects.create(
+            demand=self.demand,
+            item=second_item,
+            responder=self.other_seller,
+            status='superseded',
+        )
+        DemandResponse.objects.filter(pk=first.pk).update(
+            accepted_at=first_accepted_at,
+            superseded_at=first_reopened_at,
+            updated_at=first_reopened_at,
+        )
+        DemandResponse.objects.filter(pk=second.pk).update(
+            accepted_at=second_accepted_at,
+            superseded_at=second_reopened_at,
+            updated_at=second_reopened_at,
+        )
+
+        reopen_backfill_migration.backfill_reopen_events(apps, None)
+
+        events = DemandReopenEvent.objects.filter(demand=self.demand).order_by(
+            'reopened_at',
+        )
+        self.assertEqual(
+            [event.reopen_count_after for event in events],
+            [1, 2],
+        )
+        self.assertEqual({event.source for event in events}, {'backfill'})
+        first_event = events.get(response=first)
+        self.assertEqual(first_event.previous_item_id, self.item.id)
+        self.assertEqual(first_event.previous_item_title, self.item.title)
+        self.assertEqual(first_event.previous_accepted_at, first_accepted_at)
+        self.assertEqual(first_event.reopened_at, first_reopened_at)
+
+    def test_reopen_rolls_back_when_event_cannot_be_written(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+
+        with patch(
+            'listings.views.DemandReopenEvent.objects.create',
+            side_effect=RuntimeError('event write failed'),
+        ):
+            with self.assertRaisesMessage(RuntimeError, 'event write failed'):
+                self._reopen(accepted)
+
+        accepted.refresh_from_db()
+        self.demand.refresh_from_db()
+        self.assertEqual(accepted.status, 'accepted')
+        self.assertIsNone(accepted.superseded_at)
+        self.assertEqual(self.demand.status, 'fulfilled')
+        self.assertEqual(self.demand.reopen_count, 0)
+        self.assertFalse(DemandReopenEvent.objects.filter(demand=self.demand).exists())
 
     def test_available_item_cannot_be_reopened(self):
         accepted = self._accept_response()
@@ -335,6 +465,7 @@ class DemandResponseFlowTests(TestCase):
         self.assertEqual(accepted.status, 'accepted')
         self.assertEqual(self.demand.status, 'fulfilled')
         self.assertEqual(self.demand.reopen_count, 0)
+        self.assertFalse(DemandReopenEvent.objects.filter(demand=self.demand).exists())
 
     def test_non_owner_cannot_reopen_response(self):
         accepted = self._accept_response()
