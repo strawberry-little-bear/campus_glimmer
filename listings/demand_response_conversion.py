@@ -18,7 +18,7 @@ from datetime import time as dt_time, timedelta
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import DemandPost, DemandResponse, Item, Order
+from .models import DemandPost, DemandResponse, GiftApplication, Item, Order
 
 PERIOD_CHOICES = (
     (7, '最近 7 天'),
@@ -56,17 +56,30 @@ CONVERSION_LATENCY_BUCKETS = (
     (None, '超过 7 天', '隔了一周以上，中间很可能被别的事打断过'),
 )
 
-# 确认之后没有订单的响应，卡在哪三类。顺序即判定优先级，命中即停。
+# 确认之后没有订单的响应，走到了哪一步。领取申请是显式业务事实，优先于后来由商品或
+# 求购状态推断出的卡点；只有没有领取申请时，才继续判断商品、求购和尚未发起交易。
 BLOCKED_LABELS = {
+    'gift_pending': '已申请领取，等待卖家选择',
+    'gift_rejected': '领取申请未选中',
+    'gift_withdrawn': '领取申请已撤回',
+    'gift_selected_without_order': '领取申请已选中，待补交易记录',
+    'gift_unknown': '领取申请状态不在已知范围',
     'item_gone': '响应商品已经不可交易',
     'demand_closed': '求购那边已经不重要了',
-    'still_walking': '还在路上',
+    'still_walking': '商品和求购仍可推进，尚未发起交易',
+}
+
+GIFT_APPLICATION_STAGE_REASONS = {
+    'pending': 'gift_pending',
+    'rejected': 'gift_rejected',
+    'withdrawn': 'gift_withdrawn',
+    'selected': 'gift_selected_without_order',
 }
 
 # 求购的哪些状态算「那边已经不重要了」。只收 `closed` / `expired`——发布者或系统主动
 # 结束的。`fulfilled` 不在这里：它是 `accept` 当场写的，人人如此，把它算进来会让每一条
-# 未成交的响应都落进「求购那边已经不重要了」，而真正要运营看一眼的「还在路上」就一条
-# 都数不到了——那一栏报的恰恰是商品在、求购在、两边都没动的那批。
+# 未成交的响应都落进「求购那边已经不重要了」，而真正要运营看一眼的「尚未发起交易」就一条
+# 都数不到了。
 DEMAND_DONE_STATUSES = ('closed', 'expired')
 
 # 清单上限。清单是给「现在去处理」用的，不是给归档用的。
@@ -82,13 +95,14 @@ MESSAGE_LENGTH_BUCKETS = (
 
 TRADE_MODE_LABELS = dict(Item.TRADE_MODE_CHOICES)
 
-# 一条已确认的响应，加上它转化出来的订单、卡在哪。一次查完固定下来：转化率、时延分布、
-# 成交拆分、卡点清单各读一遍，按响应现算会让每条响应打好几遍库，而看板是一次打开全算的。
+# 一条已确认的响应，加上它接出的订单、领取申请和当前阶段。一次查完固定下来：
+# 转化率、时延分布、成交拆分和阶段清单各读一遍，按响应现算会让每条响应打好几遍库，
+# 而看板是一次打开全算的。
 ConfirmedResponse = namedtuple('ConfirmedResponse', [
-    'response', 'order', 'blocked_reason', 'latency_seconds',
+    'response', 'order', 'gift_application', 'blocked_reason', 'latency_seconds',
 ])
 
-# 卡点清单的一行。`blocked_label` 是预先对好的名字，模板不需要知道 `BLOCKED_LABELS` 这个字典。
+# 阶段清单的一行。`blocked_label` 是预先对好的名字，模板不需要知道 `BLOCKED_LABELS`。
 StuckRow = namedtuple('StuckRow', ['response', 'blocked_reason', 'blocked_label'])
 
 
@@ -162,16 +176,72 @@ def _order_is_from_response(order, response):
     )
 
 
-def _blocked_reason(response):
-    """一条确认之后没有订单的响应，卡在哪。顺序即优先级，命中即停。
+def _legacy_gift_application_is_compatible(application, response):
+    """迁移前的领取申请没有来源时，能否归到这条确认。
 
-    第一条是唯一一处要读业务字段做判断的地方，也是三类里最干净的一类：响应商品已经不可
-    交易，说明卖家侧有动作，而且动作可查。第二条只报规模不给方向——一条关闭了的求购对应
-    的未成交响应，可能是发布者自己找到了，也可能是他忘了回来关，平台分不清。
-    `fulfilled` 故意不在第二条里：它是 `accept` 当场写的，人人如此，算进来会让每一条
-    未成交的响应都变成「求购那边已经不重要了」，而真正要运营看一眼的第三类就一条都
-    数不到。
+    新记录只认 `GiftApplication.demand_response`。旧记录必须同时满足商品相同、申请人是
+    求购发布者、申请不早于确认；同一件商品有多条确认时只选离申请最近的一条，并由显式
+    来源优先覆盖，避免一份申请被重复算进多条响应。
     """
+    return (
+        application.demand_response_id is None
+        and application.item_id == response.item_id
+        and application.applicant_id == response.demand.requester_id
+        and application.created_at >= _confirmed_at(response)
+    )
+
+
+def _map_gift_applications(responses, applications):
+    """把领取申请一次性归到确认响应，返回 `{response_id: application}`。"""
+    response_by_id = {response.pk: response for response in responses}
+    mapped = {}
+    explicit_ids = set()
+    for application in applications:
+        response_id = application.demand_response_id
+        if response_id in response_by_id:
+            mapped[response_id] = application
+            explicit_ids.add(response_id)
+
+    # 旧记录只做兼容推断。每条申请先找离申请最近的一条兼容确认，再把多份历史申请
+    # 收敛成每条响应一份；显式来源永远不会被兼容记录覆盖。
+    legacy = sorted(
+        (application for application in applications
+         if application.demand_response_id is None),
+        key=lambda application: (application.created_at, application.pk),
+    )
+    for application in legacy:
+        candidates = [
+            response for response in responses
+            if _legacy_gift_application_is_compatible(application, response)
+        ]
+        if not candidates:
+            continue
+        target = max(candidates, key=lambda response: (_confirmed_at(response), response.pk))
+        current = mapped.get(target.pk)
+        if target.pk in explicit_ids:
+            continue
+        if current is None or (
+            application.created_at,
+            application.pk,
+        ) > (
+            current.created_at,
+            current.pk,
+        ):
+            mapped[target.pk] = application
+    return mapped
+
+
+def _blocked_reason(response, gift_application=None):
+    """一条确认之后没有订单的响应，走到了哪一步。顺序即优先级，命中即停。
+
+    领取申请的状态比商品和求购的后续状态更具体：等待卖家选择、未选中、撤回和已选中
+    待补订单，都说明发布者已经发起过这一步，不能再把它们统称为「还在路上」。只有完全
+    没有领取申请时，才用商品、求购和仍可推进这三个推断类别兜底。
+    """
+    if gift_application is not None:
+        return GIFT_APPLICATION_STAGE_REASONS.get(
+            gift_application.status, 'gift_unknown',
+        )
     item = response.item
     if item is None or not item.is_available_now:
         return 'item_gone'
@@ -182,7 +252,7 @@ def _blocked_reason(response):
 
 
 def _fetch_confirmed_responses(days, now):
-    """按显式排序取出周期内确认的响应，连订单一起取回来。
+    """按显式排序取出周期内确认的响应，连订单和领取申请一起取回来。
 
     统计窗口按显式记录的 `accepted_at` 切，不按 `created_at` 切：一条窗口前提交、窗口内
     才被确认的响应，它的转化发生在窗口内。重开后的历史响应会从 `accepted` 变成
@@ -205,38 +275,64 @@ def _fetch_confirmed_responses(days, now):
     if not responses:
         return []
 
-    # 新订单按显式来源取；迁移前的旧订单才用商品和求购发布者推断。候选集仍按响应涉及的
-    # 商品和买家收窄，避免在成熟站点上扫描整张订单表。
     response_ids = {response.pk for response in responses}
+    item_ids = {response.item_id for response in responses}
+    requester_ids = {response.demand.requester_id for response in responses}
+
+    # 新订单按显式来源取；迁移前的旧订单才用商品和求购发布者推断。领取申请那一侧
+    # 也有显式来源和旧记录兼容推断，三种查询都按响应集合收窄。
     candidate_orders = list(
         Order.objects.select_related('item', 'buyer', 'seller').filter(
             Q(demand_response_id__in=response_ids)
+            | Q(gift_application__demand_response_id__in=response_ids)
             | (
                 Q(demand_response__isnull=True)
-                & Q(
-                    item_id__in={response.item_id for response in responses},
-                    buyer_id__in={
-                        response.demand.requester_id for response in responses
-                    },
-                )
+                & Q(item_id__in=item_ids, buyer_id__in=requester_ids)
             )
         ).order_by('created_at', 'id')
     )
+    candidate_applications = list(
+        GiftApplication.objects.select_related(
+            'item', 'applicant', 'order', 'demand_response',
+        ).filter(
+            Q(demand_response_id__in=response_ids)
+            | (
+                Q(demand_response__isnull=True)
+                & Q(item_id__in=item_ids, applicant_id__in=requester_ids)
+            )
+        ).order_by('created_at', 'id')
+    )
+    applications_by_response = _map_gift_applications(
+        responses, candidate_applications,
+    )
+    explicit_orders = {
+        order.demand_response_id: order
+        for order in candidate_orders
+        if order.demand_response_id in response_ids
+    }
 
     confirmed = []
     for response in responses:
-        order = None
-        for candidate in candidate_orders:
-            if _order_is_from_response(candidate, response):
-                order = candidate
-                break
+        order = explicit_orders.get(response.pk)
+        if order is None:
+            for candidate in candidate_orders:
+                if _order_is_from_response(candidate, response):
+                    order = candidate
+                    break
+        application = applications_by_response.get(response.pk)
+        if order is None and application is not None and application.order_id:
+            if _order_is_from_response(application.order, response):
+                order = application.order
         latency = None
         if order is not None:
             latency = (order.created_at - _confirmed_at(response)).total_seconds()
         confirmed.append(ConfirmedResponse(
             response=response,
             order=order,
-            blocked_reason=None if order is not None else _blocked_reason(response),
+            gift_application=application,
+            blocked_reason=(
+                None if order is not None else _blocked_reason(response, application)
+            ),
             latency_seconds=latency,
         ))
     return confirmed
@@ -328,8 +424,45 @@ def _build_dealt_stats(conversion):
     }
 
 
+def _build_gift_application_stage_stats(confirmed):
+    """没有订单的确认里，免费领取申请走到了哪个阶段。
+
+    领取申请不等于订单转化：它只证明发布者已经从确认响应进入领取队列。等待、未选中、
+    撤回和“已选中但订单关系缺失”必须分开展示，尤其等待卖家选择不能被算成用户尚未
+    发起交易。`selected` 正常应有订单；这里单列出来是为了让历史缺链或写入异常可见。
+    """
+    stuck = [row for row in confirmed if row.order is None]
+    applications = [
+        row.gift_application for row in stuck
+        if row.gift_application is not None
+    ]
+    counts = {}
+    for status, reason in GIFT_APPLICATION_STAGE_REASONS.items():
+        counts[status] = sum(
+            1 for application in applications if application.status == status
+        )
+    return {
+        'total': len(applications),
+        'pending_count': counts['pending'],
+        'rejected_count': counts['rejected'],
+        'withdrawn_count': counts['withdrawn'],
+        'selected_without_order_count': counts['selected'],
+        'unknown_count': sum(
+            1 for row in stuck
+            if row.blocked_reason == 'gift_unknown'
+        ),
+        'awaiting_start_count': sum(
+            1 for row in stuck if row.blocked_reason == 'still_walking'
+        ),
+        'no_application_count': sum(
+            1 for row in stuck if row.gift_application is None
+        ),
+        'application_rate': _percent(len(applications), len(stuck)),
+    }
+
+
 def _build_blocked_stats(confirmed):
-    """确认之后没有订单的，卡在哪。"""
+    """确认之后没有订单的，走到了哪一步。"""
     stuck = [row for row in confirmed if row.order is None]
     rows = []
     for key, label in BLOCKED_LABELS.items():
@@ -346,11 +479,14 @@ def _build_blocked_stats(confirmed):
         'item_gone_count': sum(
             1 for row in stuck if row.blocked_reason == 'item_gone'
         ),
+        'demand_closed_count': sum(
+            1 for row in stuck if row.blocked_reason == 'demand_closed'
+        ),
+        # 这个字段名保留给既有调用方。语义已经收窄为“商品和求购仍可推进，但完全
+        # 没有领取申请，也没有订单”，不再覆盖等待卖家选择等已经发起过的阶段。
         'still_walking_count': sum(
             1 for row in stuck if row.blocked_reason == 'still_walking'
         ),
-        # 「还在路上」这一类是真正要运营看一眼的：商品在、求购在、两边都没动，
-        # 那次确认就这样悬着。
         'still_walking_rate': _percent(
             sum(1 for row in stuck if row.blocked_reason == 'still_walking'),
             len(stuck),
@@ -440,12 +576,11 @@ def _build_message_stats(confirmed):
 
 
 def _build_stuck_rows(confirmed):
-    """卡点清单。只带商品标题、求购标题、确认时刻和卡点类别，不带任何用户名。"""
+    """阶段清单。只带商品标题、求购标题、确认时刻和阶段，不带任何用户名。"""
     stuck = [row for row in confirmed if row.order is None]
     stuck.sort(key=lambda row: _confirmed_at(row.response), reverse=True)
     rows = []
     for row in stuck[:STUCK_LIST_LIMIT]:
-        # 卡点标签在模块里就对成名字，不往模板里推。模板要做的只是把它显示出来。
         rows.append(StuckRow(
             response=row.response,
             blocked_reason=row.blocked_reason,
@@ -458,10 +593,13 @@ def _build_stuck_rows(confirmed):
         'still_walking_row_total': len([
             row for row in stuck if row.blocked_reason == 'still_walking'
         ]),
+        'gift_application_row_total': len([
+            row for row in stuck if row.gift_application is not None
+        ]),
     }
 
 
-def _summary(conversion, latency, dealt, blocked):
+def _summary(conversion, latency, dealt, blocked, gift_applications):
     if not conversion['total']:
         return '当前周期没有确认过的求购响应，转化也就无从谈起。'
     parts = [
@@ -488,16 +626,29 @@ def _summary(conversion, latency, dealt, blocked):
             f"（{latency['same_day_rate']}%）。"
         )
     if blocked['total']:
-        parts.append(
-            f"确认之后没有订单的 {blocked['total']} 条里，"
-            f"{blocked['still_walking_count']} 条商品和求购都还在，"
-            f"那次确认就这样悬着。"
-        )
+        if gift_applications['total']:
+            parts.append(
+                f"确认之后没有订单的 {blocked['total']} 条里，"
+                f"{gift_applications['total']} 条已经发起领取申请："
+                f"等待卖家选择 {gift_applications['pending_count']} 条、"
+                f"未选中 {gift_applications['rejected_count']} 条、"
+                f"撤回 {gift_applications['withdrawn_count']} 条、"
+                f"已选中待补订单 {gift_applications['selected_without_order_count']} 条。"
+            )
+        if gift_applications['awaiting_start_count']:
+            parts.append(
+                f"另有 {gift_applications['awaiting_start_count']} 条"
+                f"商品和求购仍可推进，但尚未发起交易。"
+            )
+        if token_other := (
+            blocked['item_gone_count'] + blocked['demand_closed_count']
+        ):
+            parts.append(f"其余 {token_other} 条停在商品不可交易或求购已结束。")
     return ''.join(parts)
 
 
 def build_demand_response_conversion(days=30, now=None):
-    """统计已确认求购响应的后续成交情况，只报告不改任何字段。"""
+    """统计已确认求购响应的后续交易和领取阶段，只报告不改任何字段。"""
     allowed_days = {value for value, _ in PERIOD_CHOICES}
     if days not in allowed_days:
         days = 30
@@ -507,6 +658,7 @@ def build_demand_response_conversion(days=30, now=None):
     conversion = _build_conversion_stats(confirmed)
     latency = _build_latency_stats(confirmed)
     dealt = _build_dealt_stats(conversion)
+    gift_applications = _build_gift_application_stage_stats(confirmed)
     blocked = _build_blocked_stats(confirmed)
     trade_modes = _build_trade_mode_stats(confirmed)
     message = _build_message_stats(confirmed)
@@ -517,10 +669,13 @@ def build_demand_response_conversion(days=30, now=None):
         'period_start': _period_start(days, timezone.localtime(now).date()),
         'period_end': now,
         'has_data': bool(confirmed),
-        'summary': _summary(conversion, latency, dealt, blocked),
+        'summary': _summary(
+            conversion, latency, dealt, blocked, gift_applications,
+        ),
         'conversion': conversion,
         'latency': latency,
         'dealt': dealt,
+        'gift_applications': gift_applications,
         'blocked': blocked,
         'trade_modes': trade_modes,
         'message': message,

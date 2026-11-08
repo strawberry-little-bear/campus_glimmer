@@ -4,9 +4,9 @@
 {% endcomment %}<section class="content-card ops-panel mb-4 demand-response-conversion-panel">
     <div class="ops-panel-heading">
         <div><span class="eyebrow eyebrow-soft">Demand response conversion</span><h2>确认了求购响应之后，交易真的发生了吗</h2></div>
-        <span class="ops-panel-hint">点了确认之后，有多少真的变成了订单</span>
+        <span class="ops-panel-hint">确认之后接出了订单，还是进入领取、等待或停止</span>
     </div>
-    <p class="search-rhythm-note mb-3"><i class="bi bi-person-check me-1"></i><code>DemandResponse</code> 是站内唯一一条「卖家拿在售商品去接一个学生写的需求」的记录。<code>accept</code> 会写入 <code>accepted_at</code>、给响应人记一次贡献、<strong>把求购改成 <code>fulfilled</code></strong>，并把同条求购下其余 <code>pending</code> 响应改成 <code>deferred</code> 后通知响应人。之后发布者从这条响应继续预约或领取申请时，<code>Order.demand_response</code> / <code>GiftApplication.demand_response</code> 会保留来源；历史统计按 <code>accepted_at</code> 切窗口，<code>accepted</code> 与 <code>superseded</code> 都算一次确认。</p>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-person-check me-1"></i><code>DemandResponse</code> 是站内唯一一条「卖家拿在售商品去接一个学生写的需求」的记录。<code>accept</code> 会写入 <code>accepted_at</code>、给响应人记一次贡献、<strong>把求购改成 <code>fulfilled</code></strong>，并把同条求购下其余 <code>pending</code> 响应改成 <code>deferred</code> 后通知响应人。之后发布者从这条响应继续预约或领取申请时，<code>Order.demand_response</code> / <code>GiftApplication.demand_response</code> 会保留来源；历史统计按 <code>accepted_at</code> 切窗口，<code>accepted</code> 与 <code>superseded</code> 都算一次确认；新领取申请只按 <code>GiftApplication.demand_response</code> 归属，旧记录才做兼容推断。</p>
     {% if not demand_response_conversion.has_data %}
     <div class="empty-inline">{{ demand_response_conversion.summary }}</div>
     {% else %}
@@ -18,6 +18,14 @@
     </div>
     {% if demand_response_conversion.conversion.is_small_sample %}
     <p class="rewrite-candidate-footnote"><i class="bi bi-info-circle me-1"></i>确认响应不足 {{ demand_response_conversion.conversion.min_measured_responses }} 条，转化率只报数字不给方向。</p>
+    {% endif %}
+    {% if demand_response_conversion.blocked.total %}
+    <div class="row g-3 mb-4">
+        <div class="col-md-3"><div class="ops-mini-stat"><span>已发起领取申请</span><strong>{{ demand_response_conversion.gift_applications.total }}</strong><small>占无订单确认 {{ demand_response_conversion.gift_applications.application_rate }}%</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>等待卖家选择</span><strong>{{ demand_response_conversion.gift_applications.pending_count }}</strong><small>已在领取队列，不再算「尚未发起」</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>未选中 / 撤回</span><strong>{{ demand_response_conversion.gift_applications.rejected_count }} / {{ demand_response_conversion.gift_applications.withdrawn_count }}</strong><small>申请人侧或发布者侧已经给出结果</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>尚未发起交易</span><strong>{{ demand_response_conversion.gift_applications.awaiting_start_count }}</strong><small>商品和求购仍可推进，但领取、订单都还没有</small></div></div>
+    </div>
     {% endif %}
     <div class="row g-4">
         <div class="col-lg-6">
@@ -75,15 +83,15 @@
             <p class="small text-muted mt-2 mb-0"><strong>不按总数报。</strong>出售要看钱，免费和借用都不涉及付款，走完那段路的动力完全不同。合并会把两种体验平均成一个没有解释力的数。</p>
         </div>
         <div class="col-lg-6">
-            <h3 class="h6 mb-3">确认之后没有订单的，卡在哪</h3>
+            <h3 class="h6 mb-3">确认后没有订单时，后来走到了哪一步</h3>
             <div class="table-responsive">
                 <table class="table table-sm align-middle ops-table">
-                <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 确认之后没有订单的，卡在哪</caption>
-                    <thead><tr><th>卡点</th><th>响应数</th><th>占未转化（%）</th></tr></thead>
+                <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 确认后没有订单时，后来走到了哪一步</caption>
+                    <thead><tr><th>阶段</th><th>响应数</th><th>占未转化（%）</th></tr></thead>
                     <tbody>
                         {% for row in demand_response_conversion.blocked.rows %}
                         <tr>
-                            <td>{{ row.label }}{% if row.key == 'still_walking' %} <span class="badge text-bg-warning">要看一眼</span>{% endif %}</td>
+                            <td>{{ row.label }}{% if row.key == 'gift_pending' %} <span class="badge text-bg-warning">等卖家选择</span>{% elif row.key == 'still_walking' %} <span class="badge text-bg-warning">尚未发起</span>{% endif %}</td>
                             <td>{{ row.count }}</td>
                             <td>{% if demand_response_conversion.blocked.total %}{{ row.share }}{% else %}—{% endif %}</td>
                         </tr>
@@ -91,7 +99,7 @@
                     </tbody>
                 </table>
             </div>
-            <p class="small text-muted mt-2 mb-0"><strong>「还在路上」这一类是真正要运营看一眼的。</strong>商品在、求购在、两边都没动，那次确认就这样悬着。<code>fulfilled</code> 故意不算进「求购那边已经不重要了」——它是 <code>accept</code> 当场写的，人人如此，算进来会让每一条未成交的响应都落进第二类。只收 <code>closed</code> / <code>expired</code>——发布者或系统主动结束的。</p>
+            <p class="small text-muted mt-2 mb-0"><strong>领取申请的状态优先于服务端推断。</strong>等待卖家选择、领取申请未选中或撤回，都是用户已经走到的下一步，不能统称为「还在路上」；已选中却没有订单则单列出来检查历史缺链。只有没有领取申请、商品和求购仍可推进时，才归「尚未发起交易」。<code>fulfilled</code> 故意不算「求购已经不重要」——它是 <code>accept</code> 当场写的。求购结束只收 <code>closed</code> / <code>expired</code>。</p>
         </div>
         <div class="col-lg-6">
             <h3 class="h6 mb-3">响应说明写了没写</h3>
@@ -127,25 +135,25 @@
     </div>
     {% if demand_response_conversion.stuck_rows.row_total %}
     <div class="mt-3">
-        <h3 class="h6 mb-3">确认之后悬着没下单的清单</h3>
+        <h3 class="h6 mb-3">确认后未生成订单的响应阶段</h3>
         <div class="table-responsive">
             <table class="table table-sm align-middle ops-table">
-            <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 确认之后悬着没下单的清单</caption>
-                <thead><tr><th>响应商品</th><th>求购</th><th>确认于</th><th>卡点</th><th>说明字数</th></tr></thead>
+            <caption class="visually-hidden">确认了求购响应之后，交易真的发生了吗 · 确认后未生成订单的响应阶段</caption>
+                <thead><tr><th>响应商品</th><th>求购</th><th>确认于</th><th>阶段</th><th>说明字数</th></tr></thead>
                 <tbody>
                     {% for row in demand_response_conversion.stuck_rows.rows %}
                     <tr>
                         <td>{{ row.response.item.title }}</td>
                         <td>{{ row.response.demand.title }}</td>
                         <td>{% if row.response.accepted_at %}{{ row.response.accepted_at|date:'Y-m-d H:i' }}{% else %}{{ row.response.updated_at|date:'Y-m-d H:i' }}{% endif %}</td>
-                        <td>{% if row.blocked_reason == 'still_walking' %}<span class="badge text-bg-warning">{{ demand_response_conversion.blocked_labels.still_walking }}</span>{% else %}{{ row.blocked_label }}{% endif %}</td>
+                        <td>{{ row.blocked_label }}</td>
                         <td>{{ row.response.message|length }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-        <p class="small text-muted mt-2 mb-0"><strong>清单只带商品标题、求购标题、确认时刻和卡点类别，不带任何用户名。</strong>这份清单是给「现在去看看」用的，不是给「拌者」用的。其中 {{ demand_response_conversion.stuck_rows.still_walking_row_total }} 条属于「还在路上」。{% if demand_response_conversion.stuck_rows.row_total > demand_response_conversion.stuck_rows.row_limit %}清单最多列 {{ demand_response_conversion.stuck_rows.row_limit }} 条，完整的在导出里。{% endif %}</p>
+        <p class="small text-muted mt-2 mb-0"><strong>清单只带商品标题、求购标题、确认时刻和阶段，不带任何用户名。</strong>这份清单用于定位下一步，不是用户榜单。其中 {{ demand_response_conversion.stuck_rows.gift_application_row_total }} 条已有领取申请，{{ demand_response_conversion.stuck_rows.still_walking_row_total }} 条仍可推进但尚未发起交易。{% if demand_response_conversion.stuck_rows.row_total > demand_response_conversion.stuck_rows.row_limit %}清单最多列 {{ demand_response_conversion.stuck_rows.row_limit }} 条，完整的在导出里。{% endif %}</p>
     </div>
     {% endif %}
     <div class="ops-footer-note text-start mt-3"><i class="bi bi-shield-check me-1"></i>本模块只报告，<strong>不自动建订单、不改 <code>accept</code> 之后的任何通知文案、不把 <code>fulfilled</code> 的写入时机推到订单完成之后、不按用户做任何聚合或排名、不做「置疑似放鸽子」检测</strong>。<code>fulfilled</code> 这个词现在描述的是「有人点了确认」，不是「有人买到了」——把写入时机改到订单完成之后会让求购列表永远显示「寻找中」，而那些其实已经触达的需求会一次次被推给新的卖家。这个口径只让两个分居两处的数字第一次落到同一张表上。</div>

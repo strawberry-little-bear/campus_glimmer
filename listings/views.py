@@ -8651,7 +8651,8 @@ def operations_dashboard_export(request):
         conversion['summary'],
         '只读 DemandResponse 的 status、accepted_at、message 长度，'
         'DemandPost 的 status，Item 的 is_available_now、trade_mode，'
-        '以及 Order 的 demand_response_id、item_id、buyer_id、created_at、status，'
+        'Order 的 demand_response_id、item_id、buyer_id、created_at、status，'
+        '以及 GiftApplication 的 demand_response_id、item_id、applicant_id、status、created_at、order_id，'
         '不改写任何一条响应、任何一条求购、任何一笔订单，'
         '不自动建订单、不把 fulfilled 的写入时机推到订单完成之后，'
         '不按用户做任何聚合或排名',
@@ -8736,16 +8737,70 @@ def operations_dashboard_export(request):
             f"不足 {conversion['conversion']['min_measured_responses']} 条",
         ])
 
+    blocked_total = conversion['blocked']['total']
+    def blocked_share(count):
+        return round(count * 100 / blocked_total, 1) if blocked_total else 0
+
+    gift_stages = conversion['gift_applications']
     writer.writerow([])
-    writer.writerow(['确认之后没有订单的，卡在哪'])
-    writer.writerow(['卡点', '响应数', '占未转化（%）', '说明'])
+    writer.writerow(['确认后没有订单的领取申请阶段', '数值', '占未生成订单响应（%）', '说明'])
+    writer.writerow([
+        '领取申请总数', gift_stages['total'], blocked_share(gift_stages['total']),
+        '领取申请证明已经从确认响应进入领取队列，但本身不算订单转化',
+    ])
+    writer.writerow([
+        '等待卖家选择', gift_stages['pending_count'],
+        blocked_share(gift_stages['pending_count']), '申请仍待处理',
+    ])
+    writer.writerow([
+        '领取申请未选中', gift_stages['rejected_count'],
+        blocked_share(gift_stages['rejected_count']), '发布者已经处理，但没有选中这次申请',
+    ])
+    writer.writerow([
+        '领取申请已撤回', gift_stages['withdrawn_count'],
+        blocked_share(gift_stages['withdrawn_count']), '申请人主动撤回',
+    ])
+    writer.writerow([
+        '已选中但缺订单', gift_stages['selected_without_order_count'],
+        blocked_share(gift_stages['selected_without_order_count']),
+        '正常应已生成订单；单列出来检查历史缺链或写入异常',
+    ])
+    writer.writerow([
+        '未知领取状态', gift_stages['unknown_count'],
+        blocked_share(gift_stages['unknown_count']), '状态不在当前已知范围',
+    ])
+    writer.writerow([
+        '仍可推进但尚未发起交易', gift_stages['awaiting_start_count'],
+        blocked_share(gift_stages['awaiting_start_count']),
+        '没有订单，也没有领取申请；商品和求购仍可推进',
+    ])
+    writer.writerow([
+        '没有领取申请', gift_stages['no_application_count'],
+        blocked_share(gift_stages['no_application_count']),
+        '包含商品已不可交易、求购已结束和仍可推进的响应',
+    ])
+    writer.writerow([
+        '领取申请发起率', f"{gift_stages['application_rate']}%", '',
+        '领取申请总数 ÷ 没有订单的响应数',
+    ])
+
+    writer.writerow([])
+    writer.writerow(['确认之后没有订单的响应，走到了哪一步'])
+    writer.writerow(['阶段', '响应数', '占未生成订单响应（%）', '说明'])
     for row in conversion['blocked']['rows']:
         writer.writerow([row['label'], row['count'], row['share'], ''])
     writer.writerow([
-        '卡点合计', conversion['blocked']['total'], '',
-        f"其中 {conversion['blocked']['still_walking_count']} 条"
-        f"（{conversion['blocked']['still_walking_rate']}%）是「还在路上」："
-        f"商品在、求购在、两边都没动",
+        '阶段合计', blocked_total, '',
+        f"领取申请 {gift_stages['total']} 条 + 商品不可交易 "
+        f"{conversion['blocked']['item_gone_count']} 条 + 求购结束 "
+        f"{conversion['blocked']['demand_closed_count']} 条 + 尚未发起交易 "
+        f"{conversion['blocked']['still_walking_count']} 条",
+    ])
+    writer.writerow([
+        '总数守恒', '', '',
+        f"订单转化 {conversion['conversion']['converted_count']} 条 + 未生成订单 "
+        f"{blocked_total} 条 = 周期内确认响应 "
+        f"{conversion['conversion']['total']} 条",
     ])
 
     writer.writerow([])
@@ -8776,8 +8831,8 @@ def operations_dashboard_export(request):
         ])
 
     writer.writerow([])
-    writer.writerow(['确认之后悬着没下单的清单'])
-    writer.writerow(['响应商品', '求购', '确认于', '卡点', '响应说明字数'])
+    writer.writerow(['确认后未生成订单的响应阶段'])
+    writer.writerow(['响应商品', '求购', '确认于', '阶段', '响应说明字数'])
     for row in conversion['stuck_rows']['rows']:
         writer.writerow([
             row.response.item.title, row.response.demand.title,

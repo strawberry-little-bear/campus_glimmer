@@ -10,15 +10,17 @@
 2. 分母是已确认的响应数，排除 `withdrawn`，不是求购数也不是响应总数。
 3. 成交看 `completed` / `returned`，`cancelled` 单独一类。
 4. 从确认到下单的间隔按 `Order.created_at` 减显式 `accepted_at` 算，分档按小时起步。
-5. 没有订单的那些，卡在哪三类，顺序即优先级。
-6. 响应说明只报「写了没写」和长度，一个字符都不读。
-7. 不按用户聚合、不排名。
+5. 没有订单的那些，先看领取申请走到了哪一步，再看商品、求购和尚未发起交易。
+6. 领取申请只算阶段，不算订单转化；显式来源优先于历史兼容推断。
+7. 响应说明只报「写了没写」和长度，一个字符都不读。
+8. 不按用户聚合、不排名。
 """
 
 from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from .demand_response_conversion import (
@@ -26,7 +28,8 @@ from .demand_response_conversion import (
     build_demand_response_conversion,
 )
 from .models import (
-    CampusLocation, Category, DemandPost, DemandResponse, Item, Order,
+    CampusLocation, Category, DemandPost, DemandResponse, GiftApplication, Item,
+    Order,
 )
 
 
@@ -95,6 +98,31 @@ class DemandResponseConversionTests(TestCase):
         )
         order.refresh_from_db()
         return order
+
+    def make_gift_application(
+        self, response, *, status='pending', demand_response='source',
+        hours_after_confirmation=1,
+    ):
+        """建一份免费领取申请，并显式回填申请时刻。"""
+        application = GiftApplication.objects.create(
+            item=response.item,
+            applicant=response.demand.requester,
+            meeting_location=self.location,
+            applicant_note='转化阶段测试',
+            status=status,
+            demand_response=response if demand_response == 'source' else demand_response,
+        )
+        GiftApplication.objects.filter(pk=application.pk).update(
+            created_at=response.accepted_at + timedelta(
+                hours=hours_after_confirmation,
+            ),
+            decided_at=(
+                response.accepted_at + timedelta(hours=hours_after_confirmation)
+                if status in {'selected', 'rejected', 'withdrawn'} else None
+            ),
+        )
+        application.refresh_from_db()
+        return application
 
     # --- 转化判定 -------------------------------------------------------
 
@@ -397,6 +425,188 @@ class DemandResponseConversionTests(TestCase):
         self.assertEqual(stuck['row_total'], STUCK_LIST_LIMIT + 3)
         self.assertEqual(stuck['still_walking_row_total'], STUCK_LIST_LIMIT + 3)
 
+    # --- 免费领取阶段 --------------------------------------------------
+
+    def test_pending_gift_application_is_not_still_walking(self):
+        # 已经提交领取申请、正在等卖家选择，是用户走过的下一步，不能再报成「两边都没动」。
+        demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        response = self.make_response(demand, item)
+        self.make_gift_application(response, status='pending')
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['conversion']['converted_count'], 0)
+        self.assertEqual(report['gift_applications']['total'], 1)
+        self.assertEqual(report['gift_applications']['pending_count'], 1)
+        self.assertEqual(report['gift_applications']['awaiting_start_count'], 0)
+        self.assertEqual(report['blocked']['still_walking_count'], 0)
+        row = [row for row in report['blocked']['rows'] if row['key'] == 'gift_pending'][0]
+        self.assertEqual(row['count'], 1)
+        self.assertIn('等待卖家选择', report['summary'])
+
+    def test_each_unselected_gift_outcome_keeps_its_own_stage(self):
+        for status in ('rejected', 'withdrawn'):
+            demand = self.make_demand()
+            item = self.make_item(trade_mode='free')
+            response = self.make_response(demand, item)
+            self.make_gift_application(response, status=status)
+
+        report = build_demand_response_conversion(days=30)
+        stages = report['gift_applications']
+        self.assertEqual(stages['total'], 2)
+        self.assertEqual(stages['rejected_count'], 1)
+        self.assertEqual(stages['withdrawn_count'], 1)
+        self.assertEqual(stages['pending_count'], 0)
+        self.assertEqual(report['blocked']['still_walking_count'], 0)
+
+    def test_selected_gift_without_order_is_reported_as_a_missing_link(self):
+        demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        response = self.make_response(demand, item)
+        self.make_gift_application(response, status='selected')
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(
+            report['gift_applications']['selected_without_order_count'], 1,
+        )
+        self.assertEqual(report['blocked']['still_walking_count'], 0)
+        row = [
+            row for row in report['blocked']['rows']
+            if row['key'] == 'gift_selected_without_order'
+        ][0]
+        self.assertEqual(row['count'], 1)
+
+    def test_explicit_gift_source_disambiguates_same_item_and_requester(self):
+        first_demand = self.make_demand()
+        second_demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        first_response = self.make_response(
+            first_demand, item, confirmed_days_ago=6,
+        )
+        second_response = self.make_response(
+            second_demand, item, confirmed_days_ago=5,
+        )
+        self.make_gift_application(first_response, status='pending')
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['gift_applications']['total'], 1)
+        self.assertEqual(report['gift_applications']['pending_count'], 1)
+        self.assertEqual(report['gift_applications']['awaiting_start_count'], 1)
+        stages_by_response = {
+            row.response.pk: row.blocked_reason
+            for row in report['stuck_rows']['rows']
+        }
+        self.assertEqual(stages_by_response[first_response.pk], 'gift_pending')
+        self.assertEqual(stages_by_response[second_response.pk], 'still_walking')
+
+    def test_legacy_gift_application_uses_compatible_inference(self):
+        demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        response = self.make_response(demand, item)
+        self.make_gift_application(response, demand_response=None, status='pending')
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['gift_applications']['pending_count'], 1)
+        self.assertEqual(report['blocked']['still_walking_count'], 0)
+
+    def test_legacy_gift_application_before_confirmation_is_not_attributed(self):
+        demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        response = self.make_response(demand, item)
+        self.make_gift_application(
+            response, demand_response=None, status='pending',
+            hours_after_confirmation=-1,
+        )
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['gift_applications']['total'], 0)
+        self.assertEqual(report['blocked']['still_walking_count'], 1)
+
+    def test_legacy_gift_application_goes_to_nearest_confirmation_only(self):
+        first_demand = self.make_demand()
+        second_demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        first_response = self.make_response(
+            first_demand, item, confirmed_days_ago=6,
+        )
+        second_response = self.make_response(
+            second_demand, item, confirmed_days_ago=5,
+        )
+        self.make_gift_application(
+            second_response, demand_response=None, status='pending',
+            hours_after_confirmation=1,
+        )
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['gift_applications']['total'], 1)
+        stages_by_response = {
+            row.response.pk: row.blocked_reason
+            for row in report['stuck_rows']['rows']
+        }
+        self.assertEqual(stages_by_response[first_response.pk], 'still_walking')
+        self.assertEqual(stages_by_response[second_response.pk], 'gift_pending')
+
+    def test_order_takes_priority_over_a_pending_gift_application(self):
+        # 领取申请存在不等于订单转化；真正接出订单时，成交口径仍优先看订单。
+        demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        response = self.make_response(demand, item)
+        self.make_gift_application(response, status='pending')
+        order = self.make_order(
+            item, self.requester, demand_response=response,
+        )
+        order.created_at = response.accepted_at + timedelta(hours=2)
+        order.save(update_fields=['created_at'])
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['conversion']['converted_count'], 1)
+        self.assertEqual(report['blocked']['total'], 0)
+        self.assertEqual(report['gift_applications']['total'], 0)
+
+    def test_order_and_gift_stage_counts_conserve_the_denominator(self):
+        pending_demand = self.make_demand()
+        pending_item = self.make_item(trade_mode='free')
+        pending_response = self.make_response(pending_demand, pending_item)
+        self.make_gift_application(pending_response)
+
+        order_demand = self.make_demand()
+        order_item = self.make_item()
+        order_response = self.make_response(order_demand, order_item)
+        order = self.make_order(
+            order_item, self.requester, demand_response=order_response,
+        )
+        order.created_at = order_response.accepted_at + timedelta(hours=2)
+        order.save(update_fields=['created_at'])
+
+        self.make_demand()
+        waiting_item = self.make_item()
+        waiting_demand = self.make_demand()
+        self.make_response(waiting_demand, waiting_item)
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(
+            report['conversion']['converted_count'] + report['blocked']['total'],
+            report['conversion']['total'],
+        )
+        self.assertEqual(
+            report['gift_applications']['total']
+            + report['gift_applications']['awaiting_start_count']
+            + report['blocked']['item_gone_count']
+            + report['blocked']['demand_closed_count'],
+            report['blocked']['total'],
+        )
+
+    def test_gift_stage_report_uses_a_fixed_number_of_queries(self):
+        for _ in range(5):
+            demand = self.make_demand()
+            item = self.make_item(trade_mode='free')
+            response = self.make_response(demand, item)
+            self.make_gift_application(response)
+
+        with self.assertNumQueries(3):
+            report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['gift_applications']['pending_count'], 5)
+
     # --- 交易方式 ------------------------------------------------------
 
     def test_conversion_is_split_by_trade_mode(self):
@@ -519,3 +729,32 @@ class DemandResponseConversionTests(TestCase):
         report = build_demand_response_conversion(days=30)
         self.assertIn('真的变成了订单', report['summary'])
         self.assertIn('确认到下单', report['summary'])
+
+    def test_operations_csv_exports_gift_stage_instead_of_still_walking(self):
+        demand = self.make_demand()
+        item = self.make_item(trade_mode='free')
+        response = self.make_response(demand, item)
+        self.make_gift_application(response, status='pending')
+
+        admin = make_user('conversion-export-admin')
+        admin.is_staff = True
+        admin.save(update_fields=['is_staff'])
+        self.client.force_login(admin)
+        export = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        )
+
+        self.assertEqual(export.status_code, 200)
+        content = export.content.decode('utf-8-sig')
+        self.assertIn('确认后没有订单的领取申请阶段', content)
+        self.assertIn('GiftApplication 的 demand_response_id', content)
+        self.assertIn('等待卖家选择,1,100.0', content)
+        self.assertIn('领取申请发起率,100.0%', content)
+        self.assertIn('本身不算订单转化', content)
+        self.assertIn(
+            '订单转化 0 条 + 未生成订单 1 条 = 周期内确认响应 1 条',
+            content,
+        )
+        self.assertIn('确认后未生成订单的响应阶段', content)
+        self.assertNotIn('确认之后没有订单的，卡在哪', content)
+        self.assertNotIn('两边都没动', content)
