@@ -869,6 +869,7 @@ class ListingFlowTests(TestCase):
             requester=self.other_user, title='转化漏斗求购', description='测试响应分析',
             category=self.category, location=self.location,
         )
+        accepted_at = timezone.now() - timedelta(days=2)
         second_item = Item.objects.create(
             title='备用键盘', description='另一件测试商品', price='49.00', category=self.category,
             location=self.location, condition='8成新', seller=self.user,
@@ -877,9 +878,10 @@ class ListingFlowTests(TestCase):
             recipient=self.other_user, kind='demand_match', title='匹配提醒',
             message='发现便携键盘', demand=demand, item=self.item,
         )
-        DemandResponse.objects.create(
+        accepted_response = DemandResponse.objects.create(
             demand=demand, item=self.item, responder=self.user,
             message='可以在图书馆东门交付', status='accepted', match_score=92,
+            accepted_at=accepted_at,
         )
         DemandResponse.objects.create(
             demand=demand, item=second_item, responder=self.user,
@@ -908,6 +910,13 @@ class ListingFlowTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '求购匹配转化')
         self.assertContains(response, '提醒到响应')
+        self.assertContains(response, '都算一次确认')
+        self.assertContains(response, 'Order.demand_response')
+        self.assertContains(response, 'GiftApplication.demand_response')
+        self.assertNotContains(response, '没有任何东西把这次确认和一笔订单连起来')
+        confirmed_label = timezone.localtime(accepted_response.accepted_at).strftime('%Y-%m-%d %H:%M')
+        updated_label = timezone.localtime(accepted_response.updated_at).strftime('%Y-%m-%d %H:%M')
+        self.assertContains(response, confirmed_label)
 
         export = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
         self.assertEqual(export.status_code, 200)
@@ -920,6 +929,12 @@ class ListingFlowTests(TestCase):
             report,
         )
         self.assertIn('Order 的 demand_response_id', report)
+        stuck_line = next(
+            line for line in report.splitlines()
+            if '便携键盘' in line and '转化漏斗求购' in line
+        )
+        self.assertIn(confirmed_label, stuck_line)
+        self.assertNotIn(updated_label, stuck_line)
         self.assertNotIn('按 DemandResponse.updated_at 切窗口', report)
 
     def test_operations_dashboard_reports_notification_deduplication(self):

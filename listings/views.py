@@ -8781,7 +8781,7 @@ def operations_dashboard_export(request):
     for row in conversion['stuck_rows']['rows']:
         writer.writerow([
             row.response.item.title, row.response.demand.title,
-            row.response.updated_at.strftime('%Y-%m-%d %H:%M'),
+            timezone.localtime(row.response.accepted_at or row.response.updated_at).strftime('%Y-%m-%d %H:%M'),
             row.blocked_label,
             len((row.response.message or '').strip()),
         ])

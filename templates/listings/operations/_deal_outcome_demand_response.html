@@ -6,7 +6,7 @@
         <div><span class="eyebrow eyebrow-soft">Demand response conversion</span><h2>确认了求购响应之后，交易真的发生了吗</h2></div>
         <span class="ops-panel-hint">点了确认之后，有多少真的变成了订单</span>
     </div>
-    <p class="search-rhythm-note mb-3"><i class="bi bi-person-check me-1"></i><code>DemandResponse</code> 是站内唯一一条「卖家拿在售商品去接一个学生写的需求」的记录。<code>accept</code> 那一刻写了四件事：响应改成 <code>accepted</code>、给响应人记一次贡献、<strong>求购改成 <code>fulfilled</code></strong>、同条求购下其余 <code>pending</code> 响应全部批量改成 <code>rejected</code> 并逐一通知，通知原文写着「请继续进入商品详情完成预约或领取申请」。<strong>确认之后，没有任何东西把这次确认和一笔订单连起来。</strong></p>
+    <p class="search-rhythm-note mb-3"><i class="bi bi-person-check me-1"></i><code>DemandResponse</code> 是站内唯一一条「卖家拿在售商品去接一个学生写的需求」的记录。<code>accept</code> 会写入 <code>accepted_at</code>、给响应人记一次贡献、<strong>把求购改成 <code>fulfilled</code></strong>，并把同条求购下其余 <code>pending</code> 响应改成 <code>deferred</code> 后通知响应人。之后发布者从这条响应继续预约或领取申请时，<code>Order.demand_response</code> / <code>GiftApplication.demand_response</code> 会保留来源；历史统计按 <code>accepted_at</code> 切窗口，<code>accepted</code> 与 <code>superseded</code> 都算一次确认。</p>
     {% if not demand_response_conversion.has_data %}
     <div class="empty-inline">{{ demand_response_conversion.summary }}</div>
     {% else %}
@@ -137,7 +137,7 @@
                     <tr>
                         <td>{{ row.response.item.title }}</td>
                         <td>{{ row.response.demand.title }}</td>
-                        <td>{{ row.response.updated_at|date:'Y-m-d H:i' }}</td>
+                        <td>{% if row.response.accepted_at %}{{ row.response.accepted_at|date:'Y-m-d H:i' }}{% else %}{{ row.response.updated_at|date:'Y-m-d H:i' }}{% endif %}</td>
                         <td>{% if row.blocked_reason == 'still_walking' %}<span class="badge text-bg-warning">{{ demand_response_conversion.blocked_labels.still_walking }}</span>{% else %}{{ row.blocked_label }}{% endif %}</td>
                         <td>{{ row.response.message|length }}</td>
                     </tr>
