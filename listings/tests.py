@@ -914,6 +914,13 @@ class ListingFlowTests(TestCase):
         report = export.content.decode('utf-8-sig')
         self.assertIn('求购匹配转化', report)
         self.assertIn('分类表现,响应数,求购数,确认数,响应确认率（%）', report)
+        self.assertIn(
+            '按 DemandResponse.accepted_at 切窗口，'
+            'accepted 与 superseded 都进分母；withdrawn 不进分母',
+            report,
+        )
+        self.assertIn('Order 的 demand_response_id', report)
+        self.assertNotIn('按 DemandResponse.updated_at 切窗口', report)
 
     def test_operations_dashboard_reports_notification_deduplication(self):
         Notification.objects.create(

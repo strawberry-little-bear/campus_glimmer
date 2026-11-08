@@ -8649,17 +8649,17 @@ def operations_dashboard_export(request):
     writer.writerow(['口径与门槛'])
     writer.writerow([
         conversion['summary'],
-        '只读 DemandResponse 的 status、updated_at、message 长度，'
+        '只读 DemandResponse 的 status、accepted_at、message 长度，'
         'DemandPost 的 status，Item 的 is_available_now、trade_mode，'
-        '以及 Order 的 item_id、buyer_id、created_at、status，'
+        '以及 Order 的 demand_response_id、item_id、buyer_id、created_at、status，'
         '不改写任何一条响应、任何一条求购、任何一笔订单，'
         '不自动建订单、不把 fulfilled 的写入时机推到订单完成之后，'
         '不按用户做任何聚合或排名',
     ])
     writer.writerow([
         '周期内确认的求购响应', conversion['conversion']['total'], '',
-        '按 DemandResponse.updated_at 切窗口，即 accept 那一刻，'
-        'withdrawn 不进分母',
+        '按 DemandResponse.accepted_at 切窗口，'
+        'accepted 与 superseded 都进分母；withdrawn 不进分母',
     ])
     writer.writerow([
         '之后真的变成了订单', conversion['conversion']['converted_count'], '',
