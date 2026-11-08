@@ -190,7 +190,7 @@ campus_glimmer/
 | `profile_contact_shape.py` | 联系方式的形状：四个手写字段的填写率、站外可触达组合、长度分档与参与相关性（只报告） | 只读 |
 | `moderation_risk_tier_shape.py` | 复核分级的形状：三档各自的规模与结局、复核节奏相对各自目标、待复核超期、两套风险尺度的交叉与每条规则的档位产出（只报告） | 只读 |
 | `lost_found_lead_quality.py` | 失物招领线索的提交量、确认率、确认率指向分离与反馈填写率统计 | 读写 |
-| `demand_response_conversion.py` | 确认求购响应之后的订单转化、下单时延、订单结局与卡点统计 | 读写 |
+| `demand_response_conversion.py` | 确认求购响应之后的订单转化、下单时延、订单结局与卡点统计；新记录优先使用显式来源，旧记录保留兼容推断 | 读写 |
 | `item_image_coverage.py` | 在架商品的图片覆盖度与无图商品清单 | 读写 |
 | `delivery_handshake.py` | 当面交付两次确认的顺序、间隔、只点一半与挂起清单（只报告不改写） | 只报告 |
 | `order_deadline_reminders.py` | 订单确认截止与归还截止的等待分档、催收四种结局与距截止余量（只报告不改写） | 只报告 |
@@ -309,9 +309,9 @@ campus_glimmer/
 
 - **`test_demand_radar_phase_trend.py`**：学期纵向对比：归期、跳学期、薄格子与导出行
 
-- **`test_demand_response_conversion.py`**：只认「商品相同 + 买家是响应人 + 下单不早于确认」，响应说明只报写没写
+- **`test_demand_response_conversion.py`**：显式来源优先、旧订单兼容推断、同商品多响应可区分，响应说明只报写没写
 
-- **`test_demand_responses.py`**：求购响应的提交、确认与撤回流转
+- **`test_demand_responses.py`**：求购响应的提交、确认、撤回，以及已确认响应到预约的权限、幂等与来源关联
 
 - **`test_demand_task_aging.py`**：两支两个式子、updated_at 不能当状态变更时刻、空平台不报 0 天、看板导出
 
@@ -642,7 +642,7 @@ campus_glimmer/
 
 - **`relist-freshness-design.md`**：新鲜度欠账的四条证据与「先看板后改口径」的三条路
 
-- **`demand-response-conversion-design.md`**：确认求购响应之后交易真的发生了吗，分母是已确认响应数
+- **`demand-response-conversion-design.md`**：求购确认后如何直接承接交易、保存显式来源，以及兼容旧订单的转化口径
 
 - **`demand-task-aging-design.md`**：跟进任务派出去之后有人接手吗，两支两个式子
 

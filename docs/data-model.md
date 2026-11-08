@@ -22,13 +22,13 @@
 | 校园活动与报名 | `CampusCampaign`、`CampaignRegistration`、`CampaignUpdateMatch` | 有起止时间的专题活动、专题与在售商品的可选关联、用户逐次加入和退出的参与区间，以及主动订阅后的上新摘要命中缓冲；报名不创建订单或占用库存，命中也不预约商品 |
 | 学期日历 | `AcademicTerm`、`AcademicPhase`、`AcademicTermSnapshot` | 学期起止日期、按偏移天数划分的阶段规则、阶段级统计快照（已结束阶段由 `build_academic_calendar` 读取，进行中阶段实时算） |
 | 互动 | `Favorite`、`ItemAvailabilityWatch`、`Comment`、`PrivateMessage` | 收藏、有货提醒、公开留言和私信 |
-| 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`DeliveryConfirmation`、`Rating` | 交易预约、交付时间协商、状态事件、双方确认和完成后的评价 |
+| 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`DeliveryConfirmation`、`Rating` | 交易预约、交付时间协商、状态事件、双方确认和完成后的评价；求购承接生成的订单通过 `Order.demand_response` 保存来源 |
 | 交付开放时段风险 | 不新增表，读 `MeetingAppointment`、`CampusLocationServiceWindow`、`CampusLocationServiceException` | 把未来待确认或已确认的交付安排对照地点每周规则与单日例外，只提示人工核对，不改预约或地点配置 |
 | 校园开放规则配置审计 | 不新增表，读 `CampusLocation`、`CampusLocationServiceWindow`、`CampusLocationServiceException`、`CampusLocationServiceExceptionWindow` | 解释每周时段、跨午夜、重叠或相邻、单日例外形状与生命周期；五类配置信号只提示人工确认，不自动修复规则 |
 | 交易安全确认 | `OrderSafetyAcknowledgement` | 买卖双方对当前安全卡的版本化确认记录，按订单、角色和安全卡指纹唯一；历史记录保留用于审计 |
 | 订单阶段链路 | `OrderEvent`（状态流转事件） | 每次状态变化都会留下带时间戳的事件记录，运营看板据此还原“下单 → 确认 → 交付 → 成交 / 借出 → 归还”的阶段耗时 |
 | 搜索 | `SearchQuery`、`SearchClick`、`SearchImpression`、`SavedSearch`、`SearchSynonym` | 搜索需求、点击、曝光、保存搜索和联想词；无结果搜索会进入需求雷达 |
-| 需求撮合 | `DemandPost`、`DemandResponse` | 求购发布、商品响应、确认匹配和需求转化 |
+| 需求撮合 | `DemandPost`、`DemandResponse` | 求购发布、商品响应、确认匹配和需求转化；确认后的订单与领取申请分别通过 `demand_response` 反向关联来源 |
 | 机会流曝光 | `OpportunityImpression`、`OpportunityDismissal` | 一次机会流渲染落一行的「被看见」，和一次「不再显示」落的「不看了」；两者口径对偶，忽略率的分母来自前者 |
 | 通知 | `Notification`、`NotificationPreference` | 站内提醒、未读状态、阅读时间、通知偏好、求购关联、到期提醒和幂等键；通知类型包含商品生命周期提醒，可单独关闭。偏好开关先报形状；关闭后仍出现的历史通知再按发生时间与偏好行最后写入拆开，只给可疑下界，不把整行 `updated_at` 当成逐开关关闭时间 |
 | 互助贡献 | `CommunityContribution`、`ContributionMilestoneEvent` | 可审计的贡献积分流水，以及等级与徽章首次达成的事件台账；台账有全量覆盖审计和同类学期同阶段节奏对照，里程碑只作运营事实，不触发额外通知、排名或规则修改 |
