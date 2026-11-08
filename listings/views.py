@@ -13882,11 +13882,14 @@ def _expire_demand_posts():
     ).update(status='expired')
 
 
-def _demand_queryset():
+def _demand_queryset(include_inactive=False):
     _expire_demand_posts()
-    return DemandPost.objects.filter(status='active').select_related(
+    demands = DemandPost.objects.select_related(
         'requester', 'category', 'location',
     )
+    if not include_inactive:
+        demands = demands.filter(status='active')
+    return demands
 
 
 def _demand_match_items(demand):
@@ -13921,10 +13924,43 @@ def _demand_match_items(demand):
 def demand_list(request, mine=False):
     mine = mine or request.GET.get('mine') == '1'
     if mine and not request.user.is_authenticated:
-        return redirect('login')
-    demands = _demand_queryset()
+        return redirect(f"{reverse('login')}?{urlencode({'next': request.get_full_path()})}")
+
+    tab_configs = {
+        'all': {'status': None, 'label': '全部求购', 'result_title': '全部求购'},
+        'active': {'status': 'active', 'label': '寻找中', 'result_title': '正在寻找的求购'},
+        'fulfilled': {'status': 'fulfilled', 'label': '已找到', 'result_title': '已经找到的求购'},
+        'closed': {'status': 'closed', 'label': '已关闭', 'result_title': '已经关闭的求购'},
+        'expired': {'status': 'expired', 'label': '已过期', 'result_title': '已经过期的求购'},
+    }
+    selected_tab = request.GET.get('tab', 'all')
+    if selected_tab not in tab_configs:
+        selected_tab = 'all'
+    selected_tab_config = tab_configs[selected_tab]
+
+    demands = _demand_queryset(include_inactive=mine)
+    demand_counts = {
+        'all': 0, 'active': 0, 'fulfilled': 0, 'closed': 0, 'expired': 0,
+    }
     if mine:
         demands = demands.filter(requester=request.user)
+        demand_counts = demands.aggregate(
+            all=Count('pk'),
+            active=Count('pk', filter=Q(status='active')),
+            fulfilled=Count('pk', filter=Q(status='fulfilled')),
+            closed=Count('pk', filter=Q(status='closed')),
+            expired=Count('pk', filter=Q(status='expired')),
+        )
+        if selected_tab_config['status'] is not None:
+            demands = demands.filter(status=selected_tab_config['status'])
+        demands = demands.annotate(
+            response_count=Count('responses', distinct=True),
+            pending_response_count=Count(
+                'responses',
+                filter=Q(responses__status='pending'),
+                distinct=True,
+            ),
+        )
 
     search_query = request.GET.get('q', '').strip()[:120]
     category_id = request.GET.get('category', '').strip()
@@ -13951,6 +13987,8 @@ def demand_list(request, mine=False):
     page = Paginator(demands, 12).get_page(request.GET.get('page'))
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
+    if mine:
+        filter_params['tab'] = selected_tab
 
     categories = list(Category.objects.all())
     locations = list(CampusLocation.objects.filter(is_active=True))
@@ -13977,6 +14015,33 @@ def demand_list(request, mine=False):
         'ending': '即将截止',
         'popular': '浏览最多',
     }
+    demand_tab_links = []
+    if mine:
+        for key, config in tab_configs.items():
+            tab_params = filter_params.copy()
+            tab_params['tab'] = key
+            demand_tab_links.append({
+                'key': key,
+                'label': config['label'],
+                'count': demand_counts[key],
+                'query': tab_params.urlencode(),
+                'active': key == selected_tab,
+            })
+
+    if selected_tab == 'all':
+        demand_empty_title = '你还没有发布任何求购'
+        demand_empty_description = '发布第一条需求，让校园里的闲置主动来找你。'
+    else:
+        demand_empty_title = f'“{selected_tab_config["label"]}”状态下还没有求购'
+        demand_empty_description = '切换其他状态查看，或者发布一条新的求购需求。'
+
+    reset_params = {}
+    if mine:
+        reset_params['tab'] = selected_tab
+        if request.GET.get('mine') == '1':
+            reset_params['mine'] = '1'
+    reset_url = f'{request.path}?{urlencode(reset_params)}' if reset_params else request.path
+
     return render(request, 'listings/demand_list.html', {
         'demands': page,
         'page_obj': page,
@@ -13991,6 +14056,21 @@ def demand_list(request, mine=False):
         'demand_active_filters': active_filters,
         'demand_active_filter_count': len(active_filters),
         'demand_filter_query': filter_params.urlencode(),
+        'demand_counts': demand_counts,
+        'demand_tab_links': demand_tab_links,
+        'demand_selected_tab': selected_tab,
+        'demand_selected_tab_label': selected_tab_config['label'],
+        'demand_results_title': (
+            selected_tab_config['result_title'] if mine else '正在寻找的需求'
+        ),
+        'demand_empty_title': (
+            demand_empty_title if mine else '还没有匹配的求购信息'
+        ),
+        'demand_empty_description': (
+            demand_empty_description
+            if mine else '发布第一条需求，让校园里的闲置主动来找你。'
+        ),
+        'demand_reset_url': reset_url,
         'is_mine': mine,
     })
 

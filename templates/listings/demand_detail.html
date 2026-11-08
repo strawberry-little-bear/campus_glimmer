@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}{{ demand.title }} · 求购广场{% endblock %}
 {% block content %}
-<div class="mb-3"><a href="{% url 'demand_list' %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>返回求购广场</a></div>
+<div class="mb-3"><a href="{% if user.is_authenticated and demand.requester_id == user.id %}{% url 'my_demands' %}{% else %}{% url 'demand_list' %}{% endif %}" class="back-link"><i class="bi bi-arrow-left me-2"></i>{% if user.is_authenticated and demand.requester_id == user.id %}返回我的求购{% else %}返回求购广场{% endif %}</a></div>
 
 <div class="row g-4 align-items-start">
     <div class="col-lg-8">
@@ -23,7 +23,7 @@
             {% if user.is_authenticated and demand.requester_id != user.id and demand.status == 'active' %}<a class="btn btn-primary" href="{% url 'send_message' demand.requester.id %}"><i class="bi bi-chat-dots me-2"></i>联系求购者</a>{% endif %}
             {% if user.is_authenticated and demand.requester_id == user.id %}
             <div class="d-flex gap-2 flex-wrap mt-3">
-                <a class="btn btn-outline-primary" href="{% url 'edit_demand' demand.id %}"><i class="bi bi-pencil me-1"></i>编辑</a>
+                {% if demand.status == 'active' or demand.status == 'expired' %}<a class="btn btn-outline-primary" href="{% url 'edit_demand' demand.id %}"><i class="bi bi-pencil me-1"></i>{% if demand.status == 'expired' %}更新并重新上架{% else %}编辑{% endif %}</a>{% endif %}
                 {% if demand.status == 'active' %}
                 <form method="post" action="{% url 'close_demand' demand.id %}" class="d-inline">{% csrf_token %}<input type="hidden" name="status" value="fulfilled"><button class="btn btn-success" type="submit"><i class="bi bi-check2-circle me-1"></i>标记已找到</button></form>
                 <form method="post" action="{% url 'close_demand' demand.id %}" class="d-inline">{% csrf_token %}<input type="hidden" name="status" value="closed"><button class="btn btn-light" type="submit">关闭求购</button></form>
@@ -42,7 +42,7 @@
 </div>
 
 {% if is_demand_owner and demand_responses %}
-<section class="mt-5">
+<section class="mt-5" id="demand-responses">
     <div class="section-heading mb-3"><div><span class="eyebrow">RESPONSES</span><h2>收到的商品响应</h2></div><span class="text-muted small">按匹配时间查看</span></div>
     <div class="d-flex flex-column gap-3">
         {% for response in demand_responses %}
