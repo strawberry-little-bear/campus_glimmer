@@ -121,7 +121,7 @@ class SavedSearchLiveMatchLinkTests(TestCase):
         card = card_for(response, saved_search)
         # assertContains 不做查询串的百分号解码，所以按片段断言而不是整条 URL。
         self.assertContains(response, 'saved-search-metric-link')
-        for fragment in ('q=%E6%B5%8B%E8%AF%95', 'category=1'):
+        for fragment in ('q=%E6%B5%8B%E8%AF%95', f'category={self.category.pk}'):
             self.assertContains(response, fragment)
 
     def test_pending_match_count_stays_a_plain_number(self):

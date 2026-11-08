@@ -139,11 +139,12 @@ class ScoreBandTests(TestCase):
         self.location = CampusLocation.objects.create(name='分段地点')
 
     def fill_band(self, score, accepted, rejected, days_ago=1):
-        demand = DemandPost.objects.create(
-            requester=self.requester, title=f'分段求购 {score}',
-            description='用于分段统计', category=self.category, location=self.location,
-        )
+        decided_at = self.now - timedelta(days=days_ago)
         for index in range(accepted):
+            demand = DemandPost.objects.create(
+                requester=self.requester, title=f'分段求购 {score}-采纳-{index}',
+                description='用于分段统计', category=self.category, location=self.location,
+            )
             item = Item.objects.create(
                 title=f'分段商品 {score}-{index}', description='用于分段统计',
                 price=Decimal('50.00'), status='available',
@@ -154,10 +155,13 @@ class ScoreBandTests(TestCase):
                 match_score=score, match_reason='分类一致、地点一致',
             )
             DemandResponse.objects.filter(pk=response.pk).update(
-                created_at=self.now - timedelta(days=days_ago),
-                updated_at=self.now - timedelta(days=days_ago),
+                created_at=decided_at, updated_at=decided_at, accepted_at=decided_at,
             )
         for index in range(rejected):
+            demand = DemandPost.objects.create(
+                requester=self.requester, title=f'分段求购 {score}-拒绝-{index}',
+                description='用于分段统计', category=self.category, location=self.location,
+            )
             item = Item.objects.create(
                 title=f'分段拒件 {score}-{index}', description='用于分段统计',
                 price=Decimal('50.00'), status='available',
@@ -168,8 +172,7 @@ class ScoreBandTests(TestCase):
                 match_score=score, match_reason='分类一致、地点一致',
             )
             DemandResponse.objects.filter(pk=response.pk).update(
-                created_at=self.now - timedelta(days=days_ago),
-                updated_at=self.now - timedelta(days=days_ago),
+                created_at=decided_at, updated_at=decided_at,
             )
 
     def test_acceptance_is_reported_per_band_not_as_one_overall_rate(self):
@@ -220,12 +223,13 @@ class MonotonicityTests(TestCase):
         self.location = CampusLocation.objects.create(name='单调地点')
 
     def fill_band(self, score, accepted, rejected, reason='分类一致、地点一致'):
-        demand = DemandPost.objects.create(
-            requester=self.requester, title=f'单调求购 {score}',
-            description='用于单调性统计', category=self.category, location=self.location,
-        )
+        decided_at = self.now - timedelta(days=1)
         for index in range(accepted + rejected):
             status = 'accepted' if index < accepted else 'rejected'
+            demand = DemandPost.objects.create(
+                requester=self.requester, title=f'单调求购 {score}-{index}',
+                description='用于单调性统计', category=self.category, location=self.location,
+            )
             item = Item.objects.create(
                 title=f'单调商品 {score}-{index}', description='用于单调性统计',
                 price=Decimal('50.00'), status='available',
@@ -235,10 +239,10 @@ class MonotonicityTests(TestCase):
                 demand=demand, item=item, responder=self.seller, status=status,
                 match_score=score, match_reason=reason,
             )
-            DemandResponse.objects.filter(pk=response.pk).update(
-                created_at=self.now - timedelta(days=1),
-                updated_at=self.now - timedelta(days=1),
-            )
+            update_fields = {'created_at': decided_at, 'updated_at': decided_at}
+            if status == 'accepted':
+                update_fields['accepted_at'] = decided_at
+            DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
 
     def test_acceptance_rising_with_the_score_reads_as_a_working_score(self):
         self.fill_band(3, 2, 18)
@@ -289,12 +293,13 @@ class OverPromiseTests(TestCase):
         self.location = CampusLocation.objects.create(name='虚高地点')
 
     def fill(self, score, accepted, rejected):
-        demand = DemandPost.objects.create(
-            requester=self.requester, title=f'虚高求购 {score}',
-            description='用于虚高统计', category=self.category, location=self.location,
-        )
+        decided_at = self.now - timedelta(days=1)
         for index in range(accepted + rejected):
             status = 'accepted' if index < accepted else 'rejected'
+            demand = DemandPost.objects.create(
+                requester=self.requester, title=f'虚高求购 {score}-{index}',
+                description='用于虚高统计', category=self.category, location=self.location,
+            )
             item = Item.objects.create(
                 title=f'虚高商品 {score}-{index}', description='用于虚高统计',
                 price=Decimal('50.00'), status='available',
@@ -304,10 +309,10 @@ class OverPromiseTests(TestCase):
                 demand=demand, item=item, responder=self.seller, status=status,
                 match_score=score, match_reason='分类一致、地点一致',
             )
-            DemandResponse.objects.filter(pk=response.pk).update(
-                created_at=self.now - timedelta(days=1),
-                updated_at=self.now - timedelta(days=1),
-            )
+            update_fields = {'created_at': decided_at, 'updated_at': decided_at}
+            if status == 'accepted':
+                update_fields['accepted_at'] = decided_at
+            DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
 
     def test_a_thin_high_score_pool_withholds_the_verdict(self):
         self.fill(9, 2, 1)
@@ -348,12 +353,13 @@ class DimensionEffectTests(TestCase):
         self.location = CampusLocation.objects.create(name='维度地点')
 
     def fill(self, score, reason, accepted, rejected):
-        demand = DemandPost.objects.create(
-            requester=self.requester, title=f'维度求购 {score}',
-            description='用于维度统计', category=self.category, location=self.location,
-        )
+        decided_at = self.now - timedelta(days=1)
         for index in range(accepted + rejected):
             status = 'accepted' if index < accepted else 'rejected'
+            demand = DemandPost.objects.create(
+                requester=self.requester, title=f'维度求购 {score}-{index}',
+                description='用于维度统计', category=self.category, location=self.location,
+            )
             item = Item.objects.create(
                 title=f'维度商品 {score}-{index}', description='用于维度统计',
                 price=Decimal('50.00'), status='available',
@@ -363,10 +369,10 @@ class DimensionEffectTests(TestCase):
                 demand=demand, item=item, responder=self.seller, status=status,
                 match_score=score, match_reason=reason,
             )
-            DemandResponse.objects.filter(pk=response.pk).update(
-                created_at=self.now - timedelta(days=1),
-                updated_at=self.now - timedelta(days=1),
-            )
+            update_fields = {'created_at': decided_at, 'updated_at': decided_at}
+            if status == 'accepted':
+                update_fields['accepted_at'] = decided_at
+            DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
 
     def test_a_dimension_that_separates_outcomes_reports_a_positive_gap(self):
         # 带「地点一致」的 20 条采纳 14 条 = 70%，不带的 20 条采纳 4 条 = 20%。
@@ -424,7 +430,10 @@ class BoundaryTests(TestCase):
         self.category = Category.objects.create(name='边界分类')
         self.location = CampusLocation.objects.create(name='边界地点')
 
-    def make_response(self, status, score=8, reason='分类一致、地点一致', days_ago=1):
+    def make_response(
+        self, status, score=8, reason='分类一致、地点一致', days_ago=1,
+        created_days_ago=None, updated_days_ago=None,
+    ):
         demand = DemandPost.objects.create(
             requester=self.requester, title=f'边界求购 {status}',
             description='用于边界统计', category=self.category, location=self.location,
@@ -438,10 +447,19 @@ class BoundaryTests(TestCase):
             demand=demand, item=item, responder=self.seller, status=status,
             match_score=score, match_reason=reason,
         )
-        DemandResponse.objects.filter(pk=response.pk).update(
-            created_at=self.now - timedelta(days=days_ago),
-            updated_at=self.now - timedelta(days=days_ago),
+        decision_at = self.now - timedelta(days=days_ago)
+        created_at = self.now - timedelta(
+            days=(days_ago if created_days_ago is None else created_days_ago),
         )
+        updated_at = self.now - timedelta(
+            days=(days_ago if updated_days_ago is None else updated_days_ago),
+        )
+        update_fields = {'created_at': created_at, 'updated_at': updated_at}
+        if status in {'accepted', 'superseded'}:
+            update_fields['accepted_at'] = decision_at
+        if status == 'superseded':
+            update_fields['superseded_at'] = updated_at
+        DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
         return response
 
     def test_a_pending_response_is_not_a_decision_about_the_score(self):
@@ -466,7 +484,23 @@ class BoundaryTests(TestCase):
     def test_a_recent_decision_on_an_old_response_still_counts(self):
         # 求购人是今天才决定的，创建时间在四十天前也照样算——
         # 这个模块数的是决断时刻，不是响应时刻。
-        self.make_response('accepted', days_ago=40)
+        self.make_response('accepted', days_ago=1, created_days_ago=40)
+
+        quality = build_demand_match_quality(days=30, now=self.now)
+        self.assertEqual(quality['metrics']['decided_responses'], 1)
+
+    def test_a_superseded_response_remains_a_historical_acceptance(self):
+        # 商品失效只让这次匹配不再有效，不会把发布者当初的采纳改写成拒绝。
+        self.make_response('superseded', days_ago=1)
+
+        quality = build_demand_match_quality(days=30, now=self.now)
+        self.assertEqual(quality['metrics']['decided_responses'], 1)
+        self.assertEqual(quality['metrics']['accepted_count'], 1)
+        self.assertEqual(quality['metrics']['acceptance_rate'], 100.0)
+
+    def test_reopening_does_not_move_an_old_acceptance_into_this_period(self):
+        # updated_at 是重开时间；采纳仍属于 accepted_at 所在的旧周期。
+        self.make_response('superseded', days_ago=40, updated_days_ago=1)
 
         quality = build_demand_match_quality(days=30, now=self.now)
         self.assertEqual(quality['metrics']['decided_responses'], 0)
@@ -486,19 +520,19 @@ class DashboardSurfaceTests(TestCase):
 
     def build_rows(self):
         """低分段 10%、高分段 70%，让曲线既是可读档，也让维度效果拉得开。"""
-        demand = DemandPost.objects.create(
-            requester=self.requester, title='呈现求购', description='用于看板呈现',
-            category=self.category, location=self.location,
-            min_price=Decimal('10.00'), max_price=Decimal('200.00'),
-        )
         plan = [(3, 2, 18, '分类一致'), (10, 14, 6, '分类一致、地点一致')]
         for score, accepted, rejected, reason in plan:
             for index in range(accepted):
-                self.make_response(demand, score, 'accepted', reason, index)
+                self.make_response(score, 'accepted', reason, index)
             for index in range(rejected):
-                self.make_response(demand, score, 'rejected', reason, index)
+                self.make_response(score, 'rejected', reason, index)
 
-    def make_response(self, demand, score, status, reason, index):
+    def make_response(self, score, status, reason, index):
+        demand = DemandPost.objects.create(
+            requester=self.requester, title=f'呈现求购 {score}-{status}-{index}',
+            description='用于看板呈现', category=self.category, location=self.location,
+            min_price=Decimal('10.00'), max_price=Decimal('200.00'),
+        )
         item = Item.objects.create(
             title=f'呈现商品 {score}-{status}-{index}', description='用于看板呈现',
             price=Decimal('50.00'), status='available',
@@ -508,10 +542,13 @@ class DashboardSurfaceTests(TestCase):
             demand=demand, item=item, responder=self.staff, status=status,
             match_score=score, match_reason=reason,
         )
-        DemandResponse.objects.filter(pk=response.pk).update(
-            created_at=self.now - timedelta(days=1),
-            updated_at=self.now - timedelta(days=1),
-        )
+        update_fields = {
+            'created_at': self.now - timedelta(days=1),
+            'updated_at': self.now - timedelta(days=1),
+        }
+        if status == 'accepted':
+            update_fields['accepted_at'] = self.now - timedelta(days=1)
+        DemandResponse.objects.filter(pk=response.pk).update(**update_fields)
 
     def test_the_dashboard_renders_the_match_quality_section(self):
         self.build_rows()

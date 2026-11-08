@@ -52,10 +52,11 @@ MATCH_DIMENSIONS = (
     ('keyword', '关键词相近'),
 )
 
-# A decided response is one the requester actually acted on. A pending response
-# says nothing about the score, and a withdrawn one says nothing about the
-# requester's judgement.
-DECIDED_STATUSES = ('accepted', 'rejected')
+# A response that was accepted remains a positive signal after its item fails
+# and the demand reopens. ``superseded`` means the choice is no longer current,
+# not that the requester changed their mind.
+HISTORICAL_ACCEPTED_STATUSES = ('accepted', 'superseded')
+DECIDED_STATUSES = (*HISTORICAL_ACCEPTED_STATUSES, 'rejected')
 
 # Fixed score bands rather than one band per possible score. The score spans 2
 # to 11 and a single score carries too few responses to read, while an
@@ -102,9 +103,15 @@ def _band_of(score):
 
 
 def _decided_responses(start, end):
-    return DemandResponse.objects.filter(
-        updated_at__gte=start, updated_at__lte=end, status__in=DECIDED_STATUSES,
+    accepted_in_period = Q(
+        status__in=HISTORICAL_ACCEPTED_STATUSES,
+        accepted_at__gte=start,
+        accepted_at__lte=end,
     )
+    rejected_in_period = Q(
+        status='rejected', updated_at__gte=start, updated_at__lte=end,
+    )
+    return DemandResponse.objects.filter(accepted_in_period | rejected_in_period)
 
 
 def _build_score_bands(responses):
@@ -114,7 +121,7 @@ def _build_score_bands(responses):
     # 每个分段的四格一个都没换。
     rows = responses.values('match_score').annotate(
         count=Count('id'),
-        accepted=Count('id', filter=Q(status='accepted')),
+        accepted=Count('id', filter=Q(status__in=HISTORICAL_ACCEPTED_STATUSES)),
     )
     band_counts = {}
     for row in rows:
@@ -163,7 +170,8 @@ def _build_dimension_effect(responses, total, accepted_count):
             'id', filter=Q(match_reason__contains=marker),
         )
         aggregates['with_accepted_%s' % key] = Count(
-            'id', filter=Q(match_reason__contains=marker, status='accepted'),
+            'id',
+            filter=Q(match_reason__contains=marker, status__in=HISTORICAL_ACCEPTED_STATUSES),
         )
     counts = responses.aggregate(**aggregates)
 
@@ -330,11 +338,11 @@ def build_demand_match_quality(days=30, now=None):
     start = _period_start(days, timezone.localdate(now))
 
     responses = _decided_responses(start, now)
-    # 三个头条计数原本各发一次 COUNT，而 accepted + rejected 正好铺满 total
-    # （`_decided_responses` 只收这两种状态）。合成一次聚合拿齐，省两次往返。
+    # 三个头条计数原本各发一次 COUNT，而当前确认、历史确认与拒绝正好铺满
+    # `_decided_responses` 的结果。合成一次聚合拿齐，省两次往返。
     headline = responses.aggregate(
         total=Count('id'),
-        accepted_count=Count('id', filter=Q(status='accepted')),
+        accepted_count=Count('id', filter=Q(status__in=HISTORICAL_ACCEPTED_STATUSES)),
         rejected_count=Count('id', filter=Q(status='rejected')),
     )
     total = headline['total']

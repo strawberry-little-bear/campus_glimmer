@@ -802,7 +802,7 @@
 <a id="order-g12"></a>
 
 <details>
-<summary>求购响应确认之后交易如何接上（40 条，含缩进子项）</summary>
+<summary>求购响应确认之后交易如何接上（42 条，含缩进子项）</summary>
 
 - 求购响应确认之后，交易有没有真的接上，第一次可以被系统直接回答。
   - `DemandResponse` 是卖家拿在售商品去接一个学生写下的需求。`review_demand_response` 的 `accept` 分支把响应改成 `accepted`、写入 `accepted_at`、给响应人记录贡献、把求购改成 `fulfilled`，并把同一条求购下其余待处理响应改成暂时停用的 `deferred`；只有发布者显式拒绝才进入 `rejected`。
