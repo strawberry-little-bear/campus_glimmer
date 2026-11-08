@@ -52,7 +52,7 @@
                     <h3 class="h5 mb-1"><a href="{% url 'item_detail' response.item.id %}">{{ response.item.title }}</a></h3>
                     <div class="small text-muted">{{ response.responder.username }} · 匹配分 {{ response.match_score }} · {{ response.match_reason }}</div>
                 </div>
-                <span class="badge {% if response.status == 'accepted' %}text-bg-success{% elif response.status == 'rejected' %}text-bg-secondary{% else %}text-bg-warning{% endif %}">{{ response.get_status_display }}</span>
+                <span class="badge {% if response.status == 'accepted' %}text-bg-success{% elif response.status == 'deferred' %}text-bg-warning{% elif response.status == 'superseded' %}text-bg-light border{% elif response.status == 'rejected' or response.status == 'withdrawn' %}text-bg-secondary{% else %}text-bg-info{% endif %}">{{ response.get_status_display }}</span>
             </div>
             {% if response.message %}<p class="mb-2 mt-2">{{ response.message|linebreaksbr }}</p>{% endif %}
             {% if response.status == 'pending' and demand.status == 'active' %}
@@ -75,6 +75,14 @@
                     {% endif %}
                 {% elif not response.item.is_available_now %}
                 <span class="small text-muted"><i class="bi bi-slash-circle me-1"></i>响应商品当前不可预约</span>
+                {% if can_reopen_demand_response %}
+                <form method="post" action="{% url 'reopen_demand_response' demand.id response.id %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-arrow-repeat me-1"></i>重新选择响应</button>
+                </form>
+                {% elif demand_deadline_passed %}
+                <span class="small text-danger">求购截止时间已过，请重新发布后再选择响应。</span>
+                {% endif %}
                 {% else %}
                 <span class="small text-success"><i class="bi bi-check2-circle me-1"></i>已确认匹配，可以直接继续交易</span>
                 <a class="btn btn-sm btn-success" href="{% url 'create_order' response.item.id %}?demand_response={{ response.id }}">{% if response.item.trade_mode == 'free' %}<i class="bi bi-gift me-1"></i>申请领取{% elif response.item.trade_mode == 'borrow' %}<i class="bi bi-arrow-repeat me-1"></i>继续借用{% else %}<i class="bi bi-calendar2-check me-1"></i>继续预约{% endif %}</a>

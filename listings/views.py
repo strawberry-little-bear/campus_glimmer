@@ -14324,7 +14324,9 @@ def respond_to_demand(request, demand_id, item_id):
                 return redirect('demand_detail', demand_id=locked_demand.id)
 
             response = DemandResponse.objects.select_for_update(of=('self',)).filter(
-                demand=locked_demand, item=locked_item,
+                demand=locked_demand,
+                item=locked_item,
+                status__in=['pending', 'accepted', 'deferred'],
             ).first()
             if response and response.status in {'pending', 'accepted'}:
                 messages.info(request, '你已经响应过这条求购信息。')
@@ -14394,9 +14396,13 @@ def review_demand_response(request, response_id, action):
             if not match:
                 messages.info(request, '商品已经不再满足这条求购的条件。')
                 return redirect('demand_detail', demand_id=locked_demand.id)
+            now = timezone.now()
             locked_response.status = 'accepted'
+            locked_response.accepted_at = now
             locked_response.match_score, locked_response.match_reason = match
-            locked_response.save(update_fields=['status', 'match_score', 'match_reason', 'updated_at'])
+            locked_response.save(update_fields=[
+                'status', 'accepted_at', 'match_score', 'match_reason', 'updated_at',
+            ])
             record_demand_response_contribution(locked_response)
             locked_demand.status = 'fulfilled'
             locked_demand.save(update_fields=['status', 'updated_at'])
@@ -14404,14 +14410,14 @@ def review_demand_response(request, response_id, action):
                 demand=locked_demand, status='pending',
             ).exclude(pk=locked_response.pk).select_related('responder', 'item')
             for other in other_responses:
-                other.status = 'rejected'
+                other.status = 'deferred'
                 other.save(update_fields=['status', 'updated_at'])
                 create_notification(
                     other.responder,
                     actor=request.user,
                     kind='demand_response',
-                    title='求购响应未被采纳',
-                    message=f'求购“{locked_demand.title}”已经确认了其他响应，感谢你的参与。',
+                    title='求购响应暂时停用',
+                    message=f'求购“{locked_demand.title}”暂时确认了其他响应；如果发布者重新选择，你的响应会再次进入待处理。',
                     item=other.item,
                     demand=locked_demand,
                     target_url=reverse('demand_detail', args=[locked_demand.id]),
@@ -14442,6 +14448,103 @@ def review_demand_response(request, response_id, action):
             )
             messages.success(request, '已将这条响应标记为未采纳。')
     return redirect('demand_detail', demand_id=response.demand_id)
+
+
+@login_required
+def reopen_demand_response(request, demand_id, response_id):
+    demand = get_object_or_404(DemandPost, id=demand_id, requester=request.user)
+    response = get_object_or_404(
+        DemandResponse.objects.select_related('demand', 'item', 'responder'),
+        id=response_id,
+        demand=demand,
+    )
+    if request.method != 'POST':
+        return redirect('demand_detail', demand_id=demand.id)
+
+    now = timezone.now()
+    with transaction.atomic():
+        locked_demand = DemandPost.objects.select_for_update(of=('self',)).get(pk=demand.id)
+        locked_response = DemandResponse.objects.select_for_update(of=('self',)).select_related(
+            'demand', 'item', 'responder',
+        ).get(pk=response.id)
+        locked_item = Item.objects.select_for_update(of=('self',)).get(pk=locked_response.item_id)
+
+        if locked_response.status == 'superseded':
+            messages.info(request, '这条响应已经重新选择过了。')
+            return redirect('demand_detail', demand_id=locked_demand.id)
+        if locked_response.status != 'accepted' or locked_demand.status != 'fulfilled':
+            messages.info(request, '只有当前已确认且仍在等待交易的响应可以重新选择。')
+            return redirect('demand_detail', demand_id=locked_demand.id)
+        if locked_demand.expires_at and locked_demand.expires_at <= now:
+            messages.info(request, '求购已经超过截止时间，请重新发布求购后再选择响应。')
+            return redirect('demand_detail', demand_id=locked_demand.id)
+        if locked_item.is_available_now:
+            messages.info(request, '响应商品已经恢复可预约，可以直接继续交易。')
+            return redirect('demand_detail', demand_id=locked_demand.id)
+        if Order.objects.filter(demand_response=locked_response).exists():
+            messages.info(request, '这次匹配已经创建交易预约，不能重新选择。')
+            return redirect('demand_detail', demand_id=locked_demand.id)
+        if GiftApplication.objects.filter(demand_response=locked_response).exists():
+            messages.info(request, '这次匹配已经提交领取申请，不能重新选择。')
+            return redirect('demand_detail', demand_id=locked_demand.id)
+
+        locked_response.status = 'superseded'
+        locked_response.superseded_at = now
+        locked_response.save(update_fields=['status', 'superseded_at', 'updated_at'])
+
+        locked_demand.status = 'active'
+        locked_demand.reopen_count += 1
+        locked_demand.last_reopened_at = now
+        locked_demand.save(update_fields=[
+            'status', 'reopen_count', 'last_reopened_at', 'updated_at',
+        ])
+
+        reactivated = []
+        deferred_responses = DemandResponse.objects.select_for_update(of=('self',)).filter(
+            demand=locked_demand, status='deferred',
+        ).exclude(pk=locked_response.pk).select_related('responder', 'item')
+        for other in deferred_responses:
+            if other.item is None or not other.item.is_available_now:
+                continue
+            other.status = 'pending'
+            other.save(update_fields=['status', 'updated_at'])
+            reactivated.append(other)
+
+        create_notification(
+            locked_response.responder,
+            actor=request.user,
+            kind='demand_response',
+            title='求购已重新选择响应',
+            message=f'“{locked_demand.title}”对应的商品已不可预约，发布者已重新开放求购。',
+            item=locked_item,
+            demand=locked_demand,
+            target_url=reverse('demand_detail', args=[locked_demand.id]),
+            dedupe_key=f'demand-response-reopened-{locked_response.id}-{locked_demand.reopen_count}',
+            dedupe_forever=True,
+        )
+        for other in reactivated:
+            create_notification(
+                other.responder,
+                actor=request.user,
+                kind='demand_response',
+                title='你的求购响应恢复待处理',
+                message=f'求购“{locked_demand.title}”已重新开放，你的商品响应再次进入待处理。',
+                item=other.item,
+                demand=locked_demand,
+                target_url=reverse('demand_detail', args=[locked_demand.id]),
+                dedupe_key=f'demand-response-reactivated-{other.id}-{locked_demand.reopen_count}',
+                dedupe_forever=True,
+            )
+
+    if reactivated:
+        messages.success(
+            request,
+            f'已重新开放求购，并恢复 {len(reactivated)} 条仍可交易的响应。',
+        )
+    else:
+        messages.success(request, '已重新开放求购，可以等待新的商品响应。')
+    return redirect('demand_detail', demand_id=demand.id)
+
 
 @login_required
 def submit_demand_feedback(request, response_id):
@@ -14505,7 +14608,8 @@ def demand_detail(request, demand_id):
     demand = get_object_or_404(
         DemandPost.objects.select_related('requester', 'category', 'location'), id=demand_id,
     )
-    if demand.status == 'active' and demand.expires_at and demand.expires_at <= timezone.now():
+    now = timezone.now()
+    if demand.status == 'active' and demand.expires_at and demand.expires_at <= now:
         demand.status = 'expired'
         demand.save(update_fields=['status', 'updated_at'])
     elif demand.status == 'active':
@@ -14536,6 +14640,17 @@ def demand_detail(request, demand_id):
             my_demand_feedback = getattr(my_response, 'feedback', None)
 
     demand_feedback = getattr(accepted_response, 'feedback', None) if accepted_response else None
+    demand_deadline_passed = bool(demand.expires_at and demand.expires_at <= now)
+    can_reopen_demand_response = bool(
+        is_demand_owner
+        and accepted_response
+        and demand.status == 'fulfilled'
+        and accepted_response.item is not None
+        and not accepted_response.item.is_available_now
+        and not getattr(accepted_response, 'order', None)
+        and not getattr(accepted_response, 'gift_application', None)
+        and not demand_deadline_passed
+    )
     return render(request, 'listings/demand_detail.html', {
         'demand': demand,
         'recommended_items': _demand_match_items(demand) if demand.status == 'active' else [],
@@ -14549,6 +14664,8 @@ def demand_detail(request, demand_id):
             MutualAidFeedbackForm()
             if is_demand_owner and accepted_response and not demand_feedback else None
         ),
+        'can_reopen_demand_response': can_reopen_demand_response,
+        'demand_deadline_passed': demand_deadline_passed,
     })
 
 

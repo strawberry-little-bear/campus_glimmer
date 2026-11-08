@@ -10,6 +10,7 @@ urlpatterns = [
     path('demand/<int:demand_id>/edit/', views.edit_demand, name='edit_demand'),
     path('demand/<int:demand_id>/close/', views.close_demand, name='close_demand'),
     path('demand/<int:demand_id>/respond/<int:item_id>/', views.respond_to_demand, name='respond_to_demand'),
+    path('demand/<int:demand_id>/reopen-response/<int:response_id>/', views.reopen_demand_response, name='reopen_demand_response'),
     path('demand-responses/<int:response_id>/feedback/', views.submit_demand_feedback, name='submit_demand_feedback'),
     path('demand-responses/<int:response_id>/<str:action>/', views.review_demand_response, name='review_demand_response'),
     path('lost-found/', views.lost_found_list, name='lost_found_list'),

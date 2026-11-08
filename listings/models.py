@@ -2540,6 +2540,8 @@ class DemandPost(models.Model):
     expires_at = models.DateTimeField('需求截止时间', null=True, blank=True)
     status = models.CharField('状态', max_length=20, choices=STATUS_CHOICES, default='active')
     view_count = models.PositiveIntegerField('浏览次数', default=0)
+    reopen_count = models.PositiveIntegerField('重新选择次数', default=0)
+    last_reopened_at = models.DateTimeField('最近重新选择时间', null=True, blank=True)
     created_at = models.DateTimeField('发布时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
@@ -3012,7 +3014,9 @@ class DemandResponse(models.Model):
     STATUS_CHOICES = (
         ('pending', '待处理'),
         ('accepted', '已确认匹配'),
+        ('deferred', '因其他响应暂时停用'),
         ('rejected', '未采纳'),
+        ('superseded', '已被重新选择'),
         ('withdrawn', '已撤回'),
     )
 
@@ -3029,6 +3033,8 @@ class DemandResponse(models.Model):
     match_score = models.PositiveSmallIntegerField('匹配分数', default=0)
     match_reason = models.CharField('匹配依据', max_length=200, blank=True)
     status = models.CharField('响应状态', max_length=20, choices=STATUS_CHOICES, default='pending')
+    accepted_at = models.DateTimeField('确认匹配时间', null=True, blank=True)
+    superseded_at = models.DateTimeField('被替代时间', null=True, blank=True)
     created_at = models.DateTimeField('响应时间', auto_now_add=True)
     updated_at = models.DateTimeField('更新时间', auto_now=True)
 
@@ -3038,7 +3044,14 @@ class DemandResponse(models.Model):
         ordering = ['-created_at']
         constraints = [
             models.UniqueConstraint(
-                fields=['demand', 'item'], name='unique_demand_response_item',
+                fields=['demand', 'item'],
+                condition=models.Q(status__in=['pending', 'accepted', 'deferred']),
+                name='unique_current_demand_response_item',
+            ),
+            models.UniqueConstraint(
+                fields=['demand'],
+                condition=models.Q(status='accepted'),
+                name='unique_current_accepted_demand_response',
             ),
         ]
         indexes = [

@@ -8,7 +8,7 @@
 1. 一笔订单算不算「这条响应带来的」，只认商品相同 + 买家是求购发布者 + 下单不早于确认。
 2. 分母是已确认的响应数，排除 `withdrawn`，不是求购数也不是响应总数。
 3. 成交看 `completed` / `returned`，`cancelled` 单独一类。
-4. 从确认到下单的间隔按 `Order.created_at` 减响应的 `updated_at` 算，分档按小时起步。
+4. 从确认到下单的间隔按 `Order.created_at` 减显式 `accepted_at` 算，分档按小时起步。
 5. 没有订单的那些，卡在哪三类，顺序即优先级。
 6. 响应说明只报「写了没写」和长度，一个字符都不读。
 7. 不按用户聚合、不排名。
@@ -64,18 +64,17 @@ class DemandResponseConversionTests(TestCase):
 
     def make_response(self, demand, item, *, responder=None, status='accepted',
                       confirmed_days_ago=5, message=''):
-        """建一条响应。`updated_at` 是 auto_now，建完再回填成确认时刻。"""
+        """建一条响应，并显式回填确认时刻。"""
         response = DemandResponse.objects.create(
             demand=demand, item=item, responder=responder or item.seller,
             message=message, match_score=90, status='pending',
         )
         response.status = status
         response.save(update_fields=['status'])
-        # `updated_at` 是 auto_now，save() 会把它改回墙上时间，只能走 .update() 绕开。
-        # 而它正是确认时刻——accept 分支 save(update_fields=[..., 'updated_at']) 带的
-        # auto_now，所以回填之后它就是这次确认发生的时刻。
+        confirmed_at = timezone.now() - timedelta(days=confirmed_days_ago)
         DemandResponse.objects.filter(pk=response.pk).update(
-            updated_at=timezone.now() - timedelta(days=confirmed_days_ago),
+            updated_at=confirmed_at,
+            accepted_at=confirmed_at if status in {'accepted', 'superseded'} else None,
         )
         response.refresh_from_db()
         return response
@@ -103,7 +102,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item()
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester)
-        order.created_at = response.updated_at + timedelta(hours=3)
+        order.created_at = response.accepted_at + timedelta(hours=3)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -111,13 +110,22 @@ class DemandResponseConversionTests(TestCase):
         self.assertEqual(report['conversion']['converted_count'], 1)
         self.assertEqual(report['conversion']['conversion_rate'], 100.0)
 
+    def test_superseded_confirmation_stays_in_the_historical_denominator(self):
+        demand = self.make_demand()
+        item = self.make_item()
+        self.make_response(demand, item, status='superseded')
+
+        report = build_demand_response_conversion(days=30)
+        self.assertEqual(report['conversion']['total'], 1)
+        self.assertEqual(report['conversion']['converted_count'], 0)
+
     def test_order_created_before_the_confirmation_is_not_a_conversion(self):
         # 下单早于确认，说明这笔订单和这次确认没有关系，是买家自己摸过来的。
         demand = self.make_demand()
         item = self.make_item()
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester)
-        order.created_at = response.updated_at - timedelta(hours=1)
+        order.created_at = response.accepted_at - timedelta(hours=1)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -219,7 +227,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item(trade_mode='borrow')
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester, status='returned')
-        order.created_at = response.updated_at + timedelta(hours=2)
+        order.created_at = response.accepted_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -233,7 +241,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item()
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester, status='cancelled')
-        order.created_at = response.updated_at + timedelta(hours=2)
+        order.created_at = response.accepted_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -247,7 +255,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item()
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester, status='pending')
-        order.created_at = response.updated_at + timedelta(hours=2)
+        order.created_at = response.accepted_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -261,7 +269,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item()
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester)
-        order.created_at = response.updated_at + timedelta(hours=2)
+        order.created_at = response.accepted_at + timedelta(hours=2)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -290,7 +298,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item()
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester)
-        order.created_at = response.updated_at + timedelta(days=30)
+        order.created_at = response.accepted_at + timedelta(days=30)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -379,7 +387,8 @@ class DemandResponseConversionTests(TestCase):
         demand = self.make_demand()
         for index in range(STUCK_LIST_LIMIT + 3):
             item = self.make_item()
-            self.make_response(demand, item)
+            status = 'accepted' if index == 0 else 'superseded'
+            self.make_response(demand, item, status=status)
 
         report = build_demand_response_conversion(days=30)
         stuck = report['stuck_rows']
@@ -396,7 +405,7 @@ class DemandResponseConversionTests(TestCase):
             item = self.make_item(trade_mode=trade_mode)
             response = self.make_response(demand, item)
             order = self.make_order(item, response.demand.requester)
-            order.created_at = response.updated_at + timedelta(hours=1)
+            order.created_at = response.accepted_at + timedelta(hours=1)
             order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)
@@ -503,7 +512,7 @@ class DemandResponseConversionTests(TestCase):
         item = self.make_item()
         response = self.make_response(demand, item)
         order = self.make_order(item, response.demand.requester)
-        order.created_at = response.updated_at + timedelta(hours=4)
+        order.created_at = response.accepted_at + timedelta(hours=4)
         order.save(update_fields=['created_at'])
 
         report = build_demand_response_conversion(days=30)

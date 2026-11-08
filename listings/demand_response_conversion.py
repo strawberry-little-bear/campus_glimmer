@@ -1,40 +1,15 @@
 # -*- coding: utf-8 -*-
-"""确认了求购响应之后，交易真的发生了吗。
+"""统计求购响应被确认之后，是否真的接上了交易。
 
-`DemandResponse` 是站内唯一一条「卖家拿在售商品去接一个学生写的需求」的记录。写入路径
-三条，`review_demand_response` 的 `accept` 分支是终点：响应改成 `accepted`、给响应人记一次
-贡献、**求购改成 `fulfilled`**、同一条求购下其余 `pending` 的响应全部批量改成 `rejected`
-并逐一通知。通知原文写着「请继续进入商品详情完成预约或领取申请」。
+`DemandResponse` 记录卖家拿在售商品响应求购。发布者确认时写入 `accepted_at`、把求购改成
+`fulfilled`，并把其他待处理响应改成临时状态 `deferred`。如果确认商品在生成订单或领取申请前
+失效，发布者可以显式重新选择：旧确认进入 `superseded`，求购回到 `active`，仍可用的 `deferred`
+响应恢复为 `pending`。已有交易记录或求购已截止时不开放重新选择。
 
-**确认之后，没有任何东西把这次确认和一笔订单连起来。**
-
-`Order` 模型里没有一个字段指向 `DemandResponse`，也没有一个字段指向 `DemandPost`。
-`create_order` 是从商品详情页发起的普通预约：校验 `is_available_now`、校验没有进行中的订单、
-分流免费/借用分支，然后建 `Order`。这条路径上没有任何一处问过「这个买家是不是刚刚确认了
-某个求购响应」。从确认到下单，中间全靠用户自己记住、自己摸回商品详情页、自己再走一遍预约。
-
-于是站内同时住着两个关于「这条求购成了没有」的说法，而且它们互相不知道。一边是
-`DemandPost.status` 在 `accept` 那一刻就变成 `fulfilled`——此后这条求购从所有「寻找中」的
-列表里消失、从需求雷达的候选池里消失；另一边是 `Order` 那边什么都没有发生，交易可能十分钟
-后就成了，也可能再也没有发生。**`fulfilled` 这个词现在描述的是「有人点了确认」，不是
-「有人买到了」。**
-
-全站唯一一个按 `DemandPost.status` 做的漏斗（`analytics.py` 的
-`_build_demand_match_insights`）把响应数、处理数、确认响应数一级一级报下来，到「确认」这
-一级就是终点了。运营看到的是一个确认率，看不到确认之后有多少真的变成了订单。确认率高而
-成交低，说明流程断在中段；这两个数现在分居两处，谁也说不清。
-
-已经存在的两个统计都只摸到这个缺口的一侧，都没有跨过去。`demand_match_quality.py` 回答
-「平台自己打的匹配分准不准」，拿 `match_score` 和求购发布者的接受/拒绝做对照，它不关心
-接受之后发生了什么；`analytics.py` 的互助反馈统计回答「确认之后发布者说这次算不算完成」，
-但它把求购响应和失物招领线索并成一个总数报，而且只有提交了反馈的那些才进得来——**没有
-提交反馈的那一批，恰恰是最可能断在中段的那一批。**
-
-这个模块补四件事：确认之后有多少真的变成了订单；从确认到下单隔了多久；变成了订单的那些
-最后成交了吗；确认之后没有订单的，卡在哪。
-
-它只报告。不自动建订单、不改 `accept` 之后的任何通知文案、不把 `fulfilled` 的写入时机
-推到订单完成之后、不按用户做任何聚合或排名、不做「疑似放鸽子」检测。
+本模块只读四件事：窗口内每次确认之后有多少真的创建了订单；从确认到创建订单隔了多久；订单最终
+是否成交；没有订单的确认当时卡在商品、求购还是正常推进中。历史确认按 `accepted_at` 留在分母，
+`superseded` 不会因重新选择从统计消失。模块不自动建单、不改状态、不替免费商品挑选申请人，也不做
+个人追踪或「疑似放鸽子」判断。
 """
 
 from collections import namedtuple
@@ -59,9 +34,10 @@ MIN_MEASURED_RESPONSES = 12
 # 两个维度相差小于这个百分点视为噪声。和其余模块同一个量级。
 NOISE_POINTS = 8
 
-# 已确认的响应状态。`withdrawn` 不在其中：撤回是响应人自己撤的，它没有进入过发布者的
-# 决策，既不是转化也不是流失，把它算进任何一边都会让分母说一件没发生的事。
-CONFIRMED_STATUS = 'accepted'
+# 曾经被确认的响应都要留在分母里。`superseded` 是发布者重新选择后留下的历史确认，
+# 不能因为状态不再是 `accepted` 就从转化统计里消失。`withdrawn` 不在其中：撤回是
+# 响应人自己撤的，它没有进入过发布者的决策。
+CONFIRMED_STATUSES = ('accepted', 'superseded')
 WITHDRAWN_STATUS = 'withdrawn'
 
 # 订单状态：`completed` 是交易完成，`returned` 是借用归还。借用订单走到 `returned`
@@ -161,6 +137,11 @@ def _bucket_index(seconds, buckets):
     return len(buckets) - 1
 
 
+def _confirmed_at(response):
+    """确认时刻。迁移前没有 accepted_at 的旧记录回退到 updated_at。"""
+    return response.accepted_at or response.updated_at
+
+
 def _order_is_from_response(order, response):
     """一笔订单算不算这条响应带来的。
 
@@ -177,7 +158,7 @@ def _order_is_from_response(order, response):
     return (
         order.item_id == response.item_id
         and order.buyer_id == response.demand.requester_id
-        and order.created_at >= response.updated_at
+        and order.created_at >= _confirmed_at(response)
     )
 
 
@@ -203,10 +184,10 @@ def _blocked_reason(response):
 def _fetch_confirmed_responses(days, now):
     """按显式排序取出周期内确认的响应，连订单一起取回来。
 
-    统计窗口按 `DemandResponse.updated_at` 切，不按 `created_at` 切：一条窗口前提交、
-    窗口内才被确认的响应，它的转化发生在窗口内，按 `created_at` 切会把它整条丢出去。
-    `accept` 分支 `save(update_fields=[..., 'updated_at'])` 带的 `auto_now`，所以
-    `updated_at` 就是确认时刻，不需要另建字段。
+    统计窗口按显式记录的 `accepted_at` 切，不按 `created_at` 切：一条窗口前提交、窗口内
+    才被确认的响应，它的转化发生在窗口内。重开后的历史响应会从 `accepted` 变成
+    `superseded`，但仍保留 `accepted_at`，因此既不会从历史分母消失，也不会被重开时间
+    误算成一次新确认。
 
     显式排序不是洁癖：同一份数据在不同时刻给出不同的榜单，比一份错的榜单更难用。
     """
@@ -216,10 +197,10 @@ def _fetch_confirmed_responses(days, now):
             'demand', 'demand__requester', 'item', 'item__category',
             'item__location', 'item__seller', 'responder',
         ).filter(
-            status=CONFIRMED_STATUS,
-            updated_at__gte=start,
-            updated_at__lte=now,
-        ).order_by('updated_at', 'id')
+            status__in=CONFIRMED_STATUSES,
+            accepted_at__gte=start,
+            accepted_at__lte=now,
+        ).order_by('accepted_at', 'id')
     )
     if not responses:
         return []
@@ -251,7 +232,7 @@ def _fetch_confirmed_responses(days, now):
                 break
         latency = None
         if order is not None:
-            latency = (order.created_at - response.updated_at).total_seconds()
+            latency = (order.created_at - _confirmed_at(response)).total_seconds()
         confirmed.append(ConfirmedResponse(
             response=response,
             order=order,
@@ -280,8 +261,8 @@ def _build_conversion_stats(confirmed):
             1 for row in with_order if row.order.status not in DEALT_STATUSES
             and row.order.status != CANCELLED_STATUS
         ),
-        # 一条求购只会确认一条，所以按求购去重之后这两个数在正常情况下相等。不相等就说明
-        # 有并发确认，那本身就是要看见的信号，单独数出来。
+        # 一次求购可能经历过多次显式确认，因此响应数和求购数不能互相替代；两个数都
+        # 单列出来，重开几次、覆盖了几个求购都能直接看见。
         'demand_count': len({row.response.demand_id for row in confirmed}),
         'demand_with_order_count': len({
             row.response.demand_id for row in with_order
@@ -461,7 +442,7 @@ def _build_message_stats(confirmed):
 def _build_stuck_rows(confirmed):
     """卡点清单。只带商品标题、求购标题、确认时刻和卡点类别，不带任何用户名。"""
     stuck = [row for row in confirmed if row.order is None]
-    stuck.sort(key=lambda row: row.response.updated_at, reverse=True)
+    stuck.sort(key=lambda row: _confirmed_at(row.response), reverse=True)
     rows = []
     for row in stuck[:STUCK_LIST_LIMIT]:
         # 卡点标签在模块里就对成名字，不往模板里推。模板要做的只是把它显示出来。

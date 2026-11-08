@@ -1,10 +1,13 @@
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from .models import (
     CampusLocation, Category, CommunityContribution, DemandPost, DemandResponse,
-    Item, Notification, Order,
+    GiftApplication, Item, Notification, Order,
 )
 
 
@@ -74,6 +77,7 @@ class DemandResponseFlowTests(TestCase):
         demand_response.refresh_from_db()
         self.demand.refresh_from_db()
         self.assertEqual(demand_response.status, 'accepted')
+        self.assertIsNotNone(demand_response.accepted_at)
         self.assertEqual(self.demand.status, 'fulfilled')
         self.assertTrue(Notification.objects.filter(
             recipient=self.seller, kind='demand_response', item=self.item,
@@ -103,7 +107,7 @@ class DemandResponseFlowTests(TestCase):
             1,
         )
 
-    def test_accepting_one_response_rejects_other_pending_responses(self):
+    def test_accepting_one_response_defers_other_pending_responses(self):
         other_item = Item.objects.create(
             seller=self.other_seller,
             title='高等数学教材另一本',
@@ -124,10 +128,10 @@ class DemandResponseFlowTests(TestCase):
         self.client.login(username='demand-requester', password='safe-password-123')
         self.client.post(reverse('review_demand_response', args=[first_response.id, 'accept']))
         second_response.refresh_from_db()
-        self.assertEqual(second_response.status, 'rejected')
+        self.assertEqual(second_response.status, 'deferred')
         self.assertTrue(Notification.objects.filter(
             recipient=self.other_seller, kind='demand_response', item=other_item,
-            title='求购响应未被采纳',
+            title='求购响应暂时停用',
         ).exists())
 
     def _accept_response(self):
@@ -235,6 +239,172 @@ class DemandResponseFlowTests(TestCase):
         response = self._respond(item=item)
         self.assertEqual(response.status_code, 302)
         self.assertFalse(DemandResponse.objects.filter(demand=self.demand, item=item).exists())
+
+    def _make_other_response(self):
+        other_item = Item.objects.create(
+            seller=self.other_seller,
+            title='另一本可用教材',
+            description='符合求购条件，可以继续响应',
+            category=self.category,
+            location=self.location,
+            condition='8成新',
+            price='45.00',
+        )
+        self._respond(user=self.other_seller, item=other_item, message='我也有一本。')
+        return DemandResponse.objects.get(demand=self.demand, item=other_item)
+
+    def _make_confirmed_item_unavailable(self):
+        self.item.status = 'sold'
+        self.item.save(update_fields=['status', 'updated_at'])
+
+    def _reopen(self, demand_response):
+        return self.client.post(reverse('reopen_demand_response', args=[
+            self.demand.id, demand_response.id,
+        ]))
+
+    def test_unavailable_accepted_item_can_reopen_and_restore_deferred_response(self):
+        deferred = self._make_other_response()
+        accepted = self._accept_response()
+        self.client.post(reverse('review_demand_response', args=[accepted.id, 'accept']))
+        deferred.refresh_from_db()
+        self.assertEqual(deferred.status, 'deferred')
+        self._make_confirmed_item_unavailable()
+        detail_url = reverse('demand_detail', args=[self.demand.id])
+        self.assertContains(self.client.get(detail_url), '重新选择响应')
+
+        response = self._reopen(accepted)
+        self.assertRedirects(response, detail_url)
+        accepted.refresh_from_db()
+        deferred.refresh_from_db()
+        self.demand.refresh_from_db()
+        self.assertEqual(accepted.status, 'superseded')
+        self.assertIsNotNone(accepted.accepted_at)
+        self.assertIsNotNone(accepted.superseded_at)
+        self.assertEqual(deferred.status, 'pending')
+        self.assertEqual(self.demand.status, 'active')
+        self.assertEqual(self.demand.reopen_count, 1)
+        self.assertIsNotNone(self.demand.last_reopened_at)
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.seller,
+            title='求购已重新选择响应',
+            demand=self.demand,
+        ).exists())
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.other_seller,
+            title='你的求购响应恢复待处理',
+            demand=self.demand,
+        ).exists())
+
+    def test_reopen_keeps_explicitly_rejected_response_rejected(self):
+        rejected = self._make_other_response()
+        self._respond()
+        accepted = DemandResponse.objects.get(demand=self.demand, item=self.item)
+        self.client.logout()
+        self.client.login(username='demand-requester', password='safe-password-123')
+        self.client.post(reverse('review_demand_response', args=[rejected.id, 'reject']))
+        self.client.post(reverse('review_demand_response', args=[accepted.id, 'accept']))
+        rejected.refresh_from_db()
+        self.assertEqual(rejected.status, 'rejected')
+        self._make_confirmed_item_unavailable()
+
+        self._reopen(accepted)
+        rejected.refresh_from_db()
+        self.assertEqual(rejected.status, 'rejected')
+
+    def test_reopen_is_idempotent(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+        self._reopen(accepted)
+        self._reopen(accepted)
+        self.demand.refresh_from_db()
+        self.assertEqual(self.demand.reopen_count, 1)
+        self.assertEqual(Notification.objects.filter(
+            recipient=self.seller,
+            title='求购已重新选择响应',
+            demand=self.demand,
+        ).count(), 1)
+
+    def test_available_item_cannot_be_reopened(self):
+        accepted = self._accept_response()
+        response = self._reopen(accepted)
+        self.assertRedirects(response, reverse('demand_detail', args=[self.demand.id]))
+        accepted.refresh_from_db()
+        self.demand.refresh_from_db()
+        self.assertEqual(accepted.status, 'accepted')
+        self.assertEqual(self.demand.status, 'fulfilled')
+        self.assertEqual(self.demand.reopen_count, 0)
+
+    def test_non_owner_cannot_reopen_response(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+        self.client.force_login(self.seller)
+        response = self._reopen(accepted)
+        self.assertEqual(response.status_code, 404)
+        accepted.refresh_from_db()
+        self.assertEqual(accepted.status, 'accepted')
+
+    def test_response_with_order_cannot_be_reopened(self):
+        accepted = self._accept_response()
+        Order.objects.create(
+            item=self.item,
+            buyer=self.requester,
+            seller=self.seller,
+            demand_response=accepted,
+            meeting_location=self.location,
+            agreed_price='50.00',
+        )
+        self.item.status = 'reserved'
+        self.item.save(update_fields=['status', 'updated_at'])
+
+        self._reopen(accepted)
+        accepted.refresh_from_db()
+        self.demand.refresh_from_db()
+        self.assertEqual(accepted.status, 'accepted')
+        self.assertEqual(self.demand.status, 'fulfilled')
+
+    def test_response_with_gift_application_cannot_be_reopened(self):
+        accepted = self._accept_response()
+        GiftApplication.objects.create(
+            item=self.item,
+            applicant=self.requester,
+            meeting_location=self.location,
+            demand_response=accepted,
+        )
+        self.item.status = 'reserved'
+        self.item.save(update_fields=['status', 'updated_at'])
+
+        self._reopen(accepted)
+        accepted.refresh_from_db()
+        self.demand.refresh_from_db()
+        self.assertEqual(accepted.status, 'accepted')
+        self.assertEqual(self.demand.status, 'fulfilled')
+
+    def test_same_item_can_respond_again_after_reopen_without_overwriting_history(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+        self._reopen(accepted)
+        accepted.refresh_from_db()
+        self.assertEqual(accepted.status, 'superseded')
+
+        self.item.status = 'available'
+        self.item.save(update_fields=['status', 'updated_at'])
+        self._respond()
+        responses = DemandResponse.objects.filter(demand=self.demand, item=self.item)
+        self.assertEqual(responses.count(), 2)
+        self.assertEqual(responses.filter(status='superseded').count(), 1)
+        self.assertEqual(responses.filter(status='pending').count(), 1)
+
+    def test_expired_demand_cannot_be_reopened(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+        self.demand.expires_at = timezone.now() - timedelta(minutes=1)
+        self.demand.save(update_fields=['expires_at', 'updated_at'])
+
+        self._reopen(accepted)
+        accepted.refresh_from_db()
+        self.demand.refresh_from_db()
+        self.assertEqual(accepted.status, 'accepted')
+        self.assertEqual(self.demand.status, 'fulfilled')
 
     def test_only_requester_can_review_response(self):
         self._respond()

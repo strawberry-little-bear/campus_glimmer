@@ -28,7 +28,7 @@
 | 交易安全确认 | `OrderSafetyAcknowledgement` | 买卖双方对当前安全卡的版本化确认记录，按订单、角色和安全卡指纹唯一；历史记录保留用于审计 |
 | 订单阶段链路 | `OrderEvent`（状态流转事件） | 每次状态变化都会留下带时间戳的事件记录，运营看板据此还原“下单 → 确认 → 交付 → 成交 / 借出 → 归还”的阶段耗时 |
 | 搜索 | `SearchQuery`、`SearchClick`、`SearchImpression`、`SavedSearch`、`SearchSynonym` | 搜索需求、点击、曝光、保存搜索和联想词；无结果搜索会进入需求雷达 |
-| 需求撮合 | `DemandPost`、`DemandResponse` | 求购发布、商品响应、确认匹配和需求转化；确认后的订单与领取申请分别通过 `demand_response` 反向关联来源 |
+| 需求撮合 | `DemandPost`、`DemandResponse` | 求购发布、商品响应、确认匹配和需求转化；`accepted_at` 保留确认时刻，`superseded_at` 保留重新选择时刻，`reopen_count` / `last_reopened_at` 记录显式重开。确认后的订单与领取申请分别通过 `demand_response` 反向关联来源 |
 | 机会流曝光 | `OpportunityImpression`、`OpportunityDismissal` | 一次机会流渲染落一行的「被看见」，和一次「不再显示」落的「不看了」；两者口径对偶，忽略率的分母来自前者 |
 | 通知 | `Notification`、`NotificationPreference` | 站内提醒、未读状态、阅读时间、通知偏好、求购关联、到期提醒和幂等键；通知类型包含商品生命周期提醒，可单独关闭。偏好开关先报形状；关闭后仍出现的历史通知再按发生时间与偏好行最后写入拆开，只给可疑下界，不把整行 `updated_at` 当成逐开关关闭时间 |
 | 互助贡献 | `CommunityContribution`、`ContributionMilestoneEvent` | 可审计的贡献积分流水，以及等级与徽章首次达成的事件台账；台账有全量覆盖审计和同类学期同阶段节奏对照，里程碑只作运营事实，不触发额外通知、排名或规则修改 |
