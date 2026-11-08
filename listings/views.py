@@ -17,7 +17,7 @@ from django.core.paginator import Paginator
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.db import IntegrityError, transaction
-from django.db.models import Avg, Case, Count, ExpressionWrapper, F, FloatField, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Avg, Case, Count, ExpressionWrapper, F, FloatField, IntegerField, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Cast, Coalesce
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -14038,6 +14038,49 @@ def _demand_match_items(demand):
     ).order_by('-demand_match_score', '-created_at')[:6]
 
 
+_DEMAND_RESPONSE_REOPEN_MESSAGES = {
+    'not_owner': '只有求购发布者可以重新选择响应。',
+    'missing': '没有找到当前确认的响应。',
+    'superseded': '这条响应已经重新选择过了。',
+    'not_current': '只有当前已确认且仍在等待交易的响应可以重新选择。',
+    'deadline': '求购已经超过截止时间，请重新发布求购后再选择响应。',
+    'missing_item': '当前确认的商品已经不存在，暂时不能重新选择。',
+    'item_available': '响应商品已经恢复可预约，可以直接继续交易。',
+    'has_order': '这次匹配已经创建交易预约，不能重新选择。',
+    'has_gift_application': '这次匹配已经提交领取申请，不能重新选择。',
+}
+
+
+def _demand_response_reopen_block_reason(demand, response, *, is_owner, now=None):
+    """Return why an accepted response cannot be replaced, or ``None`` when it can."""
+    if not is_owner:
+        return 'not_owner'
+    if response is None:
+        return 'missing'
+    if response.status == 'superseded':
+        return 'superseded'
+    if response.status != 'accepted' or demand.status != 'fulfilled':
+        return 'not_current'
+    now = now or timezone.now()
+    if demand.expires_at and demand.expires_at <= now:
+        return 'deadline'
+    if response.item is None:
+        return 'missing_item'
+    if response.item.is_available_now:
+        return 'item_available'
+    if getattr(response, 'order', None):
+        return 'has_order'
+    if getattr(response, 'gift_application', None):
+        return 'has_gift_application'
+    return None
+
+
+def _can_reopen_demand_response(demand, response, *, is_owner, now=None):
+    return _demand_response_reopen_block_reason(
+        demand, response, is_owner=is_owner, now=now,
+    ) is None
+
+
 def demand_list(request, mine=False):
     mine = mine or request.GET.get('mine') == '1'
     if mine and not request.user.is_authenticated:
@@ -14077,7 +14120,13 @@ def demand_list(request, mine=False):
                 filter=Q(responses__status='pending'),
                 distinct=True,
             ),
-        )
+        ).prefetch_related(Prefetch(
+            'responses',
+            queryset=DemandResponse.objects.filter(status='accepted').select_related(
+                'item', 'order', 'gift_application',
+            ),
+            to_attr='current_accepted_responses',
+        ))
 
     search_query = request.GET.get('q', '').strip()[:120]
     category_id = request.GET.get('category', '').strip()
@@ -14102,6 +14151,18 @@ def demand_list(request, mine=False):
         demands = demands.order_by('-created_at')
 
     page = Paginator(demands, 12).get_page(request.GET.get('page'))
+    if mine:
+        list_now = timezone.now()
+        for demand in page.object_list:
+            accepted_response = next(iter(demand.current_accepted_responses), None)
+            demand.can_reopen_demand_response = _can_reopen_demand_response(
+                demand, accepted_response, is_owner=True, now=list_now,
+            )
+            demand.reopen_item_title = (
+                accepted_response.item.title
+                if accepted_response and accepted_response.item is not None
+                else ''
+            )
     filter_params = request.GET.copy()
     filter_params.pop('page', None)
     if mine:
@@ -14469,23 +14530,13 @@ def reopen_demand_response(request, demand_id, response_id):
         ).get(pk=response.id)
         locked_item = Item.objects.select_for_update(of=('self',)).get(pk=locked_response.item_id)
 
-        if locked_response.status == 'superseded':
-            messages.info(request, '这条响应已经重新选择过了。')
-            return redirect('demand_detail', demand_id=locked_demand.id)
-        if locked_response.status != 'accepted' or locked_demand.status != 'fulfilled':
-            messages.info(request, '只有当前已确认且仍在等待交易的响应可以重新选择。')
-            return redirect('demand_detail', demand_id=locked_demand.id)
-        if locked_demand.expires_at and locked_demand.expires_at <= now:
-            messages.info(request, '求购已经超过截止时间，请重新发布求购后再选择响应。')
-            return redirect('demand_detail', demand_id=locked_demand.id)
-        if locked_item.is_available_now:
-            messages.info(request, '响应商品已经恢复可预约，可以直接继续交易。')
-            return redirect('demand_detail', demand_id=locked_demand.id)
-        if Order.objects.filter(demand_response=locked_response).exists():
-            messages.info(request, '这次匹配已经创建交易预约，不能重新选择。')
-            return redirect('demand_detail', demand_id=locked_demand.id)
-        if GiftApplication.objects.filter(demand_response=locked_response).exists():
-            messages.info(request, '这次匹配已经提交领取申请，不能重新选择。')
+        reopen_block_reason = _demand_response_reopen_block_reason(
+            locked_demand, locked_response, is_owner=True, now=now,
+        )
+        if reopen_block_reason:
+            messages.info(
+                request, _DEMAND_RESPONSE_REOPEN_MESSAGES[reopen_block_reason],
+            )
             return redirect('demand_detail', demand_id=locked_demand.id)
 
         locked_response.status = 'superseded'
@@ -14641,15 +14692,11 @@ def demand_detail(request, demand_id):
 
     demand_feedback = getattr(accepted_response, 'feedback', None) if accepted_response else None
     demand_deadline_passed = bool(demand.expires_at and demand.expires_at <= now)
-    can_reopen_demand_response = bool(
-        is_demand_owner
-        and accepted_response
-        and demand.status == 'fulfilled'
-        and accepted_response.item is not None
-        and not accepted_response.item.is_available_now
-        and not getattr(accepted_response, 'order', None)
-        and not getattr(accepted_response, 'gift_application', None)
-        and not demand_deadline_passed
+    can_reopen_demand_response = _can_reopen_demand_response(
+        demand,
+        accepted_response,
+        is_owner=is_demand_owner,
+        now=now,
     )
     return render(request, 'listings/demand_detail.html', {
         'demand': demand,

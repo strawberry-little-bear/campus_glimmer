@@ -1,7 +1,9 @@
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -405,6 +407,78 @@ class DemandResponseFlowTests(TestCase):
         self.demand.refresh_from_db()
         self.assertEqual(accepted.status, 'accepted')
         self.assertEqual(self.demand.status, 'fulfilled')
+
+    def test_my_demand_list_only_flags_a_replaceable_accepted_item(self):
+        accepted = self._accept_response()
+        self._make_confirmed_item_unavailable()
+        list_url = reverse('my_demands')
+
+        list_response = self.client.get(list_url)
+        card = next(
+            demand for demand in list_response.context['demands']
+            if demand.pk == self.demand.pk
+        )
+        self.assertTrue(card.can_reopen_demand_response)
+        self.assertEqual(card.reopen_item_title, self.item.title)
+        self.assertContains(list_response, '已确认的商品失效')
+        self.assertContains(list_response, '进入详情重新选择响应')
+
+        detail_response = self.client.get(reverse('demand_detail', args=[self.demand.id]))
+        self.assertTrue(detail_response.context['can_reopen_demand_response'])
+        self.assertContains(detail_response, '重新选择响应')
+
+        self.item.status = 'available'
+        self.item.save(update_fields=['status', 'updated_at'])
+        response = self.client.get(list_url)
+        self.assertNotContains(response, '已确认的商品失效')
+        self.assertFalse(response.context['demands'][0].can_reopen_demand_response)
+
+        self.item.status = 'sold'
+        self.item.save(update_fields=['status', 'updated_at'])
+        self.demand.expires_at = timezone.now() - timedelta(minutes=1)
+        self.demand.save(update_fields=['expires_at', 'updated_at'])
+        self.assertNotContains(self.client.get(list_url), '已确认的商品失效')
+
+        self.demand.expires_at = None
+        self.demand.save(update_fields=['expires_at', 'updated_at'])
+        Order.objects.create(
+            item=self.item,
+            buyer=self.requester,
+            seller=self.seller,
+            demand_response=accepted,
+            meeting_location=self.location,
+            agreed_price='50.00',
+        )
+        self.assertNotContains(self.client.get(list_url), '已确认的商品失效')
+
+        Order.objects.filter(demand_response=accepted).delete()
+        GiftApplication.objects.create(
+            item=self.item,
+            applicant=self.requester,
+            meeting_location=self.location,
+            demand_response=accepted,
+        )
+        self.assertNotContains(self.client.get(list_url), '已确认的商品失效')
+
+    def test_my_demand_list_query_count_does_not_grow_with_cards(self):
+        self._accept_response()
+        self._make_confirmed_item_unavailable()
+        list_url = reverse('my_demands')
+
+        with CaptureQueriesContext(connection) as one_card:
+            self.client.get(list_url)
+        for index in range(11):
+            DemandPost.objects.create(
+                requester=self.requester,
+                title=f'不相关求购 {index}',
+                description='用来把第一页铺满',
+                category=self.category,
+                location=self.location,
+            )
+        with CaptureQueriesContext(connection) as twelve_cards:
+            self.client.get(list_url)
+
+        self.assertEqual(len(one_card), len(twelve_cards))
 
     def test_only_requester_can_review_response(self):
         self._respond()

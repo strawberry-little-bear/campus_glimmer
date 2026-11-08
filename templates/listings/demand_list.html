@@ -94,6 +94,13 @@
                 <span><i class="bi bi-hourglass-split me-1"></i>还没有收到响应</span>
                 {% endif %}
             </div>
+            {% if demand.can_reopen_demand_response %}
+            <a class="demand-reopen-alert" href="{% url 'demand_detail' demand.id %}#demand-responses">
+                <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                <span><strong>已确认的商品失效</strong><small>“{{ demand.reopen_item_title }}”当前不可用，进入详情重新选择响应。</small></span>
+                <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
+            </a>
+            {% endif %}
             {% endif %}
             <div class="demand-card-footer"><strong>{% if demand.min_price and demand.max_price %}¥{{ demand.min_price }} - ¥{{ demand.max_price }}{% elif demand.max_price %}最高 ¥{{ demand.max_price }}{% elif demand.min_price %}至少 ¥{{ demand.min_price }}{% else %}预算面议{% endif %}</strong><span><i class="bi bi-eye me-1"></i>{{ demand.view_count }}</span></div>
             {% if is_mine %}
