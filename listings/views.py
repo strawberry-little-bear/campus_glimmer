@@ -11442,8 +11442,21 @@ def operations_dashboard_export(request):
     ])
     due_review_flow = meeting_reminder_effect['due_review_flow']
     writer.writerow([])
-    writer.writerow(['到期复查处理流'])
+    writer.writerow(['到期复查覆盖与吞吐'])
     writer.writerow(['说明', due_review_flow['note']])
+    writer.writerow([
+        '到期机会', due_review_flow['due_opportunity_count'],
+        '可判覆盖样本', due_review_flow['coverage_sample_count'],
+        '已承接处理', due_review_flow['handled_count'],
+        '期末仍待处理', due_review_flow['unhandled_count'],
+        '提前重排（不计覆盖）', due_review_flow['early_rescheduled_count'],
+        '覆盖率（%）', (
+            due_review_flow['coverage_rate']
+            if due_review_flow['coverage_rate'] is not None else '—'
+        ),
+        '观察天数', due_review_flow['elapsed_days'],
+        '处理吞吐', due_review_flow['handled_per_day_label'],
+    ])
     writer.writerow([
         '已承接处理', due_review_flow['handled_count'],
         '按时', due_review_flow['on_time_count'],
@@ -11468,7 +11481,7 @@ def operations_dashboard_export(request):
             for item in (row['label'], row['count'])
         ],
     ])
-    if not due_review_flow['handled_count']:
+    if not due_review_flow['due_opportunity_count']:
         writer.writerow(['空状态说明', due_review_flow['empty_note']])
     writer.writerow([
         '已过窗尚无动作', meeting_reminder_effect['no_action_count'],

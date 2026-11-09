@@ -46,12 +46,21 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
         <small class="text-muted">到期组按原复查时间从早到晚排列；累计时长是各条待复核记录逾期时长之和，用来判断积压形状，不替代逐条判断。</small>
     </div>
     {% endif %}
-    <h3 class="h6 mb-2 mt-4">到期复查处理流</h3>
+    <h3 class="h6 mb-2 mt-4">到期复查覆盖与吞吐</h3>
     <p class="search-rhythm-note mb-3">{{ meeting_response_reminder_effect.due_review_flow.note }}</p>
-    {% if meeting_response_reminder_effect.due_review_flow.handled_count %}
+    {% if meeting_response_reminder_effect.due_review_flow.due_opportunity_count %}
     <div id="meeting-response-due-review-flow" class="alert alert-light border py-2 mb-3" role="status">
         <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+            <span>到期机会 <strong>{{ meeting_response_reminder_effect.due_review_flow.due_opportunity_count }}</strong> 次</span>
+            <span>可判覆盖样本 <strong>{{ meeting_response_reminder_effect.due_review_flow.coverage_sample_count }}</strong> 次</span>
             <span>已承接处理 <strong>{{ meeting_response_reminder_effect.due_review_flow.handled_count }}</strong> 次</span>
+            <span>期末仍待处理 <strong class="text-danger">{{ meeting_response_reminder_effect.due_review_flow.unhandled_count }}</strong> 次</span>
+            <span>提前重排 <strong>{{ meeting_response_reminder_effect.due_review_flow.early_rescheduled_count }}</strong> 次</span>
+            <span>覆盖率 <strong>{% if meeting_response_reminder_effect.due_review_flow.coverage_rate != None %}{{ meeting_response_reminder_effect.due_review_flow.coverage_rate|floatformat:'-1' }}%{% else %}—{% endif %}</strong></span>
+            <span>处理吞吐 <strong>{{ meeting_response_reminder_effect.due_review_flow.handled_per_day_label }}</strong></span>
+        </div>
+        {% if meeting_response_reminder_effect.due_review_flow.handled_count %}
+        <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
             <span>按时 <strong class="text-success">{{ meeting_response_reminder_effect.due_review_flow.on_time_count }}</strong>{% if meeting_response_reminder_effect.due_review_flow.on_time_rate != None %}（{{ meeting_response_reminder_effect.due_review_flow.on_time_rate|floatformat:'-1' }}%）{% endif %}</span>
             <span>逾期 <strong class="text-danger">{{ meeting_response_reminder_effect.due_review_flow.overdue_count }}</strong>{% if meeting_response_reminder_effect.due_review_flow.overdue_rate != None %}（{{ meeting_response_reminder_effect.due_review_flow.overdue_rate|floatformat:'-1' }}%）{% endif %}</span>
             <span>继续排队 <strong>{{ meeting_response_reminder_effect.due_review_flow.continuing_count }}</strong></span>
@@ -63,7 +72,8 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
             <span class="badge {% if bucket.count %}text-bg-danger{% else %}text-bg-light border text-muted{% endif %}">{{ bucket.label }} {{ bucket.count }}</span>
             {% endfor %}
         </div>
-        <small class="text-muted">处理延迟按后一次复核时间减前一次安排的下次复查时间计算；按时事件延迟为 0，中位值包含按时事件。这里只统计周期内已经发生的处理，历史条目不展示用户名。</small>
+        {% endif %}
+        <small class="text-muted">{{ meeting_response_reminder_effect.due_review_flow.empty_note }} 处理延迟按后一次复核时间减前一次安排的下次复查时间计算；历史条目不展示用户名。</small>
     </div>
     {% else %}
     <div id="meeting-response-due-review-flow" class="empty-inline mb-3">{{ meeting_response_reminder_effect.due_review_flow.empty_note }}</div>
