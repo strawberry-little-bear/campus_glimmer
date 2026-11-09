@@ -11264,7 +11264,9 @@ def operations_dashboard_export(request):
         '最小关闭样本', meeting_reminder_effect['min_samples'],
         '发送台账', meeting_reminder_effect['sent_count'],
         '通知可用', meeting_reminder_effect['notice_available_count'],
+        '阅读状态可判定', meeting_reminder_effect['read_state_known_count'],
         '通知已读', meeting_reminder_effect['read_notice_count'],
+        '阅读字段不一致', meeting_reminder_effect['inconsistent_read_state_count'],
         '通知阅读率（%）', (
             meeting_reminder_effect['notice_read_rate']
             if meeting_reminder_effect['notice_read_rate'] is not None else '—'
@@ -11289,14 +11291,15 @@ def operations_dashboard_export(request):
     writer.writerow([])
     writer.writerow(['按接收角色观察'])
     writer.writerow([
-        '接收角色', '发送', '通知可用', '已读', '通知阅读率（%）',
-        '窗口内回应', '接受', '拒绝', '再次改期', '窗口回应率（%）',
-        '中位回应时延', '样本',
+        '接收角色', '发送', '通知可用', '阅读可判定', '已读', '字段异常',
+        '通知阅读率（%）', '窗口内回应', '接受', '拒绝', '再次改期',
+        '窗口回应率（%）', '中位回应时延', '样本',
     ])
     for row in meeting_reminder_effect['role_rows']:
         writer.writerow([
             row['label'], row['sent_count'], row['notice_available_count'],
-            row['read_notice_count'],
+            row['read_state_known_count'], row['read_notice_count'],
+            row['inconsistent_read_state_count'],
             row['notice_read_rate'] if row['notice_read_rate'] is not None else '—',
             row['responded_count'], row['accepted_count'], row['declined_count'],
             row['rescheduled_count'],
@@ -11315,6 +11318,8 @@ def operations_dashboard_export(request):
             meeting_reminder_effect['notice_coverage_rate']
             if meeting_reminder_effect['notice_coverage_rate'] is not None else '—'
         ),
+        '阅读状态可判定', meeting_reminder_effect['read_state_known_count'],
+        '阅读字段不一致', meeting_reminder_effect['inconsistent_read_state_count'],
     ])
     writer.writerow([
         '交叉可判定', meeting_reminder_effect['notice_action_closed_count'],
@@ -11341,6 +11346,18 @@ def operations_dashboard_export(request):
             ),
         ])
     writer.writerow([])
+    writer.writerow(['已读与窗口动作时点'])
+    writer.writerow([meeting_reminder_effect['notice_order_note']])
+    writer.writerow(['时点关系', '窗口内行动', '占可判定行动（%）', '样本'])
+    for row in meeting_reminder_effect['notice_order_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            row['share'] if row['share'] is not None else '—',
+            '足样本' if row['comparable'] else (
+                '少于 %d 条，只报数' % meeting_reminder_effect['min_samples']
+            ),
+        ])
+    writer.writerow([])
     writer.writerow(['观察状态与缺失'])
     writer.writerow(['观察状态', '数量', '解释'])
     writer.writerow([
@@ -11356,6 +11373,10 @@ def operations_dashboard_export(request):
         '窗后动作', meeting_reminder_effect['late_action_count'],
         '动作发生在 %d 小时后，单列，不进入窗口内回应计数；窗口内仍按未回应计入分母。'
         % meeting_reminder_effect['window_hours'],
+    ])
+    writer.writerow([
+        '阅读字段不一致', meeting_reminder_effect['inconsistent_read_state_count'],
+        'is_read 与 read_at 互相冲突；不猜成已读或未读，也不进入交叉与时点观察。',
     ])
     writer.writerow([
         '通知不可用', meeting_reminder_effect['missing_notice_count'],
@@ -11381,6 +11402,7 @@ def operations_dashboard_export(request):
     writer.writerow([meeting_reminder_effect['sample_note']])
     writer.writerow([meeting_reminder_effect['source_note']])
     writer.writerow([meeting_reminder_effect['notice_action_note']])
+    writer.writerow([meeting_reminder_effect['notice_order_note']])
     writer.writerow([meeting_reminder_effect['causality_note']])
 
     reminder_effect = dashboard['lifecycle_reminder_effect']

@@ -14,7 +14,7 @@
     {% else %}
     <div class="row g-3 mb-4">
         <div class="col-md-3"><div class="ops-mini-stat"><span>发送台账</span><strong>{{ meeting_response_reminder_effect.sent_count }}</strong><small>买 {{ meeting_response_reminder_effect.role_rows.0.sent_count }} · 卖 {{ meeting_response_reminder_effect.role_rows.1.sent_count }}</small></div></div>
-        <div class="col-md-3"><div class="ops-mini-stat"><span>通知已读</span><strong>{{ meeting_response_reminder_effect.read_notice_count }}</strong><small>可观测 {{ meeting_response_reminder_effect.notice_available_count }} 条{% if meeting_response_reminder_effect.notice_read_rate != None %} · {{ meeting_response_reminder_effect.notice_read_rate|floatformat:'-1' }}%{% endif %}</small></div></div>
+        <div class="col-md-3"><div class="ops-mini-stat"><span>通知已读</span><strong>{{ meeting_response_reminder_effect.read_notice_count }}</strong><small>阅读可判定 {{ meeting_response_reminder_effect.read_state_known_count }} 条 · 字段异常 {{ meeting_response_reminder_effect.inconsistent_read_state_count }} 条{% if meeting_response_reminder_effect.notice_read_rate != None %} · {{ meeting_response_reminder_effect.notice_read_rate|floatformat:'-1' }}%{% endif %}</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>窗口内回应</span><strong>{{ meeting_response_reminder_effect.responded_count }}</strong><small>接受 {{ meeting_response_reminder_effect.accepted_count }} · 拒绝 {{ meeting_response_reminder_effect.declined_count }} · 改期 {{ meeting_response_reminder_effect.rescheduled_count }}</small></div></div>
         <div class="col-md-3"><div class="ops-mini-stat"><span>已过窗未回应</span><strong>{{ meeting_response_reminder_effect.no_action_count }}</strong><small>观察中 {{ meeting_response_reminder_effect.open_count }} · 窗后动作 {{ meeting_response_reminder_effect.late_action_count }}</small></div></div>
     </div>
@@ -23,14 +23,16 @@
     <div class="ops-table-wrap">
         <table class="table ops-table align-middle mb-0">
             <caption class="visually-hidden">交付安排提醒触达与回应 · 按接收角色观察</caption>
-            <thead><tr><th>接收角色</th><th>发送</th><th>通知可用</th><th>已读</th><th>窗口内回应</th><th>接受</th><th>拒绝</th><th>再次改期</th><th>窗口回应率（%）</th><th>中位回应时延</th><th>样本</th></tr></thead>
+            <thead><tr><th>接收角色</th><th>发送</th><th>通知可用</th><th>阅读可判定</th><th>已读</th><th>字段异常</th><th>窗口内回应</th><th>接受</th><th>拒绝</th><th>再次改期</th><th>窗口回应率（%）</th><th>中位回应时延</th><th>样本</th></tr></thead>
             <tbody>
                 {% for row in meeting_response_reminder_effect.role_rows %}
                 <tr>
                     <td data-label="接收角色"><strong>{{ row.label }}</strong></td>
                     <td data-label="发送">{{ row.sent_count }}</td>
                     <td data-label="通知可用">{{ row.notice_available_count }}</td>
+                    <td data-label="阅读可判定">{{ row.read_state_known_count }}</td>
                     <td data-label="已读">{{ row.read_notice_count }}{% if row.notice_read_rate != None %}<small class="d-block text-muted">{{ row.notice_read_rate|floatformat:'-1' }}%</small>{% endif %}</td>
+                    <td data-label="字段异常">{{ row.inconsistent_read_state_count }}</td>
                     <td data-label="窗口内回应">{{ row.responded_count }}</td>
                     <td data-label="接受">{{ row.accepted_count }}</td>
                     <td data-label="拒绝">{{ row.declined_count }}</td>
@@ -49,7 +51,7 @@
             <strong>样本质量</strong>
             <span class="text-muted">{{ meeting_response_reminder_effect.quality_label }}</span>
         </div>
-        <p class="mb-2">通知可观测 {{ meeting_response_reminder_effect.notice_available_count }} / {{ meeting_response_reminder_effect.sent_count }} 条{% if meeting_response_reminder_effect.notice_coverage_rate != None %}（{{ meeting_response_reminder_effect.notice_coverage_rate|floatformat:'-1' }}%）{% endif %}；交叉可判定 {{ meeting_response_reminder_effect.notice_action_closed_count }} / {{ meeting_response_reminder_effect.closed_count }} 条已过窗样本{% if meeting_response_reminder_effect.notice_action_closed_rate != None %}（{{ meeting_response_reminder_effect.notice_action_closed_rate|floatformat:'-1' }}%）{% endif %}。</p>
+        <p class="mb-2">通知可观测 {{ meeting_response_reminder_effect.notice_available_count }} / {{ meeting_response_reminder_effect.sent_count }} 条{% if meeting_response_reminder_effect.notice_coverage_rate != None %}（{{ meeting_response_reminder_effect.notice_coverage_rate|floatformat:'-1' }}%）{% endif %}；阅读状态可判定 {{ meeting_response_reminder_effect.read_state_known_count }} 条，字段不一致 {{ meeting_response_reminder_effect.inconsistent_read_state_count }} 条；交叉可判定 {{ meeting_response_reminder_effect.notice_action_closed_count }} / {{ meeting_response_reminder_effect.closed_count }} 条已过窗样本{% if meeting_response_reminder_effect.notice_action_closed_rate != None %}（{{ meeting_response_reminder_effect.notice_action_closed_rate|floatformat:'-1' }}%）{% endif %}。</p>
         <p class="mb-0 text-muted">{{ meeting_response_reminder_effect.quality_note }}</p>
     </div>
 
@@ -74,6 +76,25 @@
         </table>
     </div>
 
+    <h3 class="h6 mb-3 mt-4">已读与窗口动作时点</h3>
+    <p class="search-rhythm-note mb-3">{{ meeting_response_reminder_effect.notice_order_note }}</p>
+    <div class="ops-table-wrap">
+        <table class="table ops-table align-middle mb-0">
+            <caption class="visually-hidden">交付安排提醒触达与回应 · 已读与窗口动作时点</caption>
+            <thead><tr><th>时点关系</th><th>窗口内行动</th><th>占可判定行动（%）</th><th>样本</th></tr></thead>
+            <tbody>
+                {% for row in meeting_response_reminder_effect.notice_order_rows %}
+                <tr>
+                    <td data-label="时点关系"><strong>{{ row.label }}</strong></td>
+                    <td data-label="窗口内行动">{{ row.count }}</td>
+                    <td data-label="占可判定行动">{{ row.share|default_if_none:'—' }}</td>
+                    <td data-label="样本">{% if row.comparable %}足样本{% else %}少于 {{ meeting_response_reminder_effect.min_samples }} 条，只报数{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     <h3 class="h6 mb-3 mt-4">观察状态与缺失</h3>
     <div class="ops-table-wrap">
         <table class="table ops-table align-middle mb-0">
@@ -83,6 +104,7 @@
                 <tr><td data-label="观察状态"><strong>观察中</strong></td><td data-label="数量">{{ meeting_response_reminder_effect.open_count }}</td><td data-label="解释">发送未满 72 小时且尚无后续动作，是删失样本，不判为未回应。</td></tr>
                 <tr><td data-label="观察状态"><strong>已过窗未回应</strong></td><td data-label="数量">{{ meeting_response_reminder_effect.no_action_count }}</td><td data-label="解释">截至当前没有观测到同一提议回合的接受、拒绝或再次改期。</td></tr>
                 <tr><td data-label="观察状态"><strong>窗后动作</strong></td><td data-label="数量">{{ meeting_response_reminder_effect.late_action_count }}</td><td data-label="解释">动作发生在 72 小时后，单列，不进入窗口内回应计数；窗口内仍按未回应计入分母。</td></tr>
+                <tr><td data-label="观察状态"><strong>阅读字段不一致</strong></td><td data-label="数量">{{ meeting_response_reminder_effect.inconsistent_read_state_count }}</td><td data-label="解释">is_read 与 read_at 互相冲突；不猜成已读或未读，也不进入交叉与时点观察。</td></tr>
                 <tr><td data-label="观察状态"><strong>通知不可用</strong></td><td data-label="数量">{{ meeting_response_reminder_effect.missing_notice_count }}</td><td data-label="解释">发送台账仍在，但通知已删除，阅读状态不可观测。</td></tr>
                 <tr><td data-label="观察状态"><strong>台账外通知</strong></td><td data-label="数量">{{ meeting_response_reminder_effect.legacy_notice_count }}</td><td data-label="解释">周期内存在、但没有提醒台账的旧通知；不计入效果分母。</td></tr>
             </tbody>

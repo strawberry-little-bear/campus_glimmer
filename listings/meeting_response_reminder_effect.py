@@ -15,8 +15,9 @@
    开始下一轮，不把后一轮的动作算回上一轮。
 4. 固定观察 72 小时。窗口未结束时仍未回应的是删失样本，不能写成“没有回应”；
    超过窗口后才出现的动作单列为晚回应，不进入窗口内回应计数；它在窗口内仍按未回应计入已过窗分母。
-5. 阅读与动作交叉表只纳入通知仍可观测、且已过观察窗的样本。观察中样本不进
-   分母，窗后动作按窗口内未行动计，通知不可观测时也不假装成“未读”。
+5. 阅读与动作交叉表只纳入阅读状态可判定、且已过观察窗的样本。观察中样本
+   不进分母，窗后动作按窗口内未行动计，通知不可观测或阅读字段冲突时也不
+   假装成“未读”。
 
 这里只报告观察值，不宣称提醒导致了动作，也不据此自动接受、拒绝、改期、
 提升提醒频率或给接收人排名。
@@ -54,6 +55,13 @@ LATENCY_BUCKETS = (
 NOTICE_ACTION_STATES = (
     ('read', '已读'),
     ('unread', '未读'),
+)
+DECIDABLE_NOTICE_STATES = frozenset({'read', 'unread'})
+NOTICE_ORDER_STATES = (
+    ('read_before_action', '先读后动'),
+    ('action_before_read', '先动后读'),
+    ('same_time', '同一时刻'),
+    ('unread_action', '未读行动'),
 )
 
 
@@ -127,8 +135,10 @@ def _notice_state(reminder):
     notification = reminder.notification
     if notification is None:
         return 'missing'
-    if notification.is_read and notification.read_at is not None:
-        return 'read'
+    if notification.is_read:
+        return 'read' if notification.read_at is not None else 'inconsistent'
+    if notification.read_at is not None:
+        return 'inconsistent'
     return 'unread'
 
 
@@ -144,7 +154,13 @@ def _latency_bucket(hours):
 def _build_segment(key, label, observations):
     sent = len(observations)
     available = sum(row['notice_state'] != 'missing' for row in observations)
+    read_state_known = sum(
+        row['notice_state'] in DECIDABLE_NOTICE_STATES for row in observations
+    )
     read = sum(row['notice_state'] == 'read' for row in observations)
+    inconsistent_read_state = sum(
+        row['notice_state'] == 'inconsistent' for row in observations
+    )
     missing = sent - available
     accepted = sum(
         row['action_type'] == 'accepted' and row['within_window']
@@ -175,9 +191,11 @@ def _build_segment(key, label, observations):
         'label': label,
         'sent_count': sent,
         'notice_available_count': available,
+        'read_state_known_count': read_state_known,
         'read_notice_count': read,
+        'inconsistent_read_state_count': inconsistent_read_state,
         'missing_notice_count': missing,
-        'notice_read_rate': _percent(read, available),
+        'notice_read_rate': _percent(read, read_state_known),
         'responded_count': responded,
         'accepted_count': accepted,
         'declined_count': declined,
@@ -239,6 +257,42 @@ def _build_notice_action_rows(observations):
     return rows
 
 
+def _notice_action_order(row):
+    """只描述同一提醒的阅读与窗口内动作的时点先后。"""
+    if not row['within_window'] or row['notice_state'] not in DECIDABLE_NOTICE_STATES:
+        return None
+    if row['notice_state'] == 'unread':
+        return 'unread_action'
+    read_at = row['read_at']
+    action_at = row['action_at']
+    if read_at is None or action_at is None:
+        return None
+    if read_at < action_at:
+        return 'read_before_action'
+    if action_at < read_at:
+        return 'action_before_read'
+    return 'same_time'
+
+
+def _build_notice_order_rows(observations):
+    counts = {key: 0 for key, _label in NOTICE_ORDER_STATES}
+    for row in observations:
+        key = _notice_action_order(row)
+        if key:
+            counts[key] += 1
+    total = sum(counts.values())
+    return [
+        {
+            'key': key,
+            'label': label,
+            'count': counts[key],
+            'share': _percent(counts[key], total),
+            'comparable': total >= MIN_SEGMENT_SAMPLES,
+        }
+        for key, label in NOTICE_ORDER_STATES
+    ]
+
+
 def _build_sample_quality(all_segment, notice_action_rows, legacy_notice_count):
     """给出数据覆盖状态；异常只提示核对，不据此判断提醒效果。"""
     sent = all_segment['sent_count']
@@ -246,11 +300,14 @@ def _build_sample_quality(all_segment, notice_action_rows, legacy_notice_count):
         row['closed_count'] for row in notice_action_rows
     )
     missing = all_segment['missing_notice_count']
+    inconsistent = all_segment['inconsistent_read_state_count']
     open_samples = all_segment['open_count']
     closed = all_segment['closed_count']
     issues = []
     if missing:
         issues.append('通知不可观测 %d 条' % missing)
+    if inconsistent:
+        issues.append('阅读字段不一致 %d 条' % inconsistent)
     if legacy_notice_count:
         issues.append('台账外通知 %d 条' % legacy_notice_count)
     if not all(row['comparable'] for row in notice_action_rows):
@@ -263,7 +320,7 @@ def _build_sample_quality(all_segment, notice_action_rows, legacy_notice_count):
     if not sent:
         status = 'empty'
         label = '待积累'
-    elif missing or legacy_notice_count:
+    elif missing or inconsistent or legacy_notice_count:
         status = 'needs_review'
         label = '需核对'
     elif (
@@ -336,7 +393,12 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
             'reminder': reminder,
             'role': reminder.recipient_role,
             'notice_state': _notice_state(reminder),
+            'read_at': (
+                reminder.notification.read_at
+                if reminder.notification is not None else None
+            ),
             'action_type': action_type,
+            'action_at': action.occurred_at if action is not None else None,
             'response_hours': response_hours,
             'within_window': within_window,
             'status': status,
@@ -349,6 +411,8 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
     ]
     latency_rows = _build_latency_rows(observations)
     notice_action_rows = _build_notice_action_rows(observations)
+    notice_order_rows = _build_notice_order_rows(observations)
+    notice_order_known_count = sum(row['count'] for row in notice_order_rows)
     notice_action_closed_count = sum(
         row['closed_count'] for row in notice_action_rows
     )
@@ -398,21 +462,26 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         'summary': summary,
         'sample_note': (
             '发送分母来自周期内不可变提醒台账；'
-            '窗口回应率 = 72 小时内出现接受、拒绝或改期的关闭样本 ÷ 已过观察窗样本。'
+            '窗口回应率 = 72 小时内出现接受、拒绝或改期的关闭样本 ÷ 已过观察窗样本；'
+            '通知阅读率 = 已读 ÷ 阅读状态可判定样本。'
         ),
         'source_note': (
             '旧通知缺少台账时不计入效果分母，单列为未计入；通知删除后仍保留发送样本，'
-            '但阅读状态记为不可观测。'
+            '但阅读状态记为不可观测；is_read 与 read_at 冲突时记为字段不一致。'
         ),
         'causality_note': (
             '后续动作只说明发生在提醒之后，不能证明由提醒引起；本面板不自动推进预约、'
             '不提高发送频率，也不按用户或角色排名。'
         ),
         'notice_action_note': (
-            '交叉分母只含通知仍可观测且已过观察窗的样本；观察中不进入，窗后动作按'
-            '窗口内未行动计，通知不可观测也不归入未读。阅读状态取当前记录，不比较'
-            '阅读与动作先后；已读未行动或未读但行动只是线索，不能单独证明文案失效'
-            '或阅读记录有误。'
+            '交叉分母只含阅读状态可判定且已过观察窗的样本；观察中不进入，窗后动作按'
+            '窗口内未行动计，通知不可观测或阅读字段不一致也不归入未读。已读未行动或'
+            '未读但行动只是线索，不能单独证明文案失效或阅读记录有误。'
+        ),
+        'notice_order_note': (
+            '时点表只比较同一提醒的 read_at 与窗口内动作 occurred_at；阅读字段不一致、'
+            '通知删除、未行动和窗后动作不进入。阅读发生在动作之后仍保留为观察事实；'
+            '先后关系不等于因果，也不据此调整提醒。'
         ),
         'quality_status': sample_quality['status'],
         'quality_label': sample_quality['label'],
@@ -423,7 +492,9 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         'action_labels': ACTION_LABELS,
         'sent_count': all_segment['sent_count'],
         'notice_available_count': all_segment['notice_available_count'],
+        'read_state_known_count': all_segment['read_state_known_count'],
         'read_notice_count': all_segment['read_notice_count'],
+        'inconsistent_read_state_count': all_segment['inconsistent_read_state_count'],
         'notice_read_rate': all_segment['notice_read_rate'],
         'missing_notice_count': all_segment['missing_notice_count'],
         'closed_count': all_segment['closed_count'],
@@ -440,6 +511,8 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         'comparable': all_segment['comparable'],
         'role_rows': role_rows,
         'notice_action_rows': notice_action_rows,
+        'notice_order_rows': notice_order_rows,
+        'notice_order_known_count': notice_order_known_count,
         'latency_rows': latency_rows,
         'legacy_notice_count': legacy_notice_count,
     }

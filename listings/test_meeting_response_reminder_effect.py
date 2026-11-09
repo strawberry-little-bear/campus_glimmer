@@ -15,6 +15,7 @@ from django.utils import timezone
 from .meeting_response_reminders import send_meeting_response_reminders
 from .meeting_response_reminder_effect import (
     _build_notice_action_rows,
+    _build_notice_order_rows,
     build_meeting_response_reminder_effect,
 )
 from .models import (
@@ -175,6 +176,107 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(rows['read']['no_action_count'], 0)
         self.assertEqual(rows['read']['action_rate'], 100.0)
         self.assertFalse(rows['read']['comparable'])
+        self.assertEqual(effect['read_state_known_count'], 1)
+        self.assertEqual(effect['notice_order_known_count'], 1)
+        order_rows = {
+            row['key']: row for row in effect['notice_order_rows']
+        }
+        self.assertEqual(order_rows['read_before_action']['count'], 1)
+
+    def test_inconsistent_read_fields_are_excluded_from_unread_and_denominator(self):
+        read_without_time = self.make_case(proposal_age_hours=25 + 5 * 24)
+        time_without_read = self.make_case(proposal_age_hours=25 + 5 * 24)
+        valid_read = self.make_case(proposal_age_hours=25 + 5 * 24)
+        old_sent = self.now - timedelta(days=5)
+        with patch('django.utils.timezone.now', return_value=old_sent):
+            self.send_cases(now=old_sent)
+
+        first_notification = Notification.objects.get(order=read_without_time['order'])
+        first_notification.is_read = True
+        first_notification.read_at = None
+        first_notification.save(update_fields=['is_read', 'read_at'])
+        second_notification = Notification.objects.get(order=time_without_read['order'])
+        second_notification.is_read = False
+        second_notification.read_at = old_sent + timedelta(hours=1)
+        second_notification.save(update_fields=['is_read', 'read_at'])
+        self.mark_read(valid_read, hours_after=1)
+        self.add_action(read_without_time, 'accepted', hours_after=2)
+        self.add_action(time_without_read, 'declined', hours_after=2)
+        self.add_action(valid_read, 'accepted', hours_after=2)
+
+        effect = build_meeting_response_reminder_effect(days=30, now=self.now)
+        rows = {row['key']: row for row in effect['notice_action_rows']}
+
+        self.assertEqual(effect['notice_available_count'], 3)
+        self.assertEqual(effect['read_state_known_count'], 1)
+        self.assertEqual(effect['read_notice_count'], 1)
+        self.assertEqual(effect['inconsistent_read_state_count'], 2)
+        self.assertEqual(effect['notice_read_rate'], 100.0)
+        self.assertEqual(rows['read']['closed_count'], 1)
+        self.assertEqual(rows['unread']['closed_count'], 0)
+        self.assertEqual(effect['notice_action_closed_count'], 1)
+        self.assertEqual(effect['notice_order_known_count'], 1)
+        self.assertEqual(effect['quality_status'], 'needs_review')
+        self.assertIn('阅读字段不一致 2 条', effect['quality_note'])
+
+    def test_notice_order_rows_split_read_action_timing(self):
+        read_first = self.make_case(proposal_age_hours=25 + 5 * 24)
+        action_first = self.make_case(proposal_age_hours=25 + 5 * 24)
+        same_time = self.make_case(proposal_age_hours=25 + 5 * 24)
+        unread_action = self.make_case(proposal_age_hours=25 + 5 * 24)
+        old_sent = self.now - timedelta(days=5)
+        with patch('django.utils.timezone.now', return_value=old_sent):
+            self.send_cases(now=old_sent)
+
+        self.mark_read(read_first, hours_after=1)
+        self.add_action(read_first, 'accepted', hours_after=2)
+        self.add_action(action_first, 'declined', hours_after=2)
+        self.mark_read(action_first, hours_after=3)
+        self.mark_read(same_time, hours_after=2)
+        self.add_action(same_time, 'rescheduled', hours_after=2)
+        self.add_action(unread_action, 'accepted', hours_after=2)
+
+        effect = build_meeting_response_reminder_effect(days=30, now=self.now)
+        rows = {row['key']: row for row in effect['notice_order_rows']}
+
+        self.assertEqual(effect['notice_order_known_count'], 4)
+        self.assertEqual(set(rows), {
+            'read_before_action', 'action_before_read', 'same_time', 'unread_action',
+        })
+        self.assertEqual(
+            {key: row['count'] for key, row in rows.items()},
+            {
+                'read_before_action': 1,
+                'action_before_read': 1,
+                'same_time': 1,
+                'unread_action': 1,
+            },
+        )
+        self.assertTrue(all(row['share'] == 25.0 for row in rows.values()))
+        self.assertIn('先后关系不等于因果', effect['notice_order_note'])
+
+    def test_notice_order_table_needs_twelve_classified_actions(self):
+        observations = [
+            {
+                'notice_state': 'read',
+                'within_window': True,
+                'read_at': self.now - timedelta(hours=2),
+                'action_at': self.now - timedelta(hours=1),
+            }
+            for _index in range(11)
+        ]
+
+        rows = _build_notice_order_rows(observations)
+        self.assertFalse(any(row['comparable'] for row in rows))
+
+        observations.append({
+            'notice_state': 'read',
+            'within_window': True,
+            'read_at': self.now - timedelta(hours=2),
+            'action_at': self.now - timedelta(hours=1),
+        })
+        rows = _build_notice_order_rows(observations)
+        self.assertTrue(all(row['comparable'] for row in rows))
 
     def test_notice_action_rows_split_all_four_read_and_action_cells(self):
         read_acted = self.make_case(proposal_age_hours=25 + 5 * 24)
@@ -264,6 +366,7 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(rows['unread']['action_count'], 0)
         self.assertEqual(rows['unread']['no_action_count'], 1)
         self.assertEqual(rows['unread']['action_rate'], 0.0)
+        self.assertEqual(effect['notice_order_known_count'], 0)
 
     def test_deleted_notification_keeps_send_but_stays_out_of_unread_cross(self):
         case = self.make_case(proposal_age_hours=25 + 5 * 24)
@@ -356,6 +459,12 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertIn('交付安排提醒触达与回应', html)
         self.assertIn('按接收角色观察', html)
         self.assertIn('阅读与窗口动作交叉观察', html)
+        self.assertIn('已读与窗口动作时点', html)
+        self.assertIn('先读后动', html)
+        self.assertIn('先动后读', html)
+        self.assertIn('同一时刻', html)
+        self.assertIn('未读行动', html)
+        self.assertIn('少于 12 条，只报数', html)
         self.assertIn('样本质量', html)
         self.assertIn('数据积累中', html)
         self.assertIn('观察状态与缺失', html)
@@ -406,15 +515,17 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertEqual(pairs['发送台账'], '1')
         self.assertEqual(pairs['观察窗口（小时）'], '72')
         self.assertEqual(pairs['最小关闭样本'], '12')
+        self.assertEqual(pairs['阅读状态可判定'], '1')
+        self.assertEqual(pairs['阅读字段不一致'], '0')
 
         role_header = next(
             index for index, row in enumerate(section)
             if row and row[0] == '接收角色'
         )
         self.assertEqual(section[role_header], [
-            '接收角色', '发送', '通知可用', '已读', '通知阅读率（%）',
-            '窗口内回应', '接受', '拒绝', '再次改期', '窗口回应率（%）',
-            '中位回应时延', '样本',
+            '接收角色', '发送', '通知可用', '阅读可判定', '已读', '字段异常',
+            '通知阅读率（%）', '窗口内回应', '接受', '拒绝', '再次改期',
+            '窗口回应率（%）', '中位回应时延', '样本',
         ])
         seller_row = next(
             row for row in section[role_header + 1:]
@@ -433,5 +544,17 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertEqual(section[cross_header + 1], [
             '已读', '0', '0', '0', '—', '少于 12 条，只报数',
         ])
+
+        order_header = next(
+            index for index, row in enumerate(section)
+            if row and row[0] == '时点关系'
+        )
+        self.assertEqual(section[order_header], [
+            '时点关系', '窗口内行动', '占可判定行动（%）', '样本',
+        ])
+        self.assertEqual(section[order_header + 1], [
+            '先读后动', '0', '—', '少于 12 条，只报数',
+        ])
         self.assertIn('样本质量', text)
+        self.assertIn('先后关系不等于因果', text)
         self.assertIn('不能证明由提醒引起', text)

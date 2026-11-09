@@ -87,7 +87,7 @@ flowchart LR
 | 治理与安全 | [`report_priority.py`](report_priority.py)、[`governance_sla.py`](governance_sla.py)、[`dispute_resolution_quality.py`](dispute_resolution_quality.py) | 举报优先级与分页、争议/交付异常处理时限和治理结果 |
 | 运营与数据质量 | [`analytics.py`](analytics.py)、[`demand_response_conversion.py`](demand_response_conversion.py)、[`dashboard_build_performance.py`](dashboard_build_performance.py)、[`task_runs.py`](task_runs.py) | 看板、CSV 导出、求购确认后的预约、到场与双方交付确认，重新选择后的订单闭环、任务台账、趋势与样本质量 |
 
-交付安排提醒效果只看台账发送后的阅读与同一提议回合动作，未满 72 小时的样本保留为观察中。阅读与窗口动作采用 2×2 交叉观察，只纳入通知仍可观测且已过窗的样本；删除通知不归入未读，窗后动作按窗内未行动计，每个阅读状态下的行动与未行动格都至少 12 条才标为可比较。页面与 CSV 共用 `meeting_response_reminder_effect.build_meeting_response_reminder_effect()`，不按用户展示身份或排名。
+交付安排提醒效果只看台账发送后的阅读与同一提议回合动作，未满 72 小时的样本保留为观察中。阅读与窗口动作采用 2×2 交叉观察，只纳入阅读状态可判定且已过窗的样本；删除通知不归入未读，落单的 `is_read` 或 `read_at` 记为字段不一致，阅读率也只以可判定状态为分母。窗后动作按窗内未行动计，每个阅读状态下的行动与未行动格都至少 12 条才标为可比较。另按 `read_at` 与窗口内动作时间观察先读后动、先动后读、同一时刻和未读行动，合计不足 12 条只报数，先后关系不代表因果。页面与 CSV 共用 `meeting_response_reminder_effect.build_meeting_response_reminder_effect()`，不按用户展示身份或排名。
 
 完整模块与测试索引见[模块地图](../docs/module-map.md)。功能口径、指标分母和边缘情况以[功能手册](../docs/feature-handbook.md)为准。
 
