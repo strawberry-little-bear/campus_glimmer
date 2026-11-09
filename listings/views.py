@@ -85,6 +85,7 @@ from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
 from .meeting_service_window_quality import build_meeting_service_window_quality
+from .meeting_response_reminder_effect import build_meeting_response_reminder_effect
 from .campus_location_service_rule_quality import build_campus_location_service_rule_quality
 from .refresh_quota_drift import build_refresh_quota_drift
 from .item_refresh_event_ledger import build_item_refresh_event_ledger_dashboard
@@ -3841,6 +3842,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
     ('meeting_attendance', '面约到场', build_meeting_attendance),
     ('meeting_reschedule', '面约改期', build_meeting_reschedule),
     ('meeting_service_window_quality', '交付开放时段风险', build_meeting_service_window_quality),
+    ('meeting_response_reminder_effect', '交付安排提醒触达与回应', build_meeting_response_reminder_effect),
     (
         'campus_location_service_rule_quality', '校园开放规则配置审计',
         build_campus_location_service_rule_quality,
@@ -11251,6 +11253,95 @@ def operations_dashboard_export(request):
     writer.writerow([
         '此处只报告，不改变任何通知的发送时段、不折叠未读角标、不修改免打扰配置。',
     ])
+
+    meeting_reminder_effect = dashboard['meeting_response_reminder_effect']
+    writer.writerow([])
+    writer.writerow(['交付安排提醒触达与回应'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '周期天数', meeting_reminder_effect['period_days'],
+        '观察窗口（小时）', meeting_reminder_effect['window_hours'],
+        '最小关闭样本', meeting_reminder_effect['min_samples'],
+        '发送台账', meeting_reminder_effect['sent_count'],
+        '通知可用', meeting_reminder_effect['notice_available_count'],
+        '通知已读', meeting_reminder_effect['read_notice_count'],
+        '通知阅读率（%）', (
+            meeting_reminder_effect['notice_read_rate']
+            if meeting_reminder_effect['notice_read_rate'] is not None else '—'
+        ),
+        '已过观察窗', meeting_reminder_effect['closed_count'],
+        '窗口内回应', meeting_reminder_effect['responded_count'],
+        '窗口回应率（%）', (
+            meeting_reminder_effect['response_rate']
+            if meeting_reminder_effect['response_rate'] is not None else '—'
+        ),
+        '观察中', meeting_reminder_effect['open_count'],
+        '已过窗未回应', meeting_reminder_effect['no_action_count'],
+        '窗后动作', meeting_reminder_effect['late_action_count'],
+        '通知不可用', meeting_reminder_effect['missing_notice_count'],
+        '台账外通知', meeting_reminder_effect['legacy_notice_count'],
+    ])
+    writer.writerow([])
+    writer.writerow(['按接收角色观察'])
+    writer.writerow([
+        '接收角色', '发送', '通知可用', '已读', '通知阅读率（%）',
+        '窗口内回应', '接受', '拒绝', '再次改期', '窗口回应率（%）',
+        '中位回应时延', '样本',
+    ])
+    for row in meeting_reminder_effect['role_rows']:
+        writer.writerow([
+            row['label'], row['sent_count'], row['notice_available_count'],
+            row['read_notice_count'],
+            row['notice_read_rate'] if row['notice_read_rate'] is not None else '—',
+            row['responded_count'], row['accepted_count'], row['declined_count'],
+            row['rescheduled_count'],
+            row['response_rate'] if row['response_rate'] is not None else '—',
+            row['median_response_label'],
+            '足样本' if row['comparable'] else (
+                '少于 %d 条，只报数' % meeting_reminder_effect['min_samples']
+            ),
+        ])
+    writer.writerow([])
+    writer.writerow(['观察状态与缺失'])
+    writer.writerow(['观察状态', '数量', '解释'])
+    writer.writerow([
+        '观察中', meeting_reminder_effect['open_count'],
+        '发送未满 %d 小时且尚无后续动作，是删失样本，不判为未回应。'
+        % meeting_reminder_effect['window_hours'],
+    ])
+    writer.writerow([
+        '已过窗未回应', meeting_reminder_effect['no_action_count'],
+        '截至当前没有观测到同一提议回合的接受、拒绝或再次改期。',
+    ])
+    writer.writerow([
+        '窗后动作', meeting_reminder_effect['late_action_count'],
+        '动作发生在 %d 小时后，单列，不进入窗口内回应计数；窗口内仍按未回应计入分母。'
+        % meeting_reminder_effect['window_hours'],
+    ])
+    writer.writerow([
+        '通知不可用', meeting_reminder_effect['missing_notice_count'],
+        '发送台账仍在，但通知已删除，阅读状态不可观测。',
+    ])
+    writer.writerow([
+        '台账外通知', meeting_reminder_effect['legacy_notice_count'],
+        '周期内存在、但没有提醒台账的旧通知；不计入效果分母。',
+    ])
+    writer.writerow([])
+    writer.writerow(['窗口内回应时延'])
+    writer.writerow(['回应时延', '同一回合动作', '占窗口内行动（%）'])
+    for row in meeting_reminder_effect['latency_rows']:
+        writer.writerow([
+            row['label'], row['count'],
+            row['share'] if row['share'] is not None else '—',
+        ])
+    writer.writerow([])
+    writer.writerow(['运营读数'])
+    writer.writerow([meeting_reminder_effect['summary']])
+    writer.writerow([])
+    writer.writerow(['说明'])
+    writer.writerow([meeting_reminder_effect['sample_note']])
+    writer.writerow([meeting_reminder_effect['source_note']])
+    writer.writerow([meeting_reminder_effect['causality_note']])
 
     reminder_effect = dashboard['lifecycle_reminder_effect']
     writer.writerow([])

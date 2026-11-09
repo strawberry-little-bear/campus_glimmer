@@ -7,7 +7,7 @@
 
 这件事反复踩过三次，每次都是「页面不报错、只有截图才看得出来」：
 
-1. 运营看板的 38 个分区。分区是 ``<section class="ops-section">``，加了
+1. 运营看板的 39 个分区。分区是 ``<section class="ops-section">``，加了
    ``.ops-jump`` 吸顶跳转条之后忘了给 scroll-margin-top，点 chip 跳下去只见
    导航不见标题。搜索洞察的 15 个分区是同一套机制，一起补的。
 2. 专题详情页的商品区分页。``?page=2#campaign-items`` 翻页后回到页首，商品区
@@ -72,7 +72,7 @@ NON_STICKY_PAGES = frozenset({'errors/base_error.html'})
 # 么、凭什么安全；没登记的直接让测试失败。
 DYNAMIC_HASH_PAGES = {
     'listings/operations_dashboard.html':
-        '落点是 38 个 <section class="ops-section">，由 .ops-section 规则避让'
+        '落点是 39 个 <section class="ops-section">，由 .ops-section 规则避让'
         '（140px，因为还要避开上方那条吸顶跳转条）',
     'listings/operations/_alerts.html':
         '落点是告警的 action_anchor；当前重新选择告警跳到 #ops-reopen-funnel，'

@@ -163,16 +163,16 @@ flowchart LR
 
 1. 搜索建议的防抖、请求取消、键盘导航和失焦关闭；
 2. 每 30 秒刷新私信与通知未读数，并在数量增加时显示提示；
-3. 运营看板 34 个延后分区的按需取回。
+3. 运营看板 35 个延后分区的按需取回。
 
 脚本失败时，页面仍应保留服务端渲染的初始状态。新增逻辑优先限定在对应 `data-*` 容器中，不要在全局选择器上执行破坏性操作。
 
 ### 运营看板分区懒加载
 
-看板 38 个分区一屏滚不到头，整页 HTML 有 600KB 以上。`data-ops-deferred` 最早只是「CSS 藏起来、滚到再揭开」，服务端一个字节都没少渲染；现在把服务端也切开了。同一个 class 下有两种分区，必须分开看：
+看板 39 个分区一屏滚不到头，整页 HTML 有 600KB 以上。`data-ops-deferred` 最早只是「CSS 藏起来、滚到再揭开」，服务端一个字节都没少渲染；现在把服务端也切开了。同一个 class 下有两种分区，必须分开看：
 
 - **不带 `data-ops-src`**：不带 `ops_lazy` cookie 的全量渲染。内容本来就在响应体里，滚近时只加 `is-revealed`，不发请求、不碰 DOM。
-- **带 `data-ops-src`**：`<head>` 里那段内联脚本只在 `window.fetch` 存在时种下 `ops_lazy` cookie，服务端据此只渲染首屏 4 个分区，其余 34 个只留一个空 `<section>` 加一条取回地址，滚到附近（`rootMargin` 提前 320px）再由前端去拿。
+- **带 `data-ops-src`**：`<head>` 里那段内联脚本只在 `window.fetch` 存在时种下 `ops_lazy` cookie，服务端据此只渲染首屏 4 个分区，其余 35 个只留一个空 `<section>` 加一条取回地址，滚到附近（`rootMargin` 提前 320px）再由前端去拿。
 
 关掉脚本的浏览器连 cookie 都种不下，于是永远走全量渲染——「没有 JS 就没有数据」这个分支不存在。取回端点是 `listings/operations_dashboard_fragment`，门槛与整页一致（登录 + staff），渲染结果和不做懒加载时逐字节相同，由 `listings/test_operations_fragments.py` 钉住。「渲染这个分区需要哪些上下文」的那张表在 `listings/operations_fragments.py`，同样由反查测试盯着，不会悄悄漏键。
 
@@ -230,7 +230,7 @@ flowchart LR
 7. **`field.id_for_label` 不保证有值，不能拿来无条件拼属性。** Django 的 `RadioSelect.id_for_label` 刻意返回空串（注释写得很清楚：不给 `<label>` 配 `for`，免得读屏软件把选项组里第一个选项当成唯一标签）。所以 `for="{{ field.id_for_label }}"` 在单选 / 多选组上会渲染出 `for=""`，`id="{{ field.id_for_label }}_helptext"` 会退化成 `id="_helptext"`——多个字段还会撞成重复 id。约定：`id_for_label` 为空即「这是个选项组」，此时用 `role="group"` + `aria-labelledby` 关联标签，拼 id 一律改用 `field.auto_id`。参考 `templates/listings/_mutual_aid_feedback_fields.html`。
 8. **`<caption>` 要写成 `<table>` 的第一个子元素，前面不能混文本。** 浏览器会把 caption 之前的所有节点连同 caption 一起从表格里丢掉——所以 `<div>` 里换行再开 `<table>` 没问题，`<table>` 标签后面紧跟的只能是一个 caption 和空白。
 9. **caption 上的 `.visually-hidden` 不会把表格布局带崩。** Bootstrap 专门给 caption 开了口子：只有 `.visually-hidden:not(caption)` 才绝对定位。所以可以放心用视觉隐藏把 caption 藏起来；换成 `display:none` 反而连读屏软件一起屏蔽，等于没写。项目里 `.visually-hidden` 由 `static/vendor/bootstrap.min.css` 提供，`style.css` 里没有定义。
-10. **caption 文本要带面板前缀。** 运营看板 38 个分区挤一页，只写子标题（比如「字段与结构」）读屏软件念出来不知道属于哪一块。约定是「面板 · 子标题」，同一面板下无子标题时只写面板名。标题本身是模板表达式（`{{ group.kind_label }}`）的循环表格，改用 `aria-labelledby` 直接引用可见标题，文案只有一份、不会漂。
+10. **caption 文本要带面板前缀。** 运营看板 39 个分区挤一页，只写子标题（比如「字段与结构」）读屏软件念出来不知道属于哪一块。约定是「面板 · 子标题」，同一面板下无子标题时只写面板名。标题本身是模板表达式（`{{ group.kind_label }}`）的循环表格，改用 `aria-labelledby` 直接引用可见标题，文案只有一份、不会漂。
 11. **当前栏目是语义，不只是颜色。** 当前栏目由 context processor 按路由组集中映射，模板只读 `active_nav_section`；`aria-current="page"` 同时驱动读屏播报和选中样式。新增栏目或详情路由时，要把路由名补进 `campus_glimmer/context_processors.py`，运行 `NavigationSemanticsTests`，不要在各模板里复制条件判断。
 12. **页面清单漏掉表单页，等于那一页的语义检查从来没跑过。** 新增守卫维度后第一次反向验证就发现：`lost_found_form.html` 的缺陷在 264 个页面的开发期审计里能抓到，在守卫测试里抓不到——因为 `PAGES` 里根本没有「发布失物招领」。现在补齐了发布商品、发布/编辑失物招领、发布/编辑求购、批量创建、举报、发起交易。新增表单页时请顺手加进 `PAGES`。
 13. **纯图标的分页链接必须自己带 `aria-label`。** 翻页按钮里只有一个 <i class="bi bi-chevron-left">，`_accessible_name` 取不到任何文字，读屏软件只会念「链接」；同页出现多个分页器时（收件箱的「收到的消息」和「发出的消息」）四个图标链接更是完全无法分辨。现在由 `PaginationAccessibleNameTests` 静态兜底，约定是链接上写 `aria-label="上一页"` / `"下一页"`、图标本身加 `aria-hidden="true"`，当前页的 `<span class="page-link">` 再加 `aria-current="page"`——只渲染「2 / 5」时读屏软件并不知道这就是当前页。`aria-hidden="true"` 的省略号会被 `_is_hidden` 跳过，不算缺陷。

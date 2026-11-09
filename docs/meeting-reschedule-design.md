@@ -37,10 +37,11 @@ end_at            = DateTimeField('结束时间')
 当前安排；首条事件就是 `rescheduled` 时明确标为不完整记录，不把上线后的首个改期
 当作首个提议。
 
-当前读取路径集中在六处：`admin.py` 列给管理员看，
+当前读取路径集中在七处：`admin.py` 列给管理员看，
 `templates/listings/orders/_appointment.html` 只向订单买卖双方展示当前回合与真实事件链，
 `meeting_attendance.py` 读响应时长与到场，`meeting_reschedule.py` 读改期形状，
 `meeting_response_reminders.py` 识别最新未回应提议并发送一次站内提醒，
+`meeting_response_reminder_effect.py` 从不可变提醒台账观察 72 小时内的阅读与同一回合动作，
 `meeting_scheduling.py` 读推荐。用户页面先提交订单参与者校验，再读取事件。
 
 `meeting_attendance.py` 已经回答了两个问题：对方多久回应一个提议、约了时间的
@@ -140,7 +141,7 @@ end_at            = DateTimeField('结束时间')
 ## 不做什么
 
 - 不回填上线前的预约事件，不从旧备注伪造未记录的时间、地点或提议人。
-- 本模块不自动改任何一条交付安排、不自动重发通知，也不新增提醒类型；独立的 `meeting_response_reminders.py` 只读同一完整事件链发送一次待回应站内提醒，并写入提醒台账，不自动接受、拒绝或改期。
+- 本模块不自动改任何一条交付安排、不自动重发通知，也不新增提醒类型；独立的 `meeting_response_reminders.py` 只读同一完整事件链发送一次待回应站内提醒，并写入提醒台账，不自动接受、拒绝或改期。效果面板也只读该台账和事件链：未满 72 小时是观察中，窗后动作单列，旧通知不补造样本，阅读与回应只用于人工观察，不据此调整发送频率。
 - 不按用户排名、不列用户名、不把改期次数写回任何记录。
 - 不改 `meeting_scheduling.py` 的推荐逻辑——推荐时间准不准是它的领域，
   这里只提供「推荐完之后有没有被改」这个读数。

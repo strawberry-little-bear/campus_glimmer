@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """运营看板分区延后揭开的契约测试。
 
-看板 38 个分区里只有前 4 个是首屏，其余 34 个延后。延后分两层，两层都要有人盯：
+看板 39 个分区里只有前 4 个是首屏，其余 35 个延后。延后分两层，两层都要有人盯：
 
 * CSS 那层是兜底。``html.js`` 下面把分区内容藏起来，滚近时由 main.js 加
   ``is-revealed`` 揭开。关掉脚本的浏览器没有 ``html.js``，整页照常全量可见。
 * JS 那层是懒加载。带着 ``ops_lazy`` cookie 来的请求，服务端只渲染首屏四个
-  分区，其余 34 个只留一个空 ``<section>`` 加一条 ``data-ops-src`` 取回地址。
+  分区，其余 35 个只留一个空 ``<section>`` 加一条 ``data-ops-src`` 取回地址。
   cookie 由 base.html 里一段内联脚本种下，所以关掉脚本的浏览器永远种不下它，
   也就永远拿到全量页面——「没有 JS 就没有数据」这个分支不存在。
 
@@ -16,8 +16,8 @@
 
 这个文件把四条约定钉死：
 * 只有前 4 个分区不加 ``data-ops-deferred``，一个不多一个不少；
-* 不带 cookie 时 34 个延后分区照常全量渲染，没有为了省字节把东西裁掉；
-* 带 cookie 时那 34 个分区是空的，且每个都带一条指向取回端点的地址；
+* 不带 cookie 时 35 个延后分区照常全量渲染，没有为了省字节把东西裁掉；
+* 带 cookie 时那 35 个分区是空的，且每个都带一条指向取回端点的地址；
 * 所有隐藏规则都挂在 ``html.js`` 下面，无脚本环境必须全量可见。
 """
 import io
@@ -135,7 +135,7 @@ class OperationsDashboardDeferredSectionTests(TestCase):
     def test_only_the_first_four_sections_render_eagerly(self):
         eager = [anchor for anchor, deferred in self.sections if not deferred]
 
-        self.assertEqual(len(self.sections), 38, '分区数量变了，先确认跳转条和分区仍然对应')
+        self.assertEqual(len(self.sections), 39, '分区数量变了，先确认跳转条和分区仍然对应')
         self.assertEqual(
             eager,
             [anchor for anchor, _ in self.sections[:4]],
@@ -265,7 +265,7 @@ class OperationsDashboardLazyLoadingTests(TestCase):
 
     这是把延后从「CSS 藏起来」升级成「服务端也不渲染」的那一半。风险全在
     「内容消失」上：cookie 种下了、地址没给，或者地址给了但内容没裁干净，
-    用户在浏览器里看到的就是 34 个永远转圈的骨架，而 Django 测试客户端
+    用户在浏览器里看到的就是 35 个永远转圈的骨架，而 Django 测试客户端
     （不带 cookie）一切正常——所以这里必须用带 cookie 的客户端跑一遍。
     """
 
@@ -543,7 +543,7 @@ class OperationsDeferredRevealDirectionTests(TestCase):
         self.assertEqual(by_label['none'], everything, '没有观察器的旧浏览器要一次揭完')
 
     def test_sections_without_a_source_are_left_completely_alone(self):
-        # 不带 cookie 的全量渲染里，34 个延后分区的内容就在响应体里，JS 唯一的
+        # 不带 cookie 的全量渲染里，35 个延后分区的内容就在响应体里，JS 唯一的
         # 职责是换类。这条用探针盯行为而不是读源码：假分区上没有 data-ops-src，
         # 于是除了 getAttribute 和 classList.add，不该再出现任何一次调用。
         result = self._probe()

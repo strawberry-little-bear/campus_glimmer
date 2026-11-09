@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // 运营看板分区跳转条：38 个 chip 在窄屏必然横向溢出，
+    // 运营看板分区跳转条：39 个 chip 在窄屏必然横向溢出，
     // 光靠一条细滚动条很难被发现。这里按 scrollLeft 写入
     // data-overflow，让 CSS 在被裁掉的一侧做渐隐；没有 JS 时整条
     // 就是普通横向滚动，功能不受影响。
@@ -141,7 +141,7 @@ document.addEventListener('DOMContentLoaded', function () {
         运营看板：分区延后取回 + 跳转条当前位置高亮。
 
         延后机制本身在文件顶部的 createSectionRevealer，这里只负责看板自己的
-        两件事：38 个分区的 scrollspy，以及点跳转条之前先把目标分区取回来。
+        两件事：39 个分区的 scrollspy，以及点跳转条之前先把目标分区取回来。
     ------------------------------------------------------------------ */
     const opsPanels = document.querySelector('.operations-panels');
     const opsJump = document.querySelector('.ops-jump');

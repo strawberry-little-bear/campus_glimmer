@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """运营看板的分区导航数据。
 
-看板由 38 个 partial 顺序拼成，一屏滚不到头，此前没有任何分区入口，运营想找
-「需求雷达」只能一路滚过去。这里按主题把 38 个分区分成 6 组，模板据此渲染顶
+看板由 39 个 partial 顺序拼成，一屏滚不到头，此前没有任何分区入口，运营想找
+「需求雷达」只能一路滚过去。这里按主题把 39 个分区分成 6 组，模板据此渲染顶
 部跳转条。
 
 两条约定，``test_operations_nav`` 会逐条盯住：
@@ -35,6 +35,7 @@ OPERATIONS_DASHBOARD_SECTIONS = (
         ("ops-order-lifecycle", "订单链路"),
         ("ops-borrow", "借用催收"),
         ("ops-meeting", "面交时段"),
+        ("ops-meeting-reminders", "提醒回应"),
         ("ops-handover-codes", "交接码"),
         ("ops-delivery-confirm", "交付确认"),
         ("ops-trade-quality", "交易质量"),

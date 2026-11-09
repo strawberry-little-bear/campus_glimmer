@@ -13,7 +13,7 @@
 
 ## 更值得记下来的盲区
 
-上一轮的全站溢出扫描漏掉了 47 个分区，原因是运营看板和搜索洞察的分区默认懒加载：`html.js` 下 `.ops-section[data-ops-deferred]:not(.is-revealed) > * { display: none }`，靠 IntersectionObserver 滚到才展开。扫描工具不显式去掉标记再补 `is-revealed`，量到的就是一屏空壳——34 个运营分区加 13 个搜索洞察分区，一次都没被测到。
+上一轮的全站溢出扫描漏掉了 48 个分区，原因是运营看板和搜索洞察的分区默认懒加载：`html.js` 下 `.ops-section[data-ops-deferred]:not(.is-revealed) > * { display: none }`，靠 IntersectionObserver 滚到才展开。扫描工具不显式去掉标记再补 `is-revealed`，量到的就是一屏空壳——35 个运营分区加 13 个搜索洞察分区，一次都没被测到。
 
 这不是测试环境噪声，是方法缺陷：任何针对这两个页面的溢出审计，都必须先强制展开懒加载分区，否则结论无效。
 

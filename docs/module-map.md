@@ -436,11 +436,11 @@ campus_glimmer/
 
 - **`test_operations_digest.py`**：告警日报只投活跃管理员、尊重偏好、幂等键不重复刷屏
 
-- **`test_operations_deferred_sections.py`**：运营看板延后揭开的契约——只有前 4 个分区首屏、其余 34 个带 cookie 时留空桩、所有隐藏规则必须挂在 html.js 下面
+- **`test_operations_deferred_sections.py`**：运营看板延后揭开的契约——只有前 4 个分区首屏、其余 35 个带 cookie 时留空桩、所有隐藏规则必须挂在 html.js 下面
 
 - **`test_operations_fragments.py`**：运营看板分区取回的契约——上下文键表反查、端点权限门槛与两条渲染路径逐字节等价
 
-- **`test_operations_nav.py`**：运营看板分区跳转条与 38 个 partial 的对应关系，拦住「chip 还在、点下去却不动」这类单向失效
+- **`test_operations_nav.py`**：运营看板分区跳转条与 39 个 partial 的对应关系，拦住「chip 还在、点下去却不动」这类单向失效
 
 - **`test_opportunity_digest.py`**：互助机会摘要通知、偏好和命令测试
 

@@ -131,7 +131,7 @@ JS 那层才是懒加载：带 `si_lazy` cookie 的请求，服务端只渲染�
 `section_partial`，和 `search_insights_fragments` 里的那两个。名字相同、语义不同——各自查各自那张分区表。
 
 本轮第一版在 `views.py` 里直接导入，第二个导入把第一个盖掉：运营看板的取回端点于是拿搜索洞察的表去查
-`ops-demand-match` 这类锚点，一个键都匹配不上，**38 个分区里有 25 个静默变成空态**。页面其它部分完全
+`ops-demand-match` 这类锚点，一个键都匹配不上，**39 个分区里有 25 个静默变成空态**。页面其它部分完全
 正常，因为不带 `ops_lazy` cookie 的全量渲染走的是另一条路；只有把取回结果和全量渲染逐字节比对才会发现，
 那正是 `listings/test_operations_fragments.py` 的等价性测试抓到的。
 

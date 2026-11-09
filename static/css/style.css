@@ -2746,6 +2746,11 @@ a { color: inherit; text-decoration: none; }
         grid-template-columns: 4.6rem 1fr 2.2rem 2.6rem;
     }
 }
+/* 交付安排提醒效果面板：解释段紧接标题，表格沿用运营表格的横向滚动。 */
+.meeting-response-reminder-effect-panel .search-rhythm-note {
+    margin-top: 0;
+}
+
 /* 生命周期提醒效果面板：复用供给侧生命周期的视觉语言，只补“是否看过”
    这一列的强调色，以及窄屏下七列表格的留白。 */
 .lifecycle-reminder-effect-panel .ops-table-wrap {
@@ -8438,7 +8443,7 @@ a { color: inherit; text-decoration: none; }
 /* --------------------------------------------------------------------------
    运营看板分区导航
 
-   看板有 38 个分区，此前只能一屏一屏滚。这里加一条吸顶跳转条：分组名加扇平
+   看板有 39 个分区，此前只能一屏一屏滚。这里加一条吸顶跳转条：分组名加扇平
    chip，横向滚动；点一下直接落到对应分区。落点反馈交给 :target，不引入
    scroll-spy。
 
@@ -8548,7 +8553,7 @@ a { color: inherit; text-decoration: none; }
 .ops-jump-chip:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* 分区落点：避开吸顶导航，并用 outline 高亮（不影响布局，.row 带负外边距也安全）。
-   运营看板和搜索洞察两套分区共用这条：38 个分区和 15 个分区是同一套延后机制，
+   运营看板和搜索洞察两套分区共用这条：39 个分区和 15 个分区是同一套延后机制，
    只是数据来源不同。 */
 .ops-section, .si-section { scroll-margin-top: 140px; }
 

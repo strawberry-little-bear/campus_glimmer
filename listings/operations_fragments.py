@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """运营看板分区的按需取回表：锚点 -> 渲染这个分区需要什么。
 
-看板 38 个分区一屏滚不到头，整页 HTML 有 600KB 以上。``data-ops-deferred``
+看板 39 个分区一屏滚不到头，整页 HTML 有 600KB 以上。``data-ops-deferred``
 最早只是「CSS 藏起来、滚到再揭开」，服务端一个字节都没少渲染；那把服务端也切开：
-带着 ``ops_lazy`` cookie 来的请求只渲染首屏四个分区，其余 34 个只留一个空
+带着 ``ops_lazy`` cookie 来的请求只渲染首屏四个分区，其余 35 个只留一个空
 ``<section>`` 和一条取回地址，滚到附近再由前端去拿（见 ``operations_dashboard_fragment``
 和 main.js 里那段）。
 
@@ -52,6 +52,7 @@ OPERATIONS_SECTION_FRAGMENTS = (
     ('ops-borrow', '_borrow.html', True, ()),
     ('ops-demand-radar', '_demand_radar.html', True, ()),
     ('ops-meeting', '_meeting.html', False, ('campus_location_service_rule_quality', 'meeting_attendance', 'meeting_service_window_quality')),
+    ('ops-meeting-reminders', '_meeting_response_reminders.html', False, ('meeting_response_reminder_effect',)),
     ('ops-handover-codes', '_handover_codes.html', False, ('handoff_code_usage', 'return_handshake')),
     ('ops-delivery-confirm', '_delivery_confirm.html', False, ('delivery_handshake', 'order_deadline_reminders', 'transaction_safety_acknowledgement_quality')),
     ('ops-saved-search', '_saved_search.html', False, ('first_viewed', 'saved_search_latency', 'saved_search_limit_shape', 'saved_search_quiet_window')),

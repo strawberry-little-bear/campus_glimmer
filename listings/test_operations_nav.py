@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """运营看板分区跳转条的契约测试。
 
-看板由 38 个 partial 顺序拼成，一屏滚不到头。``operations_nav.py`` 描述「有哪
+看板由 39 个 partial 顺序拼成，一屏滚不到头。``operations_nav.py`` 描述「有哪
 些分区、怎么分组」，模板负责把每个 include 包进带 id 的 ``<section>``。两边分开
 书写，只改一边就会静默失效——chip 还在，点下去却不动；或者分区还在，却完全
 没有入口。这个文件就是拦住这种漂移的。
@@ -58,7 +58,7 @@ class OperationsDashboardUmbrellaTests(SimpleTestCase):
     def test_no_umbrella_partial_is_left_with_a_single_child(self):
         names = self._partial_names()
         # 目录都找错了还跑什么断言；顺手把「一个 partial 都没有」也拦在外面。
-        self.assertGreaterEqual(len(names), 38, '没读到分区片段目录，先确认路径')
+        self.assertGreaterEqual(len(names), 39, '没读到分区片段目录，先确认路径')
 
         for name in names:
             source = io.open(os.path.join(self.PARTIALS_DIR, name), encoding='utf-8').read()
@@ -119,7 +119,7 @@ class OperationsDashboardSectionNavTests(TestCase):
         groups = OPERATIONS_DASHBOARD_SECTIONS
 
         self.assertEqual(len(groups), 6)
-        self.assertEqual(len(nav_anchors()), 38)
+        self.assertEqual(len(nav_anchors()), 39)
         for label, items in groups:
             self.assertTrue(label, '分组名不能为空')
             self.assertTrue(items, '空分组会渲染出一个孤立的分组标题')
@@ -131,7 +131,7 @@ class OperationsDashboardSectionNavTests(TestCase):
             GROUP_LABEL_RE.findall(self.html),
             [label for label, _items in OPERATIONS_DASHBOARD_SECTIONS],
         )
-        self.assertEqual(len(CHIP_RE.findall(self.html)), 38)
+        self.assertEqual(len(CHIP_RE.findall(self.html)), 39)
 
     def test_the_page_has_no_duplicated_ids(self):
         # 加分区导航时踩过的坑：32 个 include 被包进 <section> 之后，原来那批
@@ -152,7 +152,7 @@ class OperationsDashboardSectionNavTests(TestCase):
         includes = re.findall(r"{% include 'listings/operations/([^']+)' %}", source)
 
         self.assertEqual(len(includes), len(set(includes)), '同一个 partial 被包含了多次')
-        self.assertEqual(len(includes), 38)
+        self.assertEqual(len(includes), 39)
 
     def test_anonymous_visitors_never_see_the_nav(self):
         self.client.logout()
