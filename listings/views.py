@@ -13403,6 +13403,7 @@ def operations_dashboard_export(request):
     writer.writerow([])
     timing = sla['incident_timing']
     writer.writerow(['预约异常事件时效'])
+    writer.writerow(['导出口径'])
     writer.writerow([
         '周期内异常', timing['sample_count'],
         '历史不可知', timing['historical_unknown_count'],

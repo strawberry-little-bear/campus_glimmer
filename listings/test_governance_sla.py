@@ -1027,6 +1027,10 @@ class GovernanceExportTests(TestCase):
 
         text = response.content.decode('utf-8-sig')
         self.assertIn('预约异常事件时效', text)
+        lines = text.splitlines()
+        title_index = lines.index('预约异常事件时效')
+        self.assertEqual(lines[title_index + 1], '导出口径')
+        self.assertIn('周期内异常', lines[title_index + 2])
         self.assertIn('首次响应：提交异常 → 开始处理', text)
         self.assertIn('开始后结论：开始处理 → 确认或驳回', text)
         self.assertIn('历史不可知', text)
