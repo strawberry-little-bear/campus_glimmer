@@ -117,6 +117,21 @@ INCIDENT_EVENT_TRANSITIONS = {
 
 INCIDENT_CLOSED_STATUSES = ('resolved', 'dismissed')
 
+# A broken event chain needs a precise queue for the operator, not a generic
+# "invalid" badge. The tuple is also the display order, so a row with several
+# faults always presents them the same way on the workbench and in CSV.
+INCIDENT_CHAIN_REASON_LABELS = (
+    ('missing_reported', '缺少「提交异常」首报'),
+    ('missing_review_started', '缺少「开始处理」'),
+    ('missing_terminal', '缺少确认或驳回结论'),
+    ('duplicate_state_event', '状态动作重复'),
+    ('unexpected_terminal', '未完结异常出现结论事件'),
+    ('out_of_order', '状态动作顺序不符'),
+    ('wrong_transition', '状态前后不连续'),
+    ('note_snapshot_mismatch', '处理说明状态快照不符'),
+    ('status_snapshot_mismatch', '当前状态与事件链末态不一致'),
+)
+
 PERIOD_FIELDS = (
     'status', 'created_at', 'closed_at', 'reviewer_id',
 )
@@ -295,14 +310,22 @@ def _load_incident_event_histories(incident_ids):
 
 
 def _assess_incident_event_chain(status, events):
-    """Validate the immutable event chain without filling in missing history.
+    """Validate the immutable event chain and explain every actionable fault.
 
     ``note_updated`` is a real event but not a state transition. It remains in
     the visible history and is ignored for timing. A legacy incident with no
     rows is ``historical_unknown``; an incident with rows that do not form the
     exact chain implied by its current status is ``invalid``. Neither becomes a
     zero-second sample, and neither is repaired from the current snapshot.
+
+    An invalid result carries stable reason codes as well as readable labels.
+    The workbench and CSV consume this same result instead of each trying to
+    infer why the chain failed from a generic status.
     """
+    last_event_at = max(
+        (event['occurred_at'] for event in events),
+        default=None,
+    )
     if not events:
         return {
             'state': 'historical_unknown',
@@ -310,45 +333,93 @@ def _assess_incident_event_chain(status, events):
             'conclusion_seconds': None,
             'response_pending': False,
             'conclusion_pending': status not in INCIDENT_CLOSED_STATUSES,
+            'reason_codes': [],
+            'reason_labels': [],
+            'last_event_at': None,
         }
 
     status_events = [event for event in events if event['event_type'] != 'note_updated']
     expected = INCIDENT_STATE_EVENTS.get(status)
-    invalid = expected is None or tuple(
-        event['event_type'] for event in status_events
-    ) != expected
+    reason_codes = set()
+
+    state_types = [event['event_type'] for event in status_events]
+    if expected is None:
+        reason_codes.add('status_snapshot_mismatch')
+        expected_filtered = ()
+    else:
+        if 'reported' not in state_types:
+            reason_codes.add('missing_reported')
+        if 'review_started' in expected and 'review_started' not in state_types:
+            reason_codes.add('missing_review_started')
+        if status in INCIDENT_CLOSED_STATUSES and status not in state_types:
+            reason_codes.add('missing_terminal')
+
+        counts = {event_type: state_types.count(event_type) for event_type in set(state_types)}
+        has_duplicate = any(count > 1 for count in counts.values())
+        has_unexpected = any(event_type not in expected for event_type in state_types)
+        if has_duplicate:
+            reason_codes.add('duplicate_state_event')
+        if has_unexpected:
+            if status not in INCIDENT_CLOSED_STATUSES and any(
+                event_type in INCIDENT_CLOSED_STATUSES for event_type in state_types
+            ):
+                reason_codes.add('unexpected_terminal')
+            else:
+                reason_codes.add('status_snapshot_mismatch')
+
+        expected_filtered = tuple(
+            event_type for event_type in expected if event_type in counts
+        )
+        if (
+            not has_duplicate
+            and not has_unexpected
+            and tuple(state_types) != expected_filtered
+        ):
+            reason_codes.add('out_of_order')
 
     current_status = ''
     previous_at = None
     for event in events:
+        if previous_at is not None and event['occurred_at'] < previous_at:
+            reason_codes.add('out_of_order')
+        previous_at = event['occurred_at']
+
         if event['event_type'] == 'note_updated':
             if (
                 event['previous_status'] != current_status
                 or event['new_status'] != current_status
             ):
-                invalid = True
-                break
+                reason_codes.add('note_snapshot_mismatch')
             continue
         transition = INCIDENT_EVENT_TRANSITIONS.get(event['event_type'])
         if transition is None:
-            invalid = True
-            break
-        if (event['previous_status'], event['new_status']) != transition:
-            invalid = True
-            break
-        if previous_at is not None and event['occurred_at'] < previous_at:
-            invalid = True
-            break
-        previous_at = event['occurred_at']
+            reason_codes.add('status_snapshot_mismatch')
+            continue
+        if (
+            (event['previous_status'], event['new_status']) != transition
+            or event['previous_status'] != current_status
+        ):
+            reason_codes.add('wrong_transition')
         current_status = event['new_status']
 
-    if invalid:
+    if status in INCIDENT_STATE_EVENTS and current_status != status:
+        reason_codes.add('status_snapshot_mismatch')
+
+    ordered_codes = [
+        code for code, _label in INCIDENT_CHAIN_REASON_LABELS
+        if code in reason_codes
+    ]
+    labels = dict(INCIDENT_CHAIN_REASON_LABELS)
+    if ordered_codes:
         return {
             'state': 'invalid',
             'response_seconds': None,
             'conclusion_seconds': None,
             'response_pending': False,
             'conclusion_pending': status not in INCIDENT_CLOSED_STATUSES,
+            'reason_codes': ordered_codes,
+            'reason_labels': [labels[code] for code in ordered_codes],
+            'last_event_at': last_event_at,
         }
 
     by_type = {event['event_type']: event for event in status_events}
@@ -371,6 +442,9 @@ def _assess_incident_event_chain(status, events):
         'conclusion_seconds': conclusion_seconds,
         'response_pending': response_pending,
         'conclusion_pending': status not in INCIDENT_CLOSED_STATUSES,
+        'reason_codes': [],
+        'reason_labels': [],
+        'last_event_at': last_event_at,
     }
 
 
@@ -410,6 +484,9 @@ def _incident_timing(period_cases, assessments, queues):
             history = case.get('incident_events', [])
             case['incident_timing_state'] = assessment['state']
             case['incident_events'] = history
+            case['incident_chain_reason_codes'] = assessment['reason_codes']
+            case['incident_chain_reason_labels'] = assessment['reason_labels']
+            case['incident_last_event_at'] = assessment['last_event_at']
             if assessment['state'] == 'historical_unknown':
                 response_label = '首次响应 · 历史不可知'
             elif assessment['state'] == 'invalid':
@@ -465,12 +542,48 @@ def _incident_timing(period_cases, assessments, queues):
         unknown_count=closed_unknown,
         pending_count=open_count,
     )
+    status_labels = dict(MeetingIncident.STATUS_CHOICES)
+    incident_event_checklist = []
+    for case in period_cases:
+        if case['kind'] != 'incident' or case['case_id'] not in assessments:
+            continue
+        assessment = assessments[case['case_id']]
+        if assessment['state'] != 'invalid':
+            continue
+        incident_event_checklist.append({
+            'case_id': case['case_id'],
+            'subject': case['subject'],
+            'reason_label': case['reason_label'],
+            'status': case['status'],
+            'status_label': status_labels.get(case['status'], case['status']),
+            'reason_codes': assessment['reason_codes'],
+            'reason_labels': assessment['reason_labels'],
+            'last_event_at': assessment['last_event_at'],
+            'created_at': case['created_at'],
+            'url': case['url'],
+        })
+    incident_event_checklist.sort(
+        key=lambda item: (
+            item['last_event_at'] or item['created_at'], item['case_id'],
+        )
+    )
+
+    reason_counts = []
+    for code, label in INCIDENT_CHAIN_REASON_LABELS:
+        count = sum(
+            1 for item in incident_event_checklist if code in item['reason_codes']
+        )
+        if count:
+            reason_counts.append({'code': code, 'label': label, 'count': count})
+
     return {
         'sample_count': len(period_assessments),
         'response': response,
         'conclusion': conclusion,
         'historical_unknown_count': historical,
         'invalid_chain_count': invalid,
+        'incident_event_checklist': incident_event_checklist,
+        'incident_chain_reason_counts': reason_counts,
     }
 
 

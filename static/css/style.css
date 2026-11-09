@@ -3662,6 +3662,90 @@ a { color: inherit; text-decoration: none; }
     font-variant-numeric: tabular-nums;
 }
 
+.governance-incident-checklist > .governance-queue-heading {
+    margin-bottom: 12px;
+}
+
+.governance-event-reason-filter {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-bottom: 13px;
+}
+
+.governance-event-reason-filter > span {
+    margin-right: 2px;
+    font-size: .7rem;
+    color: var(--muted);
+}
+
+.governance-incident-checklist .ops-table {
+    min-width: 900px;
+}
+
+.governance-incident-checklist .ops-table th,
+.governance-incident-checklist .ops-table td {
+    vertical-align: top;
+}
+
+.governance-incident-checklist .ops-table td small {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: .67rem;
+    line-height: 1.45;
+}
+
+.governance-event-checklist-subject {
+    display: block;
+    max-width: 22rem;
+    color: #2f4a3a;
+}
+
+.governance-event-status {
+    display: inline-flex;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: #5b685f;
+    background: #f0f3f1;
+    font-size: .68rem;
+    white-space: nowrap;
+}
+
+.governance-event-reason-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.governance-event-reason-badges span {
+    display: inline-flex;
+    padding: 3px 8px;
+    border: 1px solid #f0d2c4;
+    border-radius: 999px;
+    color: #9a4f37;
+    background: #fff6f1;
+    font-size: .67rem;
+    line-height: 1.35;
+}
+
+.governance-event-checklist-empty {
+    padding: 14px;
+    border: 1px dashed #dce8df;
+    border-radius: 10px;
+    color: #5d6f65;
+    background: #f8fbf9;
+    font-size: .76rem;
+}
+
+.governance-event-checklist-note {
+    margin-top: 11px;
+    color: var(--muted);
+    font-size: .69rem;
+    line-height: 1.55;
+}
+
 .governance-incident-timing > .governance-queue-heading {
     margin-bottom: 14px;
 }

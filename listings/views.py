@@ -2456,6 +2456,19 @@ def governance_workbench(request):
         status_filter = 'open'
 
     sla = build_governance_sla(days=days)
+    event_issue_filter = request.GET.get('event_issue', 'all')
+    valid_event_issues = {
+        item['code'] for item in sla['incident_timing']['incident_chain_reason_counts']
+    }
+    if event_issue_filter not in valid_event_issues:
+        event_issue_filter = 'all'
+    incident_event_checklist = sla['incident_timing']['incident_event_checklist']
+    if event_issue_filter != 'all':
+        incident_event_checklist = [
+            item for item in incident_event_checklist
+            if event_issue_filter in item['reason_codes']
+        ]
+
     rows = []
     for queue in sla['queues']:
         if kind_filter != 'all' and queue['kind'] != kind_filter:
@@ -2481,6 +2494,8 @@ def governance_workbench(request):
         'kind_filter': kind_filter,
         'status_filter': status_filter,
         'days': days,
+        'incident_event_checklist': incident_event_checklist,
+        'event_issue_filter': event_issue_filter,
         'period_choices': PERIOD_CHOICES,
         'kind_choices': (
             ('all', '全部队列'),
@@ -13431,6 +13446,39 @@ def operations_dashboard_export(request):
     writer.writerow([
         '历史不可知与事件链无法判定分开计数；两类都不按零秒进入耗时分母。'
         '首次响应只要求已真实记录提交与开始处理；结论只纳入已完结且链完整的异常。',
+    ])
+    writer.writerow([])
+    event_checklist = timing['incident_event_checklist']
+    writer.writerow(['预约异常事件链排查清单'])
+    writer.writerow([
+        '待核查异常', len(event_checklist),
+        '口径', '只列统计周期内创建、已有事件但无法判定的异常；历史不可知单列，不进入本清单。',
+    ])
+    if timing['incident_chain_reason_counts']:
+        writer.writerow(['原因分布'])
+        writer.writerow(['原因', '原因代码', '异常数'])
+        for reason in timing['incident_chain_reason_counts']:
+            writer.writerow([reason['label'], reason['code'], reason['count']])
+    writer.writerow([
+        '异常 ID', '商品', '异常类型', '当前状态', '原因', '原因代码',
+        '最近事件', '创建时间',
+    ])
+    for item in event_checklist:
+        writer.writerow([
+            item['case_id'],
+            item['subject'],
+            item['reason_label'],
+            item['status_label'],
+            '；'.join(item['reason_labels']),
+            ' · '.join(item['reason_codes']),
+            '' if item['last_event_at'] is None
+            else item['last_event_at'].strftime('%Y-%m-%d %H:%M'),
+            '' if item['created_at'] is None
+            else item['created_at'].strftime('%Y-%m-%d %H:%M'),
+        ])
+    writer.writerow([
+        '只读边界', '仅用于人工核查事件记录，不显示用户名、不排名、不修复历史、'
+        '不补造事件、不自动修改异常或业务状态。',
     ])
     writer.writerow([])
     writer.writerow(['队列', '处理时长分布', '条数', '占比（%）'])

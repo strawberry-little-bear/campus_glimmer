@@ -14,11 +14,11 @@
 
 <div class="governance-filter-bar mb-4">
     <span class="small text-muted">队列</span>
-    {% for value, label in kind_choices %}<a class="report-filter {% if kind_filter == value %}is-active{% endif %}" href="?kind={{ value }}&status={{ status_filter }}&days={{ days }}">{{ label }}</a>{% endfor %}
+    {% for value, label in kind_choices %}<a class="report-filter {% if kind_filter == value %}is-active{% endif %}" href="?kind={{ value }}&status={{ status_filter }}&days={{ days }}&event_issue={{ event_issue_filter }}">{{ label }}</a>{% endfor %}
     <span class="small text-muted ms-2">状态</span>
-    {% for value, label in status_choices %}<a class="report-filter {% if status_filter == value %}is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ value }}&days={{ days }}">{{ label }}</a>{% endfor %}
+    {% for value, label in status_choices %}<a class="report-filter {% if status_filter == value %}is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ value }}&days={{ days }}&event_issue={{ event_issue_filter }}">{{ label }}</a>{% endfor %}
     <span class="small text-muted ms-2">周期</span>
-    {% for value, label in period_choices %}<a class="report-filter {% if days == value %}is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ status_filter }}&days={{ value }}">{{ label }}</a>{% endfor %}
+    {% for value, label in period_choices %}<a class="report-filter {% if days == value %}is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ status_filter }}&days={{ value }}&event_issue={{ event_issue_filter }}">{{ label }}</a>{% endfor %}
 </div>
 
 <div class="governance-queue-grid mb-4">
@@ -82,6 +82,50 @@
         <span><strong>历史不可知 {{ governance.incident_timing.historical_unknown_count }} 条</strong>：事件表启用前的旧异常，系统不倒推、不按零秒计入。</span>
         <span><strong>事件链无法判定 {{ governance.incident_timing.invalid_chain_count }} 条</strong>：缺状态动作、重复、倒序或与当前状态不一致，均不进入耗时分母。</span>
     </div>
+</section>
+
+<section class="content-card governance-incident-checklist mb-4">
+    <div class="governance-queue-heading">
+        <div>
+            <span class="eyebrow eyebrow-soft">Event triage</span>
+            <h2 class="mt-2 mb-1">事件链排查清单</h2>
+            <p class="mb-0 small text-muted">只列最近 {{ governance.days }} 天创建、已有事件但无法判定的异常。按最近事件从早到晚排列，便于先核查搁置更久的数据问题。</p>
+        </div>
+        <span>{{ incident_event_checklist|length }} 条待核查</span>
+    </div>
+    {% if governance.incident_timing.incident_chain_reason_counts %}
+    <div class="governance-event-reason-filter" aria-label="按事件链原因筛选">
+        <span>原因</span>
+        <a class="report-filter{% if event_issue_filter == 'all' %} is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ status_filter }}&days={{ days }}&event_issue=all">全部</a>
+        {% for reason in governance.incident_timing.incident_chain_reason_counts %}
+        <a class="report-filter{% if event_issue_filter == reason.code %} is-active{% endif %}" href="?kind={{ kind_filter }}&status={{ status_filter }}&days={{ days }}&event_issue={{ reason.code }}">{{ reason.label }} {{ reason.count }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if incident_event_checklist %}
+    <div class="ops-table-wrap">
+        <table class="table ops-table align-middle mb-0">
+            <caption class="visually-hidden">预约异常事件链排查清单</caption>
+            <thead><tr><th>异常</th><th>当前状态</th><th>缺失或冲突原因</th><th>最近事件</th><th>人工核查</th></tr></thead>
+            <tbody>
+                {% for item in incident_event_checklist %}
+                <tr>
+                    <td data-label="异常"><strong class="governance-event-checklist-subject">{{ item.subject }}</strong><small>异常 {{ item.case_id }} · {{ item.reason_label }}</small></td>
+                    <td data-label="当前状态"><span class="governance-event-status">{{ item.status_label }}</span></td>
+                    <td data-label="缺失或冲突原因"><div class="governance-event-reason-badges">{% for label in item.reason_labels %}<span>{{ label }}</span>{% endfor %}</div><small>{{ item.reason_codes|join:' · ' }}</small></td>
+                    <td data-label="最近事件">{% if item.last_event_at %}<time datetime="{{ item.last_event_at|date:'c' }}">{{ item.last_event_at|date:'Y-m-d H:i' }}</time>{% else %}—{% endif %}</td>
+                    <td data-label="人工核查"><a class="btn btn-sm btn-outline-primary" href="{{ item.url }}"><i class="bi bi-search me-1"></i>核查处理链</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% elif event_issue_filter != 'all' %}
+    <div class="governance-event-checklist-empty">当前原因下没有待核查异常，可切回「全部」查看其他原因。</div>
+    {% else %}
+    <div class="governance-event-checklist-empty"><i class="bi bi-check2-circle me-1"></i>当前周期没有已留事件但无法判定的异常。历史不可知仍单独计数，不进入本清单。</div>
+    {% endif %}
+    <p class="governance-event-checklist-note mb-0"><i class="bi bi-shield-check me-1"></i>本清单不显示用户名、不排名、不自动修改异常或补造事件；原因代码仅描述事件记录与当前状态之间的可核验差异。</p>
 </section>
 
 <section class="governance-case-list">

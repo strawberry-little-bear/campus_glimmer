@@ -454,6 +454,8 @@ class GovernanceSlaTests(TestCase):
         self.assertEqual(case['incident_response_label'], '首次响应 2 小时')
         self.assertEqual(case['incident_conclusion_label'], '开始后结论 6 小时')
         self.assertEqual(len(case['incident_events']), 4)
+        self.assertEqual(timing['incident_event_checklist'], [])
+        self.assertEqual(timing['incident_chain_reason_counts'], [])
 
     def test_note_snapshot_must_match_the_state_at_that_point(self):
         incident = self.make_incident(
@@ -472,6 +474,9 @@ class GovernanceSlaTests(TestCase):
         self.assertEqual(timing['response']['measurable_count'], 0)
         self.assertEqual(timing['conclusion']['measurable_count'], 0)
         self.assertEqual(timing['conclusion']['unknown_count'], 1)
+        checklist_item = timing['incident_event_checklist'][0]
+        self.assertIn('note_snapshot_mismatch', checklist_item['reason_codes'])
+        self.assertIn('处理说明状态快照不符', checklist_item['reason_labels'])
 
     def test_legacy_incident_without_events_is_historical_unknown_not_zero(self):
         self.make_incident(
@@ -488,6 +493,7 @@ class GovernanceSlaTests(TestCase):
         self.assertEqual(timing['response']['unknown_count'], 1)
         self.assertEqual(timing['conclusion']['unknown_count'], 1)
         self.assertEqual(timing['conclusion']['pending_count'], 0)
+        self.assertEqual(timing['incident_event_checklist'], [])
 
     def test_reported_only_open_incident_is_pending_instead_of_invalid(self):
         incident = self.make_incident(status='open')
@@ -516,6 +522,10 @@ class GovernanceSlaTests(TestCase):
         self.assertEqual(timing['response']['measurable_count'], 0)
         self.assertEqual(timing['response']['unknown_count'], 1)
         self.assertEqual(timing['conclusion']['pending_count'], 1)
+        self.assertIn(
+            'missing_reported',
+            timing['incident_event_checklist'][0]['reason_codes'],
+        )
 
     def test_missing_review_started_event_invalidates_a_closed_chain(self):
         incident = self.make_incident(
@@ -534,6 +544,10 @@ class GovernanceSlaTests(TestCase):
         self.assertEqual(timing['invalid_chain_count'], 1)
         self.assertEqual(timing['response']['unknown_count'], 1)
         self.assertEqual(timing['conclusion']['unknown_count'], 1)
+        self.assertIn(
+            'missing_review_started',
+            timing['incident_event_checklist'][0]['reason_codes'],
+        )
 
     def test_duplicate_state_event_invalidates_the_chain(self):
         incident = self.make_incident(status='reviewing')
@@ -553,6 +567,10 @@ class GovernanceSlaTests(TestCase):
 
         self.assertEqual(timing['invalid_chain_count'], 1)
         self.assertEqual(timing['response']['measurable_count'], 0)
+        self.assertIn(
+            'duplicate_state_event',
+            timing['incident_event_checklist'][0]['reason_codes'],
+        )
 
     def test_out_of_order_state_events_invalidate_the_chain(self):
         incident = self.make_incident(
@@ -573,6 +591,10 @@ class GovernanceSlaTests(TestCase):
 
         self.assertEqual(timing['invalid_chain_count'], 1)
         self.assertEqual(timing['response']['measurable_count'], 0)
+        self.assertIn(
+            'out_of_order',
+            timing['incident_event_checklist'][0]['reason_codes'],
+        )
 
     def test_wrong_state_snapshot_invalidates_the_chain(self):
         incident = self.make_incident(status='reviewing')
@@ -588,6 +610,44 @@ class GovernanceSlaTests(TestCase):
 
         self.assertEqual(timing['invalid_chain_count'], 1)
         self.assertEqual(timing['response']['unknown_count'], 1)
+        self.assertIn(
+            'wrong_transition',
+            timing['incident_event_checklist'][0]['reason_codes'],
+        )
+
+    def test_missing_terminal_event_is_named_in_the_checklist(self):
+        incident = self.make_incident(status='resolved')
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(hours=4),
+        )
+        self.add_incident_event(
+            incident, 'review_started', 'open', 'reviewing',
+            ago=timedelta(hours=2),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertIn(
+            'missing_terminal',
+            timing['incident_event_checklist'][0]['reason_codes'],
+        )
+
+    def test_terminal_event_on_an_open_incident_is_named(self):
+        incident = self.make_incident(status='open')
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(hours=4),
+        )
+        self.add_incident_event(
+            incident, 'resolved', 'reviewing', 'resolved',
+            ago=timedelta(hours=1),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertIn(
+            'unexpected_terminal',
+            timing['incident_event_checklist'][0]['reason_codes'],
+        )
 
     def test_unknown_cases_do_not_change_a_known_case_median(self):
         known = self.make_incident(
@@ -633,6 +693,50 @@ class GovernanceSlaTests(TestCase):
         self.assertEqual(case['incident_timing_state'], 'valid')
         self.assertEqual(case['incident_response_label'], '首次响应 1 天')
         self.assertEqual(len(case['incident_events']), 2)
+        self.assertEqual(timing['incident_event_checklist'], [])
+
+    def test_checklist_only_contains_invalid_period_chains_in_age_order(self):
+        older = self.make_incident(
+            status='reviewing', created_ago=timedelta(days=2),
+        )
+        self.add_incident_event(
+            older, 'review_started', 'open', 'reviewing',
+            ago=timedelta(hours=8),
+        )
+        newer = self.make_incident(
+            status='reviewing', created_ago=timedelta(days=1),
+        )
+        self.add_incident_event(
+            newer, 'reported', '', 'open',
+            ago=timedelta(hours=2),
+        )
+        outside = self.make_incident(
+            status='reviewing', created_ago=timedelta(days=40),
+        )
+        self.add_incident_event(
+            outside, 'review_started', 'open', 'reviewing',
+            ago=timedelta(days=39),
+        )
+        self.make_incident(
+            status='resolved', created_ago=timedelta(hours=4),
+            closed_ago=timedelta(hours=1),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(
+            [item['case_id'] for item in timing['incident_event_checklist']],
+            [older.pk, newer.pk],
+        )
+        self.assertEqual(timing['invalid_chain_count'], 2)
+        self.assertEqual(timing['historical_unknown_count'], 1)
+        self.assertEqual(
+            [item['code'] for item in timing['incident_chain_reason_counts']],
+            [
+                'missing_reported', 'missing_review_started',
+                'wrong_transition', 'status_snapshot_mismatch',
+            ],
+        )
 
     def test_incident_events_are_loaded_once_per_sla_build(self):
         incident = self.make_incident(
@@ -742,11 +846,13 @@ class GovernanceWorkbenchTests(TestCase):
 
         self.client.login(username='workbench-staff', password='safe-password-123')
         response = self.client.get(
-            reverse('governance_workbench'), {'kind': 'nope', 'status': 'nope'},
+            reverse('governance_workbench'),
+            {'kind': 'nope', 'status': 'nope', 'event_issue': 'nope'},
         )
 
         self.assertEqual(response.context['kind_filter'], 'all')
         self.assertEqual(response.context['status_filter'], 'open')
+        self.assertEqual(response.context['event_issue_filter'], 'all')
 
     def test_period_selector_is_carried_into_the_statistics(self):
         self.client.login(username='workbench-staff', password='safe-password-123')
@@ -771,6 +877,64 @@ class GovernanceWorkbenchTests(TestCase):
         self.assertContains(response, '预约异常事件时效')
         self.assertContains(response, '首次响应 · 历史不可知')
         self.assertContains(response, '历史不可知 1 条')
+        self.assertEqual(response.context['incident_event_checklist'], [])
+
+    def test_event_issue_filter_narrows_the_checklist(self):
+        missing_report = self.make_incident()
+        MeetingIncident.objects.filter(pk=missing_report.pk).update(status='reviewing')
+        MeetingIncidentEvent.objects.create(
+            incident=missing_report, event_type='review_started',
+            previous_status='open', new_status='reviewing',
+            occurred_at=timezone.now() - timedelta(hours=2),
+        )
+        missing_terminal = self.make_incident()
+        MeetingIncident.objects.filter(pk=missing_terminal.pk).update(status='resolved')
+        MeetingIncidentEvent.objects.create(
+            incident=missing_terminal, event_type='reported',
+            previous_status='', new_status='open',
+            occurred_at=timezone.now() - timedelta(hours=4),
+        )
+        MeetingIncidentEvent.objects.create(
+            incident=missing_terminal, event_type='review_started',
+            previous_status='open', new_status='reviewing',
+            occurred_at=timezone.now() - timedelta(hours=2),
+        )
+        self.client.login(username='workbench-staff', password='safe-password-123')
+
+        response = self.client.get(
+            reverse('governance_workbench'), {'event_issue': 'missing_terminal'},
+        )
+
+        self.assertEqual(response.context['event_issue_filter'], 'missing_terminal')
+        self.assertEqual(
+            [
+                item['case_id']
+                for item in response.context['incident_event_checklist']
+            ],
+            [missing_terminal.pk],
+        )
+        self.assertContains(response, '缺少确认或驳回结论')
+
+    def test_event_checklist_does_not_expose_accounts(self):
+        incident = self.make_incident()
+        MeetingIncident.objects.filter(pk=incident.pk).update(status='reviewing')
+        MeetingIncidentEvent.objects.create(
+            incident=incident, event_type='review_started',
+            previous_status='open', new_status='reviewing',
+            occurred_at=timezone.now() - timedelta(hours=1),
+        )
+        self.client.login(username='workbench-staff', password='safe-password-123')
+
+        response = self.client.get(reverse('governance_workbench'))
+
+        html = response.content.decode('utf-8')
+        start = html.index('事件链排查清单')
+        end = html.index('<section class="governance-case-list">', start)
+        checklist_html = html[start:end]
+        self.assertIn('缺少「提交异常」首报', checklist_html)
+        self.assertNotIn(self.member.username, checklist_html)
+        self.assertNotIn(self.other.username, checklist_html)
+        self.assertIn('不显示用户名', checklist_html)
 
 
 class IncidentReviewTests(TestCase):
@@ -1036,6 +1200,27 @@ class GovernanceExportTests(TestCase):
         self.assertIn('历史不可知', text)
         self.assertIn('事件链无法判定', text)
         self.assertIn('两类都不按零秒进入耗时分母', text)
+
+    def test_the_export_carries_the_incident_event_checklist_and_read_only_boundary(self):
+        incident = self.make_overdue_incident()
+        MeetingIncident.objects.filter(pk=incident.pk).update(status='reviewing')
+        MeetingIncidentEvent.objects.create(
+            incident=incident, event_type='reported',
+            previous_status='', new_status='open',
+            occurred_at=timezone.now() - timedelta(hours=2),
+        )
+        self.client.force_login(self.staff)
+
+        response = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        )
+
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('预约异常事件链排查清单', text)
+        self.assertIn('异常 ID,商品,异常类型,当前状态,原因,原因代码,最近事件,创建时间', text)
+        self.assertIn('missing_review_started', text)
+        self.assertIn('缺少「开始处理」', text)
+        self.assertIn('不修复历史、不补造事件、不自动修改异常或业务状态', text)
 
     def test_the_export_states_that_it_only_reports(self):
         # 边界要随表导出：治理面板最容易被读成"可以自动派单"的授权，
