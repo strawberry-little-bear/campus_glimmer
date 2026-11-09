@@ -316,6 +316,25 @@ class OperationsDashboardLazyLoadingTests(TestCase):
         self.assertEqual(missing, [], '这些分区是空的却没有取回地址')
         self.assertEqual(wrong, [], '这些分区的取回地址不对')
 
+    def test_deferred_reminder_link_preserves_an_explicit_filter(self):
+        filtered_html = self.client.get(
+            reverse('operations_dashboard'),
+            {'days': 30, 'review_status': 'waiting'},
+        ).content.decode('utf-8')
+        match = re.search(
+            r'id="ops-meeting-reminders"[^>]+data-ops-src="([^"]+)"',
+            filtered_html,
+        )
+
+        self.assertIsNotNone(match)
+        self.assertEqual(
+            match.group(1),
+            reverse(
+                'operations_dashboard_fragment',
+                kwargs={'anchor': 'ops-meeting-reminders'},
+            ) + '?days=30&review_status=waiting',
+        )
+
     def test_lazy_page_is_much_smaller_than_the_full_one(self):
         # 懒加载的意义就在字节数上。这条不是性能基准，只拦住「裁了但没裁多少」
         # 和「干脆没裁」两种回归。

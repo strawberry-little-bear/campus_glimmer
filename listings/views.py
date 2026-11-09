@@ -4225,6 +4225,9 @@ def operations_dashboard(request):
     # <section id> 一一对应，由 test_operations_nav 囊底。
     dashboard['operations_sections'] = OPERATIONS_DASHBOARD_SECTIONS
     dashboard['ops_lazy'] = lazy
+    dashboard['meeting_response_review_status'] = (
+        review_status if request.GET.get('review_status') else ''
+    )
     return render(request, 'listings/operations_dashboard.html', dashboard)
 
 

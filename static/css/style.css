@@ -2747,6 +2747,7 @@ a { color: inherit; text-decoration: none; }
     }
 }
 /* 交付安排提醒效果面板：解释段紧接标题，表格沿用运营表格的横向滚动。 */
+.meeting-response-pending-review { min-width: 1180px; }
 .meeting-response-reminder-effect-panel .search-rhythm-note {
     margin-top: 0;
 }
