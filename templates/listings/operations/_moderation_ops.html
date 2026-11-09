@@ -280,6 +280,43 @@
     </div>
     {% endif %}
 
+    {% with timing=governance_sla.incident_timing %}
+    <div class="supply-lifecycle-block mt-3 governance-incident-ops-timing">
+        <div class="supply-lifecycle-block-heading"><strong>预约异常事件时效</strong><span>最近 {{ governance_sla.days }} 天的真实状态转换</span></div>
+        <div class="ops-table-wrap">
+            <table class="table ops-table align-middle mb-0">
+                <caption class="visually-hidden">预约异常事件时效 · 首次响应与开始后结论</caption>
+                <thead><tr><th>阶段</th><th>可判定</th><th>中位数</th><th>P90</th><th>24 小时内达成</th><th>尚未发生</th><th>无法判定</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td data-label="阶段">首次响应</td>
+                        <td data-label="可判定">{{ timing.response.measurable_count }}</td>
+                        <td data-label="中位数">{{ timing.response.median_label }}</td>
+                        <td data-label="P90">{{ timing.response.p90_label }}</td>
+                        <td data-label="24 小时内达成">{{ timing.response.within_24h_count }} / {% if timing.response.within_24h_rate is not None %}{{ timing.response.within_24h_rate }}%{% else %}—{% endif %}</td>
+                        <td data-label="尚未发生">{{ timing.response.pending_count }}</td>
+                        <td data-label="无法判定">{{ timing.response.unknown_count }}</td>
+                    </tr>
+                    <tr>
+                        <td data-label="阶段">开始后结论</td>
+                        <td data-label="可判定">{{ timing.conclusion.measurable_count }}</td>
+                        <td data-label="中位数">{{ timing.conclusion.median_label }}</td>
+                        <td data-label="P90">{{ timing.conclusion.p90_label }}</td>
+                        <td data-label="24 小时内达成">{{ timing.conclusion.within_24h_count }} / {% if timing.conclusion.within_24h_rate is not None %}{{ timing.conclusion.within_24h_rate }}%{% else %}—{% endif %}</td>
+                        <td data-label="尚未发生">{{ timing.conclusion.pending_count }}</td>
+                        <td data-label="无法判定">{{ timing.conclusion.unknown_count }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="governance-incident-timing-note">
+            <span>历史不可知 {{ timing.historical_unknown_count }} 条</span>
+            <span>事件链无法判定 {{ timing.invalid_chain_count }} 条</span>
+            <span>两类都不按零秒计入分母</span>
+        </div>
+    </div>
+    {% endwith %}
+
     {% if governance_sla.recommendations %}
     <div class="supply-lifecycle-recommendations mt-3">
         <div class="supply-lifecycle-block-heading"><strong>治理建议</strong><span>仅在越过时限或接近上限时给出</span></div>

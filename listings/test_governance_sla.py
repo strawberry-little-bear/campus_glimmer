@@ -12,13 +12,16 @@ false alarms or let reports rot.
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
     CampusLocation, Category, Item, LostFoundPost, LostFoundReport,
-    MeetingAppointment, MeetingIncident, Order, OrderDispute, Report,
+    MeetingAppointment, MeetingIncident, MeetingIncidentEvent, Order,
+    OrderDispute, Report,
 )
 from .governance_sla import (
     SLA_TARGETS, SLA_WARNING_RATIO, build_governance_sla,
@@ -172,6 +175,33 @@ class GovernanceSlaTests(TestCase):
         MeetingIncident.objects.filter(pk=incident.pk).update(**updates)
         incident.refresh_from_db()
         return incident
+
+    def add_incident_event(
+        self, incident, event_type, previous_status, new_status, *,
+        ago=timedelta(), note='',
+    ):
+        return MeetingIncidentEvent.objects.create(
+            incident=incident,
+            event_type=event_type,
+            previous_status=previous_status,
+            new_status=new_status,
+            occurred_at=self.now - ago,
+            note=note,
+        )
+
+    def add_complete_incident_chain(
+        self, incident, *, terminal='resolved', reported_ago=timedelta(hours=8),
+        started_ago=timedelta(hours=6), concluded_ago=timedelta(),
+    ):
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=reported_ago,
+        )
+        self.add_incident_event(
+            incident, 'review_started', 'open', 'reviewing', ago=started_ago,
+        )
+        self.add_incident_event(
+            incident, terminal, 'reviewing', terminal, ago=concluded_ago,
+        )
 
     def test_empty_platform_reports_nothing_and_no_recommendations(self):
         data = build_governance_sla(days=30, now=self.now)
@@ -393,6 +423,233 @@ class GovernanceSlaTests(TestCase):
         self.assertGreater(case['remaining_seconds'], 0)
 
 
+    def test_event_timing_uses_the_two_real_state_transition_segments(self):
+        incident = self.make_incident(
+            status='resolved', created_ago=timedelta(hours=10),
+            closed_ago=timedelta(),
+        )
+        self.add_complete_incident_chain(incident)
+        self.add_incident_event(
+            incident, 'note_updated', 'reviewing', 'reviewing',
+            ago=timedelta(hours=3), note='补充说明',
+        )
+
+        data = build_governance_sla(days=30, now=self.now)
+        timing = data['incident_timing']
+        case = next(
+            row for row in data['queues'][3]['cases']
+            if row['case_id'] == incident.pk
+        )
+
+        self.assertEqual(timing['sample_count'], 1)
+        self.assertEqual(timing['response']['measurable_count'], 1)
+        self.assertEqual(timing['response']['median_seconds'], 2 * 3600)
+        self.assertEqual(timing['response']['p90_seconds'], 2 * 3600)
+        self.assertEqual(timing['conclusion']['measurable_count'], 1)
+        self.assertEqual(timing['conclusion']['median_seconds'], 6 * 3600)
+        self.assertEqual(timing['conclusion']['p90_seconds'], 6 * 3600)
+        self.assertEqual(timing['historical_unknown_count'], 0)
+        self.assertEqual(timing['invalid_chain_count'], 0)
+        self.assertEqual(case['incident_timing_state'], 'valid')
+        self.assertEqual(case['incident_response_label'], '首次响应 2 小时')
+        self.assertEqual(case['incident_conclusion_label'], '开始后结论 6 小时')
+        self.assertEqual(len(case['incident_events']), 4)
+
+    def test_note_snapshot_must_match_the_state_at_that_point(self):
+        incident = self.make_incident(
+            status='resolved', created_ago=timedelta(hours=10),
+            closed_ago=timedelta(),
+        )
+        self.add_complete_incident_chain(incident)
+        self.add_incident_event(
+            incident, 'note_updated', 'open', 'reviewing',
+            ago=timedelta(minutes=30), note='错误的状态快照',
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['invalid_chain_count'], 1)
+        self.assertEqual(timing['response']['measurable_count'], 0)
+        self.assertEqual(timing['conclusion']['measurable_count'], 0)
+        self.assertEqual(timing['conclusion']['unknown_count'], 1)
+
+    def test_legacy_incident_without_events_is_historical_unknown_not_zero(self):
+        self.make_incident(
+            status='resolved', created_ago=timedelta(hours=4),
+            closed_ago=timedelta(hours=1),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['historical_unknown_count'], 1)
+        self.assertEqual(timing['invalid_chain_count'], 0)
+        self.assertEqual(timing['response']['measurable_count'], 0)
+        self.assertIsNone(timing['response']['median_seconds'])
+        self.assertEqual(timing['response']['unknown_count'], 1)
+        self.assertEqual(timing['conclusion']['unknown_count'], 1)
+        self.assertEqual(timing['conclusion']['pending_count'], 0)
+
+    def test_reported_only_open_incident_is_pending_instead_of_invalid(self):
+        incident = self.make_incident(status='open')
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(hours=2),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['invalid_chain_count'], 0)
+        self.assertEqual(timing['response']['pending_count'], 1)
+        self.assertEqual(timing['response']['unknown_count'], 0)
+        self.assertEqual(timing['conclusion']['pending_count'], 1)
+        self.assertEqual(timing['conclusion']['unknown_count'], 0)
+
+    def test_missing_reported_event_invalidates_the_chain(self):
+        incident = self.make_incident(status='reviewing')
+        self.add_incident_event(
+            incident, 'review_started', 'open', 'reviewing',
+            ago=timedelta(hours=1),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['invalid_chain_count'], 1)
+        self.assertEqual(timing['response']['measurable_count'], 0)
+        self.assertEqual(timing['response']['unknown_count'], 1)
+        self.assertEqual(timing['conclusion']['pending_count'], 1)
+
+    def test_missing_review_started_event_invalidates_a_closed_chain(self):
+        incident = self.make_incident(
+            status='resolved', closed_ago=timedelta(hours=1),
+        )
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(hours=4),
+        )
+        self.add_incident_event(
+            incident, 'resolved', 'reviewing', 'resolved',
+            ago=timedelta(hours=1),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['invalid_chain_count'], 1)
+        self.assertEqual(timing['response']['unknown_count'], 1)
+        self.assertEqual(timing['conclusion']['unknown_count'], 1)
+
+    def test_duplicate_state_event_invalidates_the_chain(self):
+        incident = self.make_incident(status='reviewing')
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(hours=4),
+        )
+        self.add_incident_event(
+            incident, 'review_started', 'open', 'reviewing',
+            ago=timedelta(hours=2),
+        )
+        self.add_incident_event(
+            incident, 'review_started', 'open', 'reviewing',
+            ago=timedelta(hours=1),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['invalid_chain_count'], 1)
+        self.assertEqual(timing['response']['measurable_count'], 0)
+
+    def test_out_of_order_state_events_invalidate_the_chain(self):
+        incident = self.make_incident(
+            status='resolved', closed_ago=timedelta(),
+        )
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(hours=8),
+        )
+        self.add_incident_event(
+            incident, 'review_started', 'open', 'reviewing',
+            ago=timedelta(hours=10),
+        )
+        self.add_incident_event(
+            incident, 'resolved', 'reviewing', 'resolved', ago=timedelta(),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['invalid_chain_count'], 1)
+        self.assertEqual(timing['response']['measurable_count'], 0)
+
+    def test_wrong_state_snapshot_invalidates_the_chain(self):
+        incident = self.make_incident(status='reviewing')
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(hours=4),
+        )
+        self.add_incident_event(
+            incident, 'review_started', '', 'reviewing',
+            ago=timedelta(hours=2),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['invalid_chain_count'], 1)
+        self.assertEqual(timing['response']['unknown_count'], 1)
+
+    def test_unknown_cases_do_not_change_a_known_case_median(self):
+        known = self.make_incident(
+            status='resolved', created_ago=timedelta(hours=10),
+            closed_ago=timedelta(),
+        )
+        self.add_complete_incident_chain(known)
+        self.make_incident(
+            status='resolved', created_ago=timedelta(hours=4),
+            closed_ago=timedelta(hours=1),
+        )
+
+        timing = build_governance_sla(days=30, now=self.now)['incident_timing']
+
+        self.assertEqual(timing['sample_count'], 2)
+        self.assertEqual(timing['historical_unknown_count'], 1)
+        self.assertEqual(timing['response']['measurable_count'], 1)
+        self.assertEqual(timing['response']['median_seconds'], 2 * 3600)
+        self.assertEqual(timing['conclusion']['measurable_count'], 1)
+        self.assertEqual(timing['conclusion']['median_seconds'], 6 * 3600)
+
+    def test_backlog_events_are_reused_but_not_added_to_the_period_denominator(self):
+        incident = self.make_incident(
+            status='reviewing', created_ago=timedelta(days=40),
+        )
+        self.add_incident_event(
+            incident, 'reported', '', 'open', ago=timedelta(days=39),
+        )
+        self.add_incident_event(
+            incident, 'review_started', 'open', 'reviewing',
+            ago=timedelta(days=38),
+        )
+
+        data = build_governance_sla(days=30, now=self.now)
+        timing = data['incident_timing']
+        case = next(
+            row for row in data['queues'][3]['cases']
+            if row['case_id'] == incident.pk
+        )
+
+        self.assertEqual(timing['sample_count'], 0)
+        self.assertEqual(timing['response']['measurable_count'], 0)
+        self.assertEqual(case['incident_timing_state'], 'valid')
+        self.assertEqual(case['incident_response_label'], '首次响应 1 天')
+        self.assertEqual(len(case['incident_events']), 2)
+
+    def test_incident_events_are_loaded_once_per_sla_build(self):
+        incident = self.make_incident(
+            status='resolved', closed_ago=timedelta(),
+        )
+        self.add_complete_incident_chain(incident)
+
+        with CaptureQueriesContext(connection) as captured:
+            build_governance_sla(days=30, now=self.now)
+
+        event_queries = [
+            query for query in captured.captured_queries
+            if 'meetingincidentevent' in query['sql'].lower()
+        ]
+        self.assertEqual(len(event_queries), 1)
+
+
 class GovernanceWorkbenchTests(TestCase):
     def setUp(self):
         self.staff = User.objects.create_user(
@@ -497,6 +754,23 @@ class GovernanceWorkbenchTests(TestCase):
         response = self.client.get(reverse('governance_workbench'), {'days': '90'})
 
         self.assertEqual(response.context['days'], 90)
+
+
+    def test_workbench_labels_a_legacy_incident_as_historically_unknown(self):
+        self.make_incident()
+        self.client.login(username='workbench-staff', password='safe-password-123')
+
+        response = self.client.get(
+            reverse('governance_workbench'), {'kind': 'incident'},
+        )
+
+        self.assertEqual(
+            response.context['cases'][0]['incident_timing_state'],
+            'historical_unknown',
+        )
+        self.assertContains(response, '预约异常事件时效')
+        self.assertContains(response, '首次响应 · 历史不可知')
+        self.assertContains(response, '历史不可知 1 条')
 
 
 class IncidentReviewTests(TestCase):
@@ -641,6 +915,29 @@ class GovernanceDashboardTests(TestCase):
         self.assertContains(response, '治理队列处理时效')
         self.assertContains(response, '时限内完成率')
         self.assertContains(response, '进入治理工作台')
+        self.assertContains(response, '预约异常事件时效')
+        self.assertContains(response, '首次响应')
+        self.assertContains(response, '开始后结论')
+
+    def test_dashboard_keeps_a_zero_percent_rate_instead_of_rendering_a_dash(self):
+        incident = self.make_overdue_incident()
+        now = timezone.now()
+        MeetingIncidentEvent.objects.create(
+            incident=incident, event_type='reported', previous_status='',
+            new_status='open', occurred_at=now - timedelta(hours=30),
+        )
+        MeetingIncidentEvent.objects.create(
+            incident=incident, event_type='review_started', previous_status='open',
+            new_status='reviewing', occurred_at=now - timedelta(hours=1),
+        )
+        MeetingIncident.objects.filter(pk=incident.pk).update(status='reviewing')
+        self.client.login(username='dash-staff', password='safe-password-123')
+
+        response = self.client.get(reverse('operations_dashboard'), {'days': 30})
+
+        timing = response.context['governance_sla']['incident_timing']
+        self.assertEqual(timing['response']['within_24h_rate'], 0.0)
+        self.assertContains(response, '0 / 0.0%')
 
     def test_overdue_incident_raises_a_critical_alert_linking_to_the_workbench(self):
         self.make_overdue_incident()
@@ -721,6 +1018,20 @@ class GovernanceExportTests(TestCase):
         # 超过它才叫超期；待处理清单里那一条要真的标成已超期。
         self.assertIn('1 天', text)
         self.assertIn('已超期', text)
+
+    def test_the_export_carries_the_two_event_phases_and_unknown_counts(self):
+        self.make_overdue_incident()
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse('operations_dashboard_export'), {'days': 30})
+
+        text = response.content.decode('utf-8-sig')
+        self.assertIn('预约异常事件时效', text)
+        self.assertIn('首次响应：提交异常 → 开始处理', text)
+        self.assertIn('开始后结论：开始处理 → 确认或驳回', text)
+        self.assertIn('历史不可知', text)
+        self.assertIn('事件链无法判定', text)
+        self.assertIn('两类都不按零秒进入耗时分母', text)
 
     def test_the_export_states_that_it_only_reports(self):
         # 边界要随表导出：治理面板最容易被读成"可以自动派单"的授权，

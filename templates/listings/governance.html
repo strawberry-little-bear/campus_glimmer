@@ -41,6 +41,49 @@
 {% endfor %}
 </div>
 
+<section class="content-card governance-incident-timing mb-4">
+    <div class="governance-queue-heading">
+        <div>
+            <span class="eyebrow eyebrow-soft">Event SLA</span>
+            <h2 class="mt-2 mb-1">预约异常事件时效</h2>
+            <p class="mb-0 small text-muted">只统计最近 {{ governance.days }} 天创建的异常。首次响应按「提交异常 → 开始处理」计算；开始后结论按「开始处理 → 确认或驳回」计算，均为事件 occurred_at 的真实间隔。</p>
+        </div>
+        <span>周期内异常 {{ governance.incident_timing.sample_count }} 条</span>
+    </div>
+    <div class="ops-table-wrap">
+        <table class="table ops-table align-middle mb-0">
+            <caption class="visually-hidden">预约异常事件时效 · 首次响应与开始后结论</caption>
+            <thead><tr><th>阶段</th><th>可判定</th><th>中位数</th><th>P90</th><th>24 小时内达成</th><th>达成率</th><th>尚未发生</th><th>无法判定</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td data-label="阶段">首次响应</td>
+                    <td data-label="可判定">{{ governance.incident_timing.response.measurable_count }} 条</td>
+                    <td data-label="中位数">{{ governance.incident_timing.response.median_label }}</td>
+                    <td data-label="P90">{{ governance.incident_timing.response.p90_label }}</td>
+                    <td data-label="24 小时内达成">{{ governance.incident_timing.response.within_24h_count }} 条</td>
+                    <td data-label="达成率">{% if governance.incident_timing.response.within_24h_rate is not None %}{{ governance.incident_timing.response.within_24h_rate }}%{% else %}—{% endif %}</td>
+                    <td data-label="尚未发生">{{ governance.incident_timing.response.pending_count }} 条</td>
+                    <td data-label="无法判定">{{ governance.incident_timing.response.unknown_count }} 条</td>
+                </tr>
+                <tr>
+                    <td data-label="阶段">开始后结论</td>
+                    <td data-label="可判定">{{ governance.incident_timing.conclusion.measurable_count }} 条</td>
+                    <td data-label="中位数">{{ governance.incident_timing.conclusion.median_label }}</td>
+                    <td data-label="P90">{{ governance.incident_timing.conclusion.p90_label }}</td>
+                    <td data-label="24 小时内达成">{{ governance.incident_timing.conclusion.within_24h_count }} 条</td>
+                    <td data-label="达成率">{% if governance.incident_timing.conclusion.within_24h_rate is not None %}{{ governance.incident_timing.conclusion.within_24h_rate }}%{% else %}—{% endif %}</td>
+                    <td data-label="尚未发生">{{ governance.incident_timing.conclusion.pending_count }} 条</td>
+                    <td data-label="无法判定">{{ governance.incident_timing.conclusion.unknown_count }} 条</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="governance-incident-timing-note">
+        <span><strong>历史不可知 {{ governance.incident_timing.historical_unknown_count }} 条</strong>：事件表启用前的旧异常，系统不倒推、不按零秒计入。</span>
+        <span><strong>事件链无法判定 {{ governance.incident_timing.invalid_chain_count }} 条</strong>：缺状态动作、重复、倒序或与当前状态不一致，均不进入耗时分母。</span>
+    </div>
+</section>
+
 <section class="governance-case-list">
 {% for case in cases %}
     <article class="content-card governance-case{% if case.is_overdue %} is-overdue{% elif case.sla_level == 'warning' %} is-warning{% endif %}">
@@ -72,6 +115,10 @@
                 {% else %}
                 <span class="governance-incident-history-empty"><i class="bi bi-hourglass me-1"></i>旧异常未留存处理动作，系统不会补造历史。</span>
                 {% endif %}
+                <div class="governance-incident-timing-flags">
+                    <span>{{ case.incident_response_label }}</span>
+                    <span>{{ case.incident_conclusion_label }}</span>
+                </div>
             </div>
             {% endif %}
             {% if case.kind == 'borrow' %}<span class="small text-muted">催收等级 三级 · 累计升级 {{ case.escalation_count }} 次</span>

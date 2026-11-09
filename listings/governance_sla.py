@@ -35,12 +35,14 @@ module does it: subtracting datetime columns is not portable across backends,
 and SQLite overflows on the operation.
 """
 
+from collections import defaultdict
 from datetime import timedelta
 
 from django.utils import timezone
 
 from .models import (
-    BorrowReturnEscalation, LostFoundReport, MeetingIncident, OrderDispute, Report,
+    BorrowReturnEscalation, LostFoundReport, MeetingIncident, MeetingIncidentEvent,
+    OrderDispute, Report,
 )
 from .report_priority import build_report_priority, open_report_counts
 
@@ -92,6 +94,28 @@ QUEUE_LABELS = {
 # Statuses that mean a case is still waiting for a human. Everything else has
 # been closed and only contributes to the latency statistics.
 OPEN_STATUSES = ('pending', 'reviewing', 'open')
+
+# An incident is the only governance queue with an append-only transition
+# ledger. Its current row says where the case ended up; these events say when
+# the first human response and the final decision actually happened. The two
+# segments answer different operational questions, so they are measured apart:
+# ``reported -> review_started`` is how long a user waited for a human, while
+# ``review_started -> resolved/dismissed`` is how long the review itself took.
+INCIDENT_STATE_EVENTS = {
+    'open': ('reported',),
+    'reviewing': ('reported', 'review_started'),
+    'resolved': ('reported', 'review_started', 'resolved'),
+    'dismissed': ('reported', 'review_started', 'dismissed'),
+}
+
+INCIDENT_EVENT_TRANSITIONS = {
+    'reported': ('', 'open'),
+    'review_started': ('open', 'reviewing'),
+    'resolved': ('reviewing', 'resolved'),
+    'dismissed': ('reviewing', 'dismissed'),
+}
+
+INCIDENT_CLOSED_STATUSES = ('resolved', 'dismissed')
 
 PERIOD_FIELDS = (
     'status', 'created_at', 'closed_at', 'reviewer_id',
@@ -240,6 +264,215 @@ def _incident_cases(queryset):
             url=f"/listings/governance/incidents/{row['id']}/review/",
         ))
     return rows
+
+
+def _load_incident_event_histories(incident_ids):
+    """Load every incident event once and group it by incident.
+
+    This is intentionally a batch read. The workbench used to issue the same
+    event query after the SLA builder had already loaded the incidents, while
+    the dashboard had no way to reuse the history at all. Returning the grouped
+    rows with the assessment keeps one request on one event query.
+    """
+    histories = defaultdict(list)
+    if not incident_ids:
+        return histories
+    event_labels = dict(MeetingIncidentEvent.EVENT_CHOICES)
+    rows = MeetingIncidentEvent.objects.filter(
+        incident_id__in=incident_ids,
+    ).order_by('incident_id', 'occurred_at', 'pk').values(
+        'incident_id', 'event_type', 'previous_status', 'new_status', 'occurred_at',
+    )
+    for row in rows:
+        histories[row['incident_id']].append({
+            'event_type': row['event_type'],
+            'label': event_labels.get(row['event_type'], row['event_type']),
+            'previous_status': row['previous_status'],
+            'new_status': row['new_status'],
+            'occurred_at': row['occurred_at'],
+        })
+    return histories
+
+
+def _assess_incident_event_chain(status, events):
+    """Validate the immutable event chain without filling in missing history.
+
+    ``note_updated`` is a real event but not a state transition. It remains in
+    the visible history and is ignored for timing. A legacy incident with no
+    rows is ``historical_unknown``; an incident with rows that do not form the
+    exact chain implied by its current status is ``invalid``. Neither becomes a
+    zero-second sample, and neither is repaired from the current snapshot.
+    """
+    if not events:
+        return {
+            'state': 'historical_unknown',
+            'response_seconds': None,
+            'conclusion_seconds': None,
+            'response_pending': False,
+            'conclusion_pending': status not in INCIDENT_CLOSED_STATUSES,
+        }
+
+    status_events = [event for event in events if event['event_type'] != 'note_updated']
+    expected = INCIDENT_STATE_EVENTS.get(status)
+    invalid = expected is None or tuple(
+        event['event_type'] for event in status_events
+    ) != expected
+
+    current_status = ''
+    previous_at = None
+    for event in events:
+        if event['event_type'] == 'note_updated':
+            if (
+                event['previous_status'] != current_status
+                or event['new_status'] != current_status
+            ):
+                invalid = True
+                break
+            continue
+        transition = INCIDENT_EVENT_TRANSITIONS.get(event['event_type'])
+        if transition is None:
+            invalid = True
+            break
+        if (event['previous_status'], event['new_status']) != transition:
+            invalid = True
+            break
+        if previous_at is not None and event['occurred_at'] < previous_at:
+            invalid = True
+            break
+        previous_at = event['occurred_at']
+        current_status = event['new_status']
+
+    if invalid:
+        return {
+            'state': 'invalid',
+            'response_seconds': None,
+            'conclusion_seconds': None,
+            'response_pending': False,
+            'conclusion_pending': status not in INCIDENT_CLOSED_STATUSES,
+        }
+
+    by_type = {event['event_type']: event for event in status_events}
+    response_pending = status == 'open'
+    response_seconds = None
+    if not response_pending:
+        response_seconds = (
+            by_type['review_started']['occurred_at'] - by_type['reported']['occurred_at']
+        ).total_seconds()
+    conclusion_seconds = None
+    if status in INCIDENT_CLOSED_STATUSES:
+        terminal = by_type[status]
+        conclusion_seconds = (
+            terminal['occurred_at'] - by_type['review_started']['occurred_at']
+        ).total_seconds()
+
+    return {
+        'state': 'valid',
+        'response_seconds': response_seconds,
+        'conclusion_seconds': conclusion_seconds,
+        'response_pending': response_pending,
+        'conclusion_pending': status not in INCIDENT_CLOSED_STATUSES,
+    }
+
+
+def _phase_timing(seconds_values, *, unknown_count, pending_count):
+    durations = [seconds for seconds in seconds_values if seconds is not None]
+    median_seconds = _percentile(durations, 0.5)
+    p90_seconds = _percentile(durations, 0.9)
+    within_target_count = sum(
+        1 for seconds in durations
+        if seconds <= SLA_TARGETS['incident'].total_seconds()
+    )
+    return {
+        'measurable_count': len(durations),
+        'unknown_count': unknown_count,
+        'pending_count': pending_count,
+        'median_seconds': median_seconds,
+        'median_label': _format_duration(median_seconds),
+        'p90_seconds': p90_seconds,
+        'p90_label': _format_duration(p90_seconds),
+        'within_24h_count': within_target_count,
+        'within_24h_rate': (
+            round(within_target_count / len(durations) * 100, 1)
+            if durations else None
+        ),
+    }
+
+
+def _incident_timing(period_cases, assessments, queues):
+    """Attach event assessments to rows and aggregate the period's incidents."""
+    for queue in queues:
+        if queue['kind'] != 'incident':
+            continue
+        for case in queue['cases']:
+            assessment = assessments.get(case['case_id'])
+            if assessment is None:
+                continue
+            history = case.get('incident_events', [])
+            case['incident_timing_state'] = assessment['state']
+            case['incident_events'] = history
+            if assessment['state'] == 'historical_unknown':
+                response_label = '首次响应 · 历史不可知'
+            elif assessment['state'] == 'invalid':
+                response_label = '首次响应 · 事件链无法判定'
+            elif assessment['response_pending']:
+                response_label = '首次响应 · 尚未开始'
+            else:
+                response_label = (
+                    '首次响应 '
+                    + _format_duration(assessment['response_seconds'])
+                )
+            if case['status'] not in INCIDENT_CLOSED_STATUSES:
+                conclusion_label = '结论 · 尚未产生'
+            elif assessment['state'] == 'historical_unknown':
+                conclusion_label = '结论 · 历史不可知'
+            elif assessment['state'] == 'invalid':
+                conclusion_label = '结论 · 事件链无法判定'
+            else:
+                conclusion_label = (
+                    '开始后结论 '
+                    + _format_duration(assessment['conclusion_seconds'])
+                )
+            case['incident_response_label'] = response_label
+            case['incident_conclusion_label'] = conclusion_label
+
+    period_assessments = [
+        assessments[case['case_id']]
+        for case in period_cases
+        if case['kind'] == 'incident' and case['case_id'] in assessments
+    ]
+    historical = sum(
+        1 for item in period_assessments if item['state'] == 'historical_unknown'
+    )
+    invalid = sum(1 for item in period_assessments if item['state'] == 'invalid')
+    closed_unknown = sum(
+        1 for item in period_assessments
+        if item['state'] in {'historical_unknown', 'invalid'}
+        and item['conclusion_pending'] is False
+    )
+    open_count = sum(
+        1 for item in period_assessments if item['conclusion_pending']
+    )
+    response = _phase_timing(
+        (item['response_seconds'] for item in period_assessments),
+        unknown_count=historical + invalid,
+        pending_count=sum(
+            1 for item in period_assessments
+            if item['state'] == 'valid' and item['response_pending']
+        ),
+    )
+    conclusion = _phase_timing(
+        (item['conclusion_seconds'] for item in period_assessments),
+        unknown_count=closed_unknown,
+        pending_count=open_count,
+    )
+    return {
+        'sample_count': len(period_assessments),
+        'response': response,
+        'conclusion': conclusion,
+        'historical_unknown_count': historical,
+        'invalid_chain_count': invalid,
+    }
+
 
 def _borrow_cases(queryset):
     """Read escalated borrows as governance cases.
@@ -482,6 +715,23 @@ def build_governance_sla(*, days=30, now=None):
             merged.setdefault(case['case_key'], case)
         queues.append(_queue_row(kind, list(merged.values()), now))
 
+    incident_queue = next(queue for queue in queues if queue['kind'] == 'incident')
+    incident_ids = {case['case_id'] for case in incident_queue['cases']}
+    incident_histories = _load_incident_event_histories(incident_ids)
+    incident_assessments = {}
+    for queue in queues:
+        if queue['kind'] != 'incident':
+            continue
+        for case in queue['cases']:
+            events = incident_histories.get(case['case_id'], [])
+            case['incident_events'] = events
+            incident_assessments[case['case_id']] = _assess_incident_event_chain(
+                case['status'], events,
+            )
+    incident_timing = _incident_timing(
+        period_cases, incident_assessments, queues,
+    )
+
     all_overdue = []
     for queue in queues:
         for case in queue['cases']:
@@ -515,6 +765,7 @@ def build_governance_sla(*, days=30, now=None):
         'total_overdue': len(all_overdue),
         'overdue_cases': sorted(all_overdue, key=lambda case: -case['age_seconds']),
         'within_sla_rate': round(total_within / total_closed * 100, 1) if total_closed else None,
+        'incident_timing': incident_timing,
         'summary': _summary(queues, now),
         'recommendations': recommendations,
         'has_data': bool(period_cases),

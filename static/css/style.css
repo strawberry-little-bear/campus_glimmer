@@ -3662,6 +3662,69 @@ a { color: inherit; text-decoration: none; }
     font-variant-numeric: tabular-nums;
 }
 
+.governance-incident-timing > .governance-queue-heading {
+    margin-bottom: 14px;
+}
+
+.governance-incident-timing .ops-table th,
+.governance-incident-timing .ops-table td {
+    white-space: nowrap;
+}
+
+.governance-incident-timing-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.governance-incident-timing-flags span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 25px;
+    padding: 3px 8px;
+    border: 1px solid #e4eee7;
+    border-radius: 999px;
+    color: #486353;
+    background: #f8fbf9;
+    font-size: .68rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.governance-incident-timing-note {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: .7rem;
+    line-height: 1.55;
+}
+
+.governance-incident-timing-note strong {
+    color: #52685b;
+}
+
+.governance-incident-ops-timing .governance-incident-timing-note {
+    margin-top: 8px;
+}
+
+@media (max-width: 575.98px) {
+    .governance-incident-timing {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+
+    .governance-incident-timing > .governance-queue-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .governance-incident-timing .ops-table {
+        min-width: 760px;
+    }
+}
+
 .governance-case-footer {
     display: flex;
     align-items: center;

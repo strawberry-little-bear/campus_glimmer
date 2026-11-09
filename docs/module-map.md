@@ -149,7 +149,7 @@ campus_glimmer/
 | `task_run_failure_cause_trend.py` | 失败原因的跨周期变化：按原因 × 两个等长周期按份额判方向 | 读写 |
 | `task_run_overlap.py` | 命令的自我重叠：耗时对照运行间隔，重叠按台账真实对数 | 读写 |
 | `task_run_ledger_integrity.py` | 定时任务台账的时间、状态、失败备注与指标形状完整性审计 | 只报告 |
-| `governance_sla.py` | 五类治理队列的处理时长、超期清单与时限内完成率 | 读写 |
+| `governance_sla.py` | 五类治理队列的处理时长、超期清单与时限内完成率；预约异常另按不可变事件给出首次响应和开始后结论 | 读写 |
 | `borrow_escalation.py` | 借用逾期催收三级阶梯、归还闭环与看板汇总 | 读写 |
 | `borrow_risk.py` | 借用逾期风险分层：按分类与押金档位聚合升级率 | 读写 |
 | `borrow_rhythm.py` | 借用节奏与学期阶段交叉：阶段日均口径与阶段内分类明细 | 读写 |
@@ -340,7 +340,7 @@ campus_glimmer/
 
 - **`test_governance_borrow_queue.py`**：治理工作台真的能读到三级催收案件，不只是举报与争议
 
-- **`test_governance_sla.py`**：去重计数、周期前积压、五类时限与治理工作台测试
+- **`test_governance_sla.py`**：去重计数、周期前积压、五类时限，以及预约异常事件链、两段时效与治理工作台测试
 
 - **`test_handoff_code_usage.py`**：取件码的签发间隔、尝试次数分档、重复签发与用不上的码
 

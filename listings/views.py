@@ -163,7 +163,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, MeetingResponseReminderReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, LostFoundReportForm, LostFoundReportReviewForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandReopenEvent, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MeetingIncidentEvent, MeetingResponseReminderEvent, MeetingResponseReminderReview, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandReopenEvent, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MeetingResponseReminderEvent, MeetingResponseReminderReview, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -2468,25 +2468,12 @@ def governance_workbench(request):
             rows.append(case)
     rows.sort(key=lambda case: (0 if case['is_overdue'] else 1, case['created_at']))
 
-    incident_ids = [
-        case['case_id'] for case in rows if case['kind'] == 'incident'
-    ]
-    incident_histories = {}
-    if incident_ids:
-        event_labels = dict(MeetingIncidentEvent.EVENT_CHOICES)
-        for event in MeetingIncidentEvent.objects.filter(
-            incident_id__in=incident_ids,
-        ).order_by('incident_id', 'occurred_at', 'pk').values(
-            'incident_id', 'event_type', 'occurred_at',
-        ):
-            incident_histories.setdefault(event['incident_id'], []).append({
-                'event_type': event['event_type'],
-                'label': event_labels.get(event['event_type'], event['event_type']),
-                'occurred_at': event['occurred_at'],
-            })
+    # The SLA builder already loaded and assessed each incident's event chain.
+    # Reuse those rows here; issuing the same event query again would risk the
+    # page's history and the timing denominator describing different reads.
     for case in rows:
         if case['kind'] == 'incident':
-            case['incident_events'] = incident_histories.get(case['case_id'], [])
+            case.setdefault('incident_events', [])
 
     return render(request, 'listings/governance.html', {
         'governance': sla,
@@ -13414,6 +13401,37 @@ def operations_dashboard_export(request):
             '' if queue['within_sla_rate'] is None else queue['within_sla_rate'],
         ])
     writer.writerow([])
+    timing = sla['incident_timing']
+    writer.writerow(['预约异常事件时效'])
+    writer.writerow([
+        '周期内异常', timing['sample_count'],
+        '历史不可知', timing['historical_unknown_count'],
+        '事件链无法判定', timing['invalid_chain_count'],
+    ])
+    writer.writerow([
+        '阶段', '可判定', '中位耗时', 'P90 耗时', '24 小时达成数',
+        '24 小时达成率（%）', '尚未发生', '无法判定',
+    ])
+    for key, label in (
+        ('response', '首次响应：提交异常 → 开始处理'),
+        ('conclusion', '开始后结论：开始处理 → 确认或驳回'),
+    ):
+        phase = timing[key]
+        writer.writerow([
+            label,
+            phase['measurable_count'],
+            phase['median_label'],
+            phase['p90_label'],
+            phase['within_24h_count'],
+            '' if phase['within_24h_rate'] is None else phase['within_24h_rate'],
+            phase['pending_count'],
+            phase['unknown_count'],
+        ])
+    writer.writerow([
+        '历史不可知与事件链无法判定分开计数；两类都不按零秒进入耗时分母。'
+        '首次响应只要求已真实记录提交与开始处理；结论只纳入已完结且链完整的异常。',
+    ])
+    writer.writerow([])
     writer.writerow(['队列', '处理时长分布', '条数', '占比（%）'])
     for queue in sla['queues']:
         for bucket in queue['latency_buckets']:
@@ -13462,6 +13480,14 @@ def operations_dashboard_export(request):
     writer.writerow([
         '待处理清单不按统计周期过滤：周期开始前就超期的事项，'
         '恰恰是最不该被藏起来的那一件。',
+    ])
+    writer.writerow([
+        '预约异常两段时效只看不可变事件：首次响应是 reported → review_started，'
+        '开始后结论是 review_started → resolved/dismissed；note_updated 不参与计时。',
+    ])
+    writer.writerow([
+        '事件表启用前的异常标为历史不可知；事件缺失、重复、倒序或状态快照不符的标为'
+        '事件链无法判定。两者都单独计数，不按零秒混进中位数、P90 或 24 小时达成率。',
     ])
     writer.writerow([
         '此处只报告，不自动派单、不改处理时限、不关闭任何事项。',
