@@ -646,10 +646,21 @@ class MeetingResponseReminderReviewForm(
         }),
         help_text='最多 1000 字。除“已处理”外，请填写核对依据。',
     )
+    next_review_at = forms.DateTimeField(
+        label='下次复查时间', required=False,
+        input_formats=('%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S'),
+        widget=forms.DateTimeInput(
+            format='%Y-%m-%dT%H:%M',
+            attrs={'type': 'datetime-local'},
+        ),
+        help_text='继续等待或数据异常时必须填写，并晚于当前时间。',
+    )
 
     class Meta:
         model = MeetingResponseReminderReview
-        fields = ['outcome', 'data_issue_reason', 'note']
+        fields = [
+            'outcome', 'data_issue_reason', 'next_review_at', 'note',
+        ]
         widgets = {
             'outcome': forms.Select(attrs={'class': 'form-select'}),
         }
@@ -658,6 +669,7 @@ class MeetingResponseReminderReviewForm(
         cleaned_data = super().clean()
         outcome = cleaned_data.get('outcome')
         reason = cleaned_data.get('data_issue_reason') or ''
+        next_review_at = cleaned_data.get('next_review_at')
         note = (cleaned_data.get('note') or '').strip()
         cleaned_data['note'] = note
         if outcome and outcome != 'resolved' and not note:
@@ -671,6 +683,18 @@ class MeetingResponseReminderReviewForm(
                 )
         else:
             cleaned_data['data_issue_reason'] = ''
+        if outcome in MeetingResponseReminderReview.FOLLOW_UP_OUTCOMES:
+            if next_review_at is None:
+                self.add_error(
+                    'next_review_at',
+                    '继续等待或数据异常时，请安排下次复查时间。',
+                )
+            elif next_review_at <= timezone.now():
+                self.add_error(
+                    'next_review_at', '下次复查时间必须晚于当前时间。',
+                )
+        else:
+            cleaned_data['next_review_at'] = None
         return cleaned_data
 
 

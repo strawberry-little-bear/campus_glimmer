@@ -82,12 +82,12 @@ flowchart LR
 | 搜索与发现 | [`recommendations.py`](recommendations.py)、[`saved_searches.py`](saved_searches.py)、[`price_insights.py`](price_insights.py) | 组合筛选、搜索建议、收藏搜索、价格轨迹和推荐反馈 |
 | 校园专题与参与 | [`campaign_registration.py`](campaign_registration.py)、[`campaign_updates.py`](campaign_updates.py)、[`campaign_analytics.py`](campaign_analytics.py) | 专题浏览、加入与退出、参与区间、可选的新上架摘要、聚合报名人数和运营导出 |
 | 求购与失物 | [`demand_matching.py`](demand_matching.py)、[`demand_radar.py`](demand_radar.py)、[`demand_response_conversion.py`](demand_response_conversion.py)、[`lost_found_matching.py`](lost_found_matching.py) | 求购响应、确认后直接承接订单或领取申请并保存来源、预约与到场的交付阶段、重新选择事件后的再次确认与交易闭环、三周期持续下降提醒、需求机会、失物招领线索匹配，以及共用筛选工作台 |
-| 订单与交付 | [`order_workflow.py`](order_workflow.py)、[`meeting_events.py`](meeting_events.py)、[`meeting_response_reminders.py`](meeting_response_reminders.py)、[`meeting_response_reminder_effect.py`](meeting_response_reminder_effect.py)、[`meeting_scheduling.py`](meeting_scheduling.py)、[`delivery_handshake.py`](delivery_handshake.py)、[`return_handshake.py`](return_handshake.py) | 预约、当前待回应提示、真实提议与改期历史、长时间未回应提醒及其 72 小时只读观察、带筛选与追加历史的提醒人工复核台账、签到、交付确认、借用归还与争议 |
+| 订单与交付 | [`order_workflow.py`](order_workflow.py)、[`meeting_events.py`](meeting_events.py)、[`meeting_response_reminders.py`](meeting_response_reminders.py)、[`meeting_response_reminder_effect.py`](meeting_response_reminder_effect.py)、[`meeting_scheduling.py`](meeting_scheduling.py)、[`delivery_handshake.py`](delivery_handshake.py)、[`return_handshake.py`](return_handshake.py) | 预约、当前待回应提示、真实提议与改期历史、长时间未回应提醒及其 72 小时只读观察、带筛选、到期复查与追加历史的提醒人工复核台账、签到、交付确认、借用归还与争议 |
 | 通知与摘要 | [`notifications.py`](notifications.py)、[`notification_kind_coverage.py`](notification_kind_coverage.py)、[`*_digest.py`](.) | 通知中心、偏好、免打扰、延后和周期摘要 |
 | 治理与安全 | [`report_priority.py`](report_priority.py)、[`governance_sla.py`](governance_sla.py)、[`dispute_resolution_quality.py`](dispute_resolution_quality.py) | 举报优先级与分页、争议/交付异常处理时限和治理结果 |
 | 运营与数据质量 | [`analytics.py`](analytics.py)、[`demand_response_conversion.py`](demand_response_conversion.py)、[`dashboard_build_performance.py`](dashboard_build_performance.py)、[`task_runs.py`](task_runs.py) | 看板、CSV 导出、求购确认后的预约、到场与双方交付确认，重新选择后的订单闭环、任务台账、趋势与样本质量 |
 
-交付安排提醒效果只看台账发送后的阅读与同一提议回合动作，未满 72 小时的样本保留为观察中。阅读与窗口动作采用 2×2 交叉观察，只纳入阅读状态可判定且已过窗的样本；删除通知不归入未读，落单的 `is_read` 或 `read_at` 记为字段不一致，阅读率也只以可判定状态为分母。窗后动作按窗内未行动计，每个阅读状态下的行动与未行动格都至少 12 条才标为可比较。另按 `read_at` 与窗口内动作时间观察先读后动、先动后读、同一时刻和未读行动，合计不足 12 条只报数，先后关系不代表因果。页面与 CSV 共用 `meeting_response_reminder_effect.build_meeting_response_reminder_effect()`，不按用户展示身份或排名。待人工核对清单只列已过窗无动作与观察中无动作，前者优先并同样按久候排序；窗后已有动作不进入。运营可记录继续等待、已处理、数据异常或无需跟进结论及说明；数据异常必须补充通知缺失、阅读状态冲突、预约历史不完整、提醒台账不一致或其他数据问题五类结构化原因，旧记录没有原因时按空值兼容。每次复核追加独立历史，页面以最新结论筛选和展示并可展开完整历史，默认未核对；页面、懒加载分区和 CSV 共用同一筛选，页面展示当前筛选前 20 条，CSV 导出当前筛选全量并包含最新异常类型与历史次数。人工结论不改订单、预约、通知或提醒发送台账，页面不展示用户名，不自动处置。
+交付安排提醒效果只看台账发送后的阅读与同一提议回合动作，未满 72 小时的样本保留为观察中。阅读与窗口动作采用 2×2 交叉观察，只纳入阅读状态可判定且已过窗的样本；删除通知不归入未读，落单的 `is_read` 或 `read_at` 记为字段不一致，阅读率也只以可判定状态为分母。窗后动作按窗内未行动计，每个阅读状态下的行动与未行动格都至少 12 条才标为可比较。另按 `read_at` 与窗口内动作时间观察先读后动、先动后读、同一时刻和未读行动，合计不足 12 条只报数，先后关系不代表因果。页面与 CSV 共用 `meeting_response_reminder_effect.build_meeting_response_reminder_effect()`，不按用户展示身份或排名。待人工核对清单只列已过窗无动作与观察中无动作，前者优先并同样按久候排序；窗后已有动作不进入。运营可记录继续等待、已处理、数据异常或无需跟进结论及说明；数据异常必须补充通知缺失、阅读状态冲突、预约历史不完整、提醒台账不一致或其他数据问题五类结构化原因，旧记录没有原因时按空值兼容。继续等待或数据异常必须安排晚于本次复核的未来复查时间，已处理或无需跟进会自动关闭复查；到期复查优先排列并提供独立筛选，旧记录没有复查时间时标为“历史记录未安排复查”，每次安排进入不可变复核历史。每次复核追加独立历史，页面以最新结论筛选和展示并可展开完整历史，默认未核对；页面、懒加载分区和 CSV 共用同一筛选，页面展示当前筛选前 20 条，CSV 导出当前筛选全量并包含最新异常类型、跟进状态、下次复查时间与历史次数。人工结论不改订单、预约、通知或提醒发送台账，页面不展示用户名，不自动处置。
 
 完整模块与测试索引见[模块地图](../docs/module-map.md)。功能口径、指标分母和边缘情况以[功能手册](../docs/feature-handbook.md)为准。
 
@@ -129,7 +129,7 @@ flowchart LR
 | [`admin.py`](admin.py) | Django 后台维护入口 |
 | [`meeting_events.py`](meeting_events.py) | 预约事件写入、有序读取、完整历史判定与逐轮配对；订单详情只展示真实事件，旧快照不补造历史 |
 | [`meeting_response_reminders.py`](meeting_response_reminders.py) | 从完整事件链识别最新未回应提议，按 24 小时阈值发送一次站内提醒，并写入关联具体提议与通知的不可变台账；不自动接受、拒绝、改期或推进订单 |
-| [`meeting_response_reminder_effect.py`](meeting_response_reminder_effect.py) | 交付安排提醒的 72 小时效果观察与人工复核台账：四类结论、五类结构化数据异常原因、最新结论筛选与完整历史回看，页面展示前 20 条、CSV 导出当前筛选全量；人工结论不改订单、预约、通知或提醒发送台账 |
+| [`meeting_response_reminder_effect.py`](meeting_response_reminder_effect.py) | 交付安排提醒的 72 小时效果观察与人工复核台账：四类结论、五类结构化数据异常原因、到期复查、最新结论筛选与完整历史回看，页面展示前 20 条、CSV 导出当前筛选全量；人工结论不改订单、预约、通知或提醒发送台账 |
 | [`order_presentation.py`](order_presentation.py) | 订单详情页「下一步」卡片的标题与图标，按订单状态和查看者角色给出 |
 | [`../templates/listings/orders/`](../templates/listings/orders/) | 订单详情页拆分出的分区片段，主模板只负责拼接 |
 | [`management/commands/`](management/commands/) | 定时任务与数据回填命令 |

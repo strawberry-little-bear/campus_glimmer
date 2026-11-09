@@ -312,15 +312,17 @@ class MeetingResponseReminderReviewAdmin(admin.ModelAdmin):
 
     list_display = (
         'id', 'reminder', 'outcome', 'data_issue_reason',
-        'reviewed_at', 'reviewed_by',
+        'next_review_at', 'reviewed_at', 'reviewed_by',
     )
-    list_filter = ('outcome', 'data_issue_reason', 'reviewed_at')
+    list_filter = (
+        'outcome', 'data_issue_reason', 'next_review_at', 'reviewed_at',
+    )
     search_fields = (
         'reminder__proposal_event__order_id', 'reviewed_by__username', 'note',
     )
     list_select_related = ('reminder__proposal_event', 'reviewed_by')
     readonly_fields = (
-        'reminder', 'outcome', 'data_issue_reason', 'note',
+        'reminder', 'outcome', 'data_issue_reason', 'next_review_at', 'note',
         'reviewed_by', 'reviewed_at',
     )
 

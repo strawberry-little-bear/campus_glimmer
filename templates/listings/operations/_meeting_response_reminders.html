@@ -30,12 +30,12 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
         {% endfor %}
         <a href="{% url 'operations_dashboard_export' %}?days={{ meeting_response_reminder_effect.period_days }}&amp;review_status={{ meeting_response_reminder_effect.review_status }}" class="btn btn-sm btn-outline-primary ms-sm-auto"><i class="bi bi-download me-1"></i>导出当前筛选完整 CSV</a>
     </div>
-    <p class="small text-muted mb-3">未核对 {{ meeting_response_reminder_effect.pending_review_unreviewed_count }} · 已核对 {{ meeting_response_reminder_effect.pending_review_reviewed_count }} · 继续等待 {{ meeting_response_reminder_effect.pending_review_waiting_count }} · 已处理 {{ meeting_response_reminder_effect.pending_review_resolved_count }} · 数据异常 {{ meeting_response_reminder_effect.pending_review_data_issue_count }} · 无需跟进 {{ meeting_response_reminder_effect.pending_review_no_followup_count }}</p>
+    <p class="small text-muted mb-3">未核对 {{ meeting_response_reminder_effect.pending_review_unreviewed_count }} · 已核对 {{ meeting_response_reminder_effect.pending_review_reviewed_count }} · 继续等待 {{ meeting_response_reminder_effect.pending_review_waiting_count }} · 已处理 {{ meeting_response_reminder_effect.pending_review_resolved_count }} · 数据异常 {{ meeting_response_reminder_effect.pending_review_data_issue_count }} · 无需跟进 {{ meeting_response_reminder_effect.pending_review_no_followup_count }}<br>到期复查 {{ meeting_response_reminder_effect.pending_review_due_count }} · 历史未排期 {{ meeting_response_reminder_effect.pending_review_unscheduled_follow_up_count }} · 已安排复查 {{ meeting_response_reminder_effect.pending_review_scheduled_follow_up_count }} · 复查已关闭 {{ meeting_response_reminder_effect.pending_review_closed_follow_up_count }}</p>
     {% if meeting_response_reminder_effect.pending_review_count %}
     <div class="ops-table-wrap">
         <table class="table ops-table align-middle mb-0 meeting-response-pending-review">
             <caption class="visually-hidden">交付安排提醒后待人工核对清单</caption>
-            <thead><tr><th>订单</th><th>接收角色</th><th>提议发起</th><th>当前提议时间</th><th>地点</th><th>提醒发送</th><th>提议已等待</th><th>提醒后已过</th><th>阅读状态</th><th>观察状态</th><th>最新复核</th></tr></thead>
+            <thead><tr><th>订单</th><th>接收角色</th><th>提议发起</th><th>当前提议时间</th><th>地点</th><th>提醒发送</th><th>提议已等待</th><th>提醒后已过</th><th>阅读状态</th><th>观察状态</th><th>最新复核</th><th>跟进状态</th><th>下次复查</th></tr></thead>
             <tbody>
                 {% for row in meeting_response_reminder_effect.pending_review_rows %}
                 <tr>
@@ -64,6 +64,7 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
                                 <li class="mb-2">
                                     <strong>{{ entry.outcome_label }}</strong>{% if entry.data_issue_reason_label %} · {{ entry.data_issue_reason_label }}{% endif %}
                                     <span class="d-block text-muted">{{ entry.reviewed_at_label }}</span>
+                                    {% if entry.next_review_at %}<span class="d-block text-muted">下次复查 {{ entry.next_review_at_label }}</span>{% endif %}
                                     {% if entry.note %}<div class="text-muted">{{ entry.note|linebreaksbr }}</div>{% endif %}
                                 </li>
                                 {% endfor %}
@@ -89,13 +90,20 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
                                     <option value="{{ value }}">{{ label }}</option>
                                     {% endfor %}
                                 </select>
+                                <label class="form-label small mb-1" for="review-next-review-at-{{ row.reminder_id }}">下次复查时间</label>
+                                <input class="form-control form-control-sm mb-2" type="datetime-local" id="review-next-review-at-{{ row.reminder_id }}" name="next_review_at" value="{{ meeting_response_reminder_effect.default_next_review_value }}">
                                 <label class="form-label small mb-1" for="review-note-{{ row.reminder_id }}">复核说明</label>
                                 <textarea class="form-control form-control-sm mb-1" id="review-note-{{ row.reminder_id }}" name="note" rows="3" maxlength="1000" placeholder="除“已处理”外，请填写核对依据。"></textarea>
-                                <p class="text-muted small mb-2">最多 1000 字；继续等待、数据异常或无需跟进时必须填写。选择“数据异常”时必须同时选择异常类型。</p>
+                                <p class="text-muted small mb-2">最多 1000 字；继续等待、数据异常或无需跟进时必须填写说明。继续等待、数据异常还必须选择晚于当前时间的复查时间；已处理或无需跟进会自动清空复查安排。选择“数据异常”时必须同时选择异常类型。</p>
                                 <button type="submit" class="btn btn-sm btn-primary">追加本次结论</button>
                             </form>
                         </details>
                     </td>
+                    <td data-label="跟进状态">
+                        <strong class="{% if row.follow_up_state == 'due' %}text-danger{% elif row.follow_up_state == 'closed' %}text-muted{% endif %}">{{ row.follow_up_state_label }}</strong>
+                        {% if row.follow_up_timing_label %}<small class="d-block text-muted">{{ row.follow_up_timing_label }}</small>{% endif %}
+                    </td>
+                    <td data-label="下次复查">{{ row.next_review_at_label }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

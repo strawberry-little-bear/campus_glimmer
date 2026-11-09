@@ -2315,6 +2315,7 @@ class MeetingResponseReminderReview(models.Model):
         ('data_issue', '数据异常'),
         ('no_followup', '无需跟进'),
     )
+    FOLLOW_UP_OUTCOMES = frozenset({'waiting', 'data_issue'})
 
     reminder = models.ForeignKey(
         MeetingResponseReminderEvent, on_delete=models.CASCADE,
@@ -2327,6 +2328,10 @@ class MeetingResponseReminderReview(models.Model):
     data_issue_reason = models.CharField(
         '数据异常类型', max_length=32, blank=True, default='',
         choices=DATA_ISSUE_REASON_CHOICES,
+    )
+    next_review_at = models.DateTimeField(
+        '下次复查时间', null=True, blank=True,
+        help_text='继续等待或数据异常时必填；其他结论保存时自动清空。',
     )
     reviewed_by = models.ForeignKey(
         User, on_delete=models.PROTECT,
@@ -2356,6 +2361,20 @@ class MeetingResponseReminderReview(models.Model):
             })
         if self.outcome != 'data_issue':
             self.data_issue_reason = ''
+        if self.outcome in self.FOLLOW_UP_OUTCOMES:
+            if self.next_review_at is None:
+                raise ValidationError({
+                    'next_review_at': '继续等待或数据异常时，请安排下次复查时间。',
+                })
+            if (
+                self.reviewed_at is not None
+                and self.next_review_at <= self.reviewed_at
+            ):
+                raise ValidationError({
+                    'next_review_at': '下次复查时间必须晚于本次复核时间。',
+                })
+        else:
+            self.next_review_at = None
 
     def save(self, *args, **kwargs):
         if self.pk and not self._state.adding:

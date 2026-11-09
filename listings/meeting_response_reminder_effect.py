@@ -80,7 +80,22 @@ PENDING_REVIEW_STATUS_LABELS = {
 PENDING_REVIEW_OUTCOME_LABELS = dict(
     MeetingResponseReminderReview.OUTCOME_CHOICES,
 )
+FOLLOW_UP_STATE_LABELS = {
+    'unreviewed': '待首次核对',
+    'due': '已到复查时间',
+    'scheduled': '已安排复查',
+    'unscheduled': '历史记录未安排复查',
+    'closed': '复查已关闭',
+}
+FOLLOW_UP_SORT_ORDER = {
+    'due': 0,
+    'unscheduled': 1,
+    'unreviewed': 2,
+    'scheduled': 3,
+    'closed': 4,
+}
 PENDING_REVIEW_FILTER_OPTIONS = (
+    ('due', '到期复查'),
     ('unreviewed', '未核对'),
     ('waiting', '继续等待'),
     ('resolved', '已处理'),
@@ -173,8 +188,9 @@ def _format_local_datetime(value):
 def _build_pending_review_rows(observations, now):
     """把仍未行动且需要人工查看的提醒排序成可执行清单。
 
-    已过观察窗的样本优先，再按提醒等待时间从长到短排列；仍在窗口内的样本
-    排在后面。人工复核只决定当前筛选与展示状态，不改变观察样本或业务记录。
+    到期复查排在首位，其次是历史结论没有排复查、首次未核对和已排期的样本。
+    同一组内已过观察窗的样本优先，再按提醒等待时间从长到短排列。人工复核
+    只决定当前筛选与展示状态，不改变观察样本或业务记录。
     """
     reminders = [
         observation['reminder'] for observation in observations
@@ -186,8 +202,8 @@ def _build_pending_review_rows(observations, now):
         reviews = MeetingResponseReminderReview.objects.filter(
             reminder_id__in=reminder_ids,
         ).order_by('reminder_id', '-reviewed_at', '-pk').only(
-            'reminder_id', 'outcome', 'data_issue_reason', 'note',
-            'reviewed_at',
+            'reminder_id', 'outcome', 'data_issue_reason', 'next_review_at',
+            'note', 'reviewed_at',
         )
         for review in reviews:
             review_histories.setdefault(review.reminder_id, []).append({
@@ -197,6 +213,10 @@ def _build_pending_review_rows(observations, now):
                 'data_issue_reason_label': (
                     review.get_data_issue_reason_display()
                     if review.data_issue_reason else ''
+                ),
+                'next_review_at': review.next_review_at,
+                'next_review_at_label': _format_local_datetime(
+                    review.next_review_at,
                 ),
                 'note': review.note,
                 'reviewed_at_label': _format_local_datetime(review.reviewed_at),
@@ -221,6 +241,26 @@ def _build_pending_review_rows(observations, now):
             location_label = proposal.location.name
         review_history = review_histories.get(reminder.pk, [])
         review = review_history[0] if review_history else None
+        next_review_at = review['next_review_at'] if review else None
+        if review is None:
+            follow_up_state = 'unreviewed'
+            follow_up_timing_label = ''
+        elif review['outcome'] not in MeetingResponseReminderReview.FOLLOW_UP_OUTCOMES:
+            follow_up_state = 'closed'
+            follow_up_timing_label = '本次结论无需再次复查'
+        elif next_review_at is None:
+            follow_up_state = 'unscheduled'
+            follow_up_timing_label = '历史复核结论尚未安排复查'
+        elif next_review_at <= now:
+            follow_up_state = 'due'
+            follow_up_timing_label = '已超期 %s' % _label_hours(
+                (now - next_review_at).total_seconds() / 3600.0,
+            )
+        else:
+            follow_up_state = 'scheduled'
+            follow_up_timing_label = '距复查 %s' % _label_hours(
+                (next_review_at - now).total_seconds() / 3600.0,
+            )
         rows.append({
             'order_id': proposal.order_id,
             'role_label': dict(ROLE_LABELS).get(
@@ -254,6 +294,13 @@ def _build_pending_review_rows(observations, now):
             'data_issue_reason_label': (
                 review['data_issue_reason_label'] if review is not None else ''
             ),
+            'next_review_at': next_review_at,
+            'next_review_at_label': (
+                review['next_review_at_label'] if review is not None else '—'
+            ),
+            'follow_up_state': follow_up_state,
+            'follow_up_state_label': FOLLOW_UP_STATE_LABELS[follow_up_state],
+            'follow_up_timing_label': follow_up_timing_label,
             'reviewed_at_label': (
                 review['reviewed_at_label'] if review is not None else '—'
             ),
@@ -262,6 +309,7 @@ def _build_pending_review_rows(observations, now):
             'review_history': review_history,
         })
     rows.sort(key=lambda row: (
+        FOLLOW_UP_SORT_ORDER[row['follow_up_state']],
         row['status'] != 'no_action',
         -row['reminder_age_hours'],
         row['sent_at'],
@@ -557,6 +605,10 @@ def build_meeting_response_reminder_effect(
     pending_review_candidates = _build_pending_review_rows(observations, now)
     pending_review_total_count = len(pending_review_candidates)
     pending_review_status_counts = {
+        'due': sum(
+            row['follow_up_state'] == 'due'
+            for row in pending_review_candidates
+        ),
         'unreviewed': sum(
             not row['is_reviewed'] for row in pending_review_candidates
         ),
@@ -582,6 +634,10 @@ def build_meeting_response_reminder_effect(
         row for row in pending_review_candidates
         if (
             review_status == 'all'
+            or (
+                review_status == 'due'
+                and row['follow_up_state'] == 'due'
+            )
             or (
                 review_status == 'unreviewed' and not row['is_reviewed']
             )
@@ -672,8 +728,10 @@ def build_meeting_response_reminder_effect(
             '先后关系不等于因果，也不据此调整提醒。'
         ),
         'pending_review_note': (
-            '待人工核对清单只列截至当前仍没有同一提议回合动作的提醒；已过观察窗的'
-            '优先，其余仍在等待。每次核对追加一条历史记录，页面按最新结论筛选和展示，'
+            '待人工核对清单只列截至当前仍没有同一提议回合动作的提醒。到期复查优先，'
+            '其次是旧结论未安排复查、首次未核对和已排期样本；同一组内已过观察窗的'
+            '优先。每次核对追加一条历史记录，继续等待或数据异常必须安排未来复查，'
+            '已处理或无需跟进会自动关闭复查。页面按最新结论筛选，并提供到期复查入口，'
             '默认聚焦未核对。人工结论不改变订单、预约、通知或提醒发送台账，也不会'
             '自动回应或推进预约。页面展示当前筛选前 20 条，CSV 导出当前筛选完整清单。'
         ),
@@ -684,6 +742,9 @@ def build_meeting_response_reminder_effect(
         'review_data_issue_reason_options': (
             MeetingResponseReminderReview.DATA_ISSUE_REASON_CHOICES
         ),
+        'default_next_review_value': timezone.localtime(
+            now + timedelta(days=1),
+        ).strftime('%Y-%m-%dT%H:%M'),
         'pending_review_count': len(pending_review_all_rows),
         'pending_review_rows': pending_review_rows,
         'pending_review_overflow_count': max(
@@ -691,6 +752,7 @@ def build_meeting_response_reminder_effect(
         ),
         'pending_review_all_rows': pending_review_all_rows,
         'pending_review_total_count': pending_review_total_count,
+        'pending_review_due_count': pending_review_status_counts['due'],
         'pending_review_unreviewed_count': pending_review_status_counts['unreviewed'],
         'pending_review_reviewed_count': (
             pending_review_total_count - pending_review_status_counts['unreviewed']
@@ -699,6 +761,18 @@ def build_meeting_response_reminder_effect(
         'pending_review_resolved_count': pending_review_status_counts['resolved'],
         'pending_review_data_issue_count': pending_review_status_counts['data_issue'],
         'pending_review_no_followup_count': pending_review_status_counts['no_followup'],
+        'pending_review_unscheduled_follow_up_count': sum(
+            row['follow_up_state'] == 'unscheduled'
+            for row in pending_review_candidates
+        ),
+        'pending_review_scheduled_follow_up_count': sum(
+            row['follow_up_state'] == 'scheduled'
+            for row in pending_review_candidates
+        ),
+        'pending_review_closed_follow_up_count': sum(
+            row['follow_up_state'] == 'closed'
+            for row in pending_review_candidates
+        ),
         'pending_review_empty_note': (
             '当前筛选下没有仍无同一回合动作的提醒。'
             if pending_review_all_rows else (

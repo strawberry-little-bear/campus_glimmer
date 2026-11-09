@@ -11417,6 +11417,15 @@ def operations_dashboard_export(request):
         '无需跟进', meeting_reminder_effect['pending_review_no_followup_count'],
     ])
     writer.writerow([
+        '到期复查', meeting_reminder_effect['pending_review_due_count'],
+        '历史记录未安排复查',
+        meeting_reminder_effect['pending_review_unscheduled_follow_up_count'],
+        '已安排复查',
+        meeting_reminder_effect['pending_review_scheduled_follow_up_count'],
+        '复查已关闭',
+        meeting_reminder_effect['pending_review_closed_follow_up_count'],
+    ])
+    writer.writerow([
         '已过窗尚无动作', meeting_reminder_effect['no_action_count'],
         '观察中尚无动作', meeting_reminder_effect['open_count'],
         '窗后动作（不进入清单）', meeting_reminder_effect['late_action_count'],
@@ -11428,7 +11437,7 @@ def operations_dashboard_export(request):
         '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
         '提议已等待', '提醒后已过', '阅读状态', '观察状态',
         '复核结论', '数据异常类型', '复核时间', '复核说明',
-        '复核历史次数',
+        '复核历史次数', '跟进状态', '下次复查时间',
     ])
     for row in meeting_reminder_effect['pending_review_all_rows']:
         writer.writerow([
@@ -11441,7 +11450,8 @@ def operations_dashboard_export(request):
             row['notice_label'], row['status_label'],
             row['review_outcome_label'], row['data_issue_reason_label'],
             row['reviewed_at_label'], row['review_note'],
-            row['review_history_count'],
+            row['review_history_count'], row['follow_up_state_label'],
+            row['next_review_at_label'],
         ])
     if not meeting_reminder_effect['pending_review_all_rows']:
         writer.writerow([meeting_reminder_effect['pending_review_empty_note']])
