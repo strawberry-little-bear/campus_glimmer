@@ -44,6 +44,36 @@
         </table>
     </div>
 
+    <div class="alert alert-light border mt-4 mb-4" role="status">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+            <strong>样本质量</strong>
+            <span class="text-muted">{{ meeting_response_reminder_effect.quality_label }}</span>
+        </div>
+        <p class="mb-2">通知可观测 {{ meeting_response_reminder_effect.notice_available_count }} / {{ meeting_response_reminder_effect.sent_count }} 条{% if meeting_response_reminder_effect.notice_coverage_rate != None %}（{{ meeting_response_reminder_effect.notice_coverage_rate|floatformat:'-1' }}%）{% endif %}；交叉可判定 {{ meeting_response_reminder_effect.notice_action_closed_count }} / {{ meeting_response_reminder_effect.closed_count }} 条已过窗样本{% if meeting_response_reminder_effect.notice_action_closed_rate != None %}（{{ meeting_response_reminder_effect.notice_action_closed_rate|floatformat:'-1' }}%）{% endif %}。</p>
+        <p class="mb-0 text-muted">{{ meeting_response_reminder_effect.quality_note }}</p>
+    </div>
+
+    <h3 class="h6 mb-3 mt-4">阅读与窗口动作交叉观察</h3>
+    <p class="search-rhythm-note mb-3">{{ meeting_response_reminder_effect.notice_action_note }}</p>
+    <div class="ops-table-wrap">
+        <table class="table ops-table align-middle mb-0">
+            <caption class="visually-hidden">交付安排提醒触达与回应 · 阅读与窗口动作交叉观察</caption>
+            <thead><tr><th>阅读状态</th><th>已过窗样本</th><th>窗口内行动</th><th>窗口内未行动</th><th>窗口回应率（%）</th><th>样本</th></tr></thead>
+            <tbody>
+                {% for row in meeting_response_reminder_effect.notice_action_rows %}
+                <tr>
+                    <td data-label="阅读状态"><strong>{{ row.label }}</strong></td>
+                    <td data-label="已过窗样本">{{ row.closed_count }}</td>
+                    <td data-label="窗口内行动">{{ row.action_count }}</td>
+                    <td data-label="窗口内未行动">{{ row.no_action_count }}</td>
+                    <td data-label="窗口回应率">{{ row.action_rate|default_if_none:'—' }}</td>
+                    <td data-label="样本">{% if row.comparable %}足样本{% else %}少于 {{ meeting_response_reminder_effect.min_samples }} 条，只报数{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     <h3 class="h6 mb-3 mt-4">观察状态与缺失</h3>
     <div class="ops-table-wrap">
         <table class="table ops-table align-middle mb-0">

@@ -13,7 +13,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .meeting_response_reminders import send_meeting_response_reminders
-from .meeting_response_reminder_effect import build_meeting_response_reminder_effect
+from .meeting_response_reminder_effect import (
+    _build_notice_action_rows,
+    build_meeting_response_reminder_effect,
+)
 from .models import (
     CampusLocation,
     Category,
@@ -144,6 +147,8 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(effect['open_count'], 1)
         self.assertEqual(effect['closed_count'], 0)
         self.assertEqual(effect['response_rate'], None)
+        self.assertEqual(effect['notice_action_closed_count'], 0)
+        self.assertEqual(effect['quality_status'], 'accumulating')
         self.assertEqual(MeetingResponseReminderEvent.objects.count(), 1)
 
     def test_read_and_accepted_action_use_observed_timestamps(self):
@@ -164,6 +169,42 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(effect['response_rate'], 100.0)
         self.assertEqual(effect['median_response_hours'], 2.0)
         self.assertEqual(effect['open_count'], 0)
+        rows = {row['key']: row for row in effect['notice_action_rows']}
+        self.assertEqual(rows['read']['closed_count'], 1)
+        self.assertEqual(rows['read']['action_count'], 1)
+        self.assertEqual(rows['read']['no_action_count'], 0)
+        self.assertEqual(rows['read']['action_rate'], 100.0)
+        self.assertFalse(rows['read']['comparable'])
+
+    def test_notice_action_rows_split_all_four_read_and_action_cells(self):
+        read_acted = self.make_case(proposal_age_hours=25 + 5 * 24)
+        read_not_acted = self.make_case(proposal_age_hours=25 + 5 * 24)
+        unread_acted = self.make_case(proposal_age_hours=25 + 5 * 24)
+        unread_not_acted = self.make_case(proposal_age_hours=25 + 5 * 24)
+        old_sent = self.now - timedelta(days=5)
+        with patch('django.utils.timezone.now', return_value=old_sent):
+            self.send_cases(now=old_sent)
+
+        self.mark_read(read_acted, hours_after=1)
+        self.mark_read(read_not_acted, hours_after=1)
+        self.add_action(read_acted, 'accepted', hours_after=2)
+        self.add_action(unread_acted, 'declined', hours_after=3)
+
+        effect = build_meeting_response_reminder_effect(days=30, now=self.now)
+        rows = {row['key']: row for row in effect['notice_action_rows']}
+
+        expected = {
+            'read': (2, 1, 1, 50.0),
+            'unread': (2, 1, 1, 50.0),
+        }
+        for key, (closed, action_count, no_action_count, action_rate) in expected.items():
+            self.assertEqual(rows[key]['closed_count'], closed)
+            self.assertEqual(rows[key]['action_count'], action_count)
+            self.assertEqual(rows[key]['no_action_count'], no_action_count)
+            self.assertEqual(rows[key]['action_rate'], action_rate)
+            self.assertFalse(rows[key]['comparable'])
+        self.assertEqual(effect['notice_action_closed_count'], 4)
+        self.assertEqual(effect['quality_label'], '数据积累中')
 
     def test_actions_are_split_by_role_and_type(self):
         accepted_case = self.make_case(recipient_role='seller')
@@ -218,22 +259,54 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(effect['responded_count'], 0)
         self.assertEqual(effect['response_rate'], 0.0)
         self.assertEqual(effect['no_action_count'], 0)
+        rows = {row['key']: row for row in effect['notice_action_rows']}
+        self.assertEqual(rows['unread']['closed_count'], 1)
+        self.assertEqual(rows['unread']['action_count'], 0)
+        self.assertEqual(rows['unread']['no_action_count'], 1)
+        self.assertEqual(rows['unread']['action_rate'], 0.0)
 
-    def test_deleted_notification_keeps_send_but_marks_read_unknown(self):
-        case = self.make_case()
-        self.send_cases()
-        notification = Notification.objects.get(order=case['order'])
-        notification.delete()
+    def test_deleted_notification_keeps_send_but_stays_out_of_unread_cross(self):
+        case = self.make_case(proposal_age_hours=25 + 5 * 24)
+        old_sent = self.now - timedelta(days=5)
+        with patch('django.utils.timezone.now', return_value=old_sent):
+            self.send_cases(now=old_sent)
+        Notification.objects.get(order=case['order']).delete()
 
-        effect = build_meeting_response_reminder_effect(
-            days=30, now=self.now + timedelta(hours=1),
-        )
+        effect = build_meeting_response_reminder_effect(days=30, now=self.now)
 
         self.assertEqual(effect['sent_count'], 1)
         self.assertEqual(effect['notice_available_count'], 0)
         self.assertEqual(effect['missing_notice_count'], 1)
-        self.assertEqual(effect['open_count'], 1)
+        self.assertEqual(effect['closed_count'], 1)
+        self.assertEqual(effect['no_action_count'], 1)
+        self.assertEqual(effect['open_count'], 0)
+        self.assertEqual(effect['notice_action_closed_count'], 0)
+        self.assertEqual(effect['quality_status'], 'needs_review')
+        rows = {row['key']: row for row in effect['notice_action_rows']}
+        self.assertEqual(rows['read']['closed_count'], 0)
+        self.assertEqual(rows['unread']['closed_count'], 0)
         self.assertIsNone(MeetingResponseReminderEvent.objects.get().notification)
+
+    def test_each_cross_cell_needs_twelve_samples_before_direction_is_shown(self):
+        observations = [
+            {
+                'notice_state': 'read', 'status': 'responded',
+                'within_window': True,
+            }
+            for _index in range(12)
+        ]
+        observations.append({
+            'notice_state': 'unread', 'status': 'open', 'within_window': False,
+        })
+
+        rows = {row['key']: row for row in _build_notice_action_rows(observations)}
+
+        self.assertEqual(rows['read']['closed_count'], 12)
+        self.assertEqual(rows['read']['action_count'], 12)
+        self.assertEqual(rows['read']['no_action_count'], 0)
+        self.assertFalse(rows['read']['comparable'])
+        self.assertEqual(rows['unread']['closed_count'], 0)
+        self.assertFalse(rows['unread']['comparable'])
 
     def test_legacy_notice_is_counted_separately_and_never_becomes_a_sample(self):
         case = self.make_case()
@@ -282,6 +355,9 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertIn('id="ops-meeting-reminders"', html)
         self.assertIn('交付安排提醒触达与回应', html)
         self.assertIn('按接收角色观察', html)
+        self.assertIn('阅读与窗口动作交叉观察', html)
+        self.assertIn('样本质量', html)
+        self.assertIn('数据积累中', html)
         self.assertIn('观察状态与缺失', html)
         self.assertIn('窗口内回应时延', html)
         self.assertIn('等待中的样本不会被当成提醒失败', html)
@@ -345,4 +421,17 @@ class MeetingResponseReminderEffectSurfaceTests(
             if row and row[0] == '卖家'
         )
         self.assertEqual(seller_row[1], '1')
+
+        cross_header = next(
+            index for index, row in enumerate(section)
+            if row and row[0] == '阅读状态'
+        )
+        self.assertEqual(section[cross_header], [
+            '阅读状态', '已过窗样本', '窗口内行动', '窗口内未行动',
+            '窗口回应率（%）', '样本',
+        ])
+        self.assertEqual(section[cross_header + 1], [
+            '已读', '0', '0', '0', '—', '少于 12 条，只报数',
+        ])
+        self.assertIn('样本质量', text)
         self.assertIn('不能证明由提醒引起', text)

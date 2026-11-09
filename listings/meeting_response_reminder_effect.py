@@ -5,7 +5,7 @@
 发出后，最值得回看的不是“系统又发了多少”，而是接收人是否读过，以及同一提议
 回合随后是否出现接受、拒绝或再次改期。
 
-四条边界固定了这个面板能说什么：
+五条边界固定了这个面板能说什么：
 
 1. 发送分母只来自周期内的台账。旧通知没有台账时单列为未计入，不从去重键
    倒推一个看似完整的样本。
@@ -15,6 +15,8 @@
    开始下一轮，不把后一轮的动作算回上一轮。
 4. 固定观察 72 小时。窗口未结束时仍未回应的是删失样本，不能写成“没有回应”；
    超过窗口后才出现的动作单列为晚回应，不进入窗口内回应计数；它在窗口内仍按未回应计入已过窗分母。
+5. 阅读与动作交叉表只纳入通知仍可观测、且已过观察窗的样本。观察中样本不进
+   分母，窗后动作按窗口内未行动计，通知不可观测时也不假装成“未读”。
 
 这里只报告观察值，不宣称提醒导致了动作，也不据此自动接受、拒绝、改期、
 提升提醒频率或给接收人排名。
@@ -48,6 +50,10 @@ LATENCY_BUCKETS = (
     ('within_6h', '1–6 小时', 6),
     ('within_24h', '6–24 小时', 24),
     ('within_window', '24–72 小时', EFFECT_WINDOW_HOURS),
+)
+NOTICE_ACTION_STATES = (
+    ('read', '已读'),
+    ('unread', '未读'),
 )
 
 
@@ -207,6 +213,86 @@ def _build_latency_rows(observations):
     ]
 
 
+def _build_notice_action_rows(observations):
+    """按可观测阅读状态构建窗口内行动与未行动的 2×2 交叉观察。"""
+    rows = []
+    for key, label in NOTICE_ACTION_STATES:
+        cohort = [
+            row for row in observations
+            if row['notice_state'] == key and row['status'] != 'open'
+        ]
+        action_count = sum(row['within_window'] for row in cohort)
+        closed = len(cohort)
+        no_action_count = closed - action_count
+        rows.append({
+            'key': key,
+            'label': label,
+            'closed_count': closed,
+            'action_count': action_count,
+            'no_action_count': no_action_count,
+            'action_rate': _percent(action_count, closed),
+            'comparable': (
+                action_count >= MIN_SEGMENT_SAMPLES
+                and no_action_count >= MIN_SEGMENT_SAMPLES
+            ),
+        })
+    return rows
+
+
+def _build_sample_quality(all_segment, notice_action_rows, legacy_notice_count):
+    """给出数据覆盖状态；异常只提示核对，不据此判断提醒效果。"""
+    sent = all_segment['sent_count']
+    notice_action_closed_count = sum(
+        row['closed_count'] for row in notice_action_rows
+    )
+    missing = all_segment['missing_notice_count']
+    open_samples = all_segment['open_count']
+    closed = all_segment['closed_count']
+    issues = []
+    if missing:
+        issues.append('通知不可观测 %d 条' % missing)
+    if legacy_notice_count:
+        issues.append('台账外通知 %d 条' % legacy_notice_count)
+    if not all(row['comparable'] for row in notice_action_rows):
+        issues.append(
+            '交叉组合尚未同时达到每格 %d 条门槛' % MIN_SEGMENT_SAMPLES
+        )
+    if open_samples:
+        issues.append('仍在观察中 %d 条' % open_samples)
+
+    if not sent:
+        status = 'empty'
+        label = '待积累'
+    elif missing or legacy_notice_count:
+        status = 'needs_review'
+        label = '需核对'
+    elif (
+        not all(row['comparable'] for row in notice_action_rows)
+        or open_samples
+    ):
+        status = 'accumulating'
+        label = '数据积累中'
+    else:
+        status = 'complete'
+        label = '样本可观察'
+
+    if issues:
+        note = '；'.join(issues) + '。这些提示只描述数据边界，不据此调整提醒。'
+    else:
+        note = '通知与交叉样本均达到当前展示门槛，仍只观察关联，不据此调整提醒。'
+
+    return {
+        'status': status,
+        'label': label,
+        'note': note,
+        'notice_coverage_rate': _percent(
+            all_segment['notice_available_count'], sent,
+        ),
+        'notice_action_closed_count': notice_action_closed_count,
+        'notice_action_closed_rate': _percent(notice_action_closed_count, closed),
+    }
+
+
 def build_meeting_response_reminder_effect(*, days=30, now=None):
     """构建页面与 CSV 共用的只读提醒效果面板。"""
     now = now or timezone.now()
@@ -262,6 +348,10 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         for role, label in ROLE_LABELS
     ]
     latency_rows = _build_latency_rows(observations)
+    notice_action_rows = _build_notice_action_rows(observations)
+    notice_action_closed_count = sum(
+        row['closed_count'] for row in notice_action_rows
+    )
 
     linked_notification_ids = [
         reminder.notification_id for reminder in reminders
@@ -275,6 +365,9 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
     if linked_notification_ids:
         legacy_notices = legacy_notices.exclude(pk__in=linked_notification_ids)
     legacy_notice_count = legacy_notices.count()
+    sample_quality = _build_sample_quality(
+        all_segment, notice_action_rows, legacy_notice_count,
+    )
 
     if not reminders:
         summary = (
@@ -315,6 +408,18 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
             '后续动作只说明发生在提醒之后，不能证明由提醒引起；本面板不自动推进预约、'
             '不提高发送频率，也不按用户或角色排名。'
         ),
+        'notice_action_note': (
+            '交叉分母只含通知仍可观测且已过观察窗的样本；观察中不进入，窗后动作按'
+            '窗口内未行动计，通知不可观测也不归入未读。阅读状态取当前记录，不比较'
+            '阅读与动作先后；已读未行动或未读但行动只是线索，不能单独证明文案失效'
+            '或阅读记录有误。'
+        ),
+        'quality_status': sample_quality['status'],
+        'quality_label': sample_quality['label'],
+        'quality_note': sample_quality['note'],
+        'notice_coverage_rate': sample_quality['notice_coverage_rate'],
+        'notice_action_closed_count': notice_action_closed_count,
+        'notice_action_closed_rate': sample_quality['notice_action_closed_rate'],
         'action_labels': ACTION_LABELS,
         'sent_count': all_segment['sent_count'],
         'notice_available_count': all_segment['notice_available_count'],
@@ -334,6 +439,7 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         'median_response_label': all_segment['median_response_label'],
         'comparable': all_segment['comparable'],
         'role_rows': role_rows,
+        'notice_action_rows': notice_action_rows,
         'latency_rows': latency_rows,
         'legacy_notice_count': legacy_notice_count,
     }

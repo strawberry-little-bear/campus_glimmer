@@ -11269,7 +11269,12 @@ def operations_dashboard_export(request):
             meeting_reminder_effect['notice_read_rate']
             if meeting_reminder_effect['notice_read_rate'] is not None else '—'
         ),
+        '通知可观测率（%）', (
+            meeting_reminder_effect['notice_coverage_rate']
+            if meeting_reminder_effect['notice_coverage_rate'] is not None else '—'
+        ),
         '已过观察窗', meeting_reminder_effect['closed_count'],
+        '交叉可判定样本', meeting_reminder_effect['notice_action_closed_count'],
         '窗口内回应', meeting_reminder_effect['responded_count'],
         '窗口回应率（%）', (
             meeting_reminder_effect['response_rate']
@@ -11297,6 +11302,40 @@ def operations_dashboard_export(request):
             row['rescheduled_count'],
             row['response_rate'] if row['response_rate'] is not None else '—',
             row['median_response_label'],
+            '足样本' if row['comparable'] else (
+                '少于 %d 条，只报数' % meeting_reminder_effect['min_samples']
+            ),
+        ])
+    writer.writerow([])
+    writer.writerow(['样本质量', meeting_reminder_effect['quality_label']])
+    writer.writerow([
+        '通知可观测', meeting_reminder_effect['notice_available_count'],
+        '发送台账', meeting_reminder_effect['sent_count'],
+        '覆盖率（%）', (
+            meeting_reminder_effect['notice_coverage_rate']
+            if meeting_reminder_effect['notice_coverage_rate'] is not None else '—'
+        ),
+    ])
+    writer.writerow([
+        '交叉可判定', meeting_reminder_effect['notice_action_closed_count'],
+        '已过窗样本', meeting_reminder_effect['closed_count'],
+        '覆盖率（%）', (
+            meeting_reminder_effect['notice_action_closed_rate']
+            if meeting_reminder_effect['notice_action_closed_rate'] is not None else '—'
+        ),
+    ])
+    writer.writerow([meeting_reminder_effect['quality_note']])
+    writer.writerow([])
+    writer.writerow(['阅读与窗口动作交叉观察'])
+    writer.writerow([
+        '阅读状态', '已过窗样本', '窗口内行动', '窗口内未行动',
+        '窗口回应率（%）', '样本',
+    ])
+    for row in meeting_reminder_effect['notice_action_rows']:
+        writer.writerow([
+            row['label'], row['closed_count'], row['action_count'],
+            row['no_action_count'],
+            row['action_rate'] if row['action_rate'] is not None else '—',
             '足样本' if row['comparable'] else (
                 '少于 %d 条，只报数' % meeting_reminder_effect['min_samples']
             ),
@@ -11341,6 +11380,7 @@ def operations_dashboard_export(request):
     writer.writerow(['说明'])
     writer.writerow([meeting_reminder_effect['sample_note']])
     writer.writerow([meeting_reminder_effect['source_note']])
+    writer.writerow([meeting_reminder_effect['notice_action_note']])
     writer.writerow([meeting_reminder_effect['causality_note']])
 
     reminder_effect = dashboard['lifecycle_reminder_effect']
