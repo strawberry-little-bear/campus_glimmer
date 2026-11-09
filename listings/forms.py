@@ -632,6 +632,12 @@ class MeetingResponseReminderReviewForm(
 ):
     """记录一次人工核对；备注保留现场判断依据。"""
 
+    data_issue_reason = forms.ChoiceField(
+        label='数据异常类型', required=False,
+        choices=MeetingResponseReminderReview.DATA_ISSUE_REASON_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        help_text='仅“数据异常”需要选择，其他结论会自动清空。',
+    )
     note = forms.CharField(
         label='复核说明', required=False, max_length=1000,
         widget=forms.Textarea(attrs={
@@ -643,7 +649,7 @@ class MeetingResponseReminderReviewForm(
 
     class Meta:
         model = MeetingResponseReminderReview
-        fields = ['outcome', 'note']
+        fields = ['outcome', 'data_issue_reason', 'note']
         widgets = {
             'outcome': forms.Select(attrs={'class': 'form-select'}),
         }
@@ -651,12 +657,20 @@ class MeetingResponseReminderReviewForm(
     def clean(self):
         cleaned_data = super().clean()
         outcome = cleaned_data.get('outcome')
+        reason = cleaned_data.get('data_issue_reason') or ''
         note = (cleaned_data.get('note') or '').strip()
         cleaned_data['note'] = note
         if outcome and outcome != 'resolved' and not note:
             self.add_error(
                 'note', '继续等待、数据异常或无需跟进时，请填写核对依据。',
             )
+        if outcome == 'data_issue':
+            if not reason:
+                self.add_error(
+                    'data_issue_reason', '标记数据异常时，请选择异常类型。',
+                )
+        else:
+            cleaned_data['data_issue_reason'] = ''
         return cleaned_data
 
 

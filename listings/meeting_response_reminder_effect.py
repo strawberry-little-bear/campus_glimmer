@@ -180,16 +180,27 @@ def _build_pending_review_rows(observations, now):
         observation['reminder'] for observation in observations
         if observation['status'] in PENDING_REVIEW_STATUS_LABELS
     ]
-    latest_reviews = {}
+    review_histories = {}
     reminder_ids = [reminder.pk for reminder in reminders]
     if reminder_ids:
         reviews = MeetingResponseReminderReview.objects.filter(
             reminder_id__in=reminder_ids,
         ).order_by('reminder_id', '-reviewed_at', '-pk').only(
-            'reminder_id', 'outcome', 'note', 'reviewed_at',
+            'reminder_id', 'outcome', 'data_issue_reason', 'note',
+            'reviewed_at',
         )
         for review in reviews:
-            latest_reviews.setdefault(review.reminder_id, review)
+            review_histories.setdefault(review.reminder_id, []).append({
+                'outcome': review.outcome,
+                'outcome_label': PENDING_REVIEW_OUTCOME_LABELS[review.outcome],
+                'data_issue_reason': review.data_issue_reason,
+                'data_issue_reason_label': (
+                    review.get_data_issue_reason_display()
+                    if review.data_issue_reason else ''
+                ),
+                'note': review.note,
+                'reviewed_at_label': _format_local_datetime(review.reviewed_at),
+            })
 
     rows = []
     for observation in observations:
@@ -208,7 +219,8 @@ def _build_pending_review_rows(observations, now):
         location_label = proposal.location_name
         if not location_label and proposal.location_id and proposal.location:
             location_label = proposal.location.name
-        review = latest_reviews.get(reminder.pk)
+        review_history = review_histories.get(reminder.pk, [])
+        review = review_history[0] if review_history else None
         rows.append({
             'order_id': proposal.order_id,
             'role_label': dict(ROLE_LABELS).get(
@@ -232,16 +244,22 @@ def _build_pending_review_rows(observations, now):
             'sent_at': reminder.sent_at,
             'reminder_id': reminder.pk,
             'is_reviewed': review is not None,
-            'review_outcome': review.outcome if review is not None else '',
+            'review_outcome': review['outcome'] if review is not None else '',
             'review_outcome_label': (
-                PENDING_REVIEW_OUTCOME_LABELS[review.outcome]
-                if review is not None else '未核对'
+                review['outcome_label'] if review is not None else '未核对'
+            ),
+            'data_issue_reason': (
+                review['data_issue_reason'] if review is not None else ''
+            ),
+            'data_issue_reason_label': (
+                review['data_issue_reason_label'] if review is not None else ''
             ),
             'reviewed_at_label': (
-                _format_local_datetime(review.reviewed_at)
-                if review is not None else '—'
+                review['reviewed_at_label'] if review is not None else '—'
             ),
-            'review_note': review.note if review is not None else '',
+            'review_note': review['note'] if review is not None else '',
+            'review_history_count': len(review_history),
+            'review_history': review_history,
         })
     rows.sort(key=lambda row: (
         row['status'] != 'no_action',
@@ -663,6 +681,9 @@ def build_meeting_response_reminder_effect(
         'review_status_label': dict(PENDING_REVIEW_FILTER_OPTIONS)[review_status],
         'review_filter_options': pending_review_filter_options,
         'review_outcome_options': MeetingResponseReminderReview.OUTCOME_CHOICES,
+        'review_data_issue_reason_options': (
+            MeetingResponseReminderReview.DATA_ISSUE_REASON_CHOICES
+        ),
         'pending_review_count': len(pending_review_all_rows),
         'pending_review_rows': pending_review_rows,
         'pending_review_overflow_count': max(

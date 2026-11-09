@@ -136,7 +136,7 @@ class MeetingReminderFixtureMixin:
 
     def review_case(
         self, case, reviewer, *, outcome='waiting', note='已核实，继续观察。',
-        reviewed_at=None,
+        data_issue_reason='', reviewed_at=None,
     ):
         reminder = MeetingResponseReminderEvent.objects.get(
             proposal_event=case['proposal'],
@@ -144,6 +144,7 @@ class MeetingReminderFixtureMixin:
         return MeetingResponseReminderReview.objects.create(
             reminder=reminder,
             outcome=outcome,
+            data_issue_reason=data_issue_reason,
             note=note,
             reviewed_by=reviewer,
             reviewed_at=reviewed_at or timezone.now(),
@@ -579,7 +580,8 @@ class MeetingResponseReminderEffectSurfaceTests(
             '订单编号', '订单详情路径', '接收角色', '提议发起时间',
             '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
             '提议已等待', '提醒后已过', '阅读状态', '观察状态',
-            '复核结论', '复核时间', '复核说明',
+            '复核结论', '数据异常类型', '复核时间', '复核说明',
+            '复核历史次数',
         ])
         detail_rows = []
         for row in rows[header_index + 1:]:
@@ -597,8 +599,10 @@ class MeetingResponseReminderEffectSurfaceTests(
         )
         self.assertEqual(detail_rows[0][11], '已过窗，尚无动作')
         self.assertEqual(detail_rows[0][12], '未核对')
-        self.assertEqual(detail_rows[0][13], '—')
-        self.assertEqual(detail_rows[0][14], '')
+        self.assertEqual(detail_rows[0][13], '')
+        self.assertEqual(detail_rows[0][14], '—')
+        self.assertEqual(detail_rows[0][15], '')
+        self.assertEqual(detail_rows[0][16], '0')
 
     def test_dashboard_renders_the_review_panel_without_user_identity(self):
         case = self.make_case(recipient_role='seller')
@@ -755,6 +759,9 @@ class MeetingResponseReminderReviewLedgerTests(
         for index, outcome in enumerate(outcomes):
             self.review_case(
                 cases[outcome], self.reviewer, outcome=outcome,
+                data_issue_reason=(
+                    'reminder_mismatch' if outcome == 'data_issue' else ''
+                ),
                 note='人工依据 %s' % outcome,
                 reviewed_at=self.now + timedelta(minutes=index),
             )
@@ -816,6 +823,51 @@ class MeetingResponseReminderReviewLedgerTests(
         )
         self.assertEqual(first.reviewed_at.minute + 1, second.reviewed_at.minute)
 
+    def test_review_history_keeps_all_entries_newest_first(self):
+        case = self.make_case()
+        self.send_cases()
+        first = self.review_case(
+            case, self.reviewer, outcome='waiting',
+            note='第一次核验仍等待。',
+            reviewed_at=self.now + timedelta(minutes=1),
+        )
+        second = self.review_case(
+            case, self.reviewer, outcome='data_issue',
+            data_issue_reason='reminder_mismatch',
+            note='再次核验发现提醒台账不一致。',
+            reviewed_at=self.now + timedelta(minutes=2),
+        )
+
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now, review_status='data_issue',
+        )
+        row = effect['pending_review_all_rows'][0]
+
+        self.assertEqual(row['review_history_count'], 2)
+        self.assertEqual(
+            [entry['outcome'] for entry in row['review_history']],
+            ['data_issue', 'waiting'],
+        )
+        self.assertEqual(
+            [entry['outcome_label'] for entry in row['review_history']],
+            ['数据异常', '继续等待'],
+        )
+        self.assertEqual(
+            [entry['data_issue_reason'] for entry in row['review_history']],
+            ['reminder_mismatch', ''],
+        )
+        self.assertEqual(
+            row['review_history'][1]['reviewed_at_label'],
+            timezone.localtime(first.reviewed_at).strftime('%Y-%m-%d %H:%M'),
+        )
+        self.assertEqual(
+            row['review_history'][0]['reviewed_at_label'],
+            timezone.localtime(second.reviewed_at).strftime('%Y-%m-%d %H:%M'),
+        )
+        self.assertEqual(row['data_issue_reason'], 'reminder_mismatch')
+        self.assertEqual(row['data_issue_reason_label'], '提醒台账不一致')
+        self.assertEqual(row['review_outcome'], 'data_issue')
+
     def test_unknown_filter_falls_back_to_unreviewed(self):
         self.make_case()
         self.send_cases()
@@ -862,10 +914,18 @@ class MeetingResponseReminderReviewLedgerTests(
         self.assertFalse(missing_note.is_valid())
         self.assertIn('note', missing_note.errors)
 
+        missing_reason = MeetingResponseReminderReviewForm(data={
+            'outcome': 'data_issue', 'note': '历史链缺少一条提议。',
+        })
+        self.assertFalse(missing_reason.is_valid())
+        self.assertIn('data_issue_reason', missing_reason.errors)
+
         resolved = MeetingResponseReminderReviewForm(data={
             'outcome': 'resolved', 'note': '',
+            'data_issue_reason': 'other',
         })
         self.assertTrue(resolved.is_valid(), resolved.errors)
+        self.assertEqual(resolved.cleaned_data['data_issue_reason'], '')
         review = resolved.save(commit=False)
         review.reminder = reminder
         review.reviewed_by = self.reviewer
@@ -896,7 +956,7 @@ class MeetingResponseReminderReviewSurfaceTests(
 
     def post_review(
         self, reminder, *, outcome='waiting', note='已核实，继续观察。',
-        days=30, review_status='unreviewed',
+        data_issue_reason='', days=30, review_status='unreviewed',
     ):
         return self.client.post(
             reverse(
@@ -905,6 +965,7 @@ class MeetingResponseReminderReviewSurfaceTests(
             ),
             {
                 'outcome': outcome,
+                'data_issue_reason': data_issue_reason,
                 'note': note,
                 'days': days,
                 'review_status': review_status,
@@ -989,11 +1050,17 @@ class MeetingResponseReminderReviewSurfaceTests(
         self.assertEqual(after, before)
 
         self.post_review(
-            reminder, outcome='resolved', note='', review_status='resolved',
+            reminder, outcome='resolved', note='', data_issue_reason='other',
+            review_status='resolved',
         )
+        resolved_review = MeetingResponseReminderReview.objects.get(
+            reminder=reminder, outcome='resolved',
+        )
+        self.assertEqual(resolved_review.data_issue_reason, '')
         self.post_review(
-            reminder, outcome='data_issue', note='门店地址与后台档案不一致。',
-            review_status='data_issue',
+            reminder, outcome='data_issue',
+            data_issue_reason='reminder_mismatch',
+            note='门店地址与后台档案不一致。', review_status='data_issue',
         )
         self.assertEqual(
             MeetingResponseReminderReview.objects.filter(reminder=reminder).count(),
@@ -1006,6 +1073,8 @@ class MeetingResponseReminderReviewSurfaceTests(
         )
         html = page.content.decode('utf-8')
         self.assertIn('门店地址与后台档案不一致。', html)
+        self.assertIn('提醒台账不一致', html)
+        self.assertIn('查看完整复核历史（3 条）', html)
         reviewed_at = MeetingResponseReminderReview.objects.order_by(
             '-reviewed_at', '-pk',
         ).first().reviewed_at
@@ -1036,8 +1105,12 @@ class MeetingResponseReminderReviewSurfaceTests(
             reminder, outcome='made_up', note='无效结论',
         )
         missing_note = self.post_review(reminder, outcome='no_followup', note='')
+        missing_reason = self.post_review(
+            reminder, outcome='data_issue', note='缺少结构化原因。',
+        )
         self.assertEqual(invalid_outcome.status_code, 302)
         self.assertEqual(missing_note.status_code, 302)
+        self.assertEqual(missing_reason.status_code, 302)
         self.assertEqual(MeetingResponseReminderReview.objects.count(), 0)
 
         self.add_action(case, 'accepted', hours_after=2)
@@ -1070,6 +1143,7 @@ class MeetingResponseReminderReviewSurfaceTests(
         )
         self.review_case(
             issue_case, self.staff, outcome='data_issue',
+            data_issue_reason='notification_missing',
             note='通知关联存在异常。',
         )
 
@@ -1090,6 +1164,11 @@ class MeetingResponseReminderReviewSurfaceTests(
         )
         self.assertIn('窗口内仍需继续观察。', panel)
         self.assertIn('当前筛选 1 条 · 全部待核对 2 条', html)
+        issue_page = self.client.get(
+            reverse('operations_dashboard'),
+            {'days': 30, 'review_status': 'data_issue'},
+        ).content.decode('utf-8')
+        self.assertIn('通知记录缺失', issue_page)
 
         fragment = self.client.get(
             reverse(
@@ -1122,19 +1201,20 @@ class MeetingResponseReminderReviewSurfaceTests(
             index for index, row in enumerate(rows)
             if row and row[0] == '订单编号'
         )
-        self.assertEqual(rows[header_index][-3:], [
-            '复核结论', '复核时间', '复核说明',
+        self.assertEqual(rows[header_index][-5:], [
+            '复核结论', '数据异常类型', '复核时间', '复核说明',
+            '复核历史次数',
         ])
         detail = rows[header_index + 1]
         self.assertEqual(int(detail[0]), waiting_case['order'].id)
         self.assertEqual(detail[12:], [
-            '继续等待',
+            '继续等待', '',
             timezone.localtime(
                 MeetingResponseReminderReview.objects.get(
                     reminder__proposal_event=waiting_case['proposal'],
                 ).reviewed_at,
             ).strftime('%Y-%m-%d %H:%M'),
-            '窗口内仍需继续观察。',
+            '窗口内仍需继续观察。', '1',
         ])
 
     def test_filtered_page_keeps_twenty_but_csv_exports_all_matching_rows(self):

@@ -4102,9 +4102,12 @@ def review_meeting_response_reminder(request, reminder_id):
         review.reminder = reminder
         review.reviewed_by = request.user
         review.save()
+        outcome_label = review.get_outcome_display()
+        if review.data_issue_reason:
+            outcome_label += '·' + review.get_data_issue_reason_display()
         messages.success(
             request,
-            f'已记录“{review.get_outcome_display()}”。本次只追加人工核对历史，'
+            f'已记录“{outcome_label}”。本次只追加人工核对历史，'
             '未改变订单、预约、通知或提醒发送台账。',
         )
     return _meeting_response_review_redirect(request)
@@ -11424,7 +11427,8 @@ def operations_dashboard_export(request):
         '订单编号', '订单详情路径', '接收角色', '提议发起时间',
         '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
         '提议已等待', '提醒后已过', '阅读状态', '观察状态',
-        '复核结论', '复核时间', '复核说明',
+        '复核结论', '数据异常类型', '复核时间', '复核说明',
+        '复核历史次数',
     ])
     for row in meeting_reminder_effect['pending_review_all_rows']:
         writer.writerow([
@@ -11435,8 +11439,9 @@ def operations_dashboard_export(request):
             row['location_label'], row['sent_at_label'],
             row['proposal_wait_label'], row['reminder_age_label'],
             row['notice_label'], row['status_label'],
-            row['review_outcome_label'], row['reviewed_at_label'],
-            row['review_note'],
+            row['review_outcome_label'], row['data_issue_reason_label'],
+            row['reviewed_at_label'], row['review_note'],
+            row['review_history_count'],
         ])
     if not meeting_reminder_effect['pending_review_all_rows']:
         writer.writerow([meeting_reminder_effect['pending_review_empty_note']])

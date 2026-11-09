@@ -52,9 +52,24 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
                     <td data-label="最新复核">
                         <div class="small">
                             <strong>{{ row.review_outcome_label }}</strong>
+                            {% if row.data_issue_reason_label %}<span class="badge text-bg-warning ms-1">{{ row.data_issue_reason_label }}</span>{% endif %}
                             {% if row.is_reviewed %}<span class="d-block text-muted">{{ row.reviewed_at_label }}</span>{% endif %}
                             {% if row.review_note %}<div class="text-muted mt-1">{{ row.review_note|linebreaksbr }}</div>{% endif %}
                         </div>
+                        {% if row.review_history_count > 1 %}
+                        <details class="mt-2">
+                            <summary class="small text-primary">查看完整复核历史（{{ row.review_history_count }} 条）</summary>
+                            <ol class="small mt-2 mb-0 ps-3">
+                                {% for entry in row.review_history %}
+                                <li class="mb-2">
+                                    <strong>{{ entry.outcome_label }}</strong>{% if entry.data_issue_reason_label %} · {{ entry.data_issue_reason_label }}{% endif %}
+                                    <span class="d-block text-muted">{{ entry.reviewed_at_label }}</span>
+                                    {% if entry.note %}<div class="text-muted">{{ entry.note|linebreaksbr }}</div>{% endif %}
+                                </li>
+                                {% endfor %}
+                            </ol>
+                        </details>
+                        {% endif %}
                         <details class="mt-2">
                             <summary class="small text-primary">追加复核</summary>
                             <form method="post" action="{% url 'review_meeting_response_reminder' row.reminder_id %}" class="mt-2">
@@ -67,9 +82,16 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
                                     <option value="{{ value }}">{{ label }}</option>
                                     {% endfor %}
                                 </select>
+                                <label class="form-label small mb-1" for="review-data-issue-reason-{{ row.reminder_id }}">数据异常类型</label>
+                                <select class="form-select form-select-sm mb-2" id="review-data-issue-reason-{{ row.reminder_id }}" name="data_issue_reason">
+                                    <option value="">仅“数据异常”时选择</option>
+                                    {% for value, label in meeting_response_reminder_effect.review_data_issue_reason_options %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
                                 <label class="form-label small mb-1" for="review-note-{{ row.reminder_id }}">复核说明</label>
                                 <textarea class="form-control form-control-sm mb-1" id="review-note-{{ row.reminder_id }}" name="note" rows="3" maxlength="1000" placeholder="除“已处理”外，请填写核对依据。"></textarea>
-                                <p class="text-muted small mb-2">最多 1000 字；继续等待、数据异常或无需跟进时必须填写。</p>
+                                <p class="text-muted small mb-2">最多 1000 字；继续等待、数据异常或无需跟进时必须填写。选择“数据异常”时必须同时选择异常类型。</p>
                                 <button type="submit" class="btn btn-sm btn-primary">追加本次结论</button>
                             </form>
                         </details>

@@ -2301,6 +2301,14 @@ class MeetingResponseReminderReview(models.Model):
     供运营回看判断过程。人工结论只用于跟进，不改变提醒发送台账、预约或订单。
     """
 
+    DATA_ISSUE_REASON_CHOICES = (
+        ('notification_missing', '通知记录缺失'),
+        ('read_state_conflict', '阅读状态冲突'),
+        ('appointment_history_gap', '预约历史不完整'),
+        ('reminder_mismatch', '提醒台账不一致'),
+        ('other', '其他数据问题'),
+    )
+
     OUTCOME_CHOICES = (
         ('waiting', '继续等待'),
         ('resolved', '已处理'),
@@ -2316,6 +2324,10 @@ class MeetingResponseReminderReview(models.Model):
         '复核结论', max_length=20, choices=OUTCOME_CHOICES,
     )
     note = models.TextField('复核说明', max_length=1000, blank=True)
+    data_issue_reason = models.CharField(
+        '数据异常类型', max_length=32, blank=True, default='',
+        choices=DATA_ISSUE_REASON_CHOICES,
+    )
     reviewed_by = models.ForeignKey(
         User, on_delete=models.PROTECT,
         related_name='meeting_response_reminder_reviews', verbose_name='复核人',
@@ -2338,6 +2350,12 @@ class MeetingResponseReminderReview(models.Model):
             raise ValidationError({
                 'note': '继续等待、数据异常或无需跟进时，请填写核对依据。',
             })
+        if self.outcome == 'data_issue' and not self.data_issue_reason:
+            raise ValidationError({
+                'data_issue_reason': '标记数据异常时，请选择异常类型。',
+            })
+        if self.outcome != 'data_issue':
+            self.data_issue_reason = ''
 
     def save(self, *args, **kwargs):
         if self.pk and not self._state.adding:

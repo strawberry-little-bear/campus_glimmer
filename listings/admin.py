@@ -310,13 +310,19 @@ class MeetingAppointmentEventAdmin(admin.ModelAdmin):
 class MeetingResponseReminderReviewAdmin(admin.ModelAdmin):
     """人工复核历史只供审计，新增统一从运营看板表单进入。"""
 
-    list_display = ('id', 'reminder', 'outcome', 'reviewed_at', 'reviewed_by')
-    list_filter = ('outcome', 'reviewed_at')
+    list_display = (
+        'id', 'reminder', 'outcome', 'data_issue_reason',
+        'reviewed_at', 'reviewed_by',
+    )
+    list_filter = ('outcome', 'data_issue_reason', 'reviewed_at')
     search_fields = (
         'reminder__proposal_event__order_id', 'reviewed_by__username', 'note',
     )
     list_select_related = ('reminder__proposal_event', 'reviewed_by')
-    readonly_fields = ('reminder', 'outcome', 'note', 'reviewed_by', 'reviewed_at')
+    readonly_fields = (
+        'reminder', 'outcome', 'data_issue_reason', 'note',
+        'reviewed_by', 'reviewed_at',
+    )
 
     def has_add_permission(self, request):
         return False
