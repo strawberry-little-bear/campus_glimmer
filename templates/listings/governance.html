@@ -61,6 +61,19 @@
         <div class="governance-case-body">
             <span class="small text-muted">涉及对方：{{ case.counterparty }}</span>
             <span class="small text-muted">已等待 {{ case.age_label }}（时限 {{ case.sla_label }}）</span>{% if case.kind == 'report' %}<span class="small text-muted">举报优先级：{{ case.priority_label }} · {{ case.priority_signals|join:'、' }}</span>{% endif %}
+            {% if case.kind == 'incident' %}
+            <div class="governance-incident-history">
+                {% if case.incident_events %}
+                <ol class="governance-incident-chain" aria-label="预约异常处理链">
+                    {% for event in case.incident_events %}
+                    <li><strong>{{ event.label }}</strong><time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:'m-d H:i' }}</time></li>
+                    {% endfor %}
+                </ol>
+                {% else %}
+                <span class="governance-incident-history-empty"><i class="bi bi-hourglass me-1"></i>旧异常未留存处理动作，系统不会补造历史。</span>
+                {% endif %}
+            </div>
+            {% endif %}
             {% if case.kind == 'borrow' %}<span class="small text-muted">催收等级 三级 · 累计升级 {{ case.escalation_count }} 次</span>
             {% elif case.reviewer_id %}<span class="small text-muted">已分配处理人</span>{% else %}<span class="small text-muted">尚未分配处理人</span>{% endif %}
         </div>

@@ -64,7 +64,23 @@
         {% if appointment.check_in_open and not appointment.buyer_arrived_at and user == order.buyer or appointment.check_in_open and not appointment.seller_arrived_at and user == order.seller %}
         <form method="post" action="{% url 'check_in_meeting' order.id %}" class="mt-3">{% csrf_token %}<button class="btn btn-outline-success w-100"><i class="bi bi-geo-alt me-1"></i>登记我已到达</button></form>
         {% elif appointment.check_in_open %}<p class="small text-muted mt-3 mb-0">你已登记到场，等待对方更新状态。</p>{% endif %}
-        {% if incident %}<div class="meeting-incident-note mt-3"><strong><i class="bi bi-exclamation-diamond me-1"></i>预约异常：{{ incident.get_status_display }}</strong><p class="small mb-0 mt-1">{{ incident.get_reason_display }} · {{ incident.detail|truncatechars:90 }}</p></div>{% elif incident_form %}<div class="meeting-incident-panel mt-3"><strong><i class="bi bi-shield-exclamation me-1"></i>约定结束但出现异常？</strong><p class="small mb-2 mt-1">提交后平台会结合到场登记和订单时间线进行核实。</p><form method="post" action="{% url 'report_meeting_incident' order.id %}">{% csrf_token %}{% for field in incident_form %}<div class="mb-2"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}<button class="btn btn-outline-danger btn-sm w-100">提交预约异常</button></form></div>{% endif %}
+        {% endif %}
+        {% if incident %}
+        <div class="meeting-incident-note mt-3">
+            <strong><i class="bi bi-exclamation-diamond me-1"></i>预约异常：{{ incident.get_status_display }}</strong>
+            <p class="small mb-0 mt-1">{{ incident.get_reason_display }} · {{ incident.detail|truncatechars:90 }}</p>
+            {% if incident_events %}
+            <ol class="meeting-event-list mt-2">
+                {% for event in incident_events %}
+                <li class="meeting-event meeting-event-{{ event.event_type }}"><span class="meeting-event-marker" aria-hidden="true"></span><div class="meeting-event-copy"><div class="meeting-event-head"><strong>{{ event.get_event_type_display }}</strong><time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:'Y-m-d H:i' }}</time></div><p>{{ event.get_new_status_display }}</p>{% if event.note %}<small>{{ event.note|linebreaksbr }}</small>{% endif %}</div></li>
+                {% endfor %}
+            </ol>
+            {% else %}
+            <small class="d-block text-muted mt-2">这笔异常建立于处理记录启用前，平台会继续按当前状态处理；此前缺失的动作不会补造。</small>
+            {% endif %}
+        </div>
+        {% elif incident_form %}
+        <div class="meeting-incident-panel mt-3"><strong><i class="bi bi-shield-exclamation me-1"></i>约定结束但出现异常？</strong><p class="small mb-2 mt-1">提交后平台会结合到场登记和订单时间线进行核实。</p><form method="post" action="{% url 'report_meeting_incident' order.id %}">{% csrf_token %}{% for field in incident_form %}<div class="mb-2"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}<button class="btn btn-outline-danger btn-sm w-100">提交预约异常</button></form></div>
         {% endif %}
         {% if appointment.status == 'pending' and user != appointment.proposed_by %}
         <div class="d-grid gap-2 mt-3">

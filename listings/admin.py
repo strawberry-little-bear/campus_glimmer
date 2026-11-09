@@ -1,7 +1,8 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
+from django.utils import timezone
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingAppointmentEvent, MeetingIncident, MeetingResponseReminderReview, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingAppointmentEvent, MeetingIncident, MeetingIncidentEvent, MeetingResponseReminderReview, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -336,6 +337,20 @@ class MeetingResponseReminderReviewAdmin(admin.ModelAdmin):
         return False
 
 
+class MeetingIncidentEventInline(admin.TabularInline):
+    model = MeetingIncidentEvent
+    extra = 0
+    fields = ('event_type', 'actor_label', 'previous_status', 'new_status', 'note', 'occurred_at')
+    readonly_fields = fields
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(MeetingIncident)
 class MeetingIncidentAdmin(admin.ModelAdmin):
     list_display = ('appointment', 'reported_by', 'accused', 'reason', 'status', 'reviewer', 'created_at')
@@ -343,6 +358,72 @@ class MeetingIncidentAdmin(admin.ModelAdmin):
     search_fields = ('appointment__order__item__title', 'reported_by__username', 'accused__username', 'detail')
     autocomplete_fields = ('appointment', 'reported_by', 'accused', 'reviewer')
     readonly_fields = ('created_at', 'updated_at', 'reviewed_at')
+    inlines = (MeetingIncidentEventInline,)
+
+    def save_model(self, request, obj, form, change):
+        previous_status = ''
+        if change:
+            previous_status = MeetingIncident.objects.filter(pk=obj.pk).values_list(
+                'status', flat=True,
+            ).first() or ''
+        super().save_model(request, obj, form, change)
+        event_type = None
+        if not change:
+            event_type = 'reported'
+        elif previous_status != obj.status:
+            event_type = {
+                'open': 'reported',
+                'reviewing': 'review_started',
+                'resolved': 'resolved',
+                'dismissed': 'dismissed',
+            }.get(obj.status)
+        elif 'resolution_note' in form.changed_data:
+            event_type = 'note_updated'
+        if event_type:
+            event_at = timezone.now()
+            event_previous_status = previous_status
+            if previous_status == 'open' and obj.status in {'resolved', 'dismissed'}:
+                MeetingIncidentEvent.objects.create(
+                    incident=obj,
+                    event_type='review_started',
+                    actor=request.user,
+                    actor_label=request.user.username,
+                    previous_status='open',
+                    new_status='reviewing',
+                    note='',
+                    occurred_at=event_at,
+                )
+                event_previous_status = 'reviewing'
+            MeetingIncidentEvent.objects.create(
+                incident=obj,
+                event_type=event_type,
+                actor=request.user,
+                actor_label=request.user.username,
+                previous_status=event_previous_status,
+                new_status=obj.status,
+                note=obj.resolution_note,
+                occurred_at=event_at,
+            )
+
+
+@admin.register(MeetingIncidentEvent)
+class MeetingIncidentEventAdmin(admin.ModelAdmin):
+    list_display = ('incident', 'event_type', 'actor_label', 'previous_status', 'new_status', 'occurred_at')
+    list_filter = ('event_type', 'new_status', 'occurred_at')
+    search_fields = ('incident__appointment__order__item__title', 'actor_label', 'note')
+    readonly_fields = (
+        'incident', 'event_type', 'actor', 'actor_label', 'previous_status',
+        'new_status', 'note', 'occurred_at', 'created_at',
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(BrowsingHistory)

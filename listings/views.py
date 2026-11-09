@@ -163,7 +163,7 @@ from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
 from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, MeetingResponseReminderReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, LostFoundReportForm, LostFoundReportReviewForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandReopenEvent, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MeetingResponseReminderEvent, MeetingResponseReminderReview, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandReopenEvent, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MeetingIncidentEvent, MeetingResponseReminderEvent, MeetingResponseReminderReview, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -1512,6 +1512,9 @@ def order_detail(request, order_id):
     incident_form = None
     confirmation = getattr(order, 'delivery_confirmation', None)
     incident = getattr(appointment, 'incident', None) if appointment else None
+    incident_events = (
+        incident.events.select_related('actor').all() if incident else []
+    )
     if order.status in {'confirmed', 'meeting'} and not (appointment and appointment.status == 'pending' and appointment.proposed_by_id != request.user.id):
         form_initial = {'location': order.meeting_location_id} if not appointment else None
         meeting_form = MeetingAppointmentForm(instance=appointment, initial=form_initial)
@@ -1528,7 +1531,10 @@ def order_detail(request, order_id):
         delivery_code_form = DeliveryCodeForm()
     if confirmation and request.user == order.buyer and confirmation.handoff_code_hash and not confirmation.handoff_code_used_at:
         handoff_code_display = request.session.get(f'delivery_code_{order.id}')
-    if appointment and appointment.can_report_incident and not incident:
+    if (
+        appointment and order.status in {'meeting', 'completed'}
+        and appointment.can_report_incident and not incident
+    ):
         incident_form = MeetingIncidentForm()
     rating_target = order.seller if request.user == order.buyer else order.buyer
     my_rating = Rating.objects.filter(order=order, rater=request.user).first()
@@ -1570,6 +1576,7 @@ def order_detail(request, order_id):
         'meeting_location_recommendations': meeting_location_recommendations,
         'meeting_time_recommendations': meeting_time_recommendations,
         'incident': incident,
+        'incident_events': incident_events,
         'incident_form': incident_form,
         'dispute': dispute,
         'dispute_evidence': dispute_evidence,
@@ -1920,6 +1927,7 @@ def report_meeting_incident(request, order_id):
             reason=form.cleaned_data['reason'],
             detail=form.cleaned_data['detail'],
         )
+        incident.record_event('reported', actor=request.user)
         OrderEvent.objects.create(
             order=locked_order,
             actor=request.user,
@@ -2460,6 +2468,26 @@ def governance_workbench(request):
             rows.append(case)
     rows.sort(key=lambda case: (0 if case['is_overdue'] else 1, case['created_at']))
 
+    incident_ids = [
+        case['case_id'] for case in rows if case['kind'] == 'incident'
+    ]
+    incident_histories = {}
+    if incident_ids:
+        event_labels = dict(MeetingIncidentEvent.EVENT_CHOICES)
+        for event in MeetingIncidentEvent.objects.filter(
+            incident_id__in=incident_ids,
+        ).order_by('incident_id', 'occurred_at', 'pk').values(
+            'incident_id', 'event_type', 'occurred_at',
+        ):
+            incident_histories.setdefault(event['incident_id'], []).append({
+                'event_type': event['event_type'],
+                'label': event_labels.get(event['event_type'], event['event_type']),
+                'occurred_at': event['occurred_at'],
+            })
+    for case in rows:
+        if case['kind'] == 'incident':
+            case['incident_events'] = incident_histories.get(case['case_id'], [])
+
     return render(request, 'listings/governance.html', {
         'governance': sla,
         'cases': rows,
@@ -2486,11 +2514,11 @@ def governance_workbench(request):
 
 @login_required
 def review_meeting_incident(request, incident_id):
-    """Handle a delivery incident from the workbench instead of the admin.
+    """Process a delivery incident while preserving every status transition.
 
-    The resolution mirrors dispute handling: the reviewer and the closing
-    timestamp are written together, both sides are notified, and an OrderEvent
-    records the outcome on the order timeline so the case stays auditable.
+    The incident row remains the current snapshot. ``MeetingIncidentEvent``
+    records who reported, started and closed the case, including the note at
+    the moment of closure. A later handler cannot erase who acted earlier.
     """
     if not request.user.is_staff:
         raise PermissionDenied
@@ -2504,17 +2532,74 @@ def review_meeting_incident(request, incident_id):
     if incident.status in {'resolved', 'dismissed'}:
         messages.info(request, '这条预约异常已经处理完成。')
         return redirect('governance_workbench')
+
+    if request.method == 'POST' and request.POST.get('action') == 'start':
+        if incident.status != 'open':
+            messages.info(request, '这条预约异常已经开始处理。')
+            return redirect('review_meeting_incident', incident_id=incident.id)
+        with transaction.atomic():
+            incident = MeetingIncident.objects.select_for_update(of=('self',)).select_related(
+                'appointment__order__item', 'appointment__order__buyer',
+                'appointment__order__seller', 'reported_by', 'accused',
+            ).get(pk=incident.id)
+            if incident.status != 'open':
+                messages.info(request, '这条预约异常已经被其他处理人接手。')
+                return redirect('review_meeting_incident', incident_id=incident.id)
+            incident.record_event('review_started', actor=request.user)
+            incident.status = 'reviewing'
+            incident.reviewer = request.user
+            incident.save(update_fields=['status', 'reviewer', 'updated_at'])
+            order = incident.appointment.order
+            OrderEvent.objects.create(
+                order=order,
+                actor=request.user,
+                from_status=order.status,
+                to_status=order.status,
+                note='平台已开始核实交付预约异常',
+            )
+            for recipient in {incident.reported_by, incident.accused}:
+                create_notification(
+                    recipient, kind='meeting_incident',
+                    title='交付预约异常已开始核实',
+                    message='平台已经接手这条预约异常，会在核实到场登记与订单记录后给出结论。',
+                    order=order, item=order.item,
+                    target_url=reverse('order_detail', args=[order.id]),
+                )
+        messages.success(request, '已接手这条预约异常，双方会看到处理进度。')
+        return redirect('review_meeting_incident', incident_id=incident.id)
+
     if request.method == 'POST':
         form = MeetingIncidentReviewForm(request.POST, instance=incident)
         if form.is_valid():
             with transaction.atomic():
                 incident = MeetingIncident.objects.select_for_update(of=('self',)).select_related(
-                    'appointment__order__item',
+                    'appointment__order__item', 'appointment__order__buyer',
+                    'appointment__order__seller', 'reported_by', 'accused',
                 ).get(pk=incident.id)
+                if incident.status in {'resolved', 'dismissed'}:
+                    messages.info(request, '这条预约异常已经被其他处理人关闭。')
+                    return redirect('governance_workbench')
+                event_at = timezone.now()
+                if incident.status == 'open':
+                    # A handler may close a case without first using the separate
+                    # "start" button. Record that transition too so every newly
+                    # processed incident has a complete submission -> handling ->
+                    # conclusion chain.
+                    incident.record_event(
+                        'review_started', actor=request.user, occurred_at=event_at,
+                    )
+                    incident.status = 'reviewing'
+                    incident.reviewer = request.user
+                incident.record_event(
+                    form.cleaned_data['status'],
+                    actor=request.user,
+                    note=form.cleaned_data['resolution_note'],
+                    occurred_at=event_at,
+                )
                 incident.status = form.cleaned_data['status']
                 incident.resolution_note = form.cleaned_data['resolution_note']
                 incident.reviewer = request.user
-                incident.reviewed_at = timezone.now()
+                incident.reviewed_at = event_at
                 incident.save(update_fields=[
                     'status', 'resolution_note', 'reviewer', 'reviewed_at', 'updated_at',
                 ])
@@ -2538,9 +2623,11 @@ def review_meeting_incident(request, incident_id):
             return redirect('governance_workbench')
     else:
         form = MeetingIncidentReviewForm(instance=incident, initial={'status': 'resolved'})
+    incident_events = incident.events.select_related('actor').all()
     return render(request, 'listings/incident_review.html', {
         'form': form,
         'incident': incident,
+        'incident_events': incident_events,
         'title': '处理交付预约异常',
     })
 

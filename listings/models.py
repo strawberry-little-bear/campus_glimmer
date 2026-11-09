@@ -1673,8 +1673,77 @@ class MeetingIncident(models.Model):
             ),
         ]
 
+    def record_event(self, event_type, *, actor=None, note='', occurred_at=None):
+        """Append one immutable action using the incident's status at call time."""
+        target_statuses = {
+            'reported': 'open',
+            'review_started': 'reviewing',
+            'resolved': 'resolved',
+            'dismissed': 'dismissed',
+            'note_updated': self.status,
+        }
+        if event_type not in target_statuses:
+            raise ValidationError('未知的预约异常处理动作。')
+        return self.events.create(
+            event_type=event_type,
+            actor=actor,
+            actor_label=actor.username if actor else '',
+            previous_status='' if event_type == 'reported' else self.status,
+            new_status=target_statuses[event_type],
+            note=note or '',
+            occurred_at=occurred_at or timezone.now(),
+        )
+
     def __str__(self):
         return f'{self.appointment.order.item.title} · {self.get_reason_display()}'
+
+
+class MeetingIncidentEvent(models.Model):
+    """不可变的预约异常处理动作，补齐当前状态无法保留的经办历史。"""
+    EVENT_CHOICES = (
+        ('reported', '提交异常'),
+        ('review_started', '开始处理'),
+        ('resolved', '确认异常'),
+        ('dismissed', '驳回异常'),
+        ('note_updated', '更新处理说明'),
+    )
+
+    incident = models.ForeignKey(
+        MeetingIncident, on_delete=models.CASCADE,
+        related_name='events', verbose_name='交付预约异常',
+    )
+    event_type = models.CharField('动作类型', max_length=20, choices=EVENT_CHOICES)
+    actor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='meeting_incident_events', verbose_name='操作人',
+    )
+    actor_label = models.CharField('操作人快照', max_length=150, blank=True)
+    previous_status = models.CharField(
+        '变更前状态', max_length=20, choices=MeetingIncident.STATUS_CHOICES, blank=True,
+    )
+    new_status = models.CharField(
+        '变更后状态', max_length=20, choices=MeetingIncident.STATUS_CHOICES,
+    )
+    note = models.TextField('处理说明快照', blank=True)
+    occurred_at = models.DateTimeField('发生时间')
+    created_at = models.DateTimeField('记录时间', auto_now_add=True)
+
+    class Meta:
+        verbose_name = '交付预约异常处理动作'
+        verbose_name_plural = '交付预约异常处理动作'
+        ordering = ['occurred_at', 'pk']
+        indexes = [
+            models.Index(fields=['incident', 'occurred_at', 'id']),
+            models.Index(fields=['event_type', 'occurred_at']),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            raise ValidationError('交付预约异常处理动作是不可变历史，不能修改。')
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.incident_id} · {self.get_event_type_display()} · {self.occurred_at:%Y-%m-%d %H:%M}'
 
 
 class OrderDispute(models.Model):

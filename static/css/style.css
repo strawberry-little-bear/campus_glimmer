@@ -3619,6 +3619,48 @@ a { color: inherit; text-decoration: none; }
     border-top: 1px dashed #e6efe9;
 }
 
+.governance-incident-history {
+    flex-basis: 100%;
+}
+
+.governance-incident-chain {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.governance-incident-chain li {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 4px 8px;
+    border: 1px solid #dcebe1;
+    border-radius: 999px;
+    color: #4d6c5a;
+    background: #f4faf6;
+    font-size: .7rem;
+}
+
+.governance-incident-chain li:not(:last-child)::after {
+    margin-left: 3px;
+    color: #9aada1;
+    content: '→';
+}
+
+.governance-incident-chain strong {
+    font-weight: 700;
+}
+
+.governance-incident-chain time,
+.governance-incident-history-empty {
+    color: var(--muted);
+    font-size: .67rem;
+    font-variant-numeric: tabular-nums;
+}
+
 .governance-case-footer {
     display: flex;
     align-items: center;

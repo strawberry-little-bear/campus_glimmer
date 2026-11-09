@@ -12,7 +12,45 @@
                 <p class="small text-muted mb-0">提交人：{{ incident.reported_by.username }} · 涉及对方：{{ incident.accused.username }}</p>
                 <p class="small text-muted mb-0">提交时间：{{ incident.created_at|date:'Y-m-d H:i' }} · 约定时间：{{ incident.appointment.scheduled_for|date:'Y-m-d H:i' }}</p>
             </div>
-            <form method="post" class="mt-4">{% csrf_token %}{% include 'includes/form_error_summary.html' %}{% for field in form %}<div class="mb-3"><label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}<div class="form-actions"><a href="{% url 'governance_workbench' %}" class="btn btn-light">取消</a><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-2"></i>保存处理结果</button></div></form>
+
+            <section class="meeting-negotiation-history mt-4" aria-labelledby="incident-history-heading">
+                <div class="meeting-negotiation-heading"><strong id="incident-history-heading"><i class="bi bi-clock-history me-1"></i>处理记录</strong><span>{{ incident_events|length }} 次动作</span></div>
+                {% if incident_events %}
+                <ol class="meeting-event-list">
+                    {% for event in incident_events %}
+                    <li class="meeting-event meeting-event-{{ event.event_type }}">
+                        <span class="meeting-event-marker" aria-hidden="true"></span>
+                        <div class="meeting-event-copy">
+                            <div class="meeting-event-head"><strong>{{ event.get_event_type_display }}</strong><time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:'Y-m-d H:i' }}</time></div>
+                            <p class="mb-1">{{ event.get_new_status_display }}{% if event.actor_label %} · {{ event.actor_label }}{% endif %}</p>
+                            {% if event.note %}<small>{{ event.note|linebreaksbr }}</small>{% elif event.event_type == 'resolved' or event.event_type == 'dismissed' %}<small class="text-muted">处理人没有填写说明。</small>{% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ol>
+                {% else %}
+                <p class="meeting-history-empty">这条异常建立于处理记录启用前，现有状态仍可继续处理；系统不会为之前缺失的动作补造历史。</p>
+                {% endif %}
+            </section>
+
+            {% if incident.status == 'open' %}
+            <form method="post" class="mt-4 border-top pt-4">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="start">
+                <button class="btn btn-outline-primary" type="submit"><i class="bi bi-play-circle me-2"></i>开始处理并通知双方</button>
+                <p class="form-text mb-0">开始处理后，双方会看到平台已经接手；你仍可继续核对材料，再给出最终结论。</p>
+            </form>
+            {% elif incident.status == 'reviewing' %}
+            <div class="alert alert-light border mt-4 mb-0"><i class="bi bi-hourglass-split me-2"></i>这条异常正在由{% if incident.reviewer %} {{ incident.reviewer.username }} {% else %}平台{% endif %}核实。最终结论写入后不可在前台重复处理。</div>
+            {% endif %}
+
+            <form method="post" class="mt-4 border-top pt-4">
+                {% csrf_token %}
+                <h2 class="h6 mb-3">处理结论</h2>
+                {% include 'includes/form_error_summary.html' %}
+                {% for field in form %}<div class="mb-3"><label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>{{ field }}{% if field.errors %}<div class="text-danger small mt-1" id="{{ field.id_for_label }}_error">{{ field.errors|striptags }}</div>{% endif %}</div>{% endfor %}
+                <div class="form-actions"><a href="{% url 'governance_workbench' %}" class="btn btn-light">取消</a><button class="btn btn-primary" type="submit"><i class="bi bi-check2-circle me-2"></i>保存处理结果</button></div>
+            </form>
         </section>
     </div>
     <div class="col-lg-5">
@@ -22,7 +60,7 @@
                 <li>对照订单时间线确认约定时间与到场登记是否一致；</li>
                 <li>确认双方是否已在交付确认或归还确认中留下记录；</li>
                 <li>结论只依据平台已有的结构化记录，不引入线下沟通内容；</li>
-                <li>处理后会同时通知提交人与涉及对方，并写入订单时间线。</li>
+                <li>开始处理和最终结论都会保留经办动作，最终结论会同时通知提交人与涉及对方。</li>
             </ul>
             <p class="small text-muted mb-0"><i class="bi bi-info-circle me-1"></i>该队列的处理时限为 1 天：预约异常会阻塞一次线下交付，拖延的代价比另外两类队列更高。</p>
         </section>
