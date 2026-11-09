@@ -1,6 +1,6 @@
 {% comment %}
-交付安排提醒效果的只读展示。页面与 CSV 共用 meeting_response_reminder_effect，
-模板不另算分母，也不按用户展示身份。
+交付安排提醒效果的观察与人工核对面板。页面与 CSV 共用
+meeting_response_reminder_effect，模板不另算分母，也不按用户展示身份。
 {% endcomment %}
 <section class="content-card ops-panel mb-4 meeting-response-reminder-effect-panel">
     <div class="ops-panel-heading">
@@ -21,14 +21,21 @@
 
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
         <h3 class="h6 mb-0">提醒后待人工核对</h3>
-        <span class="ops-panel-hint">{{ meeting_response_reminder_effect.pending_review_count }} 条仍无同一回合动作</span>
+        <span class="ops-panel-hint">当前筛选 {{ meeting_response_reminder_effect.pending_review_count }} 条 · 全部待核对 {{ meeting_response_reminder_effect.pending_review_total_count }} 条</span>
     </div>
     <p class="search-rhythm-note mb-3">{{ meeting_response_reminder_effect.pending_review_note }}</p>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3" aria-label="人工核对筛选">
+        {% for option in meeting_response_reminder_effect.review_filter_options %}
+        <a href="{% url 'operations_dashboard' %}?days={{ meeting_response_reminder_effect.period_days }}&amp;review_status={{ option.key }}#ops-meeting-reminders" class="btn btn-sm {% if option.selected %}btn-dark{% else %}btn-outline-secondary{% endif %}"{% if option.selected %} aria-current="page"{% endif %}>{{ option.label }} <span class="badge {% if option.selected %}text-bg-light{% else %}text-bg-secondary{% endif %}">{{ option.count }}</span></a>
+        {% endfor %}
+        <a href="{% url 'operations_dashboard_export' %}?days={{ meeting_response_reminder_effect.period_days }}&amp;review_status={{ meeting_response_reminder_effect.review_status }}" class="btn btn-sm btn-outline-primary ms-sm-auto"><i class="bi bi-download me-1"></i>导出当前筛选完整 CSV</a>
+    </div>
+    <p class="small text-muted mb-3">未核对 {{ meeting_response_reminder_effect.pending_review_unreviewed_count }} · 已核对 {{ meeting_response_reminder_effect.pending_review_reviewed_count }} · 继续等待 {{ meeting_response_reminder_effect.pending_review_waiting_count }} · 已处理 {{ meeting_response_reminder_effect.pending_review_resolved_count }} · 数据异常 {{ meeting_response_reminder_effect.pending_review_data_issue_count }} · 无需跟进 {{ meeting_response_reminder_effect.pending_review_no_followup_count }}</p>
     {% if meeting_response_reminder_effect.pending_review_count %}
     <div class="ops-table-wrap">
         <table class="table ops-table align-middle mb-0 meeting-response-pending-review">
             <caption class="visually-hidden">交付安排提醒后待人工核对清单</caption>
-            <thead><tr><th>订单</th><th>接收角色</th><th>提议发起</th><th>当前提议时间</th><th>地点</th><th>提醒发送</th><th>提议已等待</th><th>提醒后已过</th><th>阅读状态</th><th>观察状态</th></tr></thead>
+            <thead><tr><th>订单</th><th>接收角色</th><th>提议发起</th><th>当前提议时间</th><th>地点</th><th>提醒发送</th><th>提议已等待</th><th>提醒后已过</th><th>阅读状态</th><th>观察状态</th><th>最新复核</th></tr></thead>
             <tbody>
                 {% for row in meeting_response_reminder_effect.pending_review_rows %}
                 <tr>
@@ -42,16 +49,41 @@
                     <td data-label="提醒后已过">{{ row.reminder_age_label }}</td>
                     <td data-label="阅读状态">{{ row.notice_label }}</td>
                     <td data-label="观察状态"><strong class="{% if row.status == 'no_action' %}text-danger{% else %}text-muted{% endif %}">{{ row.status_label }}</strong></td>
+                    <td data-label="最新复核">
+                        <div class="small">
+                            <strong>{{ row.review_outcome_label }}</strong>
+                            {% if row.is_reviewed %}<span class="d-block text-muted">{{ row.reviewed_at_label }}</span>{% endif %}
+                            {% if row.review_note %}<div class="text-muted mt-1">{{ row.review_note|linebreaksbr }}</div>{% endif %}
+                        </div>
+                        <details class="mt-2">
+                            <summary class="small text-primary">追加复核</summary>
+                            <form method="post" action="{% url 'review_meeting_response_reminder' row.reminder_id %}" class="mt-2">
+                                {% csrf_token %}
+                                <input type="hidden" name="days" value="{{ meeting_response_reminder_effect.period_days }}">
+                                <input type="hidden" name="review_status" value="{{ meeting_response_reminder_effect.review_status }}">
+                                <label class="form-label small mb-1" for="review-outcome-{{ row.reminder_id }}">复核结论</label>
+                                <select class="form-select form-select-sm mb-2" id="review-outcome-{{ row.reminder_id }}" name="outcome" required>
+                                    {% for value, label in meeting_response_reminder_effect.review_outcome_options %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                                <label class="form-label small mb-1" for="review-note-{{ row.reminder_id }}">复核说明</label>
+                                <textarea class="form-control form-control-sm mb-1" id="review-note-{{ row.reminder_id }}" name="note" rows="3" maxlength="1000" placeholder="除“已处理”外，请填写核对依据。"></textarea>
+                                <p class="text-muted small mb-2">最多 1000 字；继续等待、数据异常或无需跟进时必须填写。</p>
+                                <button type="submit" class="btn btn-sm btn-primary">追加本次结论</button>
+                            </form>
+                        </details>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
     {% if meeting_response_reminder_effect.pending_review_overflow_count %}
-    <p class="small text-muted mt-2 mb-0">页面按优先级展示前 20 条；CSV 还包含另外 {{ meeting_response_reminder_effect.pending_review_overflow_count }} 条完整明细。</p>
+    <p class="small text-muted mt-2 mb-0">页面展示当前筛选前 20 条；CSV 导出当前筛选全部 {{ meeting_response_reminder_effect.pending_review_count }} 条，其中另外 {{ meeting_response_reminder_effect.pending_review_overflow_count }} 条只出现在导出中。</p>
     {% endif %}
     {% else %}
-    <div class="empty-inline">当前没有仍无同一回合动作、需要人工核对的提醒。</div>
+    <div class="empty-inline">{{ meeting_response_reminder_effect.pending_review_empty_note }}</div>
     {% endif %}
 
     <h3 class="h6 mb-3 mt-4">按接收角色观察</h3>

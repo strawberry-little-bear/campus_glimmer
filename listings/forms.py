@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from .campus_location_service_hours import evaluate_location_service_window
 from .image_processing import ItemImageLimitError, normalize_item_image
-from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
+from .models import CampusCampaign, CampusLocation, Category, DemandPost, Item, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MeetingResponseReminderReview, MutualAidFeedback, NotificationPreference, DemandResponse, Order, OrderDispute, OrderDisputeEvidence, Rating, Report, SavedSearch
 
 
 class StyledModelFormMixin:
@@ -625,6 +625,39 @@ class MeetingIncidentReviewForm(StyledModelFormMixin, forms.ModelForm):
             if choice[0] in {'resolved', 'dismissed'}
         ]
         self.fields['status'].widget.attrs['class'] = 'form-select'
+
+
+class MeetingResponseReminderReviewForm(
+    StyledModelFormMixin, forms.ModelForm,
+):
+    """记录一次人工核对；备注保留现场判断依据。"""
+
+    note = forms.CharField(
+        label='复核说明', required=False, max_length=1000,
+        widget=forms.Textarea(attrs={
+            'rows': 3,
+            'placeholder': '记录已核实的沟通、数据异常或继续等待的依据。',
+        }),
+        help_text='最多 1000 字。除“已处理”外，请填写核对依据。',
+    )
+
+    class Meta:
+        model = MeetingResponseReminderReview
+        fields = ['outcome', 'note']
+        widgets = {
+            'outcome': forms.Select(attrs={'class': 'form-select'}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        outcome = cleaned_data.get('outcome')
+        note = (cleaned_data.get('note') or '').strip()
+        cleaned_data['note'] = note
+        if outcome and outcome != 'resolved' and not note:
+            self.add_error(
+                'note', '继续等待、数据异常或无需跟进时，请填写核对依据。',
+            )
+        return cleaned_data
 
 
 class RatingForm(StyledModelFormMixin, forms.ModelForm):

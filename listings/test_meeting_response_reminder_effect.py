@@ -8,10 +8,12 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from .forms import MeetingResponseReminderReviewForm
 from .meeting_response_reminders import send_meeting_response_reminders
 from .meeting_response_reminder_effect import (
     _build_notice_action_rows,
@@ -25,6 +27,7 @@ from .models import (
     MeetingAppointment,
     MeetingAppointmentEvent,
     MeetingResponseReminderEvent,
+    MeetingResponseReminderReview,
     Notification,
     Order,
 )
@@ -130,6 +133,21 @@ class MeetingReminderFixtureMixin:
         notification.read_at = notification.created_at + timedelta(hours=hours_after)
         notification.save(update_fields=['is_read', 'read_at'])
         return notification
+
+    def review_case(
+        self, case, reviewer, *, outcome='waiting', note='已核实，继续观察。',
+        reviewed_at=None,
+    ):
+        reminder = MeetingResponseReminderEvent.objects.get(
+            proposal_event=case['proposal'],
+        )
+        return MeetingResponseReminderReview.objects.create(
+            reminder=reminder,
+            outcome=outcome,
+            note=note,
+            reviewed_by=reviewer,
+            reviewed_at=reviewed_at or timezone.now(),
+        )
 
 
 class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
@@ -542,7 +560,11 @@ class MeetingResponseReminderEffectSurfaceTests(
         ]
         self.assertEqual(len(linked_ids), 20)
         self.assertEqual(linked_ids, [case['order'].id for case in cases[:20]])
-        self.assertIn('CSV 还包含另外 1 条完整明细', html)
+        self.assertIn(
+            '页面展示当前筛选前 20 条；CSV 导出当前筛选全部 21 条，'
+            '其中另外 1 条只出现在导出中。',
+            html,
+        )
 
         export = self.client.get(
             reverse('operations_dashboard_export'), {'days': 30},
@@ -557,6 +579,7 @@ class MeetingResponseReminderEffectSurfaceTests(
             '订单编号', '订单详情路径', '接收角色', '提议发起时间',
             '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
             '提议已等待', '提醒后已过', '阅读状态', '观察状态',
+            '复核结论', '复核时间', '复核说明',
         ])
         detail_rows = []
         for row in rows[header_index + 1:]:
@@ -572,9 +595,12 @@ class MeetingResponseReminderEffectSurfaceTests(
             detail_rows[0][1],
             reverse('order_detail', args=[cases[0]['order'].id]),
         )
-        self.assertEqual(detail_rows[0][-1], '已过窗，尚无动作')
+        self.assertEqual(detail_rows[0][11], '已过窗，尚无动作')
+        self.assertEqual(detail_rows[0][12], '未核对')
+        self.assertEqual(detail_rows[0][13], '—')
+        self.assertEqual(detail_rows[0][14], '')
 
-    def test_dashboard_renders_the_read_only_panel_without_user_identity(self):
+    def test_dashboard_renders_the_review_panel_without_user_identity(self):
         case = self.make_case(recipient_role='seller')
         self.send_cases()
 
@@ -708,3 +734,456 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertIn('先后关系不等于因果', text)
         self.assertIn('不能证明由提醒引起', text)
         self.assertIn('窗后动作（不进入清单）', text)
+
+class MeetingResponseReminderReviewLedgerTests(
+    MeetingReminderFixtureMixin, TestCase,
+):
+    """人工结论按最新记录筛选，每次提交保留独立历史。"""
+
+    def setUp(self):
+        super().setUp()
+        self.reviewer = User.objects.create_user(username='review-ledger-staff')
+        self.evaluation_now = timezone.now() + timedelta(hours=1)
+
+    def test_each_outcome_filters_only_the_latest_pending_review(self):
+        outcomes = ('waiting', 'resolved', 'data_issue', 'no_followup')
+        cases = {}
+        for index, outcome in enumerate(outcomes):
+            case = self.make_case()
+            cases[outcome] = case
+        self.send_cases()
+        for index, outcome in enumerate(outcomes):
+            self.review_case(
+                cases[outcome], self.reviewer, outcome=outcome,
+                note='人工依据 %s' % outcome,
+                reviewed_at=self.now + timedelta(minutes=index),
+            )
+
+        all_effect = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now,
+        )
+        self.assertEqual(all_effect['pending_review_total_count'], 4)
+        self.assertEqual(all_effect['pending_review_unreviewed_count'], 0)
+        self.assertEqual(all_effect['pending_review_reviewed_count'], 4)
+        for outcome in outcomes:
+            self.assertEqual(
+                all_effect['pending_review_%s_count' % outcome], 1,
+            )
+            effect = build_meeting_response_reminder_effect(
+                days=30, now=self.evaluation_now, review_status=outcome,
+            )
+            self.assertEqual(effect['pending_review_count'], 1)
+            self.assertEqual(
+                effect['pending_review_all_rows'][0]['order_id'],
+                cases[outcome]['order'].id,
+            )
+            self.assertEqual(effect['review_status'], outcome)
+        self.assertEqual(
+            [row['key'] for row in all_effect['review_filter_options']],
+            ['unreviewed', 'waiting', 'resolved', 'data_issue', 'no_followup', 'all'],
+        )
+
+    def test_new_review_supersedes_filter_status_without_deleting_history(self):
+        case = self.make_case()
+        self.send_cases()
+        first = self.review_case(
+            case, self.reviewer, outcome='waiting', note='第一次继续等待',
+            reviewed_at=self.now + timedelta(minutes=1),
+        )
+        second = self.review_case(
+            case, self.reviewer, outcome='resolved', note='',
+            reviewed_at=self.now + timedelta(minutes=2),
+        )
+
+        waiting = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now, review_status='waiting',
+        )
+        resolved = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now, review_status='resolved',
+        )
+
+        self.assertEqual(waiting['pending_review_count'], 0)
+        self.assertEqual(resolved['pending_review_count'], 1)
+        row = resolved['pending_review_all_rows'][0]
+        self.assertEqual(row['review_outcome'], 'resolved')
+        self.assertEqual(row['review_outcome_label'], '已处理')
+        self.assertEqual(row['review_note'], '')
+        self.assertEqual(
+            MeetingResponseReminderReview.objects.filter(
+                reminder=second.reminder,
+            ).count(),
+            2,
+        )
+        self.assertEqual(first.reviewed_at.minute + 1, second.reviewed_at.minute)
+
+    def test_unknown_filter_falls_back_to_unreviewed(self):
+        self.make_case()
+        self.send_cases()
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now, review_status='not-a-filter',
+        )
+        self.assertEqual(effect['review_status'], 'unreviewed')
+        self.assertEqual(effect['review_status_label'], '未核对')
+        self.assertEqual(effect['pending_review_count'], 1)
+        self.assertEqual(effect['pending_review_all_rows'][0]['review_outcome'], '')
+
+    def test_filtering_review_does_not_change_effect_metrics(self):
+        case = self.make_case()
+        self.send_cases()
+        self.mark_read(case, hours_after=1)
+        before = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now,
+        )
+        self.review_case(case, self.reviewer)
+        after = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now, review_status='waiting',
+        )
+
+        for key in (
+            'sent_count', 'notice_available_count', 'read_notice_count',
+            'read_state_known_count', 'notice_read_rate', 'responded_count',
+            'accepted_count', 'declined_count', 'rescheduled_count',
+            'no_action_count', 'open_count', 'late_action_count',
+            'closed_count', 'quality_status', 'notice_action_rows',
+            'notice_order_rows',
+        ):
+            self.assertEqual(after[key], before[key], key)
+
+    def test_form_and_model_keep_review_requirements_and_history_immutable(self):
+        case = self.make_case()
+        self.send_cases()
+        reminder = MeetingResponseReminderEvent.objects.get(
+            proposal_event=case['proposal'],
+        )
+
+        missing_note = MeetingResponseReminderReviewForm(data={
+            'outcome': 'waiting', 'note': '   ',
+        })
+        self.assertFalse(missing_note.is_valid())
+        self.assertIn('note', missing_note.errors)
+
+        resolved = MeetingResponseReminderReviewForm(data={
+            'outcome': 'resolved', 'note': '',
+        })
+        self.assertTrue(resolved.is_valid(), resolved.errors)
+        review = resolved.save(commit=False)
+        review.reminder = reminder
+        review.reviewed_by = self.reviewer
+        review.save()
+        review.note = '试图覆盖审计历史'
+        with self.assertRaises(ValidationError):
+            review.save()
+
+        too_long = MeetingResponseReminderReviewForm(data={
+            'outcome': 'waiting', 'note': '字' * 1001,
+        })
+        self.assertFalse(too_long.is_valid())
+        self.assertIn('note', too_long.errors)
+
+
+class MeetingResponseReminderReviewSurfaceTests(
+    MeetingReminderFixtureMixin, TestCase,
+):
+    """运营页面的复核提交、权限、筛选和导出契约。"""
+
+    def setUp(self):
+        super().setUp()
+        self.staff = User.objects.create_user(
+            username='review-surface-staff', password='safe-password-123',
+            is_staff=True,
+        )
+        self.client.force_login(self.staff)
+
+    def post_review(
+        self, reminder, *, outcome='waiting', note='已核实，继续观察。',
+        days=30, review_status='unreviewed',
+    ):
+        return self.client.post(
+            reverse(
+                'review_meeting_response_reminder',
+                kwargs={'reminder_id': reminder.id},
+            ),
+            {
+                'outcome': outcome,
+                'note': note,
+                'days': days,
+                'review_status': review_status,
+            },
+        )
+
+    def test_review_post_requires_staff_and_post(self):
+        case = self.make_case()
+        self.send_cases()
+        reminder = MeetingResponseReminderEvent.objects.get(
+            proposal_event=case['proposal'],
+        )
+        url = reverse(
+            'review_meeting_response_reminder',
+            kwargs={'reminder_id': reminder.id},
+        )
+
+        self.client.logout()
+        anonymous = self.client.post(url, {
+            'outcome': 'waiting', 'note': '继续等待', 'days': 30,
+        })
+        self.assertEqual(anonymous.status_code, 302)
+        self.assertIn(reverse('login'), anonymous['Location'])
+
+        self.client.force_login(self.buyer)
+        forbidden = self.client.post(url, {
+            'outcome': 'waiting', 'note': '继续等待', 'days': 30,
+        })
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(MeetingResponseReminderReview.objects.count(), 0)
+
+        self.client.force_login(self.staff)
+        get_response = self.client.get(url)
+        self.assertEqual(get_response.status_code, 302)
+        self.assertEqual(get_response['Location'], reverse('operations_dashboard'))
+
+    def test_staff_review_appends_history_and_preserves_business_state(self):
+        case = self.make_case(recipient_role='seller')
+        self.send_cases()
+        reminder = MeetingResponseReminderEvent.objects.get(
+            proposal_event=case['proposal'],
+        )
+        before = {
+            'order': Order.objects.filter(pk=case['order'].pk).values().get(),
+            'appointment': MeetingAppointment.objects.filter(
+                pk=case['appointment'].pk,
+            ).values().get(),
+            'notification': Notification.objects.filter(
+                order=case['order'],
+            ).values().get(),
+            'reminder': MeetingResponseReminderEvent.objects.filter(
+                pk=reminder.pk,
+            ).values().get(),
+            'order_event_count': case['order'].events.count(),
+        }
+
+        response = self.post_review(
+            reminder, outcome='waiting', note='已联系双方，继续等待。',
+            review_status='waiting',
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('review_status=waiting', response['Location'])
+        self.assertIn('#ops-meeting-reminders', response['Location'])
+        first = MeetingResponseReminderReview.objects.get()
+        self.assertEqual(first.reviewed_by, self.staff)
+        self.assertEqual(first.outcome, 'waiting')
+        self.assertIsNotNone(first.reviewed_at)
+
+        after = {
+            'order': Order.objects.filter(pk=case['order'].pk).values().get(),
+            'appointment': MeetingAppointment.objects.filter(
+                pk=case['appointment'].pk,
+            ).values().get(),
+            'notification': Notification.objects.filter(
+                order=case['order'],
+            ).values().get(),
+            'reminder': MeetingResponseReminderEvent.objects.filter(
+                pk=reminder.pk,
+            ).values().get(),
+            'order_event_count': case['order'].events.count(),
+        }
+        self.assertEqual(after, before)
+
+        self.post_review(
+            reminder, outcome='resolved', note='', review_status='resolved',
+        )
+        self.post_review(
+            reminder, outcome='data_issue', note='门店地址与后台档案不一致。',
+            review_status='data_issue',
+        )
+        self.assertEqual(
+            MeetingResponseReminderReview.objects.filter(reminder=reminder).count(),
+            3,
+        )
+
+        page = self.client.get(
+            reverse('operations_dashboard'),
+            {'days': 30, 'review_status': 'data_issue'},
+        )
+        html = page.content.decode('utf-8')
+        self.assertIn('门店地址与后台档案不一致。', html)
+        reviewed_at = MeetingResponseReminderReview.objects.order_by(
+            '-reviewed_at', '-pk',
+        ).first().reviewed_at
+        self.assertIn(
+            timezone.localtime(reviewed_at).strftime('%Y-%m-%d %H:%M'), html,
+        )
+        self.assertNotIn(self.seller.username, html)
+        self.assertNotIn(self.buyer.username, html)
+        fragment = self.client.get(
+            reverse(
+                'operations_dashboard_fragment',
+                kwargs={'anchor': 'ops-meeting-reminders'},
+            ),
+            {'days': 30, 'review_status': 'data_issue'},
+        )
+        fragment_html = fragment.content.decode('utf-8')
+        for username in (self.staff.username, self.seller.username, self.buyer.username):
+            self.assertNotIn(username, fragment_html)
+
+    def test_invalid_review_and_changed_reminder_write_no_history(self):
+        case = self.make_case()
+        self.send_cases()
+        reminder = MeetingResponseReminderEvent.objects.get(
+            proposal_event=case['proposal'],
+        )
+
+        invalid_outcome = self.post_review(
+            reminder, outcome='made_up', note='无效结论',
+        )
+        missing_note = self.post_review(reminder, outcome='no_followup', note='')
+        self.assertEqual(invalid_outcome.status_code, 302)
+        self.assertEqual(missing_note.status_code, 302)
+        self.assertEqual(MeetingResponseReminderReview.objects.count(), 0)
+
+        self.add_action(case, 'accepted', hours_after=2)
+        changed = self.post_review(reminder, outcome='waiting', note='继续等待')
+        self.assertEqual(changed.status_code, 302)
+        self.assertEqual(MeetingResponseReminderReview.objects.count(), 0)
+
+    def test_review_rejects_a_reminder_outside_the_requested_period(self):
+        old_sent = self.now - timedelta(days=5)
+        case = self.make_case(proposal_age_hours=25 + 5 * 24)
+        with patch('django.utils.timezone.now', return_value=old_sent):
+            self.send_cases(now=old_sent)
+        reminder = MeetingResponseReminderEvent.objects.get(
+            proposal_event=case['proposal'],
+        )
+
+        response = self.post_review(
+            reminder, outcome='waiting', note='周期外复核', days=1,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(MeetingResponseReminderReview.objects.count(), 0)
+
+    def test_page_fragment_and_csv_use_the_current_review_filter(self):
+        waiting_case = self.make_case()
+        issue_case = self.make_case()
+        self.send_cases()
+        self.review_case(
+            waiting_case, self.staff, outcome='waiting',
+            note='窗口内仍需继续观察。',
+        )
+        self.review_case(
+            issue_case, self.staff, outcome='data_issue',
+            note='通知关联存在异常。',
+        )
+
+        page = self.client.get(
+            reverse('operations_dashboard'),
+            {'days': 30, 'review_status': 'waiting'},
+        )
+        html = page.content.decode('utf-8')
+        panel_start = html.index('meeting-response-pending-review')
+        panel = html[panel_start:html.index('按接收角色观察', panel_start)]
+        self.assertIn(
+            'href="%s"' % reverse('order_detail', args=[waiting_case['order'].id]),
+            panel,
+        )
+        self.assertNotIn(
+            'href="%s"' % reverse('order_detail', args=[issue_case['order'].id]),
+            panel,
+        )
+        self.assertIn('窗口内仍需继续观察。', panel)
+        self.assertIn('当前筛选 1 条 · 全部待核对 2 条', html)
+
+        fragment = self.client.get(
+            reverse(
+                'operations_dashboard_fragment',
+                kwargs={'anchor': 'ops-meeting-reminders'},
+            ),
+            {'days': 30, 'review_status': 'waiting'},
+        )
+        fragment_html = fragment.content.decode('utf-8')
+        self.assertIn(
+            'href="%s"' % reverse('order_detail', args=[waiting_case['order'].id]),
+            fragment_html,
+        )
+        self.assertNotIn('href="%s"' % reverse('order_detail', args=[issue_case['order'].id]), fragment_html)
+        self.assertNotIn('通知关联存在异常。', fragment_html)
+
+        export = self.client.get(
+            reverse('operations_dashboard_export'),
+            {'days': 30, 'review_status': 'waiting'},
+        )
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        filter_summary = next(
+            row for row in rows if row and row[0] == '当前核对筛选'
+        )
+        self.assertEqual(filter_summary[:6], [
+            '当前核对筛选', '继续等待', '当前筛选数量', '1',
+            '全部待核对', '2',
+        ])
+        header_index = next(
+            index for index, row in enumerate(rows)
+            if row and row[0] == '订单编号'
+        )
+        self.assertEqual(rows[header_index][-3:], [
+            '复核结论', '复核时间', '复核说明',
+        ])
+        detail = rows[header_index + 1]
+        self.assertEqual(int(detail[0]), waiting_case['order'].id)
+        self.assertEqual(detail[12:], [
+            '继续等待',
+            timezone.localtime(
+                MeetingResponseReminderReview.objects.get(
+                    reminder__proposal_event=waiting_case['proposal'],
+                ).reviewed_at,
+            ).strftime('%Y-%m-%d %H:%M'),
+            '窗口内仍需继续观察。',
+        ])
+
+    def test_filtered_page_keeps_twenty_but_csv_exports_all_matching_rows(self):
+        cases = [self.make_case() for _index in range(21)]
+        self.send_cases()
+        for index, case in enumerate(cases):
+            self.review_case(
+                case, self.staff, outcome='waiting', note='第 %d 条继续等待' % index,
+                reviewed_at=self.now + timedelta(minutes=index),
+            )
+
+        default_page = self.client.get(
+            reverse('operations_dashboard'), {'days': 30},
+        )
+        self.assertNotIn(
+            'meeting-response-pending-review',
+            default_page.content.decode('utf-8'),
+        )
+
+        page = self.client.get(
+            reverse('operations_dashboard'),
+            {'days': 30, 'review_status': 'waiting'},
+        )
+        html = page.content.decode('utf-8')
+        panel_start = html.index('meeting-response-pending-review')
+        panel = html[panel_start:html.index('按接收角色观察', panel_start)]
+        linked_ids = [
+            case['order'].id for case in cases
+            if 'href="%s"' % reverse('order_detail', args=[case['order'].id]) in panel
+        ]
+        self.assertEqual(linked_ids, [case['order'].id for case in cases[:20]])
+        self.assertIn('CSV 导出当前筛选全部 21 条', html)
+
+        export = self.client.get(
+            reverse('operations_dashboard_export'),
+            {'days': 30, 'review_status': 'waiting'},
+        )
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        header_index = next(
+            index for index, row in enumerate(rows)
+            if row and row[0] == '订单编号'
+        )
+        detail_rows = []
+        for row in rows[header_index + 1:]:
+            if not row:
+                break
+            detail_rows.append(row)
+        self.assertEqual(len(detail_rows), 21)
+        self.assertEqual(
+            [int(row[0]) for row in detail_rows],
+            [case['order'].id for case in cases],
+        )

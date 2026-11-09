@@ -2294,6 +2294,64 @@ class MeetingResponseReminderEvent(models.Model):
         return f'{self.proposal_event_id} · {self.get_recipient_role_display()} · {self.sent_at:%Y-%m-%d %H:%M}'
 
 
+class MeetingResponseReminderReview(models.Model):
+    """交付安排待回应提醒的人工核对历史。
+
+    每一次核对都新增一条记录，页面按最新一条显示当前结论；旧记录继续保留，
+    供运营回看判断过程。人工结论只用于跟进，不改变提醒发送台账、预约或订单。
+    """
+
+    OUTCOME_CHOICES = (
+        ('waiting', '继续等待'),
+        ('resolved', '已处理'),
+        ('data_issue', '数据异常'),
+        ('no_followup', '无需跟进'),
+    )
+
+    reminder = models.ForeignKey(
+        MeetingResponseReminderEvent, on_delete=models.CASCADE,
+        related_name='manual_reviews', verbose_name='待核对提醒',
+    )
+    outcome = models.CharField(
+        '复核结论', max_length=20, choices=OUTCOME_CHOICES,
+    )
+    note = models.TextField('复核说明', max_length=1000, blank=True)
+    reviewed_by = models.ForeignKey(
+        User, on_delete=models.PROTECT,
+        related_name='meeting_response_reminder_reviews', verbose_name='复核人',
+    )
+    reviewed_at = models.DateTimeField(
+        '复核时间', default=timezone.now, editable=False,
+    )
+
+    class Meta:
+        verbose_name = '交付安排提醒人工核对'
+        verbose_name_plural = '交付安排提醒人工核对'
+        ordering = ['-reviewed_at', '-pk']
+        indexes = [
+            models.Index(fields=['reminder', '-reviewed_at']),
+        ]
+
+    def clean(self):
+        self.note = (self.note or '').strip()
+        if self.outcome != 'resolved' and not self.note:
+            raise ValidationError({
+                'note': '继续等待、数据异常或无需跟进时，请填写核对依据。',
+            })
+
+    def save(self, *args, **kwargs):
+        if self.pk and not self._state.adding:
+            raise ValidationError('交付安排提醒人工核对记录不能修改。')
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return (
+            f'{self.reminder_id} · {self.get_outcome_display()} · '
+            f'{self.reviewed_at:%Y-%m-%d %H:%M}'
+        )
+
+
 class NotificationPreference(models.Model):
     """Per-user switches for the notification channels created by the app."""
 

@@ -35,6 +35,7 @@ from .meeting_response_reminders import NOTIFICATION_KIND
 from .models import (
     MeetingAppointmentEvent,
     MeetingResponseReminderEvent,
+    MeetingResponseReminderReview,
     Notification,
 )
 
@@ -76,6 +77,25 @@ PENDING_REVIEW_STATUS_LABELS = {
     'no_action': '已过窗，尚无动作',
     'open': '观察中，尚无动作',
 }
+PENDING_REVIEW_OUTCOME_LABELS = dict(
+    MeetingResponseReminderReview.OUTCOME_CHOICES,
+)
+PENDING_REVIEW_FILTER_OPTIONS = (
+    ('unreviewed', '未核对'),
+    ('waiting', '继续等待'),
+    ('resolved', '已处理'),
+    ('data_issue', '数据异常'),
+    ('no_followup', '无需跟进'),
+    ('all', '全部'),
+)
+PENDING_REVIEW_FILTER_KEYS = frozenset(
+    key for key, _label in PENDING_REVIEW_FILTER_OPTIONS
+)
+
+
+def normalize_pending_review_filter(value):
+    """把 URL 中的核对筛选收敛到固定集合，未知值回到未核对。"""
+    return value if value in PENDING_REVIEW_FILTER_KEYS else 'unreviewed'
 
 
 def _period_bounds(days, now):
@@ -154,8 +174,23 @@ def _build_pending_review_rows(observations, now):
     """把仍未行动且需要人工查看的提醒排序成可执行清单。
 
     已过观察窗的样本优先，再按提醒等待时间从长到短排列；仍在窗口内的样本
-    排在后面。清单只用于打开订单核对现场，不自动回应或推进预约。
+    排在后面。人工复核只决定当前筛选与展示状态，不改变观察样本或业务记录。
     """
+    reminders = [
+        observation['reminder'] for observation in observations
+        if observation['status'] in PENDING_REVIEW_STATUS_LABELS
+    ]
+    latest_reviews = {}
+    reminder_ids = [reminder.pk for reminder in reminders]
+    if reminder_ids:
+        reviews = MeetingResponseReminderReview.objects.filter(
+            reminder_id__in=reminder_ids,
+        ).order_by('reminder_id', '-reviewed_at', '-pk').only(
+            'reminder_id', 'outcome', 'note', 'reviewed_at',
+        )
+        for review in reviews:
+            latest_reviews.setdefault(review.reminder_id, review)
+
     rows = []
     for observation in observations:
         if observation['status'] not in PENDING_REVIEW_STATUS_LABELS:
@@ -173,6 +208,7 @@ def _build_pending_review_rows(observations, now):
         location_label = proposal.location_name
         if not location_label and proposal.location_id and proposal.location:
             location_label = proposal.location.name
+        review = latest_reviews.get(reminder.pk)
         rows.append({
             'order_id': proposal.order_id,
             'role_label': dict(ROLE_LABELS).get(
@@ -195,6 +231,17 @@ def _build_pending_review_rows(observations, now):
             'reminder_age_hours': reminder_age_hours,
             'sent_at': reminder.sent_at,
             'reminder_id': reminder.pk,
+            'is_reviewed': review is not None,
+            'review_outcome': review.outcome if review is not None else '',
+            'review_outcome_label': (
+                PENDING_REVIEW_OUTCOME_LABELS[review.outcome]
+                if review is not None else '未核对'
+            ),
+            'reviewed_at_label': (
+                _format_local_datetime(review.reviewed_at)
+                if review is not None else '—'
+            ),
+            'review_note': review.note if review is not None else '',
         })
     rows.sort(key=lambda row: (
         row['status'] != 'no_action',
@@ -424,9 +471,12 @@ def _build_sample_quality(all_segment, notice_action_rows, legacy_notice_count):
     }
 
 
-def build_meeting_response_reminder_effect(*, days=30, now=None):
-    """构建页面与 CSV 共用的只读提醒效果面板。"""
+def build_meeting_response_reminder_effect(
+    *, days=30, now=None, review_status='unreviewed',
+):
+    """构建页面与 CSV 共用的提醒效果与人工核对面板。"""
     now = now or timezone.now()
+    review_status = normalize_pending_review_filter(review_status)
     start, start_date = _period_bounds(days, now)
     window_ends_before = now - timedelta(hours=EFFECT_WINDOW_HOURS)
     reminders = list(
@@ -486,8 +536,50 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         for role, label in ROLE_LABELS
     ]
     latency_rows = _build_latency_rows(observations)
-    pending_review_all_rows = _build_pending_review_rows(observations, now)
+    pending_review_candidates = _build_pending_review_rows(observations, now)
+    pending_review_total_count = len(pending_review_candidates)
+    pending_review_status_counts = {
+        'unreviewed': sum(
+            not row['is_reviewed'] for row in pending_review_candidates
+        ),
+        'waiting': sum(
+            row['review_outcome'] == 'waiting'
+            for row in pending_review_candidates
+        ),
+        'resolved': sum(
+            row['review_outcome'] == 'resolved'
+            for row in pending_review_candidates
+        ),
+        'data_issue': sum(
+            row['review_outcome'] == 'data_issue'
+            for row in pending_review_candidates
+        ),
+        'no_followup': sum(
+            row['review_outcome'] == 'no_followup'
+            for row in pending_review_candidates
+        ),
+        'all': pending_review_total_count,
+    }
+    pending_review_all_rows = [
+        row for row in pending_review_candidates
+        if (
+            review_status == 'all'
+            or (
+                review_status == 'unreviewed' and not row['is_reviewed']
+            )
+            or row['review_outcome'] == review_status
+        )
+    ]
     pending_review_rows = pending_review_all_rows[:PENDING_REVIEW_PAGE_LIMIT]
+    pending_review_filter_options = [
+        {
+            'key': key,
+            'label': label,
+            'count': pending_review_status_counts[key],
+            'selected': key == review_status,
+        }
+        for key, label in PENDING_REVIEW_FILTER_OPTIONS
+    ]
     notice_action_rows = _build_notice_action_rows(observations)
     notice_order_rows = _build_notice_order_rows(observations)
     notice_order_known_count = sum(row['count'] for row in notice_order_rows)
@@ -563,15 +655,37 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         ),
         'pending_review_note': (
             '待人工核对清单只列截至当前仍没有同一提议回合动作的提醒；已过观察窗的'
-            '优先，其余仍在等待。窗后已经出现的动作不进入当前清单。页面展示前 20 条，'
-            'CSV 导出完整清单；清单只用于打开订单核对，不自动回应或推进预约。'
+            '优先，其余仍在等待。每次核对追加一条历史记录，页面按最新结论筛选和展示，'
+            '默认聚焦未核对。人工结论不改变订单、预约、通知或提醒发送台账，也不会'
+            '自动回应或推进预约。页面展示当前筛选前 20 条，CSV 导出当前筛选完整清单。'
         ),
+        'review_status': review_status,
+        'review_status_label': dict(PENDING_REVIEW_FILTER_OPTIONS)[review_status],
+        'review_filter_options': pending_review_filter_options,
+        'review_outcome_options': MeetingResponseReminderReview.OUTCOME_CHOICES,
         'pending_review_count': len(pending_review_all_rows),
         'pending_review_rows': pending_review_rows,
         'pending_review_overflow_count': max(
             len(pending_review_all_rows) - len(pending_review_rows), 0,
         ),
         'pending_review_all_rows': pending_review_all_rows,
+        'pending_review_total_count': pending_review_total_count,
+        'pending_review_unreviewed_count': pending_review_status_counts['unreviewed'],
+        'pending_review_reviewed_count': (
+            pending_review_total_count - pending_review_status_counts['unreviewed']
+        ),
+        'pending_review_waiting_count': pending_review_status_counts['waiting'],
+        'pending_review_resolved_count': pending_review_status_counts['resolved'],
+        'pending_review_data_issue_count': pending_review_status_counts['data_issue'],
+        'pending_review_no_followup_count': pending_review_status_counts['no_followup'],
+        'pending_review_empty_note': (
+            '当前筛选下没有仍无同一回合动作的提醒。'
+            if pending_review_all_rows else (
+                '当前没有仍无同一回合动作、需要人工核对的提醒。'
+                if not pending_review_total_count else
+                '当前筛选下没有符合条件的核对记录，可切换到“全部”查看其他状态。'
+            )
+        ),
         'quality_status': sample_quality['status'],
         'quality_label': sample_quality['label'],
         'quality_note': sample_quality['note'],

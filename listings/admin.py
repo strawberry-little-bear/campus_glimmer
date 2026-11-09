@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
 
-from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingAppointmentEvent, MeetingIncident, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .models import AcademicPhase, AcademicTerm, AcademicTermSnapshot, BorrowReturnEscalation, BrowsingHistory, CampusCampaign, CampaignGoal, CampaignRegistration, CampaignUpdateMatch, CampusLocation, CampusLocationMaintenanceDecision, CampusLocationServiceException, CampusLocationServiceExceptionWindow, CampusLocationServiceWindow, Category, CommunityContribution, DemandOpportunityTask, DemandPost, DemandResponse, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingAppointmentEvent, MeetingIncident, MeetingResponseReminderReview, MutualAidFeedback, Notification, NotificationPreference, OpportunityDismissal, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, Report, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .location_maintenance_queue import get_location_maintenance_fingerprint
 from .search_rejection_stats import restore_rejections_for_pair, supersede_rejections_for_pair
 
@@ -295,6 +295,28 @@ class MeetingAppointmentEventAdmin(admin.ModelAdmin):
         'responded_by', 'responded_at', 'decline_reason', 'previous_status',
         'new_status', 'created_at',
     )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(MeetingResponseReminderReview)
+class MeetingResponseReminderReviewAdmin(admin.ModelAdmin):
+    """人工复核历史只供审计，新增统一从运营看板表单进入。"""
+
+    list_display = ('id', 'reminder', 'outcome', 'reviewed_at', 'reviewed_by')
+    list_filter = ('outcome', 'reviewed_at')
+    search_fields = (
+        'reminder__proposal_event__order_id', 'reviewed_by__username', 'note',
+    )
+    list_select_related = ('reminder__proposal_event', 'reviewed_by')
+    readonly_fields = ('reminder', 'outcome', 'note', 'reviewed_by', 'reviewed_at')
 
     def has_add_permission(self, request):
         return False

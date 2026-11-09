@@ -85,7 +85,9 @@ from .meeting_incident_quality import build_meeting_incident_quality
 from .meeting_attendance import build_meeting_attendance
 from .meeting_reschedule import build_meeting_reschedule
 from .meeting_service_window_quality import build_meeting_service_window_quality
-from .meeting_response_reminder_effect import build_meeting_response_reminder_effect
+from .meeting_response_reminder_effect import (
+    build_meeting_response_reminder_effect, normalize_pending_review_filter,
+)
 from .campus_location_service_rule_quality import build_campus_location_service_rule_quality
 from .refresh_quota_drift import build_refresh_quota_drift
 from .item_refresh_event_ledger import build_item_refresh_event_ledger_dashboard
@@ -160,8 +162,8 @@ from .moderation_risk_tier_shape import build_moderation_risk_tier_shape
 from .borrow_escalation import close_escalation
 from .demand_matching import _match_demand, notify_demand_matches
 from .lost_found_matching import expire_lost_found_posts, find_lost_found_matches, score_lost_found_posts
-from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, LostFoundReportForm, LostFoundReportReviewForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
-from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandReopenEvent, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
+from .forms import BulkListingRenewalForm, BulkListingRowFormSet, BulkListingSettingsForm, CampaignUpdateSubscriptionForm, DeliveryCodeForm, DemandPostForm, DisputeEvidenceForm, DisputeForm, DisputeResolutionForm, MeetingIncidentReviewForm, MeetingResponseReminderReviewForm, DemandResponseForm, FavoriteCollectionForm, ItemForm, ItemImageFormSet, LostFoundLeadForm, LostFoundPostForm, LostFoundReportForm, LostFoundReportReviewForm, MeetingAppointmentForm, MeetingIncidentForm, MutualAidFeedbackForm, NotificationPreferenceForm, OrderForm, RatingForm, ReportForm, ReportReviewForm, SavedSearchForm
+from .models import BrowsingHistory, CampusCampaign, CampaignRegistration, CampusLocation, Category, DemandOpportunityTask, DemandPost, DemandReopenEvent, DeliveryConfirmation, Favorite, FavoriteCollection, GiftApplication, Item, ItemAvailabilityWatch, ItemImage, ItemRefreshEvent, SemesterListingTemplate, LostFoundImage, LostFoundLead, LostFoundPost, LostFoundReport, MeetingAppointment, MeetingIncident, MeetingResponseReminderEvent, MeetingResponseReminderReview, Notification, NotificationPreference, OpportunityDismissal, OpportunityImpression, DemandResponse, MutualAidFeedback, Order, OrderDispute, OrderDisputeEvidence, OrderEvent, OrderSafetyAcknowledgement, Rating, RecommendationFeedback, RecommendationImpression, Report, ReportOutcomeFeedback, SavedSearch, SavedSearchMatch, SearchClick, SearchImpression, SearchQuery, SearchSynonym, SearchSynonymRejection
 from .image_processing import ItemImageLimitError, normalize_item_image
 from .recommendations import get_recommendations
 from .recommendation_impression_quality import build_recommendation_impression_quality
@@ -3927,7 +3929,7 @@ OPERATIONS_DASHBOARD_SHARED_BUILDERS = (
 
 def _build_shared_operations_dashboard(
     *, days, base_builder=build_operations_dashboard,
-    panel_builders=None, anchors=None,
+    panel_builders=None, anchors=None, review_status=None,
 ):
     """构建页面与 CSV 共用的运营看板，并附上本次请求的耗时报告。
 
@@ -3968,7 +3970,12 @@ def _build_shared_operations_dashboard(
         if key in dashboard:
             continue
         started = perf_counter()
-        dashboard[key] = builder(days=days)
+        # 提醒效果面板需要保留当前 GET 筛选；其它面板的构建器仍只接收天数，
+        # 测试注入的极小构建器也不必为一个面板学会新参数。
+        builder_kwargs = {'days': days}
+        if key == 'meeting_response_reminder_effect' and review_status is not None:
+            builder_kwargs['review_status'] = review_status
+        dashboard[key] = builder(**builder_kwargs)
         runs.append({
             'key': key,
             'label': label,
@@ -4029,16 +4036,92 @@ def _operations_dashboard_extras(request, days, dashboard):
     return dashboard
 
 
+def _meeting_response_review_filter(request):
+    return normalize_pending_review_filter(
+        request.GET.get('review_status'),
+    )
+
+
+def _meeting_review_period_days(request):
+    try:
+        return int(request.POST.get('days', 30))
+    except (TypeError, ValueError):
+        return 30
+
+
+def _meeting_response_review_redirect(request):
+    days = _meeting_review_period_days(request)
+    review_status = normalize_pending_review_filter(
+        request.POST.get('review_status'),
+    )
+    query = urlencode({'days': days, 'review_status': review_status})
+    return redirect(
+        f"{reverse('operations_dashboard')}?{query}#ops-meeting-reminders"
+    )
+
+
+@login_required
+def review_meeting_response_reminder(request, reminder_id):
+    """追加一次人工核对结论，不触碰订单、预约或提醒发送台账。"""
+    if not request.user.is_staff:
+        raise PermissionDenied
+    if request.method != 'POST':
+        return redirect('operations_dashboard')
+
+    days = _meeting_review_period_days(request)
+    with transaction.atomic():
+        reminder = get_object_or_404(
+            MeetingResponseReminderEvent.objects.select_for_update(),
+            pk=reminder_id,
+        )
+        effect = build_meeting_response_reminder_effect(
+            days=days, review_status='all',
+        )
+        current_row = next((
+            row for row in effect['pending_review_all_rows']
+            if row['reminder_id'] == reminder.pk
+        ), None)
+        if current_row is None:
+            messages.error(
+                request,
+                '这条提醒已经出现同一回合动作，或不在当前统计周期内，'
+                '不能追加人工核对。',
+            )
+            return _meeting_response_review_redirect(request)
+
+        form = MeetingResponseReminderReviewForm(request.POST)
+        if not form.is_valid():
+            message = '；'.join(
+                str(error)
+                for errors in form.errors.values() for error in errors
+            )
+            messages.error(request, f'复核没有保存：{message}')
+            return _meeting_response_review_redirect(request)
+
+        review = form.save(commit=False)
+        review.reminder = reminder
+        review.reviewed_by = request.user
+        review.save()
+        messages.success(
+            request,
+            f'已记录“{review.get_outcome_display()}”。本次只追加人工核对历史，'
+            '未改变订单、预约、通知或提醒发送台账。',
+        )
+    return _meeting_response_review_redirect(request)
+
+
 @login_required
 def operations_dashboard(request):
     if not request.user.is_staff:
         raise PermissionDenied
     days = _operations_period_days(request)
+    review_status = _meeting_response_review_filter(request)
     lazy = _wants_lazy_operations(request)
     # 懒加载时只构建首屏四个分区用得到的部分；其余分区等前端来取。
     dashboard = _build_shared_operations_dashboard(
         days=days,
         anchors=OPERATIONS_DASHBOARD_FIRST_SCREEN if lazy else None,
+        review_status=review_status,
     )
     dashboard = _operations_dashboard_extras(request, days, dashboard)
     dashboard['pending_dispute_count'] = OrderDispute.objects.filter(
@@ -4071,7 +4154,10 @@ def operations_dashboard_fragment(request, anchor):
     if partial is None:
         raise Http404('运营看板没有这个分区：%s' % anchor)
     days = _operations_period_days(request)
-    dashboard = _build_shared_operations_dashboard(days=days, anchors=(anchor,))
+    review_status = _meeting_response_review_filter(request)
+    dashboard = _build_shared_operations_dashboard(
+        days=days, anchors=(anchor,), review_status=review_status,
+    )
     dashboard = _operations_dashboard_extras(request, days, dashboard)
     return render(request, 'listings/operations/' + partial, dashboard)
 
@@ -4192,7 +4278,10 @@ def operations_dashboard_export(request):
         raise PermissionDenied
 
     days = _operations_period_days(request)
-    dashboard = _build_shared_operations_dashboard(days=days)
+    review_status = _meeting_response_review_filter(request)
+    dashboard = _build_shared_operations_dashboard(
+        days=days, review_status=review_status,
+    )
     metrics = dashboard['metrics']
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = (
@@ -11313,7 +11402,18 @@ def operations_dashboard_export(request):
     writer.writerow(['提醒后待人工核对'])
     writer.writerow(['口径与门槛'])
     writer.writerow([
-        '待核对数量', meeting_reminder_effect['pending_review_count'],
+        '当前核对筛选', meeting_reminder_effect['review_status_label'],
+        '当前筛选数量', meeting_reminder_effect['pending_review_count'],
+        '全部待核对', meeting_reminder_effect['pending_review_total_count'],
+    ])
+    writer.writerow([
+        '未核对', meeting_reminder_effect['pending_review_unreviewed_count'],
+        '继续等待', meeting_reminder_effect['pending_review_waiting_count'],
+        '已处理', meeting_reminder_effect['pending_review_resolved_count'],
+        '数据异常', meeting_reminder_effect['pending_review_data_issue_count'],
+        '无需跟进', meeting_reminder_effect['pending_review_no_followup_count'],
+    ])
+    writer.writerow([
         '已过窗尚无动作', meeting_reminder_effect['no_action_count'],
         '观察中尚无动作', meeting_reminder_effect['open_count'],
         '窗后动作（不进入清单）', meeting_reminder_effect['late_action_count'],
@@ -11324,6 +11424,7 @@ def operations_dashboard_export(request):
         '订单编号', '订单详情路径', '接收角色', '提议发起时间',
         '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
         '提议已等待', '提醒后已过', '阅读状态', '观察状态',
+        '复核结论', '复核时间', '复核说明',
     ])
     for row in meeting_reminder_effect['pending_review_all_rows']:
         writer.writerow([
@@ -11334,9 +11435,11 @@ def operations_dashboard_export(request):
             row['location_label'], row['sent_at_label'],
             row['proposal_wait_label'], row['reminder_age_label'],
             row['notice_label'], row['status_label'],
+            row['review_outcome_label'], row['reviewed_at_label'],
+            row['review_note'],
         ])
     if not meeting_reminder_effect['pending_review_all_rows']:
-        writer.writerow(['当前没有仍无同一回合动作、需要人工核对的提醒。'])
+        writer.writerow([meeting_reminder_effect['pending_review_empty_note']])
     writer.writerow([])
     writer.writerow(['样本质量', meeting_reminder_effect['quality_label']])
     writer.writerow([
