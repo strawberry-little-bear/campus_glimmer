@@ -18,6 +18,8 @@
 5. 阅读与动作交叉表只纳入阅读状态可判定、且已过观察窗的样本。观察中样本
    不进分母，窗后动作按窗口内未行动计，通知不可观测或阅读字段冲突时也不
    假装成“未读”。
+6. 待人工核对清单只列截至当前仍未观测到同一提议回合动作的样本。观察中
+   样本仍在等待，已过窗未行动样本优先；窗后已经出现的动作不进入当前清单。
 
 这里只报告观察值，不宣称提醒导致了动作，也不据此自动接受、拒绝、改期、
 提升提醒频率或给接收人排名。
@@ -39,6 +41,7 @@ from .models import (
 
 EFFECT_WINDOW_HOURS = 72
 MIN_SEGMENT_SAMPLES = 12
+PENDING_REVIEW_PAGE_LIMIT = 20
 ACTION_EVENT_TYPES = frozenset({'accepted', 'declined', 'rescheduled'})
 ROLE_LABELS = (('buyer', '买家'), ('seller', '卖家'))
 ACTION_LABELS = {
@@ -63,6 +66,16 @@ NOTICE_ORDER_STATES = (
     ('same_time', '同一时刻'),
     ('unread_action', '未读行动'),
 )
+NOTICE_STATE_LABELS = {
+    'read': '已读',
+    'unread': '未读',
+    'missing': '通知不可用',
+    'inconsistent': '字段异常',
+}
+PENDING_REVIEW_STATUS_LABELS = {
+    'no_action': '已过窗，尚无动作',
+    'open': '观察中，尚无动作',
+}
 
 
 def _period_bounds(days, now):
@@ -129,6 +142,67 @@ def _first_action_after(events, proposal, sent_at):
                 return None
             return event
     return None
+
+
+def _format_local_datetime(value):
+    if value is None:
+        return '—'
+    return timezone.localtime(value).strftime('%Y-%m-%d %H:%M')
+
+
+def _build_pending_review_rows(observations, now):
+    """把仍未行动且需要人工查看的提醒排序成可执行清单。
+
+    已过观察窗的样本优先，再按提醒等待时间从长到短排列；仍在窗口内的样本
+    排在后面。清单只用于打开订单核对现场，不自动回应或推进预约。
+    """
+    rows = []
+    for observation in observations:
+        if observation['status'] not in PENDING_REVIEW_STATUS_LABELS:
+            continue
+        reminder = observation['reminder']
+        proposal = reminder.proposal_event
+        proposal_wait_hours = max(
+            (now - proposal.occurred_at).total_seconds() / 3600.0,
+            0.0,
+        )
+        reminder_age_hours = max(
+            (now - reminder.sent_at).total_seconds() / 3600.0,
+            0.0,
+        )
+        location_label = proposal.location_name
+        if not location_label and proposal.location_id and proposal.location:
+            location_label = proposal.location.name
+        rows.append({
+            'order_id': proposal.order_id,
+            'role_label': dict(ROLE_LABELS).get(
+                observation['role'], observation['role'],
+            ),
+            'proposal_at_label': _format_local_datetime(proposal.occurred_at),
+            'proposal_start_label': _format_local_datetime(
+                proposal.proposed_start_at,
+            ),
+            'proposal_end_label': _format_local_datetime(
+                proposal.proposed_end_at,
+            ),
+            'location_label': location_label or '—',
+            'sent_at_label': _format_local_datetime(reminder.sent_at),
+            'proposal_wait_label': _label_hours(proposal_wait_hours),
+            'reminder_age_label': _label_hours(reminder_age_hours),
+            'notice_label': NOTICE_STATE_LABELS[observation['notice_state']],
+            'status': observation['status'],
+            'status_label': PENDING_REVIEW_STATUS_LABELS[observation['status']],
+            'reminder_age_hours': reminder_age_hours,
+            'sent_at': reminder.sent_at,
+            'reminder_id': reminder.pk,
+        })
+    rows.sort(key=lambda row: (
+        row['status'] != 'no_action',
+        -row['reminder_age_hours'],
+        row['sent_at'],
+        row['reminder_id'],
+    ))
+    return rows
 
 
 def _notice_state(reminder):
@@ -358,7 +432,9 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
     reminders = list(
         MeetingResponseReminderEvent.objects.filter(
             sent_at__gte=start, sent_at__lte=now,
-        ).select_related('proposal_event', 'notification').order_by('sent_at', 'pk')
+        ).select_related(
+            'proposal_event__location', 'notification',
+        ).order_by('sent_at', 'pk')
     )
     events_by_order = _load_events(reminders)
 
@@ -410,6 +486,8 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
         for role, label in ROLE_LABELS
     ]
     latency_rows = _build_latency_rows(observations)
+    pending_review_all_rows = _build_pending_review_rows(observations, now)
+    pending_review_rows = pending_review_all_rows[:PENDING_REVIEW_PAGE_LIMIT]
     notice_action_rows = _build_notice_action_rows(observations)
     notice_order_rows = _build_notice_order_rows(observations)
     notice_order_known_count = sum(row['count'] for row in notice_order_rows)
@@ -483,6 +561,17 @@ def build_meeting_response_reminder_effect(*, days=30, now=None):
             '通知删除、未行动和窗后动作不进入。阅读发生在动作之后仍保留为观察事实；'
             '先后关系不等于因果，也不据此调整提醒。'
         ),
+        'pending_review_note': (
+            '待人工核对清单只列截至当前仍没有同一提议回合动作的提醒；已过观察窗的'
+            '优先，其余仍在等待。窗后已经出现的动作不进入当前清单。页面展示前 20 条，'
+            'CSV 导出完整清单；清单只用于打开订单核对，不自动回应或推进预约。'
+        ),
+        'pending_review_count': len(pending_review_all_rows),
+        'pending_review_rows': pending_review_rows,
+        'pending_review_overflow_count': max(
+            len(pending_review_all_rows) - len(pending_review_rows), 0,
+        ),
+        'pending_review_all_rows': pending_review_all_rows,
         'quality_status': sample_quality['status'],
         'quality_label': sample_quality['label'],
         'quality_note': sample_quality['note'],

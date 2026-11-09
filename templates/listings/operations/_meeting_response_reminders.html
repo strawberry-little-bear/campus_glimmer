@@ -19,7 +19,42 @@
         <div class="col-md-3"><div class="ops-mini-stat"><span>已过窗未回应</span><strong>{{ meeting_response_reminder_effect.no_action_count }}</strong><small>观察中 {{ meeting_response_reminder_effect.open_count }} · 窗后动作 {{ meeting_response_reminder_effect.late_action_count }}</small></div></div>
     </div>
 
-    <h3 class="h6 mb-3">按接收角色观察</h3>
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h3 class="h6 mb-0">提醒后待人工核对</h3>
+        <span class="ops-panel-hint">{{ meeting_response_reminder_effect.pending_review_count }} 条仍无同一回合动作</span>
+    </div>
+    <p class="search-rhythm-note mb-3">{{ meeting_response_reminder_effect.pending_review_note }}</p>
+    {% if meeting_response_reminder_effect.pending_review_count %}
+    <div class="ops-table-wrap">
+        <table class="table ops-table align-middle mb-0 meeting-response-pending-review">
+            <caption class="visually-hidden">交付安排提醒后待人工核对清单</caption>
+            <thead><tr><th>订单</th><th>接收角色</th><th>提议发起</th><th>当前提议时间</th><th>地点</th><th>提醒发送</th><th>提议已等待</th><th>提醒后已过</th><th>阅读状态</th><th>观察状态</th></tr></thead>
+            <tbody>
+                {% for row in meeting_response_reminder_effect.pending_review_rows %}
+                <tr>
+                    <td data-label="订单"><a href="{% url 'order_detail' row.order_id %}"><strong>订单 #{{ row.order_id }}</strong></a></td>
+                    <td data-label="接收角色">{{ row.role_label }}</td>
+                    <td data-label="提议发起">{{ row.proposal_at_label }}</td>
+                    <td data-label="当前提议时间">{{ row.proposal_start_label }}<small class="d-block text-muted">至 {{ row.proposal_end_label }}</small></td>
+                    <td data-label="地点">{{ row.location_label }}</td>
+                    <td data-label="提醒发送">{{ row.sent_at_label }}</td>
+                    <td data-label="提议已等待">{{ row.proposal_wait_label }}</td>
+                    <td data-label="提醒后已过">{{ row.reminder_age_label }}</td>
+                    <td data-label="阅读状态">{{ row.notice_label }}</td>
+                    <td data-label="观察状态"><strong class="{% if row.status == 'no_action' %}text-danger{% else %}text-muted{% endif %}">{{ row.status_label }}</strong></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if meeting_response_reminder_effect.pending_review_overflow_count %}
+    <p class="small text-muted mt-2 mb-0">页面按优先级展示前 20 条；CSV 还包含另外 {{ meeting_response_reminder_effect.pending_review_overflow_count }} 条完整明细。</p>
+    {% endif %}
+    {% else %}
+    <div class="empty-inline">当前没有仍无同一回合动作、需要人工核对的提醒。</div>
+    {% endif %}
+
+    <h3 class="h6 mb-3 mt-4">按接收角色观察</h3>
     <div class="ops-table-wrap">
         <table class="table ops-table align-middle mb-0">
             <caption class="visually-hidden">交付安排提醒触达与回应 · 按接收角色观察</caption>

@@ -11310,6 +11310,34 @@ def operations_dashboard_export(request):
             ),
         ])
     writer.writerow([])
+    writer.writerow(['提醒后待人工核对'])
+    writer.writerow(['口径与门槛'])
+    writer.writerow([
+        '待核对数量', meeting_reminder_effect['pending_review_count'],
+        '已过窗尚无动作', meeting_reminder_effect['no_action_count'],
+        '观察中尚无动作', meeting_reminder_effect['open_count'],
+        '窗后动作（不进入清单）', meeting_reminder_effect['late_action_count'],
+    ])
+    writer.writerow(['说明'])
+    writer.writerow([meeting_reminder_effect['pending_review_note']])
+    writer.writerow([
+        '订单编号', '订单详情路径', '接收角色', '提议发起时间',
+        '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
+        '提议已等待', '提醒后已过', '阅读状态', '观察状态',
+    ])
+    for row in meeting_reminder_effect['pending_review_all_rows']:
+        writer.writerow([
+            row['order_id'],
+            reverse('order_detail', args=[row['order_id']]),
+            row['role_label'], row['proposal_at_label'],
+            row['proposal_start_label'], row['proposal_end_label'],
+            row['location_label'], row['sent_at_label'],
+            row['proposal_wait_label'], row['reminder_age_label'],
+            row['notice_label'], row['status_label'],
+        ])
+    if not meeting_reminder_effect['pending_review_all_rows']:
+        writer.writerow(['当前没有仍无同一回合动作、需要人工核对的提醒。'])
+    writer.writerow([])
     writer.writerow(['样本质量', meeting_reminder_effect['quality_label']])
     writer.writerow([
         '通知可观测', meeting_reminder_effect['notice_available_count'],

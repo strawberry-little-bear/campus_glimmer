@@ -23,7 +23,7 @@
 | 学期日历 | `AcademicTerm`、`AcademicPhase`、`AcademicTermSnapshot` | 学期起止日期、按偏移天数划分的阶段规则、阶段级统计快照（已结束阶段由 `build_academic_calendar` 读取，进行中阶段实时算） |
 | 互动 | `Favorite`、`ItemAvailabilityWatch`、`Comment`、`PrivateMessage` | 收藏、有货提醒、公开留言和私信 |
 | 交易 | `Order`、`OrderEvent`、`MeetingAppointment`、`MeetingAppointmentEvent`、`DeliveryConfirmation`、`Rating` | `MeetingAppointment` 保存当前交付安排；不可变的 `MeetingAppointmentEvent` 保存上线后的提议、改期、接受、拒绝和订单取消快照；配合订单事件、双方确认和完成后的评价跑完整交易链。求购承接生成的订单通过 `Order.demand_response` 保存来源，旧预约不补造事件历史 |
-| 交付安排提醒效果 | `MeetingResponseReminderEvent`、`MeetingAppointmentEvent`、`Notification.is_read` / `read_at` | 不可变提醒台账提供发送分母，并按当前通知与同一提议回合动作构建已读/未读 × 行动/未行动的 2×2 观察；只纳入阅读状态可判定且已过 72 小时窗口的样本，观察中不进入，窗后动作按未行动计，通知删除或 `is_read` 与 `read_at` 冲突时不归入任一侧。阅读率只使用可判定状态；另按 `read_at` 与窗口内动作 `occurred_at` 观察时点先后，合计不足 12 条只报数。每个行动与未行动格需 12 条才标为可比较；跨表只说明关联与先后，不据此调频或修改预约 |
+| 交付安排提醒效果 | `MeetingResponseReminderEvent`、`MeetingAppointmentEvent`、`Notification.is_read` / `read_at` | 不可变提醒台账提供发送分母，并按当前通知与同一提议回合动作构建已读/未读 × 行动/未行动的 2×2 观察；只纳入阅读状态可判定且已过 72 小时窗口的样本，观察中不进入，窗后动作按未行动计，通知删除或 `is_read` 与 `read_at` 冲突时不归入任一侧。阅读率只使用可判定状态；另按 `read_at` 与窗口内动作 `occurred_at` 观察时点先后，合计不足 12 条只报数。每个行动与未行动格需 12 条才标为可比较；跨表只说明关联与先后，不据此调频或修改预约。待人工核对清单复用同一观察：只纳入已过窗无动作与观察中无动作，前者优先，页面列 20 条、CSV 导出全量 |
 | 交付开放时段风险 | 不新增表，读 `MeetingAppointment`、`CampusLocationServiceWindow`、`CampusLocationServiceException` | 把未来待确认或已确认的交付安排对照地点每周规则与单日例外，只提示人工核对，不改预约或地点配置 |
 | 校园开放规则配置审计 | 不新增表，读 `CampusLocation`、`CampusLocationServiceWindow`、`CampusLocationServiceException`、`CampusLocationServiceExceptionWindow` | 解释每周时段、跨午夜、重叠或相邻、单日例外形状与生命周期；五类配置信号只提示人工确认，不自动修复规则 |
 | 交易安全确认 | `OrderSafetyAcknowledgement` | 买卖双方对当前安全卡的版本化确认记录，按订单、角色和安全卡指纹唯一；历史记录保留用于审计 |

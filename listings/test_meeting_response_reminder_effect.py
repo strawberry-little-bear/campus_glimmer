@@ -134,7 +134,7 @@ class MeetingReminderFixtureMixin:
 
 class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
     def test_production_sender_creates_an_open_observation_sample(self):
-        self.make_case()
+        case = self.make_case()
         self.send_cases()
 
         effect = build_meeting_response_reminder_effect(
@@ -150,6 +150,16 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(effect['response_rate'], None)
         self.assertEqual(effect['notice_action_closed_count'], 0)
         self.assertEqual(effect['quality_status'], 'accumulating')
+        self.assertEqual(effect['pending_review_count'], 1)
+        self.assertEqual(effect['pending_review_overflow_count'], 0)
+        self.assertEqual(len(effect['pending_review_rows']), 1)
+        queue_row = effect['pending_review_rows'][0]
+        self.assertEqual(queue_row['order_id'], case['order'].id)
+        self.assertEqual(queue_row['role_label'], '卖家')
+        self.assertEqual(queue_row['location_label'], self.location.name)
+        self.assertEqual(queue_row['notice_label'], '未读')
+        self.assertEqual(queue_row['status'], 'open')
+        self.assertEqual(queue_row['status_label'], '观察中，尚无动作')
         self.assertEqual(MeetingResponseReminderEvent.objects.count(), 1)
 
     def test_read_and_accepted_action_use_observed_timestamps(self):
@@ -182,6 +192,8 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
             row['key']: row for row in effect['notice_order_rows']
         }
         self.assertEqual(order_rows['read_before_action']['count'], 1)
+        self.assertEqual(effect['pending_review_count'], 0)
+        self.assertEqual(effect['pending_review_rows'], [])
 
     def test_inconsistent_read_fields_are_excluded_from_unread_and_denominator(self):
         read_without_time = self.make_case(proposal_age_hours=25 + 5 * 24)
@@ -308,6 +320,58 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(effect['notice_action_closed_count'], 4)
         self.assertEqual(effect['quality_label'], '数据积累中')
 
+    def test_pending_review_prioritizes_overdue_then_longest_open(self):
+        def create_and_send(*, proposal_age_hours, sent_at):
+            case = self.make_case(proposal_age_hours=proposal_age_hours)
+            with patch('django.utils.timezone.now', return_value=sent_at):
+                result = send_meeting_response_reminders(now=sent_at)
+            self.assertEqual(result['sent'], 1)
+            return case
+
+        oldest_overdue = create_and_send(
+            proposal_age_hours=25 + 5 * 24,
+            sent_at=self.now - timedelta(days=5),
+        )
+        newer_overdue = create_and_send(
+            proposal_age_hours=25 + 4 * 24,
+            sent_at=self.now - timedelta(days=4),
+        )
+        longest_open = create_and_send(
+            proposal_age_hours=35,
+            sent_at=self.now - timedelta(hours=10),
+        )
+        responded = create_and_send(
+            proposal_age_hours=34,
+            sent_at=self.now - timedelta(hours=9),
+        )
+        late_action = create_and_send(
+            proposal_age_hours=25 + 6 * 24,
+            sent_at=self.now - timedelta(days=6),
+        )
+        self.add_action(responded, 'accepted', hours_after=2)
+        self.add_action(late_action, 'declined', hours_after=80)
+
+        effect = build_meeting_response_reminder_effect(days=30, now=self.now)
+
+        self.assertEqual(effect['pending_review_count'], 3)
+        rows = effect['pending_review_all_rows']
+        self.assertEqual(
+            [row['order_id'] for row in rows],
+            [
+                oldest_overdue['order'].id,
+                newer_overdue['order'].id,
+                longest_open['order'].id,
+            ],
+        )
+        self.assertEqual(
+            [row['status'] for row in rows],
+            ['no_action', 'no_action', 'open'],
+        )
+        self.assertEqual(effect['responded_count'], 1)
+        self.assertEqual(effect['late_action_count'], 1)
+        self.assertNotIn(responded['order'].id, [row['order_id'] for row in rows])
+        self.assertNotIn(late_action['order'].id, [row['order_id'] for row in rows])
+
     def test_actions_are_split_by_role_and_type(self):
         accepted_case = self.make_case(recipient_role='seller')
         declined_case = self.make_case(recipient_role='buyer')
@@ -346,6 +410,12 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(effect['response_rate'], 0.0)
         self.assertFalse(effect['comparable'])
         self.assertIn('只报告计数与时延', effect['summary'])
+        self.assertEqual(effect['pending_review_count'], 1)
+        self.assertEqual(effect['pending_review_rows'][0]['status'], 'no_action')
+        self.assertEqual(
+            effect['pending_review_rows'][0]['status_label'],
+            '已过窗，尚无动作',
+        )
 
     def test_action_after_window_is_late_and_not_counted_in_rate(self):
         old_sent = self.now - timedelta(days=5)
@@ -367,6 +437,7 @@ class MeetingResponseReminderEffectTests(MeetingReminderFixtureMixin, TestCase):
         self.assertEqual(rows['unread']['no_action_count'], 1)
         self.assertEqual(rows['unread']['action_rate'], 0.0)
         self.assertEqual(effect['notice_order_known_count'], 0)
+        self.assertEqual(effect['pending_review_count'], 0)
 
     def test_deleted_notification_keeps_send_but_stays_out_of_unread_cross(self):
         case = self.make_case(proposal_age_hours=25 + 5 * 24)
@@ -445,8 +516,66 @@ class MeetingResponseReminderEffectSurfaceTests(
         )
         self.client.force_login(self.staff)
 
+    def test_dashboard_limits_pending_review_but_csv_keeps_the_full_list(self):
+        old_sent = self.now - timedelta(days=5)
+        cases = [
+            self.make_case(proposal_age_hours=25 + 5 * 24)
+            for _index in range(21)
+        ]
+        with patch('django.utils.timezone.now', return_value=old_sent):
+            self.send_cases(now=old_sent)
+
+        effect = build_meeting_response_reminder_effect(days=30, now=self.now)
+        self.assertEqual(effect['pending_review_count'], 21)
+        self.assertEqual(len(effect['pending_review_rows']), 20)
+        self.assertEqual(effect['pending_review_overflow_count'], 1)
+
+        response = self.client.get(
+            reverse('operations_dashboard'), {'days': 30},
+        )
+        html = response.content.decode('utf-8')
+        panel_start = html.index('meeting-response-pending-review')
+        panel = html[panel_start:html.index('按接收角色观察', panel_start)]
+        linked_ids = [
+            case['order'].id for case in cases
+            if 'href="%s"' % reverse('order_detail', args=[case['order'].id]) in panel
+        ]
+        self.assertEqual(len(linked_ids), 20)
+        self.assertEqual(linked_ids, [case['order'].id for case in cases[:20]])
+        self.assertIn('CSV 还包含另外 1 条完整明细', html)
+
+        export = self.client.get(
+            reverse('operations_dashboard_export'), {'days': 30},
+        )
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        start = rows.index(['提醒后待人工核对'])
+        header_index = next(
+            index for index in range(start, len(rows))
+            if rows[index] and rows[index][0] == '订单编号'
+        )
+        self.assertEqual(rows[header_index], [
+            '订单编号', '订单详情路径', '接收角色', '提议发起时间',
+            '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
+            '提议已等待', '提醒后已过', '阅读状态', '观察状态',
+        ])
+        detail_rows = []
+        for row in rows[header_index + 1:]:
+            if not row:
+                break
+            detail_rows.append(row)
+        self.assertEqual(len(detail_rows), 21)
+        self.assertEqual(
+            [int(row[0]) for row in detail_rows],
+            [case['order'].id for case in cases],
+        )
+        self.assertEqual(
+            detail_rows[0][1],
+            reverse('order_detail', args=[cases[0]['order'].id]),
+        )
+        self.assertEqual(detail_rows[0][-1], '已过窗，尚无动作')
+
     def test_dashboard_renders_the_read_only_panel_without_user_identity(self):
-        self.make_case(recipient_role='seller')
+        case = self.make_case(recipient_role='seller')
         self.send_cases()
 
         response = self.client.get(
@@ -470,6 +599,12 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertIn('观察状态与缺失', html)
         self.assertIn('窗口内回应时延', html)
         self.assertIn('等待中的样本不会被当成提醒失败', html)
+        self.assertIn('提醒后待人工核对', html)
+        self.assertIn('观察中，尚无动作', html)
+        self.assertIn(
+            'href="%s"' % reverse('order_detail', args=[case['order'].id]),
+            html,
+        )
         self.assertNotIn(self.seller.username, html)
         self.assertNotIn(self.buyer.username, html)
 
@@ -492,7 +627,7 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertNotIn('id="ops-meeting-reminders"', html)
 
     def test_export_uses_the_same_sent_count_and_table_shape(self):
-        self.make_case(recipient_role='seller')
+        case = self.make_case(recipient_role='seller')
         self.send_cases()
 
         response = self.client.get(
@@ -555,6 +690,21 @@ class MeetingResponseReminderEffectSurfaceTests(
         self.assertEqual(section[order_header + 1], [
             '先读后动', '0', '—', '少于 12 条，只报数',
         ])
+        pending_header = next(
+            index for index, row in enumerate(section)
+            if row and row[0] == '订单编号'
+        )
+        self.assertEqual(section[pending_header][0:4], [
+            '订单编号', '订单详情路径', '接收角色', '提议发起时间',
+        ])
+        self.assertEqual(section[pending_header + 1][0], str(case['order'].id))
+        self.assertEqual(
+            section[pending_header + 1][1],
+            reverse('order_detail', args=[case['order'].id]),
+        )
+        self.assertEqual(section[pending_header + 1][10], '未读')
+        self.assertEqual(section[pending_header + 1][11], '观察中，尚无动作')
         self.assertIn('样本质量', text)
         self.assertIn('先后关系不等于因果', text)
         self.assertIn('不能证明由提醒引起', text)
+        self.assertIn('窗后动作（不进入清单）', text)
