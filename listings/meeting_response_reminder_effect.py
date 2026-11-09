@@ -401,6 +401,103 @@ def _build_due_triage(rows):
     }
 
 
+def _build_due_review_flow(start, now):
+    """汇总周期内承接此前到期复查的复核事件。
+
+    同一提醒按复核时间形成序列；每一次复核承接的都是前一条复核安排的
+    下次复查时间。只有承接动作发生在本次统计周期内才计入，未发生的未来
+    安排不提前算成处理结果。该流回答“周期内处理了什么”，当前积压仍由
+    上方快照回答。
+    """
+    reminder_ids = set(
+        MeetingResponseReminderReview.objects.filter(
+            reviewed_at__gte=start,
+            reviewed_at__lte=now,
+        ).values_list('reminder_id', flat=True)
+    )
+    events = []
+    if reminder_ids:
+        reviews = MeetingResponseReminderReview.objects.filter(
+            reminder_id__in=reminder_ids,
+        ).order_by('reminder_id', 'reviewed_at', 'pk').only(
+            'reminder_id', 'outcome', 'next_review_at', 'reviewed_at',
+        )
+        previous_review = None
+        previous_reminder_id = None
+        for review in reviews:
+            if review.reminder_id != previous_reminder_id:
+                previous_review = None
+                previous_reminder_id = review.reminder_id
+            due_at = (
+                previous_review.next_review_at
+                if previous_review is not None else None
+            )
+            if (
+                due_at is not None
+                and start <= review.reviewed_at <= now
+                and review.reviewed_at >= due_at
+            ):
+                delay_hours = max(
+                    (review.reviewed_at - due_at).total_seconds() / 3600.0,
+                    0.0,
+                )
+                on_time = delay_hours == 0
+                bucket_key = (
+                    '' if on_time else _overdue_bucket(delay_hours)[0]
+                )
+                events.append({
+                    'delay_hours': delay_hours,
+                    'on_time': on_time,
+                    'bucket_key': bucket_key,
+                    'continuing': (
+                        review.outcome
+                        in MeetingResponseReminderReview.FOLLOW_UP_OUTCOMES
+                    ),
+                })
+            previous_review = review
+
+    handled_count = len(events)
+    on_time_count = sum(event['on_time'] for event in events)
+    overdue_count = handled_count - on_time_count
+    continuing_count = sum(event['continuing'] for event in events)
+    closed_count = handled_count - continuing_count
+    bucket_counts = {
+        key: sum(event['bucket_key'] == key for event in events)
+        for key, _label, _upper_bound in OVERDUE_BUCKETS
+    }
+    median_delay_hours = (
+        median(event['delay_hours'] for event in events)
+        if events else None
+    )
+    return {
+        'handled_count': handled_count,
+        'on_time_count': on_time_count,
+        'on_time_rate': _percent(on_time_count, handled_count),
+        'overdue_count': overdue_count,
+        'overdue_rate': _percent(overdue_count, handled_count),
+        'continuing_count': continuing_count,
+        'continuing_rate': _percent(continuing_count, handled_count),
+        'closed_count': closed_count,
+        'closed_rate': _percent(closed_count, handled_count),
+        'overdue_bucket_rows': [
+            {'key': key, 'label': label, 'count': bucket_counts[key]}
+            for key, label, _upper_bound in OVERDUE_BUCKETS
+        ],
+        'median_delay_hours': median_delay_hours,
+        'median_delay_label': _label_overdue_duration(median_delay_hours),
+        'note': (
+            '只统计所选周期内发生的承接处理。每条复核承接前一条复核安排的下次'
+            '复查时间；恰好到期算按时，之后算逾期。继续等待或数据异常表示仍'
+            '需排队，已处理或无需跟进表示关闭本次复查。未发生处理的积压请看'
+            '上方当前快照，不把未来安排提前算成结果。'
+        ),
+        'empty_note': (
+            '所选周期内没有复核承接此前已到期的复查安排；未处理积压仍以上方'
+            '当前快照为准。'
+        ),
+    }
+
+
 def _notice_state(reminder):
     notification = reminder.notification
     if notification is None:
@@ -687,6 +784,7 @@ def build_meeting_response_reminder_effect(
     latency_rows = _build_latency_rows(observations)
     pending_review_candidates = _build_pending_review_rows(observations, now)
     pending_review_due_triage = _build_due_triage(pending_review_candidates)
+    due_review_flow = _build_due_review_flow(start, now)
     pending_review_total_count = len(pending_review_candidates)
     pending_review_status_counts = {
         'due': sum(
@@ -762,10 +860,17 @@ def build_meeting_response_reminder_effect(
     )
 
     if not reminders:
-        summary = (
-            '周期内还没有交付安排待回应提醒台账。旧通知不会按去重键补造发送样本；'
-            '新提醒发送后才会进入这里。'
-        )
+        if due_review_flow['handled_count']:
+            summary = (
+                '周期内没有新的提醒发送台账，但复核承接了 %d 次此前到期的复查；'
+                '下方处理流与当前发送观察分开阅读。'
+                % due_review_flow['handled_count']
+            )
+        else:
+            summary = (
+                '周期内还没有交付安排待回应提醒台账。旧通知不会按去重键补造发送样本；'
+                '新提醒发送后才会进入这里。'
+            )
     elif all_segment['closed_count'] < MIN_SEGMENT_SAMPLES:
         summary = (
             '已过观察窗的样本少于 %d 条，只报告计数与时延，不判断提醒效果方向。'
@@ -779,7 +884,7 @@ def build_meeting_response_reminder_effect(
         )
 
     return {
-        'has_data': bool(reminders),
+        'has_data': bool(reminders) or bool(due_review_flow['handled_count']),
         'period_days': days,
         'period_start': start,
         'period_end': now,
@@ -844,6 +949,7 @@ def build_meeting_response_reminder_effect(
         'pending_review_oldest_due_at_label': pending_review_due_triage['oldest_at_label'],
         'pending_review_oldest_due_order_id': pending_review_due_triage['oldest_order_id'],
         'pending_review_due_total_label': pending_review_due_triage['total_label'],
+        'due_review_flow': due_review_flow,
         'pending_review_unreviewed_count': pending_review_status_counts['unreviewed'],
         'pending_review_reviewed_count': (
             pending_review_total_count - pending_review_status_counts['unreviewed']

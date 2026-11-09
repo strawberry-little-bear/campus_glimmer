@@ -1065,6 +1065,160 @@ class MeetingResponseReminderReviewLedgerTests(
         self.assertIsNone(effect['pending_review_oldest_due_order_id'])
         self.assertEqual(effect['pending_review_due_total_label'], '—')
 
+    def test_due_review_flow_counts_on_time_boundaries_and_outcomes(self):
+        cases = [self.make_case() for _index in range(5)]
+        self.send_cases()
+        due_at = self.now + timedelta(days=2)
+        outcomes = (
+            (0, 'resolved'),
+            (1, 'waiting'),
+            (24, 'resolved'),
+            (72, 'data_issue'),
+            (168, 'no_followup'),
+        )
+        for case, (delay_hours, outcome) in zip(cases, outcomes):
+            self.review_case(
+                case, self.reviewer, outcome='waiting',
+                note='已安排下一轮复查。',
+                reviewed_at=self.now + timedelta(minutes=1),
+                next_review_at=due_at,
+            )
+            self.review_case(
+                case, self.reviewer, outcome=outcome,
+                data_issue_reason=(
+                    'reminder_mismatch' if outcome == 'data_issue' else ''
+                ),
+                note='承接本次到期复查。',
+                reviewed_at=due_at + timedelta(hours=delay_hours),
+            )
+
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=due_at + timedelta(hours=169),
+        )
+        flow = effect['due_review_flow']
+
+        self.assertEqual(flow['handled_count'], 5)
+        self.assertEqual(flow['on_time_count'], 1)
+        self.assertEqual(flow['on_time_rate'], 20.0)
+        self.assertEqual(flow['overdue_count'], 4)
+        self.assertEqual(flow['overdue_rate'], 80.0)
+        self.assertEqual(flow['continuing_count'], 2)
+        self.assertEqual(flow['closed_count'], 3)
+        self.assertEqual(
+            [row['count'] for row in flow['overdue_bucket_rows']],
+            [1, 1, 1, 1],
+        )
+        self.assertEqual(flow['median_delay_hours'], 24.0)
+        self.assertEqual(flow['median_delay_label'], '1.0 天')
+
+    def test_due_review_flow_uses_each_previous_review_schedule(self):
+        case = self.make_case()
+        self.send_cases()
+        first_due = self.now + timedelta(hours=3)
+        self.review_case(
+            case, self.reviewer, outcome='waiting', note='第一次安排复查。',
+            reviewed_at=self.now + timedelta(minutes=1),
+            next_review_at=first_due,
+        )
+        second_due = first_due + timedelta(days=1)
+        self.review_case(
+            case, self.reviewer, outcome='waiting', note='第二次继续排队。',
+            reviewed_at=first_due,
+            next_review_at=second_due,
+        )
+        self.review_case(
+            case, self.reviewer, outcome='resolved', note='',
+            reviewed_at=second_due + timedelta(hours=2),
+        )
+
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=self.now + timedelta(days=4),
+        )
+        flow = effect['due_review_flow']
+
+        self.assertEqual(flow['handled_count'], 2)
+        self.assertEqual(flow['on_time_count'], 1)
+        self.assertEqual(flow['overdue_count'], 1)
+        self.assertEqual(flow['continuing_count'], 1)
+        self.assertEqual(flow['closed_count'], 1)
+        self.assertEqual(flow['median_delay_hours'], 1.0)
+        self.assertEqual(
+            [row['count'] for row in flow['overdue_bucket_rows']],
+            [1, 0, 0, 0],
+        )
+
+    def test_due_review_flow_includes_period_boundaries_only(self):
+        period_start = timezone.make_aware(
+            timezone.datetime.combine(
+                timezone.localdate(self.now), timezone.datetime.min.time(),
+            ),
+        )
+        old_case = self.make_case(proposal_age_hours=25 + 4 * 24)
+        old_sent = period_start - timedelta(days=3)
+        with patch('django.utils.timezone.now', return_value=old_sent):
+            self.send_cases(now=old_sent)
+        self.review_case(
+            old_case, self.reviewer, outcome='waiting',
+            note='周期开始前安排的复查。',
+            reviewed_at=period_start - timedelta(hours=2),
+            next_review_at=period_start - timedelta(hours=1),
+        )
+        self.review_case(
+            old_case, self.reviewer, outcome='resolved', note='',
+            reviewed_at=period_start,
+        )
+
+        sent_at = self.now - timedelta(hours=3)
+        at_now_case = self.make_case(proposal_age_hours=30)
+        future_case = self.make_case(proposal_age_hours=30)
+        with patch('django.utils.timezone.now', return_value=sent_at):
+            result = send_meeting_response_reminders(now=sent_at)
+        self.assertEqual(result['sent'], 2)
+        for case, reviewed_at in (
+            (at_now_case, self.now),
+            (future_case, self.now + timedelta(seconds=1)),
+        ):
+            self.review_case(
+                case, self.reviewer, outcome='waiting',
+                note='紧接着开始的到期复查。',
+                reviewed_at=self.now - timedelta(hours=2),
+                next_review_at=self.now - timedelta(hours=1),
+            )
+            self.review_case(
+                case, self.reviewer, outcome='resolved', note='',
+                reviewed_at=reviewed_at,
+            )
+
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=self.now,
+        )
+
+        self.assertEqual(effect['due_review_flow']['handled_count'], 2)
+        self.assertEqual(effect['due_review_flow']['overdue_count'], 2)
+
+    def test_no_due_review_flow_has_explicit_empty_state(self):
+        case = self.make_case()
+        self.send_cases()
+        self.review_case(
+            case, self.reviewer, outcome='waiting', note='尚未到下次复查。',
+            reviewed_at=self.now + timedelta(minutes=1),
+            next_review_at=self.now + timedelta(days=1),
+        )
+
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=self.now + timedelta(minutes=2),
+        )
+        flow = effect['due_review_flow']
+
+        self.assertEqual(flow['handled_count'], 0)
+        self.assertIsNone(flow['median_delay_hours'])
+        self.assertEqual(flow['median_delay_label'], '—')
+        self.assertEqual(
+            [row['count'] for row in flow['overdue_bucket_rows']],
+            [0, 0, 0, 0],
+        )
+        self.assertIn('没有复核承接', flow['empty_note'])
+
     def test_new_review_replaces_current_follow_up_but_keeps_history(self):
         case = self.make_case()
         self.send_cases()
@@ -1633,6 +1787,63 @@ class MeetingResponseReminderReviewSurfaceTests(
             [case['order'].id for case in ordered_cases],
         )
         self.assertEqual([row[20] for row in details], ['7 天以上', '3–7 天', '24 小时内'])
+
+    def test_due_review_flow_page_and_csv_share_the_same_summary(self):
+        case = self.make_case()
+        self.send_cases()
+        first_due = self.now + timedelta(hours=1)
+        self.review_case(
+            case, self.staff, outcome='waiting', note='先安排一次到期复查。',
+            reviewed_at=self.now + timedelta(minutes=1),
+            next_review_at=first_due,
+        )
+        self.review_case(
+            case, self.staff, outcome='resolved', note='',
+            reviewed_at=first_due + timedelta(hours=1),
+        )
+        dashboard_now = self.now + timedelta(days=1)
+
+        with patch('django.utils.timezone.now', return_value=dashboard_now):
+            page = self.client.get(
+                reverse('operations_dashboard'), {'days': 30},
+            )
+            export = self.client.get(
+                reverse('operations_dashboard_export'), {'days': 30},
+            )
+
+        self.assertEqual(page.status_code, 200)
+        html = page.content.decode('utf-8')
+        panel_start = html.index('meeting-response-reminder-effect-panel')
+        panel = html[panel_start:html.index('按接收角色观察', panel_start)]
+        self.assertIn('到期复查处理流', panel)
+        self.assertIn('已承接处理 <strong>1</strong> 次', panel)
+        self.assertIn('按时 <strong class="text-success">0</strong>', panel)
+        self.assertIn('逾期 <strong class="text-danger">1</strong>', panel)
+        self.assertIn('继续排队 <strong>0</strong>', panel)
+        self.assertIn('关闭复查 <strong>1</strong>', panel)
+        self.assertIn('中位处理延迟 <strong>1.0 小时</strong>', panel)
+        self.assertIn('24 小时内 1', panel)
+        for username in (self.seller.username, self.buyer.username, self.staff.username):
+            self.assertNotIn(username, panel)
+
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        summary = next(
+            row for row in rows if row and row[0] == '已承接处理'
+        )
+        self.assertEqual(summary, [
+            '已承接处理', '1', '按时', '0', '按时占比（%）', '0.0',
+            '逾期', '1', '逾期占比（%）', '100.0',
+            '继续排队', '0', '关闭复查', '1',
+            '中位处理延迟', '1.0 小时',
+        ])
+        buckets = next(
+            row for row in rows if row and row[0] == '逾期处理分档'
+        )
+        self.assertEqual(buckets, [
+            '逾期处理分档',
+            '24 小时内', '1', '1–3 天', '0',
+            '3–7 天', '0', '7 天以上', '0',
+        ])
 
     def test_filtered_page_keeps_twenty_but_csv_exports_all_matching_rows(self):
         cases = [self.make_case() for _index in range(21)]

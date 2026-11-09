@@ -11440,6 +11440,36 @@ def operations_dashboard_export(request):
         '各条逾期时长合计',
         meeting_reminder_effect['pending_review_due_total_label'],
     ])
+    due_review_flow = meeting_reminder_effect['due_review_flow']
+    writer.writerow([])
+    writer.writerow(['到期复查处理流'])
+    writer.writerow(['说明', due_review_flow['note']])
+    writer.writerow([
+        '已承接处理', due_review_flow['handled_count'],
+        '按时', due_review_flow['on_time_count'],
+        '按时占比（%）', (
+            due_review_flow['on_time_rate']
+            if due_review_flow['on_time_rate'] is not None else '—'
+        ),
+        '逾期', due_review_flow['overdue_count'],
+        '逾期占比（%）', (
+            due_review_flow['overdue_rate']
+            if due_review_flow['overdue_rate'] is not None else '—'
+        ),
+        '继续排队', due_review_flow['continuing_count'],
+        '关闭复查', due_review_flow['closed_count'],
+        '中位处理延迟', due_review_flow['median_delay_label'],
+    ])
+    writer.writerow([
+        '逾期处理分档',
+        *[
+            item
+            for row in due_review_flow['overdue_bucket_rows']
+            for item in (row['label'], row['count'])
+        ],
+    ])
+    if not due_review_flow['handled_count']:
+        writer.writerow(['空状态说明', due_review_flow['empty_note']])
     writer.writerow([
         '已过窗尚无动作', meeting_reminder_effect['no_action_count'],
         '观察中尚无动作', meeting_reminder_effect['open_count'],
