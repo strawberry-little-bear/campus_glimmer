@@ -94,6 +94,12 @@ FOLLOW_UP_SORT_ORDER = {
     'scheduled': 3,
     'closed': 4,
 }
+OVERDUE_BUCKETS = (
+    ('within_24h', '24 小时内', 24),
+    ('within_3d', '1–3 天', 72),
+    ('within_7d', '3–7 天', 168),
+    ('over_7d', '7 天以上', None),
+)
 PENDING_REVIEW_FILTER_OPTIONS = (
     ('due', '到期复查'),
     ('unreviewed', '未核对'),
@@ -135,6 +141,22 @@ def _label_hours(hours):
     if hours < 1:
         return '%.1f 分钟' % (hours * 60)
     return '%.1f 小时' % hours
+
+
+def _overdue_bucket(hours):
+    """把到期复查时长收敛到固定分档；边界归入后一档。"""
+    for key, label, upper_bound in OVERDUE_BUCKETS:
+        if upper_bound is None or hours < upper_bound:
+            return key, label
+    raise ValueError('到期复查分档缺少兜底档位')
+
+
+def _label_overdue_duration(hours):
+    if hours is None:
+        return '—'
+    if hours >= 24:
+        return '%.1f 天' % (hours / 24.0)
+    return _label_hours(hours)
 
 
 def _load_events(reminders):
@@ -189,7 +211,8 @@ def _build_pending_review_rows(observations, now):
     """把仍未行动且需要人工查看的提醒排序成可执行清单。
 
     到期复查排在首位，其次是历史结论没有排复查、首次未核对和已排期的样本。
-    同一组内已过观察窗的样本优先，再按提醒等待时间从长到短排列。人工复核
+    到期组按复查时间从早到晚排列；其它组内已过观察窗的样本优先，再按提醒
+    等待时间从长到短排列。人工复核
     只决定当前筛选与展示状态，不改变观察样本或业务记录。
     """
     reminders = [
@@ -242,6 +265,9 @@ def _build_pending_review_rows(observations, now):
         review_history = review_histories.get(reminder.pk, [])
         review = review_history[0] if review_history else None
         next_review_at = review['next_review_at'] if review else None
+        overdue_hours = None
+        overdue_bucket_key = ''
+        overdue_bucket_label = ''
         if review is None:
             follow_up_state = 'unreviewed'
             follow_up_timing_label = ''
@@ -253,8 +279,16 @@ def _build_pending_review_rows(observations, now):
             follow_up_timing_label = '历史复核结论尚未安排复查'
         elif next_review_at <= now:
             follow_up_state = 'due'
-            follow_up_timing_label = '已超期 %s' % _label_hours(
+            overdue_hours = max(
                 (now - next_review_at).total_seconds() / 3600.0,
+                0.0,
+            )
+            overdue_bucket_key, overdue_bucket_label = _overdue_bucket(
+                overdue_hours,
+            )
+            follow_up_timing_label = '已超期 %s · %s' % (
+                _label_overdue_duration(overdue_hours),
+                overdue_bucket_label,
             )
         else:
             follow_up_state = 'scheduled'
@@ -301,6 +335,10 @@ def _build_pending_review_rows(observations, now):
             'follow_up_state': follow_up_state,
             'follow_up_state_label': FOLLOW_UP_STATE_LABELS[follow_up_state],
             'follow_up_timing_label': follow_up_timing_label,
+            'overdue_hours': overdue_hours,
+            'overdue_label': _label_overdue_duration(overdue_hours),
+            'overdue_bucket_key': overdue_bucket_key,
+            'overdue_bucket_label': overdue_bucket_label,
             'reviewed_at_label': (
                 review['reviewed_at_label'] if review is not None else '—'
             ),
@@ -308,14 +346,59 @@ def _build_pending_review_rows(observations, now):
             'review_history_count': len(review_history),
             'review_history': review_history,
         })
-    rows.sort(key=lambda row: (
-        FOLLOW_UP_SORT_ORDER[row['follow_up_state']],
-        row['status'] != 'no_action',
-        -row['reminder_age_hours'],
-        row['sent_at'],
-        row['reminder_id'],
-    ))
+    def sort_key(row):
+        follow_up_group = FOLLOW_UP_SORT_ORDER[row['follow_up_state']]
+        if row['follow_up_state'] == 'due':
+            return (
+                follow_up_group,
+                row['next_review_at'],
+                row['status'] != 'no_action',
+                -row['reminder_age_hours'],
+                row['reminder_id'],
+            )
+        return (
+            follow_up_group,
+            row['status'] != 'no_action',
+            -row['reminder_age_hours'],
+            row['sent_at'],
+            row['reminder_id'],
+        )
+
+    rows.sort(key=sort_key)
     return rows
+
+
+def _build_due_triage(rows):
+    """汇总到期复查的积压时长与分档，不改变任何复核记录。"""
+    due_rows = [row for row in rows if row['follow_up_state'] == 'due']
+    bucket_counts = {
+        key: sum(row['overdue_bucket_key'] == key for row in due_rows)
+        for key, _label, _upper_bound in OVERDUE_BUCKETS
+    }
+    oldest_due = min(
+        due_rows,
+        key=lambda row: (row['next_review_at'], row['reminder_id']),
+        default=None,
+    )
+    total_hours = sum(row['overdue_hours'] for row in due_rows)
+    return {
+        'rows': [
+            {'key': key, 'label': label, 'count': bucket_counts[key]}
+            for key, label, _upper_bound in OVERDUE_BUCKETS
+        ],
+        'oldest_label': (
+            oldest_due['overdue_label'] if oldest_due is not None else '—'
+        ),
+        'oldest_at_label': (
+            oldest_due['next_review_at_label'] if oldest_due is not None else '—'
+        ),
+        'oldest_order_id': (
+            oldest_due['order_id'] if oldest_due is not None else None
+        ),
+        'total_label': _label_overdue_duration(
+            total_hours if due_rows else None,
+        ),
+    }
 
 
 def _notice_state(reminder):
@@ -603,6 +686,7 @@ def build_meeting_response_reminder_effect(
     ]
     latency_rows = _build_latency_rows(observations)
     pending_review_candidates = _build_pending_review_rows(observations, now)
+    pending_review_due_triage = _build_due_triage(pending_review_candidates)
     pending_review_total_count = len(pending_review_candidates)
     pending_review_status_counts = {
         'due': sum(
@@ -729,8 +813,10 @@ def build_meeting_response_reminder_effect(
         ),
         'pending_review_note': (
             '待人工核对清单只列截至当前仍没有同一提议回合动作的提醒。到期复查优先，'
-            '其次是旧结论未安排复查、首次未核对和已排期样本；同一组内已过观察窗的'
-            '优先。每次核对追加一条历史记录，继续等待或数据异常必须安排未来复查，'
+            '并按复查时间从早到晚、逾期最久优先排列；其次是旧结论未安排复查、首次'
+            '未核对和已排期样本，组内已过观察窗的优先。到期样本另按 24 小时、3 天、'
+            '7 天分档，并显示最久逾期与各条逾期时长合计。每次核对追加一条历史记录，'
+            '继续等待或数据异常必须安排未来复查，'
             '已处理或无需跟进会自动关闭复查。页面按最新结论筛选，并提供到期复查入口，'
             '默认聚焦未核对。人工结论不改变订单、预约、通知或提醒发送台账，也不会'
             '自动回应或推进预约。页面展示当前筛选前 20 条，CSV 导出当前筛选完整清单。'
@@ -753,6 +839,11 @@ def build_meeting_response_reminder_effect(
         'pending_review_all_rows': pending_review_all_rows,
         'pending_review_total_count': pending_review_total_count,
         'pending_review_due_count': pending_review_status_counts['due'],
+        'pending_review_due_bucket_rows': pending_review_due_triage['rows'],
+        'pending_review_oldest_due_label': pending_review_due_triage['oldest_label'],
+        'pending_review_oldest_due_at_label': pending_review_due_triage['oldest_at_label'],
+        'pending_review_oldest_due_order_id': pending_review_due_triage['oldest_order_id'],
+        'pending_review_due_total_label': pending_review_due_triage['total_label'],
         'pending_review_unreviewed_count': pending_review_status_counts['unreviewed'],
         'pending_review_reviewed_count': (
             pending_review_total_count - pending_review_status_counts['unreviewed']

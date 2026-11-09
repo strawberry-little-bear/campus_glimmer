@@ -588,7 +588,7 @@ class MeetingResponseReminderEffectSurfaceTests(
             '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
             '提议已等待', '提醒后已过', '阅读状态', '观察状态',
             '复核结论', '数据异常类型', '复核时间', '复核说明',
-            '复核历史次数', '跟进状态', '下次复查时间',
+            '复核历史次数', '跟进状态', '下次复查时间', '逾期时长', '逾期分档',
         ])
         detail_rows = []
         for row in rows[header_index + 1:]:
@@ -996,6 +996,75 @@ class MeetingResponseReminderReviewLedgerTests(
             due_case['order'].id,
         )
 
+    def test_due_reviews_are_bucketed_and_sorted_by_oldest_schedule(self):
+        overdue_hours = (12, 24, 48, 72, 168)
+        cases = [self.make_case() for _hours in overdue_hours]
+        self.send_cases()
+        reviews = []
+        for case, hours in zip(cases, overdue_hours):
+            next_review_at = self.evaluation_now - timedelta(hours=hours)
+            reviews.append(self.review_case(
+                case, self.reviewer, outcome='waiting',
+                note='逾期 %d 小时。' % hours,
+                reviewed_at=next_review_at - timedelta(hours=1),
+                next_review_at=next_review_at,
+            ))
+
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now, review_status='due',
+        )
+
+        self.assertEqual(effect['pending_review_due_count'], 5)
+        self.assertEqual(
+            [
+                (row['key'], row['label'], row['count'])
+                for row in effect['pending_review_due_bucket_rows']
+            ],
+            [
+                ('within_24h', '24 小时内', 1),
+                ('within_3d', '1–3 天', 2),
+                ('within_7d', '3–7 天', 1),
+                ('over_7d', '7 天以上', 1),
+            ],
+        )
+        self.assertEqual(
+            [row['overdue_hours'] for row in effect['pending_review_all_rows']],
+            [168.0, 72.0, 48.0, 24.0, 12.0],
+        )
+        self.assertEqual(
+            [row['order_id'] for row in effect['pending_review_all_rows']],
+            [case['order'].id for case in reversed(cases)],
+        )
+        self.assertEqual(
+            [row['overdue_bucket_key'] for row in effect['pending_review_all_rows']],
+            ['over_7d', 'within_7d', 'within_3d', 'within_3d', 'within_24h'],
+        )
+        self.assertEqual(effect['pending_review_oldest_due_label'], '7.0 天')
+        self.assertEqual(
+            effect['pending_review_oldest_due_at_label'],
+            timezone.localtime(reviews[-1].next_review_at).strftime('%Y-%m-%d %H:%M'),
+        )
+        self.assertEqual(effect['pending_review_oldest_due_order_id'], cases[-1]['order'].id)
+        self.assertEqual(effect['pending_review_due_total_label'], '13.5 天')
+
+    def test_no_due_review_has_explicit_empty_triage(self):
+        self.make_case()
+        self.send_cases()
+
+        effect = build_meeting_response_reminder_effect(
+            days=30, now=self.evaluation_now, review_status='due',
+        )
+
+        self.assertEqual(effect['pending_review_due_count'], 0)
+        self.assertEqual(
+            [row['count'] for row in effect['pending_review_due_bucket_rows']],
+            [0, 0, 0, 0],
+        )
+        self.assertEqual(effect['pending_review_oldest_due_label'], '—')
+        self.assertEqual(effect['pending_review_oldest_due_at_label'], '—')
+        self.assertIsNone(effect['pending_review_oldest_due_order_id'])
+        self.assertEqual(effect['pending_review_due_total_label'], '—')
+
     def test_new_review_replaces_current_follow_up_but_keeps_history(self):
         case = self.make_case()
         self.send_cases()
@@ -1388,9 +1457,9 @@ class MeetingResponseReminderReviewSurfaceTests(
             index for index, row in enumerate(rows)
             if row and row[0] == '订单编号'
         )
-        self.assertEqual(rows[header_index][-7:], [
+        self.assertEqual(rows[header_index][-9:], [
             '复核结论', '数据异常类型', '复核时间', '复核说明',
-            '复核历史次数', '跟进状态', '下次复查时间',
+            '复核历史次数', '跟进状态', '下次复查时间', '逾期时长', '逾期分档',
         ])
         detail = rows[header_index + 1]
         self.assertEqual(int(detail[0]), waiting_case['order'].id)
@@ -1407,6 +1476,7 @@ class MeetingResponseReminderReviewSurfaceTests(
                     reminder__proposal_event=waiting_case['proposal'],
                 ).next_review_at,
             ).strftime('%Y-%m-%d %H:%M'),
+            '—', '—',
         ])
 
     def test_due_review_filter_renders_follow_up_state_and_csv_columns(self):
@@ -1461,7 +1531,10 @@ class MeetingResponseReminderReviewSurfaceTests(
             index for index, row in enumerate(rows)
             if row and row[0] == '订单编号'
         )
-        self.assertEqual(rows[header_index][-2:], ['跟进状态', '下次复查时间'])
+        self.assertEqual(
+            rows[header_index][-5:],
+            ['复核历史次数', '跟进状态', '下次复查时间', '逾期时长', '逾期分档'],
+        )
         detail = rows[header_index + 1]
         self.assertEqual(int(detail[0]), due_case['order'].id)
         self.assertEqual(detail[17], '已到复查时间')
@@ -1469,6 +1542,97 @@ class MeetingResponseReminderReviewSurfaceTests(
             detail[18],
             timezone.localtime(due_review.next_review_at).strftime('%Y-%m-%d %H:%M'),
         )
+        self.assertTrue(detail[19].endswith('小时'))
+        self.assertEqual(detail[20], '24 小时内')
+        self.assertIn('到期复查分诊', html)
+        self.assertIn('最久逾期', html)
+
+    def test_due_triage_page_and_csv_use_oldest_schedule_first(self):
+        within_day = self.make_case()
+        within_week = self.make_case()
+        over_week = self.make_case()
+        triage_now = self.now + timedelta(seconds=5)
+        self.send_cases(now=triage_now)
+        next_review_times = {
+            within_day['order'].id: triage_now - timedelta(hours=7),
+            within_week['order'].id: triage_now - timedelta(days=4),
+            over_week['order'].id: triage_now - timedelta(days=10),
+        }
+        for case, next_review_at in zip(
+            (within_day, within_week, over_week),
+            next_review_times.values(),
+        ):
+            self.review_case(
+                case, self.staff, outcome='waiting', note='按逾期分诊。',
+                reviewed_at=next_review_at - timedelta(hours=1),
+                next_review_at=next_review_at,
+            )
+
+        with patch('django.utils.timezone.now', return_value=triage_now):
+            page = self.client.get(
+                reverse('operations_dashboard'),
+                {'days': 30, 'review_status': 'due'},
+            )
+            export = self.client.get(
+                reverse('operations_dashboard_export'),
+                {'days': 30, 'review_status': 'due'},
+            )
+        self.assertEqual(page.status_code, 200)
+        html = page.content.decode('utf-8')
+        panel_start = html.index('meeting-response-reminder-effect-panel')
+        panel = html[panel_start:html.index('按接收角色观察', panel_start)]
+        ordered_cases = (over_week, within_week, within_day)
+        positions = [
+            panel.index(
+                'href="%s"' % reverse('order_detail', args=[case['order'].id])
+            )
+            for case in ordered_cases
+        ]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIn('最久逾期', panel)
+        self.assertIn('10.0 天', panel)
+        self.assertIn('各条逾期合计', panel)
+        self.assertIn('14.3 天', panel)
+        self.assertIn('24 小时内 1', panel)
+        self.assertIn('1–3 天 0', panel)
+        self.assertIn('3–7 天 1', panel)
+        self.assertIn('7 天以上 1', panel)
+
+        rows = list(csv.reader(io.StringIO(export.content.decode('utf-8-sig'))))
+        bucket_summary = next(
+            row for row in rows if row and row[0] == '到期复查分档'
+        )
+        self.assertEqual(
+            bucket_summary,
+            [
+                '到期复查分档',
+                '24 小时内', '1', '1–3 天', '0',
+                '3–7 天', '1', '7 天以上', '1',
+            ],
+        )
+        summary = next(
+            row for row in rows if row and row[0] == '最久逾期'
+        )
+        self.assertEqual(
+            summary,
+            [
+                '最久逾期', '10.0 天', '对应复查时间',
+                timezone.localtime(next_review_times[over_week['order'].id]).strftime(
+                    '%Y-%m-%d %H:%M',
+                ),
+                '各条逾期时长合计', '14.3 天',
+            ],
+        )
+        header_index = next(
+            index for index, row in enumerate(rows)
+            if row and row[0] == '订单编号'
+        )
+        details = rows[header_index + 1:header_index + 4]
+        self.assertEqual(
+            [int(row[0]) for row in details],
+            [case['order'].id for case in ordered_cases],
+        )
+        self.assertEqual([row[20] for row in details], ['7 天以上', '3–7 天', '24 小时内'])
 
     def test_filtered_page_keeps_twenty_but_csv_exports_all_matching_rows(self):
         cases = [self.make_case() for _index in range(21)]

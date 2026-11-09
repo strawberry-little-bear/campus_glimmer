@@ -11426,6 +11426,21 @@ def operations_dashboard_export(request):
         meeting_reminder_effect['pending_review_closed_follow_up_count'],
     ])
     writer.writerow([
+        '到期复查分档',
+        *[
+            item
+            for row in meeting_reminder_effect['pending_review_due_bucket_rows']
+            for item in (row['label'], row['count'])
+        ],
+    ])
+    writer.writerow([
+        '最久逾期', meeting_reminder_effect['pending_review_oldest_due_label'],
+        '对应复查时间',
+        meeting_reminder_effect['pending_review_oldest_due_at_label'],
+        '各条逾期时长合计',
+        meeting_reminder_effect['pending_review_due_total_label'],
+    ])
+    writer.writerow([
         '已过窗尚无动作', meeting_reminder_effect['no_action_count'],
         '观察中尚无动作', meeting_reminder_effect['open_count'],
         '窗后动作（不进入清单）', meeting_reminder_effect['late_action_count'],
@@ -11437,7 +11452,7 @@ def operations_dashboard_export(request):
         '当前提议开始', '当前提议结束', '地点', '提醒发送时间',
         '提议已等待', '提醒后已过', '阅读状态', '观察状态',
         '复核结论', '数据异常类型', '复核时间', '复核说明',
-        '复核历史次数', '跟进状态', '下次复查时间',
+        '复核历史次数', '跟进状态', '下次复查时间', '逾期时长', '逾期分档',
     ])
     for row in meeting_reminder_effect['pending_review_all_rows']:
         writer.writerow([
@@ -11452,6 +11467,8 @@ def operations_dashboard_export(request):
             row['reviewed_at_label'], row['review_note'],
             row['review_history_count'], row['follow_up_state_label'],
             row['next_review_at_label'],
+            row['overdue_label'],
+            row['overdue_bucket_label'] or '—',
         ])
     if not meeting_reminder_effect['pending_review_all_rows']:
         writer.writerow([meeting_reminder_effect['pending_review_empty_note']])

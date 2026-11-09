@@ -31,6 +31,21 @@ meeting_response_reminder_effect，模板不另算分母，也不按用户展示
         <a href="{% url 'operations_dashboard_export' %}?days={{ meeting_response_reminder_effect.period_days }}&amp;review_status={{ meeting_response_reminder_effect.review_status }}" class="btn btn-sm btn-outline-primary ms-sm-auto"><i class="bi bi-download me-1"></i>导出当前筛选完整 CSV</a>
     </div>
     <p class="small text-muted mb-3">未核对 {{ meeting_response_reminder_effect.pending_review_unreviewed_count }} · 已核对 {{ meeting_response_reminder_effect.pending_review_reviewed_count }} · 继续等待 {{ meeting_response_reminder_effect.pending_review_waiting_count }} · 已处理 {{ meeting_response_reminder_effect.pending_review_resolved_count }} · 数据异常 {{ meeting_response_reminder_effect.pending_review_data_issue_count }} · 无需跟进 {{ meeting_response_reminder_effect.pending_review_no_followup_count }}<br>到期复查 {{ meeting_response_reminder_effect.pending_review_due_count }} · 历史未排期 {{ meeting_response_reminder_effect.pending_review_unscheduled_follow_up_count }} · 已安排复查 {{ meeting_response_reminder_effect.pending_review_scheduled_follow_up_count }} · 复查已关闭 {{ meeting_response_reminder_effect.pending_review_closed_follow_up_count }}</p>
+    {% if meeting_response_reminder_effect.pending_review_due_count %}
+    <div class="alert alert-light border py-2 mb-3" role="status">
+        <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+            <strong>到期复查分诊</strong>
+            <span>最久逾期 <strong class="text-danger">{{ meeting_response_reminder_effect.pending_review_oldest_due_label }}</strong>{% if meeting_response_reminder_effect.pending_review_oldest_due_order_id %}<small class="text-muted">（订单 #{{ meeting_response_reminder_effect.pending_review_oldest_due_order_id }}，原复查时间 {{ meeting_response_reminder_effect.pending_review_oldest_due_at_label }}）</small>{% endif %}</span>
+            <span>各条逾期合计 <strong>{{ meeting_response_reminder_effect.pending_review_due_total_label }}</strong></span>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mb-2" aria-label="到期复查逾期分档">
+            {% for bucket in meeting_response_reminder_effect.pending_review_due_bucket_rows %}
+            <span class="badge {% if bucket.count %}text-bg-danger{% else %}text-bg-light border text-muted{% endif %}">{{ bucket.label }} {{ bucket.count }}</span>
+            {% endfor %}
+        </div>
+        <small class="text-muted">到期组按原复查时间从早到晚排列；累计时长是各条待复核记录逾期时长之和，用来判断积压形状，不替代逐条判断。</small>
+    </div>
+    {% endif %}
     {% if meeting_response_reminder_effect.pending_review_count %}
     <div class="ops-table-wrap">
         <table class="table ops-table align-middle mb-0 meeting-response-pending-review">
