@@ -205,6 +205,24 @@ class LostFoundReportQueueTests(TestCase):
         self.assertContains(response, closed.get_reason_display())
         self.assertNotContains(response, '其他问题')
 
+    def test_queue_second_page_exposes_the_current_page_to_assistive_technology(self):
+        for index in range(21):
+            post = make_post(self.owner, title=f'举报分页记录 {index:02d}')
+            LostFoundReport.objects.create(post=post, reporter=self.reader, reason='other')
+        self.client.force_login(self.staff)
+
+        response = self.client.get(self.url, {'page': 2})
+        html = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['page_obj'].number, 2)
+        self.assertContains(response, 'aria-label="上一页"')
+        self.assertRegex(
+            html,
+            r'<li class="page-item active"><span class="page-link" '
+            r'aria-current="page" aria-label="第 2 页，共 2 页">2 / 2</span></li>',
+        )
+
     def test_review_writes_the_verdict_and_notifies_only_the_reporter(self):
         report = LostFoundReport.objects.create(
             post=self.post, reporter=self.reader, reason='impersonation',

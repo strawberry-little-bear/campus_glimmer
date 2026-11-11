@@ -103,6 +103,12 @@ class CampusCampaignTests(TestCase):
         self.assertContains(first, '第 1 / 2 页')
         self.assertContains(second, '第 2 / 2 页')
         self.assertContains(second, 'value="/listings/campaigns/graduation-clearance/?page=2"')
+        self.assertRegex(
+            second.content.decode(),
+            r'<li class="page-item active">\s*<span class="page-link" '
+            r'aria-current="page" aria-label="第 2 页">2</span>\s*</li>',
+        )
+        self.assertContains(second, 'aria-label="第 1 页">1</a>')
 
     def test_campaign_detail_clamps_invalid_and_out_of_range_pages(self):
         for index in range(13):

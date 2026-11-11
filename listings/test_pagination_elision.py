@@ -37,7 +37,14 @@ PAGE_LINK_RE = re.compile(
     r'<a class="page-link" href="\?page=(\d+)([^"]*)"[^>]*>(.*?)</a>', re.S
 )
 GAP_RE = re.compile(r'class="page-link page-link-gap"')
-ACTIVE_RE = re.compile(r'<li class="page-item active"><a class="page-link" href="\?page=(\d+)')
+CURRENT_PAGE_LINK_RE = re.compile(
+    r'<span class="page-link" aria-current="page" aria-label="第 (\d+) 页">\d+</span>'
+)
+ACTIVE_PAGE_RE = re.compile(
+    r'<li class="page-item active">\s*<span class="page-link" '
+    r'aria-current="page" aria-label="第 (?P<label>\d+) 页">'
+    r'(?P<number>\d+)</span>\s*</li>'
+)
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CSS_PATH = os.path.join(PROJECT_ROOT, 'static', 'css', 'style.css')
@@ -58,14 +65,17 @@ def pagination_block(html):
 
 
 def page_numbers(html):
-    """按渲染顺序取回数字页码，排除上一页/下一页两个文字链接。"""
-    numbers = []
-    for match in PAGE_LINK_RE.finditer(pagination_block(html)):
+    """按渲染顺序取回数字页码，包含链接和不可点击的当前页。"""
+    block = pagination_block(html)
+    numbered = []
+    for match in PAGE_LINK_RE.finditer(block):
         label = match.group(3).strip()
         if label in ('上一页', '下一页'):
             continue
-        numbers.append(int(match.group(1)))
-    return numbers
+        numbered.append((match.start(), int(match.group(1))))
+    for match in CURRENT_PAGE_LINK_RE.finditer(block):
+        numbered.append((match.start(), int(match.group(1))))
+    return [number for _position, number in sorted(numbered)]
 
 
 class PaginationElisionTests(TestCase):
@@ -118,12 +128,31 @@ class PaginationElisionTests(TestCase):
             '分页条仍然把每一页都渲染出来了',
         )
 
-    def test_item_list_marks_current_page_active(self):
+    def _assert_current_page(self, html, current):
+        active = ACTIVE_PAGE_RE.search(html)
+        self.assertIsNotNone(active, '分页条没有渲染当前页语义')
+        self.assertEqual(active.group('label'), str(current))
+        self.assertEqual(active.group('number'), str(current))
+
+    def test_item_list_marks_current_page_as_current(self):
         response = self.client.get(reverse('item_list'), {'page': 4})
-        html = response.content.decode()
-        active = ACTIVE_RE.search(html)
-        self.assertIsNotNone(active, '分页条没有高亮当前页')
-        self.assertEqual(int(active.group(1)), 4)
+        self._assert_current_page(response.content.decode(), 4)
+
+    def test_list_number_links_have_explicit_accessible_names(self):
+        for view_name in ('item_list', 'lost_found_list'):
+            response = self.client.get(reverse(view_name), {'page': 6})
+            html = response.content.decode()
+            self.assertRegex(
+                html,
+                r'<a class="page-link" href="\?page=5[^"]*" '
+                r'aria-label="第 5 页">5</a>',
+                view_name + ' 的普通页码没有明确的可访问名称',
+            )
+            self._assert_current_page(html, 6)
+
+    def test_lost_found_list_marks_current_page_as_current(self):
+        response = self.client.get(reverse('lost_found_list'), {'page': 6})
+        self._assert_current_page(response.content.decode(), 6)
 
     def test_item_list_keeps_filter_query_on_page_links(self):
         response = self.client.get(reverse('item_list'), {'sort': 'price_asc', 'page': 2})
