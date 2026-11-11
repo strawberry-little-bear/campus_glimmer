@@ -517,7 +517,7 @@
 <a id="order-g1"></a>
 
 <details>
-<summary>预约的创建与推进（5 条，含缩进子项）</summary>
+<summary>预约的创建与推进（6 条，含缩进子项）</summary>
 
 - 买家从商品详情发起交易预约。
 
