@@ -139,7 +139,7 @@ class PaginationElisionTests(TestCase):
         self._assert_current_page(response.content.decode(), 4)
 
     def test_list_number_links_have_explicit_accessible_names(self):
-        for view_name in ('item_list', 'lost_found_list'):
+        for view_name in ('item_list', 'demand_list', 'lost_found_list'):
             response = self.client.get(reverse(view_name), {'page': 6})
             html = response.content.decode()
             self.assertRegex(
