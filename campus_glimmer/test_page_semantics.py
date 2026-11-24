@@ -868,6 +868,37 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
             with self.subTest(page=label):
                 self._assert_accessible_error_summary(label, response, field_id)
 
+    def test_lost_found_lead_get_renders_an_untouched_form(self):
+        # 「提交线索」在失物招领详情页上是一条普通 <a href> 链接，用户点进来时
+        # request.POST 是空的。以前视图无条件把表单绑到 request.POST 上，空数据等于
+        # 「已提交但必填项全空」，页面一打开就是 aria-invalid + 错误摘要，
+        # 读屏软件先念一遍错误才念到表单本身。这里同时守住两个方向：
+        # GET 给出的必须是干净的未绑定表单，POST 空数据仍然要报错。
+        response = self.client.get(
+            reverse('submit_lost_found_lead', args=[self.lost_found.id]))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode('utf-8')
+        self.assertNotIn('aria-invalid', html)
+        self.assertNotIn('data-form-error-summary', html)
+        unlabelled, nameless, altless = _semantics_problems(html)
+        self.assertEqual(unlabelled, [])
+        self.assertEqual(nameless, [])
+        self.assertEqual(altless, [])
+        duplicates, dangling = _id_reference_problems(html)
+        self.assertEqual(duplicates, [])
+        self.assertEqual(dangling, [])
+        self.assertEqual(_heading_problems(html), [])
+
+        # 反向：不能为了修好 GET 把空提交的校验一起关掉。
+        before = LostFoundLead.objects.count()
+        invalid = self.client.post(
+            reverse('submit_lost_found_lead', args=[self.lost_found.id]), {})
+        self.assertEqual(invalid.status_code, 200)
+        invalid_html = invalid.content.decode('utf-8')
+        self.assertIn('aria-invalid="true"', invalid_html)
+        self.assertIn('data-form-error-summary', invalid_html)
+        self.assertEqual(LostFoundLead.objects.count(), before)
+
     def test_public_account_forms_focus_an_accessible_error_summary(self):
         # 登录和注册没有现成的登录态，单独跑无效提交，避免被上面的页面清单漏掉。
         self.client.logout()

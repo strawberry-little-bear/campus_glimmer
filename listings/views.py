@@ -15824,7 +15824,14 @@ def submit_lost_found_lead(request, post_id):
     if existing and existing.status not in {'rejected', 'withdrawn'}:
         messages.info(request, '你已经提交过这条记录的线索，请等待发布者处理。')
         return redirect('lost_found_detail', post.id)
-    form = LostFoundLeadForm(request.POST, instance=existing, post=post)
+    # GET 也必须给一份未绑定的表单：这个入口在失物招领举报页上是一条普通
+    # <a href> 链接，用户点进来时 request.POST 是空的。以前无条件把表单绑到
+    # request.POST 上，空数据等于「已提交但必填项全空」，页面一打开就是一片红
+    # 和 aria-invalid，读屏软件先念一遍错误才念到表单本身。
+    if request.method == 'POST':
+        form = LostFoundLeadForm(request.POST, instance=existing, post=post)
+    else:
+        form = LostFoundLeadForm(instance=existing, post=post)
     form.instance.post = post
     form.instance.respondent = request.user
     if form.is_valid():
