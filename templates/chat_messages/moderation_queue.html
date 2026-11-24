@@ -156,7 +156,7 @@
                     {% if event.appeal.status == 'pending' %}
                     <form method="post" action="{% url 'resolve_moderation_appeal' event.appeal.id %}" class="mod-event-appeal-form">
                         {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <label>处理说明<textarea name="resolution_note" rows="2" class="form-control form-control-sm mt-1" maxlength="1000" required placeholder="写给用户看的复核说明"></textarea></label>
+                        <label for="appeal-resolution-{{ event.appeal.id }}">处理说明</label><textarea id="appeal-resolution-{{ event.appeal.id }}" name="resolution_note" rows="2" class="form-control form-control-sm mt-1" maxlength="1000" required placeholder="写给用户看的复核说明"></textarea>
                         <button class="btn btn-sm btn-outline-secondary" type="submit" name="decision" value="upheld">维持原判</button>
                         <button class="btn btn-sm btn-outline-success" type="submit" name="decision" value="accepted">申诉成立</button>
                     </form>
