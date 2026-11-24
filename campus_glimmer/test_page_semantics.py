@@ -536,6 +536,14 @@ class DemoContentMixin:
             appointment=self.appointment, reported_by=self.buyer, accused=self.seller,
             reason='no_show', detail='语义测试预约异常',
         )
+        # 一条别人发布、当前用户还没提交过举报的记录：report_lost_found 的 GET 分支只有这种数据才渲染得出表单，
+        # 否则视图会回到详情页，举报表单模板一直落在渲染态检查之外。
+        self.unreported_lost_found = LostFoundPost.objects.create(
+            reporter=self.seller, post_type='found', title='捞到一个耳机',
+            description='教室后排底下', category=self.category,
+            location=self.location, occurred_at=self.item.created_at,
+        )
+
         self.lost_found_report = LostFoundReport.objects.create(
             post=self.lost_found, reporter=self.buyer, reason='impersonation',
             detail='语义测试举报',
@@ -682,7 +690,7 @@ class SemanticsChecksMixin:
 class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
     """普通用户视角：登录后能走通的每一类页面。"""
 
-    MIN_RENDERED = 44
+    MIN_RENDERED = 46
 
     PAGES = (
         ('首页', 'home'),
@@ -731,6 +739,7 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         ('公开档案', 'public_profile'),
         ('校园认证', 'campus_verification'),
         ('我的失物举报', 'my_lost_found_reports'),
+        ('举报失物招领', 'report_lost_found'),
         ('评价订单', 'rate_order'),
     )
 
@@ -741,6 +750,7 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         '求购详情': lambda self: [self.demand.id],
         '失物招领详情（发布者视角）': lambda self: [self.owned_lost_found.id],
         '失物招领详情（访客视角）': lambda self: [self.lost_found.id],
+        '举报失物招领': lambda self: [self.unreported_lost_found.id],
         '编辑失物招领': lambda self: [self.owned_lost_found.id],
         '编辑求购': lambda self: [self.demand.id],
         '举报商品': lambda self: [self.item.id],
