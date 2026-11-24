@@ -1341,6 +1341,48 @@ class PaginationAccessibleNameTests(SimpleTestCase):
             + '\n'.join('  ' + item for item in offenders),
         )
 
+    def test_current_page_indicator_names_the_page_and_total(self):
+        """当前页不能只靠「2 / 5」这段可见文本当名字。
+
+        aria-current 只说明「这是当前位置」，不说明「这是第几页、一共几页」。
+        同页出现多个分页器时问题才暴露：收件箱页同时有「收到的消息」和「发出的
+        消息」两个分页器，两处裸「2 / 5」在辅助技术里念起来一模一样，用户根本
+        分不清自己站在哪个列表的第几页。所以当前页要显式写 aria-label。
+
+        光写了还不够——标签里必须带上可见文本用到的页码占位符。只写死
+        aria-label="第 1 页" 这种复制来的常量，翻到第二页就名不副实，比不写更糟：
+        读屏软件会笃定地念出一个错的页码。这里用占位符交叉验证把这种情况挡下来。
+
+        纯装饰的省略号按 _is_hidden 跳过，不进本检查。
+        """
+        offenders = []
+        total = 0
+        for relative, text in self._sources():
+            for node, _builder in self._page_links(text):
+                if _is_hidden(node) or not self._in_active_item(node):
+                    continue
+                total += 1
+                label = (node.attrs.get('aria-label') or '').strip()
+                if not label:
+                    offenders.append(
+                        '%s: 当前页只靠可见文本当名字，同页多个分页器时分不清'
+                        '是谁的当前页，补 aria-label' % relative)
+                    continue
+                placeholders = set(
+                    re.findall(r'\{\{\s*([^}]+?)\s*\}\}', _text_of(node)))
+                if placeholders and not any(p in label for p in placeholders):
+                    offenders.append(
+                        '%s: aria-label="%s" 没带上可见文本的页码占位符 %s，'
+                        '复制来的常量翻页就名不副实'
+                        % (relative, label, '、'.join(sorted(placeholders))))
+
+        self.assertGreater(total, 0, '一个当前页指示器都没扫到，检查逻辑失效了')
+        self.assertEqual(
+            offenders, [],
+            '当前页要显式写 aria-label，并带上页码占位符：\n'
+            + '\n'.join('  ' + item for item in offenders),
+        )
+
 
 class GridFirstCellTests(SimpleTestCase):
     """窄首列网格的首格内容契约：固定宽度的第一轨只放得了很短的内容。
