@@ -42,16 +42,14 @@
                 {% else %}
                 <form method="post" action="{% url 'submit_moderation_appeal' event.id %}" class="mod-event-appeal-form">
                     {% csrf_token %}
-                    <label>申诉原因
-                        <select name="reason" class="form-select form-select-sm mt-1">
+                    <label for="appeal-reason-{{ event.id }}">申诉原因</label>
+                        <select id="appeal-reason-{{ event.id }}" name="reason" class="form-select form-select-sm mt-1">
                             <option value="not_violation">内容不违规</option>
                             <option value="missing_context">缺少语境</option>
                             <option value="other">其他需要补充的情况</option>
                         </select>
-                    </label>
-                    <label>申诉说明
-                        <textarea name="statement" rows="3" maxlength="1000" class="form-control form-control-sm mt-1" required placeholder="请补充当时的语境或你认为需要复核的原因。"></textarea>
-                    </label>
+                    <label for="appeal-statement-{{ event.id }}">申诉说明</label>
+                        <textarea id="appeal-statement-{{ event.id }}" name="statement" rows="3" maxlength="1000" class="form-control form-control-sm mt-1" required placeholder="请补充当时的语境或你认为需要复核的原因。"></textarea>
                     <button class="btn btn-sm btn-primary" type="submit"><i class="bi bi-send me-1"></i>提交申诉</button>
                 </form>
                 {% endif %}
