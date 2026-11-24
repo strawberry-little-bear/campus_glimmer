@@ -453,6 +453,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [失物招领图片辅助](lost-found-image-assist-design.md) | 想了解一条记录为什么只放一张照片、变体管线为什么复用商品那一套，以及哪些信息必须留在镜头外 |
 | [失物招领举报闭环](lost-found-report-design.md) | 想了解举报为什么只对运营可见、审核结论为什么只有一条写路径，以及哪些治理能力刻意留到下一轮 |
 | [文字对比度契约](contrast-contract-design.md) | 想了解深绿面板浅色文字的合成规则、令牌下限，以及为什么结论落在静态契约里 |
+| [减少动态效果契约](reduced-motion-contract-design.md) | 想了解 reduced-motion 为什么必须是 * 通配总闸而不是点名表，压秒为什么比 transition: none 安全，以及四个测试各守什么 |
 | [个人历史、专题足迹与领取申请分页](personal-queue-pagination-design.md) | 想了解浏览足迹上限、专题历史分页、申请状态排序、全量待办统计与安全原页回跳 |
 | [卖家商品工作台分页](my-items-workspace-pagination-design.md) | 想了解状态页签为什么改为服务端分页、全量统计如何保留，以及批量操作怎样回到原页 |
 | [生产部署基线](production-deployment.md) | 想配置 PostgreSQL、Redis、MinIO、Gunicorn 与生产探针 |

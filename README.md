@@ -417,7 +417,8 @@ git diff --check
 
 除完整测试集外，仓库里还有一批「页面不报错、只有截图才看得出来」的守卫测试：
 标题层级与表单标签看 `campus_glimmer/test_page_semantics.py`，页内跳转落点是否让出吸顶导航
-看 `campus_glimmer/test_anchor_scroll_margin.py`。改动模板、样式或表单时，这两个文件要一起跑。
+看 `campus_glimmer/test_anchor_scroll_margin.py`，`prefers-reduced-motion` 是否还是 * 通配总闸
+看 `campus_glimmer/test_reduced_motion.py`。改动模板、样式或表单时，这三个文件要一起跑。
 
 GitHub Actions 在推送到 `main` 或提交 Pull Request 时执行语法检查、Django check、
 迁移一致性检查和完整测试集。四个任务分工不同：`quality` 在 SQLite 下跑完整业务测试，
@@ -471,7 +472,9 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 复算每个浅色文字位点的最坏背景，再断言达到 4.5:1。改渐变色标、高光透明度、文字透明度
 或令牌值，这里会立刻变红，不必再为此起一轮浏览器审计。分页器也会把当前页渲染成不可点击的
 `aria-current="page"` 指示器，并给当前页补“第 N 页，共 M 页”、给普通数字页补“第 N 页”名称；商品、求购、专题、失物招领、举报审核、内容申诉、会话、站内动态、我的举报和通知
-的数字分页与第二页渲染都有回归测试，不再只依赖模板源码检查。键盘焦点、窄屏布局与图片加载仍在逐页补齐，
+的数字分页与第二页渲染都有回归测试，不再只依赖模板源码检查。动效这边留了一条 `*` 通配的
+`@media (prefers-reduced-motion: reduce)` 总闸，把全场动画与过渡压到瞬时，新增动效默认就被
+收口，见[减少动态效果契约](docs/reduced-motion-contract-design.md)。键盘焦点、窄屏布局与图片加载仍在逐页补齐，
 见[后续路线图](docs/roadmap.md)。
 
 ---
@@ -509,6 +512,7 @@ MinIO，对对象存储做真实上传、签名 URL 与备份恢复验证；`bac
 | 预约异常的质量指标、处理动作链与旧数据边界 | [预约异常质量与处理链设计](docs/meeting-incident-quality-design.md) |
 | 400 / 403 / 404 / 500 与 CSRF 错误页的恢复路径和隐私边界 | [品牌化错误体验设计](docs/error-experience-design.md) |
 | 深绿面板浅色文字的合成规则与 AA 下限 | [文字对比度契约](docs/contrast-contract-design.md) |
+| reduced-motion 为什么是 * 通配总闸、压秒为什么比 transition: none 安全 | [减少动态效果契约](docs/reduced-motion-contract-design.md) |
 | 浏览足迹、专题历史与免费领取申请队列的分页边界 | [个人队列分页设计](docs/personal-queue-pagination-design.md) |
 | 学期阶段、统计快照与交易高峰 | [学期日历与交易高峰](docs/academic-calendar.md) |
 | 当前取舍、隐私边界与实现纪律 | [当前取舍与边界](docs/product-boundaries.md) |

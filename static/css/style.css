@@ -10882,3 +10882,26 @@ html.js .ops-section[data-ops-deferred][data-ops-failed]:focus-within::after, ht
 
 /* 对比度补齐：Bootstrap 默认 code 粉 #d63384 在浅色面板上仅 4.0x，统一压深到 AA 以上 */
 code { color: #b02a6b; }
+
+/* 动效兜底：prefers-reduced-motion 下把全场动画与过渡压到瞬时。
+   上面两条 @media (prefers-reduced-motion: reduce) 都是按选择器点名处理的，
+   只照顾了进度步骤和懒加载骨架微光。这种点名法有个结构性漏洞：往后任何人新增
+   一处 transition 或 keyframes，都会悄悄落在覆盖之外，而页面上看不出任何异常——
+   只有真的在系统里打开「减少动态效果」的用户会撞上。当前漏网的就包括
+   .unread-toast 的一次性入场动画和几十处 hover 过渡。
+   这里用 * 通配 + !important 做总闸收口。做法是把时长压到 0.01ms、循环次数钉成 1，
+   而不是写 transition: none：属性该变的照样变，只是不再有中间帧，infinite 的
+   脉冲和骨架微光也会随之停下，不会把元素留在半空状态。.unread-toast 的基础态
+   没有 opacity: 0，压秒后只是瞬间出现，不会变成看不见。
+   scroll-behavior 今天全站没有声明，写在这里是给将来补平滑滚动的人留的兜底。
+   项目 JS 不监听 transitionend / animationend，压秒不会打断任何交互逻辑。 */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
