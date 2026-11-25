@@ -884,8 +884,79 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
                 ),
                 'id_message',
             ),
+            (
+                '批量发布商品',
+                self.client.post(
+                    reverse('bulk_create_items'),
+                    {
+                        'form-TOTAL_FORMS': '5',
+                        'form-INITIAL_FORMS': '0',
+                        'form-MAX_NUM_FORMS': '20',
+                    },
+                ),
+                'id_category',
+            ),
+            (
+                '批量发布商品（行内字段错误）',
+                self.client.post(
+                    reverse('bulk_create_items'),
+                    {
+                        'form-TOTAL_FORMS': '2',
+                        'form-INITIAL_FORMS': '0',
+                        'form-MAX_NUM_FORMS': '20',
+                        'category': str(self.category.id),
+                        'form-0-title': '摘要里的第一行',
+                        'form-0-trade_mode': 'sale',
+                        'form-0-description': '',
+                        'form-0-price': '',
+                        'form-0-condition': '',
+                    },
+                ),
+                'id_form-0-description',
+            ),
+            (
+                '编辑求购',
+                self.client.post(reverse('edit_demand', args=[self.demand.id]), {}),
+                'id_title',
+            ),
+            (
+                '编辑失物招领',
+                self.client.post(
+                    reverse('edit_lost_found', args=[self.owned_lost_found.id]), {},
+                ),
+                'id_title',
+            ),
+            (
+                '举报失物招领',
+                self.client.post(
+                    reverse('report_lost_found', args=[self.unreported_lost_found.id]),
+                    {},
+                ),
+                'id_reason',
+            ),
+            (
+                '给用户发私信（无商品）',
+                self.client.post(reverse('send_message', args=[self.seller.id]), {}),
+                'id_content',
+            ),
         )
 
+        for label, response, field_id in cases:
+            with self.subTest(page=label):
+                self._assert_accessible_error_summary(label, response, field_id)
+
+    def test_seller_side_item_form_focuses_an_accessible_error_summary(self):
+        # 编辑商品只有卖家能打开：买家登录时只会拿到 302，
+        # 所以这条用例必须切到卖家身份再发一次无效 POST，
+        # 否则断言会落在一个重定向上，看起来像“通过”。
+        self.client.force_login(self.seller)
+        cases = (
+            (
+                '编辑商品',
+                self.client.post(reverse('edit_item', args=[self.item.id]), {}),
+                'id_title',
+            ),
+        )
         for label, response, field_id in cases:
             with self.subTest(page=label):
                 self._assert_accessible_error_summary(label, response, field_id)
@@ -1113,6 +1184,16 @@ class StaffPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
                 '预约异常处理',
                 self.client.post(
                     reverse('review_meeting_incident', args=[incident.id]), {},
+                ),
+                'id_status',
+            ),
+            (
+                '审核失物举报',
+                self.client.post(
+                    reverse(
+                        'review_lost_found_report', args=[self.lost_found_report.id],
+                    ),
+                    {},
                 ),
                 'id_status',
             ),
