@@ -518,6 +518,14 @@ class DemoContentMixin:
             item=self.item, buyer=self.buyer, seller=self.seller,
             agreed_price='45.00', status='completed',
         )
+        # 一笔可以发起争议的订单：open_dispute 只接受 confirmed/meeting/completed/
+        # borrowed/returned，且不能已有争议。self.order 是 pending、self.completed_order
+        # 已经挂着 self.dispute，两个都进不去 GET 分支，争议表单模版于是一直落在
+        # 渲染态检查之外。completed 不触发 item 上的活跃订单唯一约束。
+        self.disputable_order = Order.objects.create(
+            item=self.item, buyer=self.buyer, seller=self.seller,
+            agreed_price='45.00', status='completed',
+        )
         self.report = Report.objects.create(
             item=self.gift_item, reporter=self.buyer, reason='spam',
             detail='语义测试举报',
@@ -690,7 +698,7 @@ class SemanticsChecksMixin:
 class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCase):
     """普通用户视角：登录后能走通的每一类页面。"""
 
-    MIN_RENDERED = 46
+    MIN_RENDERED = 48
 
     PAGES = (
         ('首页', 'home'),
@@ -741,10 +749,14 @@ class RenderedPageSemanticsTests(SemanticsChecksMixin, DemoContentMixin, TestCas
         ('我的失物举报', 'my_lost_found_reports'),
         ('举报失物招领', 'report_lost_found'),
         ('评价订单', 'rate_order'),
+        ('发起交易争议', 'open_dispute'),
+        ('发送消息（无商品）', 'send_message'),
     )
 
     ARGS = {
         '评价订单': lambda self: [self.completed_order.id],
+        '发起交易争议': lambda self: [self.disputable_order.id],
+        '发送消息（无商品）': lambda self: [self.seller.id],
         '分类商品列表': lambda self: [self.category.id],
         '商品详情': lambda self: [self.item.id],
         '求购详情': lambda self: [self.demand.id],
