@@ -95,12 +95,10 @@
         <input type="hidden" name="bulk_import_token" value="{{ import_token }}">
         {% endif %}
 
-        {% if settings_form.non_field_errors or formset.non_form_errors %}
-        <div class="alert alert-danger">
-            {{ settings_form.non_field_errors }}
-            {{ formset.non_form_errors }}
-        </div>
-        {% endif %}
+        {# 无效提交时由共享错误摘要片段统一汇总：
+            共享样式表单字段、formset 非字段错误（如“请至少填写一条商品”）
+            以及每一行的字段错误，避免错误只能在行内逐个发现。 #}
+        {% include 'includes/form_error_summary.html' with form=settings_form formset=formset %}
 
         <div class="form-section">
             <h2><span>01</span>本批次共同设置</h2>
