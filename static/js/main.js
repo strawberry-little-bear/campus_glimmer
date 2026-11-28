@@ -96,6 +96,131 @@ const createSectionRevealer = function (panels, options) {
         revealThrough: revealThrough,
     };
 };
+// 全局搜索建议的 combobox 控制器。输入框在模板里声明 role="combobox"，
+// 这里负责把键盘导航落到 ARIA 状态上：每个选项补 id 和 aria-selected，
+// 方向键走统一的 setActive，同步 is-active、aria-selected 和输入框上的
+// aria-activedescendant。读屏要的「当前选中哪一项」就是从这里来的；
+// 散落在各键盘分支里各改各的，必然有一处漏掉。
+const createSearchSuggestController = function (options) {
+    const searchForm = options.form;
+    const searchInput = options.input;
+    const suggestionMenu = options.menu;
+    if (!searchInput || !suggestionMenu) return null;
+    let suggestionTimer = null;
+    let suggestionRequest = null;
+    let activeSuggestion = -1;
+
+    const setActive = function (index) {
+        const optionNodes = suggestionMenu.querySelectorAll('.search-suggest-option');
+        activeSuggestion = index;
+        optionNodes.forEach(function (option, position) {
+            const selected = position === index;
+            option.classList.toggle('is-active', selected);
+            option.setAttribute('aria-selected', selected ? 'true' : 'false');
+        });
+        if (index >= 0 && optionNodes[index]) {
+            searchInput.setAttribute('aria-activedescendant', optionNodes[index].id);
+        } else {
+            searchInput.removeAttribute('aria-activedescendant');
+        }
+    };
+
+    const hideSuggestions = function () {
+        suggestionMenu.hidden = true;
+        searchInput.setAttribute('aria-expanded', 'false');
+        setActive(-1);
+    };
+
+    const renderSuggestions = function (suggestions) {
+        suggestionMenu.replaceChildren();
+        setActive(-1);
+        if (!suggestions.length) {
+            hideSuggestions();
+            return;
+        }
+        suggestions.forEach(function (suggestion, index) {
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.className = 'search-suggest-option';
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            option.id = `${suggestionMenu.id}-option-${index}`;
+            option.dataset.index = String(index);
+            option.innerHTML = `<span class="search-suggest-icon"><i class="bi ${suggestion.kind === 'category' ? 'bi-grid' : suggestion.kind === 'location' ? 'bi-geo-alt' : 'bi-clock-history'}"></i></span><span class="search-suggest-main"><strong></strong><small></small></span>`;
+            option.querySelector('strong').textContent = suggestion.text;
+            option.querySelector('small').textContent = `${suggestion.label}${suggestion.meta ? ` · ${suggestion.meta}` : ''}`;
+            option.addEventListener('click', function () {
+                searchInput.value = suggestion.text;
+                hideSuggestions();
+                searchForm.submit();
+            });
+            suggestionMenu.appendChild(option);
+        });
+        suggestionMenu.hidden = false;
+        searchInput.setAttribute('aria-expanded', 'true');
+    };
+
+    const loadSuggestions = function () {
+        const query = searchInput.value.trim();
+        if (suggestionRequest) suggestionRequest.abort();
+        if (query.length < 2) {
+            hideSuggestions();
+            return;
+        }
+        suggestionRequest = new AbortController();
+        fetch(`${searchForm.dataset.searchSuggestEndpoint}?q=${encodeURIComponent(query)}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+            signal: suggestionRequest.signal,
+        })
+            .then(function (response) {
+                if (!response.ok) throw new Error('搜索建议请求失败');
+                return response.json();
+            })
+            .then(function (data) { renderSuggestions(data.suggestions || []); })
+            .catch(function (error) {
+                if (error.name !== 'AbortError') hideSuggestions();
+            });
+    };
+
+    searchInput.addEventListener('input', function () {
+        window.clearTimeout(suggestionTimer);
+        suggestionTimer = window.setTimeout(loadSuggestions, 180);
+    });
+    searchInput.addEventListener('focus', function () {
+        if (searchInput.value.trim().length >= 2) loadSuggestions();
+    });
+    searchInput.addEventListener('keydown', function (event) {
+        const optionNodes = suggestionMenu.querySelectorAll('.search-suggest-option');
+        if (suggestionMenu.hidden || !optionNodes.length) {
+            if (event.key === 'Escape') hideSuggestions();
+            return;
+        }
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const nextIndex = event.key === 'ArrowDown'
+                ? (activeSuggestion + 1) % optionNodes.length
+                : (activeSuggestion - 1 + optionNodes.length) % optionNodes.length;
+            setActive(nextIndex);
+        } else if (event.key === 'Enter' && activeSuggestion >= 0) {
+            event.preventDefault();
+            optionNodes[activeSuggestion].click();
+        } else if (event.key === 'Escape') {
+            hideSuggestions();
+        }
+    });
+    document.addEventListener('click', function (event) {
+        if (!searchForm.contains(event.target)) hideSuggestions();
+    });
+
+    return {
+        hideSuggestions: hideSuggestions,
+        renderSuggestions: renderSuggestions,
+        loadSuggestions: loadSuggestions,
+        setActive: setActive,
+    };
+};
+
 document.addEventListener('DOMContentLoaded', function () {
     // 服务端校验失败时把焦点交给错误摘要。role="alert" 负责即时播报，
     // tabindex="-1" 让读屏和键盘用户可以直接落到摘要并跳到具体字段。
@@ -334,98 +459,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const searchForm = document.querySelector('[data-search-suggest-endpoint]');
     if (searchForm) {
-        const searchInput = searchForm.querySelector('input[name="q"]');
-        const suggestionMenu = searchForm.querySelector('.search-suggest-menu');
-        let suggestionTimer = null;
-        let suggestionRequest = null;
-        let activeSuggestion = -1;
-
-        const hideSuggestions = function () {
-            suggestionMenu.hidden = true;
-            searchInput.setAttribute('aria-expanded', 'false');
-            activeSuggestion = -1;
-        };
-
-        const renderSuggestions = function (suggestions) {
-            suggestionMenu.replaceChildren();
-            activeSuggestion = -1;
-            if (!suggestions.length) {
-                hideSuggestions();
-                return;
-            }
-            suggestions.forEach(function (suggestion, index) {
-                const option = document.createElement('button');
-                option.type = 'button';
-                option.className = 'search-suggest-option';
-                option.setAttribute('role', 'option');
-                option.dataset.index = String(index);
-                option.innerHTML = `<span class="search-suggest-icon"><i class="bi ${suggestion.kind === 'category' ? 'bi-grid' : suggestion.kind === 'location' ? 'bi-geo-alt' : 'bi-clock-history'}"></i></span><span class="search-suggest-main"><strong></strong><small></small></span>`;
-                option.querySelector('strong').textContent = suggestion.text;
-                option.querySelector('small').textContent = `${suggestion.label}${suggestion.meta ? ` · ${suggestion.meta}` : ''}`;
-                option.addEventListener('click', function () {
-                    searchInput.value = suggestion.text;
-                    hideSuggestions();
-                    searchForm.submit();
-                });
-                suggestionMenu.appendChild(option);
-            });
-            suggestionMenu.hidden = false;
-            searchInput.setAttribute('aria-expanded', 'true');
-        };
-
-        const loadSuggestions = function () {
-            const query = searchInput.value.trim();
-            if (suggestionRequest) suggestionRequest.abort();
-            if (query.length < 2) {
-                hideSuggestions();
-                return;
-            }
-            suggestionRequest = new AbortController();
-            fetch(`${searchForm.dataset.searchSuggestEndpoint}?q=${encodeURIComponent(query)}`, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                credentials: 'same-origin',
-                signal: suggestionRequest.signal,
-            })
-                .then(function (response) {
-                    if (!response.ok) throw new Error('搜索建议请求失败');
-                    return response.json();
-                })
-                .then(function (data) { renderSuggestions(data.suggestions || []); })
-                .catch(function (error) {
-                    if (error.name !== 'AbortError') hideSuggestions();
-                });
-        };
-
-        searchInput.addEventListener('input', function () {
-            window.clearTimeout(suggestionTimer);
-            suggestionTimer = window.setTimeout(loadSuggestions, 180);
-        });
-        searchInput.addEventListener('focus', function () {
-            if (searchInput.value.trim().length >= 2) loadSuggestions();
-        });
-        searchInput.addEventListener('keydown', function (event) {
-            const options = suggestionMenu.querySelectorAll('.search-suggest-option');
-            if (suggestionMenu.hidden || !options.length) {
-                if (event.key === 'Escape') hideSuggestions();
-                return;
-            }
-            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-                event.preventDefault();
-                activeSuggestion = event.key === 'ArrowDown'
-                    ? (activeSuggestion + 1) % options.length
-                    : (activeSuggestion - 1 + options.length) % options.length;
-                options.forEach(function (option, index) {
-                    option.classList.toggle('is-active', index === activeSuggestion);
-                });
-            } else if (event.key === 'Enter' && activeSuggestion >= 0) {
-                event.preventDefault();
-                options[activeSuggestion].click();
-            } else if (event.key === 'Escape') {
-                hideSuggestions();
-            }
-        });
-        document.addEventListener('click', function (event) {
-            if (!searchForm.contains(event.target)) hideSuggestions();
+        createSearchSuggestController({
+            form: searchForm,
+            input: searchForm.querySelector('input[name="q"]'),
+            menu: searchForm.querySelector('.search-suggest-menu'),
         });
     }
 
