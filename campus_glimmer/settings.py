@@ -239,6 +239,28 @@ if ALERT_WEBHOOK_URL:
             'DJANGO_ALERT_WEBHOOK_URL 必须是完整的 http:// 或 https:// 地址'
         )
 
+# critical 告警在常规渠道重试耗尽后的升级 Webhook。留空即关闭升级；升级事件
+# 写进同一个 outbox，键空间与常规投递分开，去重与重试互不影响。URL 同样在
+# 启动时校验，避免升级真正发生的那一刻才发现地址写错。
+ALERT_ESCALATION_WEBHOOK_URL = os.getenv('DJANGO_ALERT_ESCALATION_WEBHOOK_URL', '').strip()
+ALERT_ESCALATION_WEBHOOK_BEARER_TOKEN = os.getenv(
+    'DJANGO_ALERT_ESCALATION_WEBHOOK_BEARER_TOKEN', '',
+).strip()
+ALERT_ESCALATION_WEBHOOK_TIMEOUT = _env_float(
+    'DJANGO_ALERT_ESCALATION_WEBHOOK_TIMEOUT', ALERT_WEBHOOK_TIMEOUT,
+)
+if ALERT_ESCALATION_WEBHOOK_TIMEOUT <= 0:
+    raise ImproperlyConfigured('DJANGO_ALERT_ESCALATION_WEBHOOK_TIMEOUT 必须为正数')
+if ALERT_ESCALATION_WEBHOOK_URL:
+    _alert_escalation_webhook = urlparse(ALERT_ESCALATION_WEBHOOK_URL)
+    if (
+        _alert_escalation_webhook.scheme not in {'http', 'https'}
+        or not _alert_escalation_webhook.netloc
+    ):
+        raise ImproperlyConfigured(
+            'DJANGO_ALERT_ESCALATION_WEBHOOK_URL 必须是完整的 http:// 或 https:// 地址'
+        )
+
 # 告警翻转历史默认写入数据库，重启和多 worker 后仍可查；关闭后只保留进程内窗口。
 # 写入/读取都是尽力而为，数据库故障只降级历史，不影响告警评估和监控端点。
 ALERT_HISTORY_DB_ENABLED = _env_bool('DJANGO_ALERT_HISTORY_DB_ENABLED', True)

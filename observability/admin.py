@@ -24,9 +24,10 @@ class AlertTransitionAdmin(admin.ModelAdmin):
 @admin.register(AlertNotificationDelivery)
 class AlertNotificationDeliveryAdmin(admin.ModelAdmin):
     list_display = (
-        'created_at', 'rule_name', 'event', 'status', 'attempts', 'next_attempt_at',
+        'created_at', 'rule_name', 'event', 'priority', 'status', 'attempts',
+        'next_attempt_at',
     )
-    list_filter = ('status', 'event', 'rule_name')
+    list_filter = ('status', 'priority', 'escalated', 'event', 'rule_name')
     search_fields = ('rule_name', 'last_error', 'dedupe_key')
     ordering = ('-created_at', '-id')
     readonly_fields = tuple(field.name for field in AlertNotificationDelivery._meta.fields)

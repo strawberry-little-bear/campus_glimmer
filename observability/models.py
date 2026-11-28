@@ -73,11 +73,27 @@ class AlertNotificationDelivery(models.Model):
         (EXHAUSTED, '重试耗尽'),
     )
 
+    # 严重度到投递顺序的固定档位：数字越小越先投。映射关系在投递模块里，
+    # 这里只保存结果；未知严重度按「一般」档入队，不抢队首也不被饿死。
+    PRIORITY_CRITICAL = 0
+    PRIORITY_WARNING = 1
+    PRIORITY_INFO = 2
+    PRIORITY_CHOICES = (
+        (PRIORITY_CRITICAL, '紧急'),
+        (PRIORITY_WARNING, '一般'),
+        (PRIORITY_INFO, '提示'),
+    )
+
     dedupe_key = models.CharField(max_length=128, unique=True, verbose_name='去重键')
     event = models.CharField(max_length=20, verbose_name='翻转事件')
     rule_name = models.CharField(max_length=120, verbose_name='告警规则')
     state = models.CharField(max_length=20, verbose_name='翻转后状态')
     payload = models.JSONField(verbose_name='投递载荷')
+    priority = models.PositiveSmallIntegerField(
+        choices=PRIORITY_CHOICES, default=PRIORITY_WARNING, db_index=True,
+        verbose_name='投递优先级',
+    )
+    escalated = models.BooleanField(default=False, verbose_name='升级投递')
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default=PENDING,
         db_index=True, verbose_name='投递状态',

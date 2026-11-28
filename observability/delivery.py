@@ -13,7 +13,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import connection, transaction
-from django.db.models import Count
+from django.db.models import Count, Min
 from django.utils import timezone
 
 from .models import AlertNotificationDelivery
@@ -31,6 +31,20 @@ TERMINAL_STATUSES = (
     AlertNotificationDelivery.SKIPPED,
     AlertNotificationDelivery.EXHAUSTED,
 )
+ACTIVE_STATUSES = (
+    AlertNotificationDelivery.PENDING,
+    AlertNotificationDelivery.DELIVERING,
+)
+# 严重度到优先级的固定映射，未知严重度按 warning 处理：宁可排中间，不抢队首。
+SEVERITY_PRIORITY = {
+    'critical': AlertNotificationDelivery.PRIORITY_CRITICAL,
+    'warning': AlertNotificationDelivery.PRIORITY_WARNING,
+    'info': AlertNotificationDelivery.PRIORITY_INFO,
+}
+DEFAULT_PRIORITY = AlertNotificationDelivery.PRIORITY_WARNING
+# 升级是给 critical 的兜底通道：常规渠道重试耗尽后才触发，其余严重度不喊第二遍。
+ESCALATION_SEVERITY = 'critical'
+ESCALATION_PAYLOAD_FLAG = 'escalation'
 
 
 def _positive_setting(name, default):
@@ -45,7 +59,8 @@ class AlertDeliveryQueue:
     """一个 PostgreSQL/数据库支持的告警 Webhook outbox。"""
 
     def __init__(self, *, max_attempts=None, retry_base_seconds=None,
-                 retry_max_seconds=None, dedupe_seconds=None, lease_seconds=None):
+                 retry_max_seconds=None, dedupe_seconds=None, lease_seconds=None,
+                 escalation_notifier=None):
         self.max_attempts = max(
             int(max_attempts if max_attempts is not None else
                 getattr(settings, 'ALERT_NOTIFICATION_MAX_ATTEMPTS', DEFAULT_MAX_ATTEMPTS)),
@@ -64,17 +79,43 @@ class AlertDeliveryQueue:
         self.lease_seconds = _positive_setting(
             'ALERT_NOTIFICATION_LEASE_SECONDS', DEFAULT_LEASE_SECONDS,
         ) if lease_seconds is None else max(float(lease_seconds), 0.1)
+        self.escalation_notifier = escalation_notifier
 
     @classmethod
     def from_settings(cls):
-        return cls()
+        """读全局配置；升级 Webhook 留空即整个升级通道关闭。"""
+
+        escalation_notifier = None
+        escalation_url = (
+            getattr(settings, 'ALERT_ESCALATION_WEBHOOK_URL', '') or ''
+        ).strip()
+        if escalation_url:
+            # 延迟导入：observability 不在加载期依赖告警模块。
+            from campus_glimmer.alerts import AlertNotifier
+
+            notifier_kwargs = {
+                'url': escalation_url,
+                'token': (
+                    getattr(settings, 'ALERT_ESCALATION_WEBHOOK_BEARER_TOKEN', '') or ''
+                ).strip(),
+            }
+            timeout = getattr(settings, 'ALERT_ESCALATION_WEBHOOK_TIMEOUT', None)
+            if timeout is not None:
+                notifier_kwargs['timeout'] = timeout
+            escalation_notifier = AlertNotifier(**notifier_kwargs)
+        return cls(escalation_notifier=escalation_notifier)
 
     def _dedupe_series(self, event):
-        return '|'.join((
+        series = '|'.join((
             str(event.get('name') or ''),
             str(event.get('event') or ''),
             str(event.get('state') or ''),
         ))
+        if event.get(ESCALATION_PAYLOAD_FLAG):
+            # 升级行与常规行共用一张表但键空间分开：同一规则可以在常规行
+            # 仍在退避时独立去重、独立重试，互不覆盖对方的窗口。
+            return 'escalated|' + series
+        return series
 
     def dedupe_key(self, event):
         """同一规则、同一翻转、同一时间窗口在多副本上得到同一个键。
@@ -103,6 +144,7 @@ class AlertDeliveryQueue:
                 event=event.get('event') or '',
                 rule_name=event.get('name') or '',
                 state=event.get('state') or '',
+                escalated=bool(event.get(ESCALATION_PAYLOAD_FLAG)),
             )
             .order_by('-created_at', '-id')
             .only('id', 'dedupe_key', 'payload')
@@ -119,13 +161,17 @@ class AlertDeliveryQueue:
             return latest
         return None
 
-    def enqueue(self, event, *, now=None):
+    def enqueue(self, event, *, now=None, escalated=False):
         now = now or timezone.now()
         defaults = {
             'event': event['event'],
             'rule_name': event['name'],
             'state': event['state'],
             'payload': dict(event),
+            'priority': SEVERITY_PRIORITY.get(
+                str(event.get('severity') or '').strip().lower(), DEFAULT_PRIORITY,
+            ),
+            'escalated': escalated,
             # 先留出一个租约，避免入队事务刚提交就被另一个重试进程抢走。
             'next_attempt_at': now + timedelta(seconds=self.lease_seconds),
         }
@@ -146,15 +192,42 @@ class AlertDeliveryQueue:
                 defaults=defaults,
             )
 
+    def _active_rule_heads(self):
+        """每条规则最早的一条未决常规行；严格有序以它为闸门。"""
+
+        heads = (
+            AlertNotificationDelivery.objects
+            .filter(status__in=ACTIVE_STATUSES, escalated=False)
+            .values('rule_name')
+            .annotate(head_id=Min('id'))
+        )
+        return {row['rule_name']: row['head_id'] for row in heads}
+
+    def _is_held(self, rule_name, delivery_id, heads):
+        """同规则前面还有未决行时让位；升级行自成一条流，不受闸门限制。"""
+
+        head_id = heads.get(rule_name)
+        return head_id is not None and head_id != delivery_id
+
     def enqueue_and_deliver(self, events, notifier, *, now=None):
         """去重后立即尝试事件；到期未送达的行会在下一次抓取时继续重试。"""
 
         now = now or timezone.now()
-        outcomes = {'delivered': 0, 'failed': 0, 'skipped': 0, 'deduplicated': 0}
+        outcomes = {
+            'delivered': 0, 'failed': 0, 'skipped': 0,
+            'deduplicated': 0, 'deferred': 0,
+        }
         for event in events:
             row, created = self.enqueue(event, now=now)
             # 新行立刻投递；重复事件只在退避到期时重试。这样即使外部调度器
             # 暂时没跑，只要 Prometheus 还在抓取，失败通知仍能继续收敛。
+            if created and self._is_held(
+                row.rule_name, row.pk, self._active_rule_heads(),
+            ):
+                # 同一规则前面还有未决行：resolved 不能越过退避中的 firing。
+                # 行已带着租约写进 outbox，flush 会按序接手。
+                outcomes['deferred'] += 1
+                continue
             result = self.attempt(row.pk, notifier, now=now, force=created)
             if result is None:
                 outcomes['deduplicated'] += 1
@@ -230,34 +303,59 @@ class AlertDeliveryQueue:
         claimed.save(update_fields=[
             'status', 'next_attempt_at', 'delivered_at', 'last_error', 'updated_at',
         ])
+        if claimed.status == AlertNotificationDelivery.EXHAUSTED:
+            self._escalate(claimed, now=now)
         return {
             'status': claimed.status,
             'attempts': claimed.attempts,
             'outcome': outcome,
         }
 
+    def _escalate(self, row, *, now):
+        """critical 常规渠道耗尽后，向升级渠道追加一条独立的 outbox 行。
+
+        升级行复用同一套去重与重试机制：键空间带 ``escalated|`` 前缀，
+        因此与原事件在同一窗口内也互不合并。升级自身失败只会正常退避，
+        不会再派生新的升级——升级行的 ``escalated`` 已是 True。
+        """
+
+        if self.escalation_notifier is None or row.escalated:
+            return
+        severity = str((row.payload or {}).get('severity') or '').strip().lower()
+        if severity != ESCALATION_SEVERITY:
+            return
+        event = dict(row.payload or {})
+        event[ESCALATION_PAYLOAD_FLAG] = True
+        escalated_row, created = self.enqueue(event, now=now, escalated=True)
+        if not created:
+            return
+        self.attempt(escalated_row.pk, self.escalation_notifier, now=now, force=True)
+
     def flush(self, notifier, *, limit=50, now=None):
         """按到期时间处理一批，返回调用方可直接打印或记账的结果。"""
 
         now = now or timezone.now()
-        due_ids = list(
+        due_rows = list(
             AlertNotificationDelivery.objects
-            .filter(status__in=(
-                AlertNotificationDelivery.PENDING,
-                AlertNotificationDelivery.DELIVERING,
-            ))
+            .filter(status__in=ACTIVE_STATUSES)
             .filter(next_attempt_at__lte=now)
-            .order_by('next_attempt_at', 'id')
-            .values_list('id', flat=True)[:max(int(limit), 1)]
+            .order_by('priority', 'next_attempt_at', 'id')
+            .values_list('id', 'rule_name', 'escalated')[:max(int(limit), 1)]
         )
+        heads = self._active_rule_heads()
         result = {
             'attempted': 0,
             'delivered': 0,
             'failed': 0,
             'skipped': 0,
             'exhausted': 0,
+            'held': 0,
         }
-        for delivery_id in due_ids:
+        for delivery_id, rule_name, escalated in due_rows:
+            # 闸门在本轮开始前定好：同规则队首未决时，后面的行这一轮不插队。
+            if self._is_held(rule_name, delivery_id, heads):
+                result['held'] += 1
+                continue
             outcome = self.attempt(delivery_id, notifier, now=now)
             if outcome is None:
                 continue
