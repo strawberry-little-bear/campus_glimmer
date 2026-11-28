@@ -354,6 +354,17 @@ class AlertDeliveryOrderingAndEscalationTests(TestCase):
         self.assertEqual(escalation.deliver.call_count, 1)
 
 
+class _ToggleProbe:
+    """第一次评估触发，之后恢复：用来制造 firing → resolved 两段翻转。"""
+
+    def __init__(self):
+        self.calls = 0
+
+    def __call__(self, _context):
+        self.calls += 1
+        return self.calls == 1, 1.0, '测试条件'
+
+
 class AlertDeliveryEngineIntegrationTests(TestCase):
     def test_two_engines_collapse_the_same_transition_into_one_delivery(self):
         # 两个副本的观察时间跨过 60 秒分桶边界时也必须只入队一次。
@@ -381,6 +392,32 @@ class AlertDeliveryEngineIntegrationTests(TestCase):
         self.assertEqual(AlertNotificationDelivery.objects.count(), 1)
         self.assertEqual(notifier.deliver.call_count, 1)
         self.assertEqual(second.counters()['notifications']['deduplicated'], 1)
+
+    def test_engine_counts_deferred_transitions_behind_the_ordering_gate(self):
+        now = timezone.now()
+        notifier = MagicMock()
+        notifier.deliver.side_effect = [_failed(), _delivered()]
+        queue = AlertDeliveryQueue(
+            max_attempts=3, retry_base_seconds=10, retry_max_seconds=60,
+            dedupe_seconds=60, lease_seconds=120,
+        )
+        engine = AlertEngine(
+            rules=[Rule('Gated', 'critical', '闸门计数', 0, _ToggleProbe())],
+            notifier=notifier,
+            delivery_queue=queue,
+        )
+
+        engine.evaluate([], now=now.timestamp())
+        engine.evaluate([], now=(now + timedelta(seconds=1)).timestamp())
+
+        counters = engine.counters()['notifications']
+        self.assertEqual(counters['deferred'], 1)
+        self.assertEqual(counters['delivered'], 0)
+        # resolved 已入队但被闸门压住：outbox 里两行都在，未投递。
+        self.assertEqual(AlertNotificationDelivery.objects.count(), 2)
+        resolved = AlertNotificationDelivery.objects.get(event='resolved')
+        self.assertEqual(resolved.status, AlertNotificationDelivery.PENDING)
+        self.assertEqual(notifier.deliver.call_count, 1)
 
     def test_queue_failure_falls_back_to_direct_delivery_and_degrades_snapshot(self):
         class BrokenQueue:

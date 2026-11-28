@@ -565,7 +565,8 @@ class AlertEngine:
         self._evaluations = 0
         self._errors = 0
         self._notifications = {
-            'delivered': 0, 'failed': 0, 'skipped': 0, 'deduplicated': 0,
+            'delivered': 0, 'failed': 0, 'skipped': 0,
+            'deduplicated': 0, 'deferred': 0,
         }
         self._transitions = {'firing': 0, 'resolved': 0}
         self._history_errors = {'write': 0, 'read': 0}
