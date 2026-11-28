@@ -41,4 +41,5 @@ critical 行在投递中标记 exhausted 时，若配置了 `DJANGO_ALERT_ESCALA
 
 - 升级行与常规行共用 `/metrics/` 的固定指标形状，不新增序列；`/alerts/` 的 `notification_queue` 额外给出 `escalated`——当前未决的升级行数，用来发现「升级渠道自己正在重试」。终态的升级行不计数。
 - `flush_alert_notifications` 的输出多了 held（本轮让位行数），其余键不变。
+- 抓取路径被闸门延后的新事件计入 `/alerts/` 的 `notifications.deferred`；它与 `deduplicated` 一样是 outbox 内部行为，不进 `/metrics/` 的固定形状。
 - 升级行的优先级继承原事件的 critical 档，会排在常规重试之前被 flush 处理。
