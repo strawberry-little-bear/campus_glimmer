@@ -916,6 +916,7 @@ class MetricsExposureTests(SimpleTestCase):
             'enabled': True,
             'degraded': True,
             'due': 0,
+            'escalated': 0,
             'status': {},
         })
 

@@ -392,15 +392,16 @@ class AlertDeliveryQueue:
             .annotate(total=Count('id'))
         ):
             counts[row['status']] = row['total']
+        active_filter = dict(status__in=ACTIVE_STATUSES)
         return {
             'enabled': True,
             'degraded': False,
             'status': counts,
             'due': AlertNotificationDelivery.objects.filter(
-                status__in=(
-                    AlertNotificationDelivery.PENDING,
-                    AlertNotificationDelivery.DELIVERING,
-                ),
-                next_attempt_at__lte=now,
+                **active_filter, next_attempt_at__lte=now,
+            ).count(),
+            # 升级通道自己是否正在重试，只看未决的升级行；终态台账不算数。
+            'escalated': AlertNotificationDelivery.objects.filter(
+                escalated=True, **active_filter,
             ).count(),
         }

@@ -133,13 +133,26 @@ class AlertDeliveryQueueTests(TestCase):
             payload=event, status=AlertNotificationDelivery.DELIVERED,
             next_attempt_at=now, delivered_at=now, attempts=1,
         )
+        # 未决的升级行计入 escalated；已送终态的升级行不算，避免台账虚增告警。
+        AlertNotificationDelivery.objects.create(
+            dedupe_key='escalated', event='firing', rule_name='Pending', state='firing',
+            payload=event, status=AlertNotificationDelivery.PENDING,
+            next_attempt_at=now, attempts=1, escalated=True,
+        )
+        AlertNotificationDelivery.objects.create(
+            dedupe_key='escalated-done', event='firing', rule_name='Pending',
+            state='firing', payload=event,
+            status=AlertNotificationDelivery.DELIVERED,
+            next_attempt_at=now, delivered_at=now, attempts=1, escalated=True,
+        )
         AlertNotificationDelivery.objects.filter(pk=delivered.pk).update(
             updated_at=now - timedelta(days=40),
         )
         snapshot = self._queue().snapshot(now=now)
-        self.assertEqual(snapshot['status'][AlertNotificationDelivery.PENDING], 1)
-        self.assertEqual(snapshot['status'][AlertNotificationDelivery.DELIVERED], 1)
-        self.assertEqual(snapshot['due'], 1)
+        self.assertEqual(snapshot['status'][AlertNotificationDelivery.PENDING], 2)
+        self.assertEqual(snapshot['status'][AlertNotificationDelivery.DELIVERED], 2)
+        self.assertEqual(snapshot['due'], 2)
+        self.assertEqual(snapshot['escalated'], 1)
 
         deleted = self._queue().prune_terminal(before=now - timedelta(days=30))
         self.assertEqual(deleted, 1)

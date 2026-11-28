@@ -744,6 +744,7 @@ class AlertEngine:
                 'enabled': False,
                 'degraded': False,
                 'due': 0,
+                'escalated': 0,
                 'status': {},
             }
         try:
@@ -756,6 +757,7 @@ class AlertEngine:
                 'enabled': True,
                 'degraded': True,
                 'due': 0,
+                'escalated': 0,
                 'status': {},
             }
 
@@ -896,6 +898,7 @@ def _alert_families(states, counters, delivery=None):
             'enabled': False,
             'degraded': False,
             'due': 0,
+            'escalated': 0,
             'status': {},
         }
     delivery_status = delivery.get('status') or {}
