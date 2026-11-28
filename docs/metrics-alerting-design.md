@@ -27,7 +27,7 @@
 
 评估不修改业务事实；除 `/alerts/` 的 JSON 和 `/metrics/` 末尾的 `campus_glimmer_alert_*` 序列外，配置 `DJANGO_ALERT_WEBHOOK_URL` 后，`pending → firing` 和 `firing → inactive` 会先写入 `observability_alertnotificationdelivery`，随后立即尝试一次 Webhook。持续 firing 不重复发送，`pending → inactive` 也不发送；URL 留空即完全关闭通知。
 
-这是有界重试的 Webhook outbox，不是一套值班系统：没有邮件、呼叫、升级路径或值班轮换。投递失败会按指数退避留在表中，Prometheus 下一次抓取或 `flush_alert_notifications` 会继续尝试；达到上限后标记 `exhausted`。`/alerts/` 的 `notification_queue` 暴露状态计数与到期数量，数据库故障时端点仍返回 200，并退回一次直接投递。做了值班系统的项目还要回答「谁在什么时候必须响应」「静默多久」，这些问题仍然留给部署方的外层监控。
+这是有界重试的 Webhook outbox，不是一套值班系统：没有邮件、呼叫或值班轮换。投递失败会按指数退避留在表中，Prometheus 下一次抓取或 `flush_alert_notifications` 会继续尝试；达到上限后标记 `exhausted`。critical 耗尽后可把事件送进独立的升级 Webhook 再喊一遍，投递顺序与升级通道的取舍见[告警投递顺序与升级设计](alert-delivery-ordering-design.md)。`/alerts/` 的 `notification_queue` 暴露状态计数与到期数量，数据库故障时端点仍返回 200，并退回一次直接投递。做了值班系统的项目还要回答「谁在什么时候必须响应」「静默多久」，这些问题仍然留给部署方的外层监控。
 
 ### 二、状态翻转写入有界数据库历史，失败时退回进程内尾部
 
@@ -152,7 +152,7 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 
 - **通知是可选且有界重试的**。数据库 outbox 保存状态、尝试次数和下次重试时间，失败可继续收敛；但它不是消息队列或值班系统，没有无限重试、人工确认、升级路径和优先级保证。多个 worker 仍各自维护状态，同一时间窗口内的翻转通过幂等键合并。
 - **持久化历史不是可靠审计**。数据库只保留最近 1000 条状态翻转，`/alerts/` 只展示最近 100 条；数据库失败时降级为进程内窗口，多 worker 仍可能重复记录。投递台账只回答通知是否送达，不替代事故时间线。
-- **没有抑制与静默**。没有「维护窗口内不喊」、没有「同一故障合并成一条」、没有升级路径。这些是值班系统的功能，不在本模块范围内。
+- **没有抑制与静默**。没有「维护窗口内不喊」，也没有「同一故障合并成一条」。critical 的升级 Webhook 只解决「换渠道重喊」，不解决「谁必须响应」「静默多久」；这些仍是值班系统的功能，不在本模块范围内。
 - **规则是硬编码的八条**。不提供用户自定义规则、不提供配置文件里的阈值、不提供 PromQL。加一条规则就是加一个 `_probe_*` 函数和一行 `RULES`。
 - **`for` 的计时依赖抓取节奏**。两次抓取间隔超过 `for` 时长的规则（300 秒那两条）在抓取间隔过长时会晚一个周期才 firing。这是「评估节奏等于抓取节奏」的代价，写在这里以免以后有人以为是 bug。
 
@@ -163,6 +163,9 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 | `DJANGO_ALERT_WEBHOOK_URL` | 空 | 完整的 `http://` 或 `https://` 地址；留空即关闭通知 |
 | `DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` | 空 | 可选，作为 `Authorization: Bearer` 发送 |
 | `DJANGO_ALERT_WEBHOOK_TIMEOUT` | `2.0` | 单次 POST 超时秒数，必须为正数 |
+| `DJANGO_ALERT_ESCALATION_WEBHOOK_URL` | 空 | critical 重试耗尽后的升级 Webhook；留空即关闭升级 |
+| `DJANGO_ALERT_ESCALATION_WEBHOOK_BEARER_TOKEN` | 空 | 升级 Webhook 的可选 Bearer 令牌 |
+| `DJANGO_ALERT_ESCALATION_WEBHOOK_TIMEOUT` | 同 `DJANGO_ALERT_WEBHOOK_TIMEOUT` | 升级 Webhook 单次 POST 超时秒数 |
 | `DJANGO_ALERT_HISTORY_DB_ENABLED` | `true` | 翻转历史是否写入数据库；关闭后只保留进程内窗口 |
 | `DJANGO_ALERT_NOTIFICATION_QUEUE_ENABLED` | `true` | 是否在配置 Webhook 后启用数据库 outbox；关闭时退回一次性直投 |
 | `DJANGO_ALERT_NOTIFICATION_MAX_ATTEMPTS` | `5` | 单条通知的最大尝试次数 |
@@ -171,7 +174,7 @@ Webhook 投递还有一层独立保护：即使通知实现意外抛出异常，
 | `DJANGO_ALERT_NOTIFICATION_DEDUPE_SECONDS` | `60` | 跨副本合并同一翻转的时间窗口 |
 | `DJANGO_ALERT_NOTIFICATION_LEASE_SECONDS` | `120` | 投递认领租约，进程崩溃后由命令接手 |
 
-Webhook 地址在启动时校验。配置 URL 后默认启用 outbox；Prometheus 抓取会首次投递并继续处理到期重试，`python manage.py flush_alert_notifications` 则用于没有抓取流量时主动补投并清理默认 30 天前的终态记录。多 worker 仍各自维护状态，但同一规则、事件、状态和 60 秒窗口会生成相同幂等键；需要更严格顺序、优先队列或升级响应时，应在外部监控层完成。
+Webhook 地址在启动时校验。配置 URL 后默认启用 outbox；Prometheus 抓取会首次投递并继续处理到期重试，`python manage.py flush_alert_notifications` 则用于没有抓取流量时主动补投并清理默认 30 天前的终态记录。多 worker 仍各自维护状态，但同一规则、事件、状态和 60 秒窗口会生成相同幂等键。critical 先投、同一规则内按入队序投、critical 耗尽后的升级 Webhook 都已在 outbox 内实现，取舍见[告警投递顺序与升级设计](alert-delivery-ordering-design.md)；值班轮换、静默与人工确认仍留给外部监控层。
 
 ## 运维上必须知道的两件事
 

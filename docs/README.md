@@ -463,6 +463,7 @@ CI 的目标是保证每个独立迭代至少满足“能导入、能启动、�
 | [对象存储 CI 集成设计](object-storage-ci-integration-design.md) | 想了解 MinIO 集成任务覆盖了什么，以及为什么宁可失败也不静默跳过 |
 | [按指标告警设计](metrics-alerting-design.md) | 想了解八条规则为什么在状态翻转时通知、数据库持久化历史与故障降级怎么取舍、for 时长按什么取、Webhook 失败为什么不影响抓取，以及阈值为什么是模块常量 |
 | [跨副本指标聚合设计](metrics-fleet-view-design.md) | 想了解舰队视图为什么用周期全量快照、合并规则每条的理由，以及为什么启用共享后只能配一个抓取目标 |
+| [告警投递顺序与升级设计](alert-delivery-ordering-design.md) | 想了解 critical 为什么先投、同一规则内 resolved 为什么不能越过退避中的 firing，以及升级 Webhook 的键空间与边界 |
 | [搜索洞察懒加载与导出同构](search-insights-lazy-loading-design.md) | 想了解搜索洞察分区为什么比运营看板多一列裁剪，以及 CSV 导出与页面同构是怎么守住的 |
 | [联系方式的形状](profile-contact-shape-design.md) | 想了解四个手写字段为什么按全量口径算、长度档为什么不取分位数，以及为什么只报相关性不讲因果 |
 | [复核分级的形状](moderation-risk-tier-shape-design.md) | 想了解三档复核节奏为什么按各自目标归一化、pending 为什么单独一节，以及两套风险尺度的分歧为什么不是 bug 报告 |

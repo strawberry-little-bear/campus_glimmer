@@ -149,6 +149,9 @@ PostgreSQL + Redis + S3 兼容存储 + cached_db 会话 + WhiteNoise 静态文�
 | `DJANGO_ALERT_WEBHOOK_URL` | 告警状态翻转时的可选 Webhook 地址；留空即关闭 |
 | `DJANGO_ALERT_WEBHOOK_BEARER_TOKEN` | Webhook 的可选 Bearer 令牌 |
 | `DJANGO_ALERT_WEBHOOK_TIMEOUT` | Webhook 单次请求超时（秒），默认 `2.0` |
+| `DJANGO_ALERT_ESCALATION_WEBHOOK_URL` | critical 告警重试耗尽后的升级 Webhook；留空即关闭升级 |
+| `DJANGO_ALERT_ESCALATION_WEBHOOK_BEARER_TOKEN` | 升级 Webhook 的可选 Bearer 令牌 |
+| `DJANGO_ALERT_ESCALATION_WEBHOOK_TIMEOUT` | 升级 Webhook 单次请求超时（秒），默认同主 Webhook |
 
 - 本地默认值直接可运行，生产必须显式覆盖 `DJANGO_SECRET_KEY`、域名、HTTPS 和 Cookie 安全开关；
 - 完整样例见 [`../.env.production.example`](../.env.production.example)，逐项说明见[生产部署基线](../docs/production-deployment.md)；

@@ -191,7 +191,7 @@ campus_glimmer_alert_notification_queue_due > 0
 campus_glimmer_alert_notification_queue_degraded > 0
 ```
 
-`exhausted` 会一直保留到清理任务删除旧终态记录，因此告警应配合 `flush_alert_notifications --prune-days` 的保留周期使用。翻转历史仍写入 `observability_alerttransition`，表内最多保留 1000 条，配置 `DJANGO_ALERT_HISTORY_DB_ENABLED=false` 可关闭；数据库历史失败时端点仍返回 200，自动退回进程内窗口。多 worker 各自维护状态，但同一规则、事件、状态与默认 60 秒窗口会生成相同幂等键，避免同一次翻转被重复投递。
+critical 通知在常规渠道重试耗尽后，若配置了 `DJANGO_ALERT_ESCALATION_WEBHOOK_URL`（令牌与超时可选），会向同一张表追加一条升级事件并立即用升级渠道投递一次，失败后按同样的指数退避重试；URL 留空即关闭升级。投递顺序上 critical 先于 warning/info，同一规则内 resolved 不会越过退避中的 firing，口径见[告警投递顺序与升级设计](alert-delivery-ordering-design.md)。`exhausted` 会一直保留到清理任务删除旧终态记录，因此告警应配合 `flush_alert_notifications --prune-days` 的保留周期使用。翻转历史仍写入 `observability_alerttransition`，表内最多保留 1000 条，配置 `DJANGO_ALERT_HISTORY_DB_ENABLED=false` 可关闭；数据库历史失败时端点仍返回 200，自动退回进程内窗口。多 worker 各自维护状态，但同一规则、事件、状态与默认 60 秒窗口会生成相同幂等键，避免同一次翻转被重复投递。
 
 ```powershell
 curl -H "Authorization: Bearer $env:DJANGO_METRICS_TOKEN" http://127.0.0.1:8000/metrics/
