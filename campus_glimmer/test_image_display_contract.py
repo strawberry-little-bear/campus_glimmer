@@ -44,6 +44,9 @@ ATTRIBUTE = re.compile(
 EXPRESSION = re.compile(r'\{\{\s*(.+?)\s*\}\}')
 IF_CONDITION = re.compile(r'\{%\s*if\s+([^%]+?)\s*%\}')
 PLACEHOLDER_MARKER = 'no-image.png'
+# 渲染输出里 whitenoise manifest 会把占位图变成带哈希的 URL，
+# 所以渲染态断言只能匹配文件名前缀，不能依赖完整文件名。
+RENDERED_PLACEHOLDER_MARKER = 'no-image'
 LIST_MARKER = 'list_image_url'
 HERO_MARKER = 'detail_image_url'
 
@@ -310,7 +313,7 @@ class ItemImageDisplayRenderedTests(TestCase):
         self.assertEqual(response.status_code, 200)
         placeholders = [
             attrs for attrs in rendered_images(response)
-            if 'no-image.png' in attrs.get('src', '')
+            if RENDERED_PLACEHOLDER_MARKER in attrs.get('src', '')
         ]
         self.assertTrue(
             placeholders,
